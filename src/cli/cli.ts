@@ -2,21 +2,28 @@
 import process from "node:process"
 
 import { run } from "@optique/run"
-import { isErr, messageChain } from "ts-explicit-errors"
+import type { Result } from "ts-explicit-errors"
+import { err, isErr, messageChain } from "ts-explicit-errors"
 
 import { program } from "#cli/program.ts"
 import { discoverHosts } from "#hosts/discover.ts"
 
-const main = async (): Promise<number> => {
+const runTsinfra = async (): Promise<Result> => {
   const config = run(program, { help: "option", version: program.metadata.version ?? "", showDefault: true })
 
   const hosts = await discoverHosts(config.hostsDir, config.hosts)
-  if (isErr(hosts)) {
-    console.error(`error: ${messageChain(hosts)}`)
+  if (isErr(hosts)) return err("failed to discover hosts", hosts)
+
+  for (const { name } of hosts) console.log(name)
+}
+
+const main = async (): Promise<number> => {
+  const result = await runTsinfra()
+  if (isErr(result)) {
+    console.error(messageChain(result))
     return 1
   }
 
-  for (const { name } of hosts) console.log(name)
   return 0
 }
 

@@ -1,2 +1,2 @@
-// Public API returns `Result`, so consumers get the type without depending on ts-explicit-errors directly.
-export type { Result } from "ts-explicit-errors"
+// oxlint-disable-next-line unicorn/require-module-specifiers - the public API goes here once `host()` exists
+export {}

@@ -28,7 +28,7 @@
     "url": "git+https://github.com/adamhl8/tsinfra.git"
   },
   "bin": {
-    "tsinfra": "./dist/cli.js"
+    "tsinfra": "./dist/cli/cli.js"
   },
   "files": [
     "dist/"
