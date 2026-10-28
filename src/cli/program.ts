@@ -33,7 +33,6 @@ export const program = defineProgram({
   parser,
   metadata: {
     name: "tsinfra",
-    version: packageJson.version,
     brief: message`${text(packageJson.description)}`,
   },
 })

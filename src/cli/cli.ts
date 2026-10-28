@@ -7,9 +7,10 @@ import { err, isErr, messageChain } from "ts-explicit-errors"
 
 import { program } from "#cli/program.ts"
 import { discoverHosts } from "#hosts/discover.ts"
+import packageJson from "#package.json" with { type: "json" }
 
 const runTsinfra = async (): Promise<Result> => {
-  const config = run(program, { help: "option", version: program.metadata.version ?? "", showDefault: true })
+  const config = run(program, { help: "option", version: packageJson.version, showDefault: true })
 
   const hosts = await discoverHosts(config.hostsDir, config.hosts)
   if (isErr(hosts)) return err("failed to discover hosts", hosts)
