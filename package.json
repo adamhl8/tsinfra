@@ -1,0 +1,80 @@
+{
+  "name": "tsinfra",
+  "version": "0.0.0",
+  "description": "An agentless infrastructure as code tool for TypeScript",
+  "keywords": [
+    "automation",
+    "configuration-management",
+    "deployment",
+    "iac",
+    "infrastructure",
+    "infrastructure-as-code",
+    "provisioning",
+    "ssh",
+    "typescript"
+  ],
+  "homepage": "https://github.com/adamhl8/tsinfra",
+  "bugs": {
+    "url": "https://github.com/adamhl8/tsinfra/issues"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Adam Langbert",
+    "email": "adamhl@pm.me",
+    "url": "https://github.com/adamhl8"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adamhl8/tsinfra.git"
+  },
+  "bin": {
+    "tsinfra": "./dist/cli.js"
+  },
+  "files": [
+    "dist/"
+  ],
+  "type": "module",
+  "imports": {
+    "#*": "./src/*",
+    "#package.json": "./package.json"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "prepare": "bask prepare"
+  },
+  "dependencies": {
+    "@optique/core": "^1.3.6",
+    "@optique/run": "^1.3.6",
+    "ts-explicit-errors": "^5.0.0"
+  },
+  "devDependencies": {
+    "@adamhl8/bask": "^0.6.0",
+    "@adamhl8/configs": "^3.4.1",
+    "@arethetypeswrong/core": "^0.18.5",
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
+    "@types/bun": "^1.4.4",
+    "@vitest/istanbul-lib-coverage": "^2.0.0",
+    "@vitest/istanbul-lib-instrument": "^2.0.0",
+    "@vitest/istanbul-lib-report": "^2.0.0",
+    "@vitest/istanbul-lib-source-maps": "^2.0.0",
+    "knip": "^6.43.0",
+    "markdown-toc": "^1.2.0",
+    "oxfmt": "^0.74.0",
+    "oxlint": "^1.89.0",
+    "oxlint-tsgolint": "^7.0.2005",
+    "publint": "^0.3.25",
+    "release-it": "^21.1.1",
+    "release-it-git-cliff": "^0.2.0",
+    "tsdown": "^0.23.2",
+    "typescript": "7.1.0-beta"
+  },
+  "engines": {
+    "bun": ">=1.4"
+  }
+}
