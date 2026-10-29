@@ -56,4 +56,15 @@ describe("tsinfra", () => {
     expect(stdout).toBe("a ok")
     expect(stderr).toBe("failed to run host 'b' -> boom")
   })
+
+  it("should run a host that reads from '@local'", async () => {
+    const { dir, run } = await createProject()
+    const source = `import { host } from "tsinfra"\n\nexport default host("@local", async (h) => console.log(await h.read("echo hi")))\n`
+    await Bun.write(path.join(dir, "hosts", "a.ts"), source)
+
+    const { stdout, exitCode } = await run`tsinfra plan`.nothrow()
+
+    expect(exitCode).toBe(0)
+    expect(stdout).toBe("hi\na ok")
+  })
 })

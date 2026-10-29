@@ -18,17 +18,17 @@ interface Host {
   readonly name: string // the host file's name, e.g. "sonarr"
   step(name: string, spec: StepSpec): Promise<StepResult>
   file(path: string, spec: FileSpec): Promise<StepResult>
-  run(name: string, cmd: string, opts?: RunOpts): Promise<StepResult>
+  run(name: string, cmd: string, opts: RunOpts): Promise<StepResult>
   read(cmd: string): Promise<string>
 }
 
 type StepResult = {
-  status: "ok" | "changed" | "would-change" | "waiting" | "failed" | "skipped"
+  status: "ok" | "changed" | "would-change" | "waiting" | "failed"
   changed: boolean // true for "changed", "would-change", and "waiting"
 }
 ```
 
-`changed` is what lets a script react to a step, as in `if (unit.changed) await h.run(...)`. In plan mode it means
+`changed` is what lets a script react to a step, as in `h.run(..., { when: unit.changed })`. In plan mode it means
 "would change", so the follow-up shows up in the plan as "would run" exactly when it would run for real.
 
 ## `step`
@@ -116,12 +116,46 @@ home on the target.
 ## `run`
 
 ```ts
-type RunOpts = { sudo?: boolean; requires?: Need[]; provides?: Need[] }
+type RunOpts = {
+  when: boolean // run the command on this pass
+  sudo?: boolean // run the command under sudo
+  requires?: Need[]
+  provides?: Need[]
+}
 ```
 
-A command with no check, so it runs every time it is reached. In plan mode it does not run and reports `would-change`
-("would run" in the output). Use it for follow-ups that only make sense after something else changed, like
-`daemon-reload`, and for genuinely unconditional work. Anything that can be checked should be a `step`.
+A command with no check. `when` is required, so every `run` says when it runs. Unconditional work is `when: true`,
+written out rather than assumed, so a forgotten guard is a type error instead of a command that quietly runs every time.
+
+```ts
+const unit = await h.file("/etc/systemd/system/sonarr.service", { content: sonarrUnit, sudo: true })
+const timer = await h.file("/etc/systemd/system/sonarr-backup.timer", { content: backupTimer, sudo: true })
+
+await h.run("Reload systemd", "sudo systemctl daemon-reload", { when: unit.changed || timer.changed })
+await h.run("Prune docker", "docker system prune -f", { when: true })
+```
+
+`when` is a plain boolean, so `||`, `&&`, and `?.` cover any condition. A step that only runs on some code paths is
+`unit?.changed ?? false`.
+
+|               | `apply`                    | `plan`                                             |
+| ------------- | -------------------------- | -------------------------------------------------- |
+| `when: true`  | runs, reports `changed`    | does not run, reports `would-change` ("would run") |
+| `when: false` | does not run, reports `ok` | does not run, reports `ok`                         |
+
+Because `changed` is true for `would-change`, one `run` can guard another (`when: reload.changed`), and the plan shows
+the chain exactly as it would run for real.
+
+Prefer `when` over wrapping a single `run` in an `if`. They decide the same thing, but with `when: false` tsinfra still
+knows the run exists, so verbose output can list it. An `if` fits around a block of steps that only applies to some
+machines.
+
+**Drift.** A `run` never counts toward `plan` exiting 2 (see [CLI](./cli.md#exit-codes)). It has no check, so it cannot
+see drift. A run guarded by a step only fires when that step changes, and the step already counts. A `when: true` run is
+a deliberate choice to run every time, which says nothing about the machine's state.
+
+Anything that can be checked should be a `step`. That includes a check hidden in `when`, like
+`when: (await h.read("...")) !== "x"`. It works, but it never counts as drift.
 
 ## `read`
 
@@ -137,17 +171,15 @@ answer. A `read` must not change anything, because it also runs during `plan`. N
 
 ## Failure
 
-Steps never throw, and scripts never check results for errors.
+Scripts never check results for errors. When a call on `h` fails, the host is marked failed and the call throws, which
+stops the script at that point. The CLI reports the host as failed, with the call that failed and its output.
 
-When a step fails, the host is marked failed. From then on, every call on `h` returns `skipped` straight away without
-touching the target, and `read` returns an empty string. The script keeps running to the end, but nothing more happens
-on the host. The CLI reports the host as failed, with the step that failed and its output.
+Catching the error does not recover the host. It stays failed, and every later call on `h` throws the same error
+straight away without touching the target. Code between the catch and the next call on `h` still runs, so do not catch
+around calls on `h`. A command whose non-zero exit is a legitimate answer says so itself, with `|| true`.
 
-Only calls on `h` are stopped. Code in the script that has its own local side effects, like writing a file on the
-control machine, still runs after a failure. Keep side effects in steps.
-
-If the host function itself throws (a bug in the script), the CLI catches it and reports the host as failed in the same
-way.
+If the host function throws for any other reason (a bug in the script), the CLI catches it and reports the host as
+failed in the same way.
 
 ## What `plan` can and cannot show
 

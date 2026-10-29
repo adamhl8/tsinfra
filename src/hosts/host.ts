@@ -5,6 +5,14 @@ export type Mode = (typeof MODES)[number]
 
 export interface Host {
   readonly name: string
+  /**
+   * Runs `cmd` on the host and returns its stdout without trailing newlines. It must not change anything, because it
+   * also runs during `plan`.
+   *
+   * A non-zero exit fails the host and throws. Catching it does not recover the host. Append `|| true` to `cmd` when a
+   * non-zero exit is a legitimate answer.
+   */
+  read: (cmd: string) => Promise<string>
 }
 
 export type HostFunction = (h: Host) => Promise<void>

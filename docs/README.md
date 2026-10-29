@@ -100,7 +100,7 @@ export default host("sonarr.lan", async (h) => {
     content: await readFile(new URL("../files/sonarr.service", import.meta.url), "utf8"),
     sudo: true,
   })
-  if (unit.changed) await h.run("Reload systemd", "sudo systemctl daemon-reload")
+  await h.run("Reload systemd", "sudo systemctl daemon-reload", { when: unit.changed })
 
   await h.step("Sonarr is running", {
     read: "systemctl is-active sonarr",

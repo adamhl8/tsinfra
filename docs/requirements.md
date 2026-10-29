@@ -7,7 +7,6 @@ wrote makes sense.
 <!-- toc -->
 
 - [What happens when a step requires something](#what-happens-when-a-step-requires-something)
-- [Catching the wrong order](#catching-the-wrong-order)
 - [When `provides` matters](#when-provides-matters)
 
 <!-- tocstop -->
@@ -47,25 +46,15 @@ Before the step does anything else, each of its requirements is checked:
      not run. Running it would only report on a machine that does not have docker yet.
    - In `apply`, that step has already run. The requirement still failing means the provider did not deliver, so the
      step fails naming both.
-3. **If nothing earlier provides it, the step fails** with "docker is missing" and the hint, if there is one.
+3. **If nothing earlier provides it, the step fails** with "docker is missing" and the hint, if there is one. A step
+   later in the script that provides it does not count. The host stops at the failure, so the fix is to move the
+   provider earlier.
 
 A `waiting` step counts as changed, so a follow-up like `if (x.changed)` shows up in the plan too. `plan` errs toward
 showing too much rather than too little.
 
 Requirements are not cached. Each one is re-checked whenever a step requires it, because the check is cheap and the
 state may have changed since.
-
-## Catching the wrong order
-
-At the end of a host's run, in both modes, the library looks at every requirement that failed or waited. If a step
-**later** in the script provides it, the error says so:
-
-```
-docker is provided by "Install docker", which comes after "Start Immich"
-```
-
-This works in `apply` too. After a failure, the remaining calls on `h` are skipped, but the script still reaches them,
-so the library still sees what they provide. See [Failure](./steps.md#failure).
 
 ## When `provides` matters
 
