@@ -24,7 +24,7 @@ const runTsinfra = async (): Promise<Result<number>> => {
   let hasFailedHost = false
   for (const hostEntry of hostEntries) {
     // oxlint-disable-next-line no-await-in-loop - hosts run one at a time until there's a parallel option
-    const result = await runHost(hostEntry)
+    const result = await runHost(hostEntry, config.mode)
     if (isErr(result)) {
       console.error(messageChain(result))
       hasFailedHost = true

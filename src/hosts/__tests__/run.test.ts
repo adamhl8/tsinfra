@@ -20,7 +20,7 @@ const catchFailedRead = async (h: Host) => {
 
 /** Runs a host 'a' with `fn` and returns the error's message chain, if any. */
 const runAndGetMessage = async (fn: HostFunction) => {
-  const result = await runHost({ name: "a", ...host("@local", fn) })
+  const result = await runHost({ name: "a", ...host("@local", fn) }, "apply")
   return isErr(result) ? messageChain(result) : result
 }
 
@@ -38,7 +38,7 @@ describe("runHost", () => {
     // oxlint-disable-next-line typescript/require-await - a `HostFunction` must return a promise
     const recordName = async (h: Host) => void names.push(h.name)
 
-    await runHost({ name: "a", ...host("@local", recordName) })
+    await runHost({ name: "a", ...host("@local", recordName) }, "apply")
 
     expect(names).toStrictEqual(["a"])
   })

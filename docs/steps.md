@@ -16,26 +16,29 @@ Everything a host script does to a target goes through `h`, the context passed t
 ```ts
 interface Host {
   readonly name: string // the host file's name, e.g. "sonarr"
-  step(name: string, spec: StepSpec): Promise<StepResult>
-  file(path: string, spec: FileSpec): Promise<StepResult>
-  run(name: string, cmd: string, opts: RunOpts): Promise<StepResult>
+  step(name: string, options: StepOptions): Promise<StepResult>
+  file(path: string, options: FileOptions): Promise<StepResult>
+  run(name: string, cmd: string, options: RunOptions): Promise<StepResult>
   read(cmd: string): Promise<string>
 }
 
 type StepResult = {
-  status: "ok" | "changed" | "would-change" | "waiting" | "failed"
-  changed: boolean // true for "changed", "would-change", and "waiting"
+  changed: boolean // the step changed something, would change it in plan, or waits on a requirement
 }
 ```
 
 `changed` is what lets a script react to a step, as in `h.run(..., { when: unit.changed })`. In plan mode it means
 "would change", so the follow-up shows up in the plan as "would run" exactly when it would run for real.
 
+Scripts only see `changed`. They cannot tell a real change from a would-be one, so they cannot branch on the mode and
+make the plan differ from what `apply` does. The output shows each step's full status: ok, changed, would change,
+waiting, or failed.
+
 ## `step`
 
 ```ts
-type StepSpec = (
-  | { check: string } // exit 0 means already right
+type StepOptions = (
+  | { check: string | (() => Promise<boolean>) } // exit 0, or true, means already right
   | { read: string; want: string } // compare output to a value
 ) & {
   fix: string | string[]
@@ -53,6 +56,19 @@ A step has one of two kinds of check.
 **`check`** is a command whose exit status is the answer. Exit 0 means the state is already right and nothing happens.
 Anything else means the fix runs. There is nothing to diff, so `plan` shows only the step's name. This is the shape of
 `converge` in the pyinfra helper, and it suits state that only answers yes or no, like `brew bundle check`.
+
+`check` can also be a function that returns `true` when the state is already right. It can call `h.read` and work out
+the answer in TypeScript, for state that is awkward to test in shell:
+
+```ts
+await h.step("App is enabled", {
+  check: async () => JSON.parse(await h.read("cat /etc/app/config.json")).enabled === true,
+  fix: "...",
+})
+```
+
+Like any check, it also runs during `plan`, so it must not change anything. If it throws, the step fails with the
+step's name in the error.
 
 **`read` and `want`** compare a command's output to a value. `read` runs on the target and `want` is computed in your
 script on the control machine. Trailing newlines are stripped from the output (the way `$(cmd)` does), then the two are
@@ -85,7 +101,7 @@ that needs a re-login.
 ## `file`
 
 ```ts
-type FileSpec = {
+type FileOptions = {
   content: string | Buffer // computed on the control machine
   mode?: string // octal, default "644", or "600" when secret
   owner?: string // managed only when given
@@ -116,7 +132,7 @@ home on the target.
 ## `run`
 
 ```ts
-type RunOpts = {
+type RunOptions = {
   when: boolean // run the command on this pass
   sudo?: boolean // run the command under sudo
   requires?: Need[]

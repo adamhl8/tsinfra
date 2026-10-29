@@ -13,6 +13,26 @@ export interface Host {
    * non-zero exit is a legitimate answer.
    */
   read: (cmd: string) => Promise<string>
+  /**
+   * Runs `check`, and in `apply` runs `fix` when the check fails, then checks again. In `plan` the fix never runs.
+   *
+   * A failing fix, or a check that still fails after it, fails the host and throws.
+   */
+  step: (name: string, options: StepOptions) => Promise<StepResult>
+}
+
+export interface StepOptions {
+  /**
+   * A command where exit 0 means already right, or a function that returns true when already right. It also runs during
+   * `plan`, so it must not change anything.
+   */
+  check: string | (() => Promise<boolean>)
+  fix: string
+}
+
+export interface StepResult {
+  /** True when the step changed something, or would in `plan`, so a follow-up guarded by it shows up in the plan too. */
+  changed: boolean
 }
 
 export type HostFunction = (h: Host) => Promise<void>

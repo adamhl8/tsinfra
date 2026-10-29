@@ -12,6 +12,7 @@ What still needs an answer. Most are best settled by porting real hosts first (s
 - [A directory step](#a-directory-step)
 - [A fix that runs local code](#a-fix-that-runs-local-code)
 - [Ordering between hosts](#ordering-between-hosts)
+- [No state](#no-state)
 
 <!-- tocstop -->
 
@@ -74,3 +75,23 @@ do that work before the step today, which means doing it during `plan` too. Revi
 
 Out of scope: the Incus host and its containers are run as separate commands. Revisit if that becomes a real source of
 mistakes.
+
+## No state
+
+tsinfra keeps no record of past runs. Every `plan` reads the machine as it is now. There is no state file to lose, lock,
+or keep in sync, and any checkout on any control machine gives the same plan. Ansible and pyinfra work the same way.
+Terraform needs state because it creates resources and has to know which ones are its own. tsinfra configures machines
+that already exist.
+
+What that costs:
+
+- **Removing a step does not undo it.** A file or package the script stops managing stays on the machine. Removing it
+  takes a step that removes it, like `check: "! test -e /etc/sonarr.conf"` with `fix: "sudo rm /etc/sonarr.conf"`.
+- **`plan` cannot say why something differs.** A hand edit on the machine and an edit to the script look the same,
+  because there is no record of the last apply.
+- **Run-once work needs a marker.** A one-time migration has no natural check, so it leaves a marker on the target, like
+  `test -f /var/lib/myapp/migrated`, and checks for that.
+
+If removal becomes a real problem, there is a lighter fix than a state file. `file` records the paths it manages in a
+manifest on the target (`~/.local/state/tsinfra/manifest`), and `plan` warns about paths in the manifest that the script
+no longer manages. The machine stays the only source of truth. Revisit after porting real hosts.

@@ -3,7 +3,7 @@ import os from "node:os"
 import type { Result } from "ts-explicit-errors"
 import { attempt, err, isErr } from "ts-explicit-errors"
 
-interface ShellOutput {
+export interface ShellOutput {
   stdout: string
   stderr: string
   exitCode: number

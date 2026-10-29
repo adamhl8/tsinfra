@@ -4,7 +4,7 @@ import path from "node:path"
 import { makeTempDir } from "@adamhl8/configs/test"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
-import type { Host } from "#hosts/host.ts"
+import type { Host, Mode, StepOptions } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
 import { createHostSession } from "#hosts/session.ts"
 
@@ -12,12 +12,29 @@ const doNothing = async () => {
   /* empty */
 }
 
-const createSession = (target = "@local") => createHostSession({ name: "a", ...host(target, doNothing) })
+const createSession = (mode: Mode = "apply", target = "@local") =>
+  createHostSession({ name: "a", ...host(target, doNothing) }, mode)
 
 /** Reads `cmd` and returns its output, or the thrown error's message chain. */
 const readOrMessage = async (h: Host, cmd: string) => {
   const output = await attempt(async () => h.read(cmd))
   return isErr(output) ? messageChain(output) : output
+}
+
+/** Runs a step and returns its result, or the thrown error's message chain. */
+const stepOrMessage = async (h: Host, options: StepOptions) => {
+  const result = await attempt(async () => h.step("Make marker", options))
+  return isErr(result) ? messageChain(result) : result
+}
+
+/** Returns a path in a new temp dir, plus a step that creates a file there. */
+const createMarkerStep = async () => {
+  const marker = path.join(await makeTempDir("step-"), "marker")
+  return { marker, options: { check: `test -f '${marker}'`, fix: `touch '${marker}'` } }
+}
+
+const throwBoom = () => {
+  throw new Error("boom")
 }
 
 /** Returns the message chain of the host's recorded failure, if any. */
@@ -67,10 +84,72 @@ describe("h.read", () => {
   })
 
   it("should fail when the target isn't '@local'", async () => {
-    const hostSession = createSession("a.lan")
+    const hostSession = createSession("apply", "a.lan")
 
     expect(await readOrMessage(hostSession.host, "echo hi")).toBe(
       "failed to read 'echo hi' -> target 'a.lan' isn't supported yet (only '@local')",
     )
+  })
+})
+
+describe("h.step", () => {
+  it("should return ok without running the fix when the check passes", async () => {
+    const { host: h } = createSession()
+
+    expect(await stepOrMessage(h, { check: "true", fix: "exit 1" })).toStrictEqual({ changed: false })
+  })
+
+  it("should run the fix in apply and return changed", async () => {
+    const { marker, options } = await createMarkerStep()
+    const { host: h } = createSession("apply")
+
+    expect(await stepOrMessage(h, options)).toStrictEqual({ changed: true })
+    expect(await Bun.file(marker).exists()).toBe(true)
+  })
+
+  it("should return changed in plan without running the fix", async () => {
+    const { marker, options } = await createMarkerStep()
+    const { host: h } = createSession("plan")
+
+    expect(await stepOrMessage(h, options)).toStrictEqual({ changed: true })
+    expect(await Bun.file(marker).exists()).toBe(false)
+  })
+
+  it("should fail the host when the fix fails", async () => {
+    const hostSession = createSession()
+    const message = "failed to run the fix for step 'Make marker' -> exited with code 2: nope"
+
+    expect(await stepOrMessage(hostSession.host, { check: "false", fix: "echo nope >&2; exit 2" })).toBe(message)
+    expect(getFailureMessage(hostSession)).toBe(message)
+  })
+
+  it("should fail the host when the check still fails after the fix", async () => {
+    const { host: h } = createSession()
+
+    expect(await stepOrMessage(h, { check: "echo missing >&2; false", fix: "true" })).toBe(
+      "the check for step 'Make marker' still fails after the fix: missing",
+    )
+  })
+
+  it("should accept a function check that uses h.read", async () => {
+    const { host: h } = createSession()
+    const check = async () => (await h.read("echo yes")) === "yes"
+
+    expect(await stepOrMessage(h, { check, fix: "exit 1" })).toStrictEqual({ changed: false })
+  })
+
+  it("should fail the host with the step's name when a function check throws", async () => {
+    const { host: h } = createSession()
+
+    expect(await stepOrMessage(h, { check: throwBoom, fix: "true" })).toBe("failed to check step 'Make marker' -> boom")
+  })
+
+  it("should name the step when a read inside a function check fails", async () => {
+    const hostSession = createSession()
+    const check = async () => (await hostSession.host.read("exit 1")) === ""
+    const message = "failed to check step 'Make marker' -> failed to read 'exit 1' -> exited with code 1"
+
+    expect(await stepOrMessage(hostSession.host, { check, fix: "true" })).toBe(message)
+    expect(getFailureMessage(hostSession)).toBe(message)
   })
 })
