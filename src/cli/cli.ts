@@ -7,15 +7,19 @@ import { err, isErr, messageChain } from "ts-explicit-errors"
 
 import { program } from "#cli/program.ts"
 import { discoverHosts } from "#hosts/discover.ts"
+import { loadHosts } from "#hosts/load.ts"
 import packageJson from "#package.json" with { type: "json" }
 
 const runTsinfra = async (): Promise<Result> => {
   const config = run(program, { help: "option", version: packageJson.version, showDefault: true })
 
-  const hosts = await discoverHosts(config.hostsDir, config.hosts)
-  if (isErr(hosts)) return err("failed to discover hosts", hosts)
+  const hostFiles = await discoverHosts(config.hostsDir, config.hosts)
+  if (isErr(hostFiles)) return err("failed to discover hosts", hostFiles)
 
-  for (const { name } of hosts) console.log(name)
+  const hosts = await loadHosts(hostFiles)
+  if (isErr(hosts)) return hosts
+
+  for (const { name, target } of hosts) console.log(`${name} -> ${target}`)
 }
 
 const main = async (): Promise<number> => {

@@ -1,8 +1,7 @@
 import { describe, expect, it, setDefaultTimeout } from "bun:test"
 import path from "node:path"
 
-import { writeHosts } from "#__tests__/utils.ts"
-import { createProject } from "#cli/__tests__/utils.ts"
+import { createProject, writeHosts } from "#cli/__tests__/utils.ts"
 
 setDefaultTimeout(30_000)
 
@@ -32,5 +31,16 @@ describe("tsinfra", () => {
     expect(exitCode).toBe(1)
     expect(stdout).toBe("")
     expect(stderr).toStartWith("failed to discover hosts -> failed to read hosts directory 'nowhere' -> ENOENT")
+  })
+
+  it("should print the error and exit 1 when a host can't be loaded", async () => {
+    const { dir, run } = await createProject()
+    await Bun.write(path.join(dir, "hosts", "a.ts"), "")
+
+    const { stdout, stderr, exitCode } = await run`tsinfra plan`.nothrow()
+
+    expect(exitCode).toBe(1)
+    expect(stdout).toBe("")
+    expect(stderr).toBe("failed to load hosts:\nhost 'a' does not default export host()")
   })
 })

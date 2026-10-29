@@ -1,2 +1,2 @@
-// oxlint-disable-next-line unicorn/require-module-specifiers - the public API goes here once `host()` exists
-export {}
+export type { HostDefinition, HostFunction } from "#hosts/host.ts"
+export { host } from "#hosts/host.ts"

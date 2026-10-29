@@ -5,6 +5,9 @@ import { copyFixture, minimalEnv, packPackage, subprocessCoverageEnv } from "@ad
 const ROOT = path.resolve(import.meta.dir, "../../..")
 const FIXTURE = path.resolve(import.meta.dir, "fixtures/project")
 
+const buildHostSource = (name: string) =>
+  `import { host } from "tsinfra"\n\nexport default host("${name}.lan", async () => {})\n`
+
 let tarball: Promise<string> | undefined
 /** Builds and packs tsinfra on first use, so concurrent tests share one tarball. */
 const packTsinfra = async () => {
@@ -18,4 +21,9 @@ export const createProject = async () => {
   await run`bun add -d ${await packTsinfra()}`
 
   return { dir, run }
+}
+
+/** Writes a host file for each name into `dir` that targets `<name>.lan`. */
+export const writeHosts = async (dir: string, names: string[]) => {
+  await Promise.all(names.map(async (name) => Bun.write(path.join(dir, `${name}.ts`), buildHostSource(name))))
 }
