@@ -41,7 +41,7 @@ describe("tsinfra", () => {
 
     expect(exitCode).toBe(1)
     expect(stdout).toBe("")
-    expect(stderr).toBe("failed to load hosts:\nhost 'a' does not default export host()")
+    expect(stderr).toBe("failed to load hosts:\nfailed to load host 'a' -> default must be an object (was missing)")
   })
 
   it("should print the error and exit 1 when a host fails", async () => {

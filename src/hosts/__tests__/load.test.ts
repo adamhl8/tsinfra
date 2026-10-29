@@ -41,8 +41,8 @@ describe("loadHosts", () => {
       [
         "failed to load hosts:",
         "failed to load host 'throws' -> boom",
-        "host 'no-default' does not default export host()",
-        "host 'not-host' does not default export host()",
+        "failed to load host 'no-default' -> default must be an object (was missing)",
+        "failed to load host 'not-host' -> default.fn must be a function (was missing)",
       ].join("\n"),
     )
   })

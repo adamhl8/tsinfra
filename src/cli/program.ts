@@ -1,8 +1,11 @@
+import type { Message } from "@optique/core"
 import { argument, command, constant, merge, message, object, option, or, string, text } from "@optique/core"
 import { defineProgram } from "@optique/core/program"
 import { path } from "@optique/run"
 
 import { HOST_FILE_EXTENSION } from "#hosts/discover.ts"
+import type { Mode } from "#hosts/host.ts"
+import { MODES } from "#hosts/host.ts"
 import packageJson from "#package.json" with { type: "json" }
 
 const DEFAULT_HOSTS_DIR = "hosts"
@@ -16,18 +19,17 @@ const hostOptions = object({
   }).multiple(),
 })
 
+const MODE_BRIEFS = {
+  plan: message`Show what would change on each host`,
+  apply: message`Make the changes on each host`,
+} as const satisfies Record<Mode, Message>
+
 // Merge `hostOptions` into each command so hosts and options can only come after the command name.
-const buildCommandOptions = <T extends string>(name: T) => merge(object({ command: constant(name) }), hostOptions)
+const buildCommandOptions = (mode: Mode) => merge(object({ mode: constant(mode) }), hostOptions)
 
-const plan = command("plan", buildCommandOptions("plan"), {
-  brief: message`Show what would change on each host`,
-})
+const buildCommand = (mode: Mode) => command(mode, buildCommandOptions(mode), { brief: MODE_BRIEFS[mode] })
 
-const apply = command("apply", buildCommandOptions("apply"), {
-  brief: message`Make the changes on each host`,
-})
-
-const parser = or(plan, apply)
+const parser = or(...MODES.map(buildCommand))
 
 export const program = defineProgram({
   parser,

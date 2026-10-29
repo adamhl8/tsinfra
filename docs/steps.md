@@ -14,9 +14,8 @@ Everything a host script does to a target goes through `h`, the context passed t
 <!-- tocstop -->
 
 ```ts
-type HostCtx = {
+interface Host {
   readonly name: string // the host file's name, e.g. "sonarr"
-  readonly mode: "plan" | "apply"
   step(name: string, spec: StepSpec): Promise<StepResult>
   file(path: string, spec: FileSpec): Promise<StepResult>
   run(name: string, cmd: string, opts?: RunOpts): Promise<StepResult>
