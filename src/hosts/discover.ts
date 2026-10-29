@@ -20,15 +20,17 @@ export const discoverHosts = async (dir: string, names: readonly string[]): Prom
   const files = await attempt(async () => Array.fromAsync(glob.scan({ cwd: dir, absolute: true })))
   if (isErr(files)) return err(`failed to read hosts directory '${dir}'`, files)
 
-  const hosts: HostFile[] = files.toSorted().map((file) => ({ name: path.basename(file, HOST_FILE_EXTENSION), file }))
-  if (hosts.length === 0) return err(`no host files in '${dir}'`, undefined)
-  if (names.length === 0) return hosts
+  const hostFiles: HostFile[] = files
+    .toSorted()
+    .map((file) => ({ name: path.basename(file, HOST_FILE_EXTENSION), file }))
+  if (hostFiles.length === 0) return err(`no host files in '${dir}'`, undefined)
+  if (names.length === 0) return hostFiles
 
-  const hostNames = new Set(hosts.map(({ name }) => name))
+  const hostNames = new Set(hostFiles.map(({ name }) => name))
   const unknownNames = names.filter((name) => !hostNames.has(name))
   if (unknownNames.length > 0)
     return err(`unknown host ${quoteNames(unknownNames)} (hosts: ${quoteNames(hostNames)})`, undefined)
 
   const selectedNames = new Set(names)
-  return hosts.filter(({ name }) => selectedNames.has(name))
+  return hostFiles.filter(({ name }) => selectedNames.has(name))
 }

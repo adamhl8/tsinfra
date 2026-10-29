@@ -15,19 +15,19 @@ const ANY_FUNCTION: HostFunction = expect.any(Function)
 
 const toHostFile = (dir: string, name: string) => ({ name, file: path.join(FIXTURES, dir, `${name}.ts`) })
 
-/** Loads the host files and returns the hosts, or the error's message chain. */
+/** Loads the host files and returns their entries, or the error's message chain. */
 const loadOrMessage = async (hostFiles: HostFile[]) => {
-  const hosts = await loadHosts(hostFiles)
-  return isErr(hosts) ? messageChain(hosts) : hosts
+  const hostEntries = await loadHosts(hostFiles)
+  return isErr(hostEntries) ? messageChain(hostEntries) : hostEntries
 }
 
 describe("loadHosts", () => {
-  it("should return each host with its definition", async () => {
-    const hosts = await loadHosts([toHostFile("hosts", "a"), toHostFile("hosts", "b")])
+  it("should return each host file's entry", async () => {
+    const hostEntries = await loadHosts([toHostFile("hosts", "a"), toHostFile("hosts", "b")])
 
-    expect(hosts).toStrictEqual([
-      { ...host("a.lan", ANY_FUNCTION), ...toHostFile("hosts", "a") },
-      { ...host("b.lan", ANY_FUNCTION), ...toHostFile("hosts", "b") },
+    expect(hostEntries).toStrictEqual([
+      { name: "a", ...host("a.lan", ANY_FUNCTION) },
+      { name: "b", ...host("b.lan", ANY_FUNCTION) },
     ])
   })
 

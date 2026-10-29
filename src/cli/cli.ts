@@ -18,17 +18,17 @@ const runTsinfra = async (): Promise<Result<number>> => {
   const hostFiles = await discoverHosts(config.hostsDir, config.hosts)
   if (isErr(hostFiles)) return err("failed to discover hosts", hostFiles)
 
-  const hosts = await loadHosts(hostFiles)
-  if (isErr(hosts)) return hosts
+  const hostEntries = await loadHosts(hostFiles)
+  if (isErr(hostEntries)) return hostEntries
 
   let hasFailedHost = false
-  for (const host of hosts) {
+  for (const hostEntry of hostEntries) {
     // oxlint-disable-next-line no-await-in-loop - hosts run one at a time until there's a parallel option
-    const result = await runHost(host)
+    const result = await runHost(hostEntry)
     if (isErr(result)) {
       console.error(messageChain(result))
       hasFailedHost = true
-    } else console.log(`${host.name} ok`)
+    } else console.log(`${hostEntry.name} ok`)
   }
 
   return hasFailedHost ? 1 : 0

@@ -2,14 +2,14 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { Host } from "#hosts/host.ts"
-import type { LoadedHost } from "#hosts/load.ts"
+import type { HostEntry } from "#hosts/load.ts"
 import { runLocal } from "#transport/local.ts"
 
 const LOCAL_TARGET = "@local"
 const TRAILING_NEWLINES = /\n+$/v
 
-interface HostContext {
-  h: Host
+interface HostSession {
+  host: Host
   getFailure: () => Error | undefined
 }
 
@@ -26,8 +26,8 @@ const runCommand = async (target: string, cmd: string): Promise<Result<string>> 
   return output.stdout
 }
 
-/** Builds the `h` passed to a host function, keeping the host's failure out of its public API. */
-export const createHostContext = ({ name, target }: LoadedHost): HostContext => {
+/** Builds the `Host` passed to a host's function, and tracks the run's failure where the script can't see it. */
+export const createHostSession = ({ name, target }: HostEntry): HostSession => {
   let failure: Error | undefined
 
   // Throw the first failure again on every later call, so a script that catches it still can't use the host.
@@ -44,5 +44,5 @@ export const createHostContext = ({ name, target }: LoadedHost): HostContext => 
     return stdout.replace(TRAILING_NEWLINES, "")
   }
 
-  return { h: { name, read }, getFailure: () => failure }
+  return { host: { name, read }, getFailure: () => failure }
 }

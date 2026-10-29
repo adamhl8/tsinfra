@@ -10,16 +10,16 @@ const HOSTS_DIR = path.join(FIXTURES, "hosts")
 
 /** Returns the names of the discovered hosts, or the error's message chain. */
 const discoverNames = async (dir: string, names: string[] = []) => {
-  const hosts = await discoverHosts(dir, names)
-  if (isErr(hosts)) return messageChain(hosts)
-  return hosts.map(({ name }) => name)
+  const hostFiles = await discoverHosts(dir, names)
+  if (isErr(hostFiles)) return messageChain(hostFiles)
+  return hostFiles.map(({ name }) => name)
 }
 
 describe("discoverHosts", () => {
   it("should return every host file, sorted, ignoring subdirectories and other files", async () => {
-    const hosts = await discoverHosts(HOSTS_DIR, [])
+    const hostFiles = await discoverHosts(HOSTS_DIR, [])
 
-    expect(hosts).toStrictEqual(["a", "b", "c"].map((name) => ({ name, file: path.join(HOSTS_DIR, `${name}.ts`) })))
+    expect(hostFiles).toStrictEqual(["a", "b", "c"].map((name) => ({ name, file: path.join(HOSTS_DIR, `${name}.ts`) })))
   })
 
   it("should return only the named hosts, in file order", async () => {
