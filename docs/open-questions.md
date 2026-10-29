@@ -6,6 +6,7 @@ What still needs an answer. Most are best settled by porting real hosts first (s
 
 - [What `plan` output should look like](#what-plan-output-should-look-like)
 - [Interactive sudo](#interactive-sudo)
+- [Interactive commands](#interactive-commands)
 - [Published, or personal](#published-or-personal)
 - [Helpers worth shipping](#helpers-worth-shipping)
 - [A directory step](#a-directory-step)
@@ -30,6 +31,23 @@ it by running `plan` on the ported Mac and reacting to what it shows.
 
 Options include running `sudo -v` interactively before a host starts (fine for the local host, awkward with hosts in
 parallel), or passing a password on stdin to `sudo -S` from a secret the script decrypted.
+
+## Interactive commands
+
+Some commands need a person at the keyboard, like an installer that asks questions. Commands normally run with their
+script on stdin and their output captured, so nothing can answer a prompt.
+
+Two ways to allow it:
+
+- **Inherit the terminal.** Connect the command to the CLI's own terminal (`stdio: "inherit"` locally, `ssh -t`
+  remotely). The user answers prompts directly, and tsinfra sees none of the output.
+- **A pseudo-terminal.** `Bun.spawn`'s `terminal` option attaches a PTY, so tsinfra sits between the command and the
+  user. It can show and record the output, or answer a prompt itself, like a sudo password from a decrypted secret (see
+  [Interactive sudo](#interactive-sudo)).
+
+Either way it is a separate mode, not how commands normally run. A PTY merges stdout and stderr and would echo a script
+sent on stdin, so the command would travel as an argument instead. An interactive command also needs the terminal to
+itself, which conflicts with hosts running in parallel and with `BatchMode`. Settle it when a real host needs one.
 
 ## Published, or personal
 
