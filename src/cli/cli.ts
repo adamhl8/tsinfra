@@ -8,9 +8,11 @@ import { err, isErr, messageChain } from "ts-explicit-errors"
 import { program } from "#cli/program.ts"
 import { discoverHosts } from "#hosts/discover.ts"
 import { loadHosts } from "#hosts/load.ts"
+import { runHost } from "#hosts/run.ts"
 import packageJson from "#package.json" with { type: "json" }
 
-const runTsinfra = async (): Promise<Result> => {
+/** Runs the hosts and returns the exit code: 1 when any host failed. */
+const runTsinfra = async (): Promise<Result<number>> => {
   const config = run(program, { help: "option", version: packageJson.version, showDefault: true })
 
   const hostFiles = await discoverHosts(config.hostsDir, config.hosts)
@@ -19,17 +21,27 @@ const runTsinfra = async (): Promise<Result> => {
   const hosts = await loadHosts(hostFiles)
   if (isErr(hosts)) return hosts
 
-  for (const { name, target } of hosts) console.log(`${name} -> ${target}`)
+  let hasFailedHost = false
+  for (const host of hosts) {
+    // oxlint-disable-next-line no-await-in-loop - hosts run one at a time until there's a parallel option
+    const result = await runHost(host)
+    if (isErr(result)) {
+      console.error(messageChain(result))
+      hasFailedHost = true
+    } else console.log(`${host.name} ok`)
+  }
+
+  return hasFailedHost ? 1 : 0
 }
 
 const main = async (): Promise<number> => {
-  const result = await runTsinfra()
-  if (isErr(result)) {
-    console.error(messageChain(result))
+  const exitCode = await runTsinfra()
+  if (isErr(exitCode)) {
+    console.error(messageChain(exitCode))
     return 1
   }
 
-  return 0
+  return exitCode
 }
 
 process.exitCode = await main()

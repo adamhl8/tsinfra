@@ -43,4 +43,17 @@ describe("tsinfra", () => {
     expect(stdout).toBe("")
     expect(stderr).toBe("failed to load hosts:\nhost 'a' does not default export host()")
   })
+
+  it("should print the error and exit 1 when a host fails", async () => {
+    const { dir, run } = await createProject()
+    await writeHosts(path.join(dir, "hosts"), ["a"])
+    const source = `import { host } from "tsinfra"\n\nexport default host("b.lan", async () => { throw new Error("boom") })\n`
+    await Bun.write(path.join(dir, "hosts", "b.ts"), source)
+
+    const { stdout, stderr, exitCode } = await run`tsinfra plan`.nothrow()
+
+    expect(exitCode).toBe(1)
+    expect(stdout).toBe("a ok")
+    expect(stderr).toBe("failed to run host 'b' -> boom")
+  })
 })
