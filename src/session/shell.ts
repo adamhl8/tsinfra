@@ -6,7 +6,7 @@ import type { Transport } from "#transport/transport.ts"
 
 const TRAILING_NEWLINES = /\n+$/v
 
-interface CommandOutput {
+export interface CommandResult {
   /** The command's stdout without trailing newlines. */
   stdout: string
   /** Set when the command exits non-zero, with the exit code and stderr in its message. */
@@ -15,7 +15,7 @@ interface CommandOutput {
 
 export interface Shell {
   /** Runs `cmd` and describes how it went. Only failing to run at all is an error. */
-  inspect: (cmd: string) => Promise<Result<CommandOutput>>
+  inspect: (cmd: string) => Promise<Result<CommandResult>>
   /** Runs `cmd` and returns its stdout. Failing to run and a non-zero exit are both errors. */
   run: (cmd: string) => Promise<Result<string>>
 }
@@ -30,7 +30,7 @@ const createCommandExitError = ({ exitCode, stderr }: ShellOutput) => {
 
 /** Binds `transport` into the two ways the session runs commands. */
 export const createShell = (transport: Transport): Shell => {
-  const inspect = async (cmd: string): Promise<Result<CommandOutput>> => {
+  const inspect = async (cmd: string): Promise<Result<CommandResult>> => {
     const output = await transport(cmd)
     if (isErr(output)) return output
 
@@ -41,11 +41,11 @@ export const createShell = (transport: Transport): Shell => {
   }
 
   const run = async (cmd: string): Promise<Result<string>> => {
-    const output = await inspect(cmd)
-    if (isErr(output)) return output
-    if (output.exitError) return output.exitError
+    const commandResult = await inspect(cmd)
+    if (isErr(commandResult)) return commandResult
+    if (commandResult.exitError) return commandResult.exitError
 
-    return output.stdout
+    return commandResult.stdout
   }
 
   return { inspect, run }

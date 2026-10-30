@@ -3,7 +3,7 @@ import { err, isErr } from "ts-explicit-errors"
 
 import { stripTrailingNewlines } from "#session/shell.ts"
 import type { CheckResult, FixOptions, StepCall, StepResult } from "#session/step.ts"
-import { callCheckFunction, converge } from "#session/step.ts"
+import { converge, runCheck } from "#session/step.ts"
 
 export interface EnsureValueOptions extends FixOptions {
   /**
@@ -21,29 +21,25 @@ const compareToWant = (value: string, want: string): CheckResult => {
   return read === wanted ? { checkPassed: true } : { checkPassed: false, detail: `read: ${read}\nwant: ${wanted}` }
 }
 
-const evaluateReadWant = async (
-  { shell, stepName }: StepCall,
-  { read, want }: EnsureValueOptions,
-): Promise<Result<CheckResult>> => {
-  if (typeof read === "function") {
-    const value = await callCheckFunction(stepName, read)
-    if (isErr(value)) return value
+export const runEnsureValue = async (
+  stepCall: StepCall,
+  { read, want, fix }: EnsureValueOptions,
+): Promise<Result<StepResult>> => {
+  const evaluate = async (): Promise<Result<CheckResult>> => {
+    const checkRun = await runCheck(stepCall, read)
+    if (isErr(checkRun)) return checkRun
+    if (checkRun.type === "function") return compareToWant(checkRun.value, want)
 
-    return compareToWant(value, want)
+    const { stdout, exitError } = checkRun.commandResult
+    const checkResult = compareToWant(stdout, want)
+    if (!exitError) return checkResult
+
+    // Fail a broken read whose output happens to match, so it can't look converged.
+    if (checkResult.checkPassed) return err(`failed to check step '${stepCall.stepName}'`, exitError)
+
+    // Keep the exit error in the detail, because it can show that the read itself is broken.
+    return { checkPassed: false, detail: `${checkResult.detail ?? ""}\n${exitError.message}` }
   }
 
-  const output = await shell.inspect(read)
-  if (isErr(output)) return err(`failed to check step '${stepName}'`, output)
-
-  const outcome = compareToWant(output.stdout, want)
-  if (!output.exitError) return outcome
-
-  // Fail a broken read whose output happens to match, so it can't look converged.
-  if (outcome.checkPassed) return err(`failed to check step '${stepName}'`, output.exitError)
-
-  // Keep the exit error in the detail, because it can show that the read itself is broken.
-  return { checkPassed: false, detail: `${outcome.detail ?? ""}\n${output.exitError.message}` }
+  return converge(stepCall, evaluate, fix)
 }
-
-export const runEnsureValue = async (stepCall: StepCall, options: EnsureValueOptions): Promise<Result<StepResult>> =>
-  converge(stepCall, async () => evaluateReadWant(stepCall, options), options.fix)

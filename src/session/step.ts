@@ -2,7 +2,7 @@ import type { Result } from "ts-explicit-errors"
 import { attempt, err, isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
-import type { Shell } from "#session/shell.ts"
+import type { CommandResult, Shell } from "#session/shell.ts"
 
 export interface FixOptions {
   fix: string
@@ -26,14 +26,27 @@ export interface CheckResult {
   detail?: string
 }
 
+/** What a check produced: a check function's value, or a check command's result. */
+export type CheckRun<T> = { type: "function"; value: T } | { type: "command"; commandResult: CommandResult }
+
 const indentLines = (text: string) => text.replaceAll(/^/gmv, "  ")
 
-/** Calls a check or read function from the script, and names the step when it throws. */
-export const callCheckFunction = async <T>(stepName: string, checkFunction: () => Promise<T>): Promise<Result<T>> => {
-  const value = await attempt(async () => checkFunction())
-  if (isErr(value)) return err(`failed to check step '${stepName}'`, value)
+/** Runs a step's check, as a command or a function, and names the step when it can't run. */
+export const runCheck = async <T>(
+  { shell, stepName }: StepCall,
+  check: string | (() => Promise<T>),
+): Promise<Result<CheckRun<T>>> => {
+  if (typeof check === "function") {
+    const value = await attempt(async () => check())
+    if (isErr(value)) return err(`failed to check step '${stepName}'`, value)
 
-  return value
+    return { type: "function", value }
+  }
+
+  const commandResult = await shell.inspect(check)
+  if (isErr(commandResult)) return err(`failed to check step '${stepName}'`, commandResult)
+
+  return { type: "command", commandResult }
 }
 
 /** Runs the part every step shares: check, fix in `apply`, then check again. */

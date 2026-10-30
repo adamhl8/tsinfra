@@ -1,8 +1,8 @@
 import type { Result } from "ts-explicit-errors"
-import { err, isErr } from "ts-explicit-errors"
+import { isErr } from "ts-explicit-errors"
 
 import type { CheckResult, FixOptions, StepCall, StepResult } from "#session/step.ts"
-import { callCheckFunction, converge } from "#session/step.ts"
+import { converge, runCheck } from "#session/step.ts"
 
 export interface EnsureOptions extends FixOptions {
   /**
@@ -12,23 +12,15 @@ export interface EnsureOptions extends FixOptions {
   check: string | (() => Promise<boolean>)
 }
 
-const evaluateCheck = async (
-  { shell, stepName }: StepCall,
-  check: EnsureOptions["check"],
-): Promise<Result<CheckResult>> => {
-  if (typeof check === "function") {
-    const checkPassed = await callCheckFunction(stepName, check)
-    if (isErr(checkPassed)) return checkPassed
+export const runEnsure = async (stepCall: StepCall, { check, fix }: EnsureOptions): Promise<Result<StepResult>> => {
+  const evaluate = async (): Promise<Result<CheckResult>> => {
+    const checkRun = await runCheck(stepCall, check)
+    if (isErr(checkRun)) return checkRun
+    if (checkRun.type === "function") return { checkPassed: checkRun.value }
 
-    return { checkPassed }
+    const { exitError } = checkRun.commandResult
+    return exitError ? { checkPassed: false, detail: exitError.message } : { checkPassed: true }
   }
 
-  const output = await shell.inspect(check)
-  if (isErr(output)) return err(`failed to check step '${stepName}'`, output)
-  if (output.exitError) return { checkPassed: false, detail: output.exitError.message }
-
-  return { checkPassed: true }
+  return converge(stepCall, evaluate, fix)
 }
-
-export const runEnsure = async (stepCall: StepCall, { check, fix }: EnsureOptions): Promise<Result<StepResult>> =>
-  converge(stepCall, async () => evaluateCheck(stepCall, check), fix)
