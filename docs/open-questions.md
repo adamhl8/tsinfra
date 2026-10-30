@@ -11,6 +11,8 @@ What still needs an answer. Most are best settled by porting real hosts first (s
 - [Helpers worth shipping](#helpers-worth-shipping)
 - [A directory step](#a-directory-step)
 - [A fix that runs local code](#a-fix-that-runs-local-code)
+- [Steps inside step functions](#steps-inside-step-functions)
+- [Quoting values in commands](#quoting-values-in-commands)
 - [Ordering between hosts](#ordering-between-hosts)
 - [No state](#no-state)
 
@@ -68,8 +70,24 @@ Add `h.dir(path, { mode })` if a port needs it.
 
 ## A fix that runs local code
 
-`fix` is shell only. A fix that needs work on the control machine at apply time (download locally, then upload) has to
-do that work before the step today, which means doing it during `plan` too. Revisit if a port hits this.
+A fix function only runs in `apply`, so work on the control machine (like a download) can go inside it and stay out of
+`plan`. `exec` only runs commands, though, so the fix has no way to send what it built to the target. Revisit if a port
+hits this.
+
+## Steps inside step functions
+
+Calling `h.ensure`, `h.ensureValue`, `h.file`, or `h.run` inside a check, read, fix, or run function is a mistake (see
+[Steps](./steps.md#commands)), and today only the docs say so. The session could enforce it with `AsyncLocalStorage`
+from `node:async_hooks`. Each function would run inside a scope that holds its step's name, and those methods would fail
+when they find one. The scope follows the async chain, so a step running next to it in `Promise.all` is not affected.
+The error would read `failed to run the fix for step 'A' -> step 'B' can't run inside another step`. Add it if the
+mistake shows up in practice.
+
+## Quoting values in commands
+
+Computing values in TypeScript means putting them into command strings, and a value with a space or a quote breaks the
+command. A tagged template that escapes what is put into it would fix this: `` sh`curl -fsSL ${url} -o ${dest}` ``.
+Bun ships `$.escape`, so it would be a thin wrapper. It applies to `check`, `read`, `fix`, `exec`, and `run` alike.
 
 ## Ordering between hosts
 

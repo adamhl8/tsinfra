@@ -4,7 +4,11 @@ Everything a host script does to a target goes through `h`, the context passed t
 
 <!-- toc -->
 
-- [`step`](#step)
+- [Commands](#commands)
+- [Steps](#steps)
+  - [`ensure`](#ensure)
+  - [`ensureValue`](#ensurevalue)
+  - [`fix`](#fix)
 - [`file`](#file)
 - [`run`](#run)
 - [`read`](#read)
@@ -16,10 +20,19 @@ Everything a host script does to a target goes through `h`, the context passed t
 ```ts
 interface Host {
   readonly name: string // the host file's name, e.g. "sonarr"
-  step(name: string, options: StepOptions): Promise<StepResult>
+  ensure(name: string, options: EnsureOptions): Promise<StepResult>
+  ensureValue(name: string, options: EnsureValueOptions): Promise<StepResult>
   file(path: string, options: FileOptions): Promise<StepResult>
-  run(name: string, cmd: string, options: RunOptions): Promise<StepResult>
-  read(cmd: string): Promise<string>
+  run(name: string, cmd: string | ((exec: Exec) => Promise<void>), options: RunOptions): Promise<StepResult>
+  read(cmd: string, options?: CommandOptions): Promise<string>
+}
+
+// Runs one command inside a fix or run function, and returns its stdout.
+type Exec = (cmd: string, options?: CommandOptions) => Promise<string>
+
+type CommandOptions = {
+  sudo?: boolean // run as root through `sudo -n`
+  secret?: boolean // keep the command and its output out of the output and errors
 }
 
 type StepResult = {
@@ -34,34 +47,74 @@ Scripts only see `changed`. They cannot tell a real change from a would-be one, 
 make the plan differ from what `apply` does. The output shows each step's full status: ok, changed, would change,
 waiting, or failed.
 
-## `step`
+## Commands
+
+Everything that runs on the target takes one command at a time, so you never have to write a multi-line shell script.
+Shell is for basic commands like `systemctl` or `docker compose`. Work out values in TypeScript, not with pipes and
+`cut`.
+
+Two shapes follow from that:
+
+- **Computing a value** (a step's `check` and `read`) takes a command, or a function that returns the value. The
+  function calls `h.read` as many times as it needs. It also runs during `plan`, so it must not change anything.
+- **Changing the target** (a step's `fix`, and `run`) takes a command, or a function given `exec`. The function calls
+  `exec` once per command. It only runs in `apply`.
+
+`h.read` and `exec` are the primitives. Each runs one command, returns its stdout, and takes `CommandOptions`. `exec`
+only exists inside a fix or run function. It is not `h.run`. A run is an action with its own name in the output, and a
+command inside a fix is part of one change that the step's name already covers.
+
+**A function holds commands, not decisions.** A fix or run function that tests the machine before acting is a step in
+disguise (see [`run`](#run)).
+
+**No steps inside steps.** Do not call `h.ensure`, `h.ensureValue`, `h.file`, or `h.run` inside a check, read, fix, or run function. A step
+inside a fix never shows in `plan`, because `plan` never runs the fix. A step inside a check runs its fix while
+checking. Nothing enforces this yet (see [Open questions](./open-questions.md#steps-inside-step-functions)).
+
+## Steps
+
+A step checks one piece of state, and in `apply` runs a fix when the check fails. `ensure` and `ensureValue` are steps
+you write the check for. [`file`](#file) is a step whose check tsinfra writes. All three return a `StepResult`.
 
 ```ts
-type StepOptions = (
-  | { check: string | (() => Promise<boolean>) } // exit 0, or true, means already right
-  | { read: string; want: string } // compare output to a value
-) & {
-  fix: string | string[]
+type FixOptions = {
+  fix: string | ((exec: Exec) => Promise<void>)
   noop?: string // message shown when already right, in verbose output
-  sudo?: boolean // run the fix under sudo
+  sudo?: boolean // run a string fix under sudo
   verify?: boolean // default true
   secret?: boolean // hide the diff
   requires?: Need[]
   provides?: Need[]
 }
+
+type EnsureOptions = FixOptions & {
+  check: string | (() => Promise<boolean>) // exit 0, or true, means already right
+}
+
+type EnsureValueOptions = FixOptions & {
+  read: string | (() => Promise<string>) // compared to `want`
+  want: string
+}
 ```
 
-A step has one of two kinds of check.
+Name a step like a function, starting with a verb ("Install Caddy"), or as the state it ensures ("Caddy is installed").
+Both read well after `ensure`.
 
-**`check`** is a command whose exit status is the answer. Exit 0 means the state is already right and nothing happens.
+### `ensure`
+
+`check` is a command whose exit status is the answer. Exit 0 means the state is already right and nothing happens.
 Anything else means the fix runs. There is nothing to diff, so `plan` shows only the step's name. This is the shape of
 `converge` in the pyinfra helper, and it suits state that only answers yes or no, like `brew bundle check`.
+
+```ts
+await h.ensure("Install Caddy", { check: "dpkg -s caddy", fix: "sudo apt-get install -y caddy" })
+```
 
 `check` can also be a function that returns `true` when the state is already right. It can call `h.read` and work out
 the answer in TypeScript, for state that is awkward to test in shell:
 
 ```ts
-await h.step("App is enabled", {
+await h.ensure("Enable the app", {
   check: async () => JSON.parse(await h.read("cat /etc/app/config.json")).enabled === true,
   fix: "...",
 })
@@ -70,14 +123,28 @@ await h.step("App is enabled", {
 Like any check, it also runs during `plan`, so it must not change anything. If it throws, the step fails with the
 step's name in the error.
 
-**`read` and `want`** compare a command's output to a value. `read` runs on the target and `want` is computed in your
-script on the control machine. Trailing newlines are stripped from the output (the way `$(cmd)` does), then the two are
-compared exactly. When they differ, `plan` shows a line diff.
+### `ensureValue`
+
+`read` and `want` compare a command's output to a value. `read` runs on the target and `want` is computed in your
+script on the control machine. Trailing newlines are stripped from both (the way `$(cmd)` does), then the two are
+compared exactly. Stripping `want` too means a value built from a template literal that ends in a newline still matches.
+When they differ, `plan` shows a line diff.
+
+```ts
+await h.ensureValue("Start Sonarr", {
+  read: "systemctl is-active sonarr",
+  want: "active",
+  fix: "sudo systemctl enable --now sonarr",
+})
+```
+
+Like `check`, `read` can also be a function, here one that returns the value to compare. It suits values that are
+easier to pull out in TypeScript than in shell:
 
 ```ts
 const latest = await latestCaddyVersion() // fetch() on the control machine
-await h.step("Caddy is up to date", {
-  read: "caddy version | cut -d' ' -f1",
+await h.ensureValue("Update Caddy", {
+  read: async () => (await h.read("caddy version")).split(" ")[0] ?? "",
   want: latest,
   fix: buildCaddy,
 })
@@ -85,16 +152,78 @@ await h.step("Caddy is up to date", {
 
 A broken `read` must not look converged. If `read` exits non-zero and its output still equals `want`, the step fails
 instead of reporting ok. A read whose non-zero exit is legitimate (`systemctl is-active` exits 3 for inactive) already
-produces output that differs from `want`, so this only catches the broken case.
+produces output that differs from `want`, so this only catches the broken case. A function `read` gets this for free,
+because `h.read` inside it throws on a non-zero exit.
 
-**`fix`** is one command or a list. A list runs in order, and the first one that fails stops the step and is named in
-the error. `sudo: true` runs the whole fix under `sudo`. Writing `sudo` inside a command also works, because commands
-are just strings.
+### `fix`
 
-**Verification.** After a fix runs, the check runs again. If it still does not pass, the step fails with "fix ran but
-the check still fails", plus the diff or the check's stderr. A step that reports a change on every run is a bug, and
-this is what surfaces it the first time. `verify: false` is for fixes whose effect is genuinely delayed, like a setting
-that needs a re-login.
+`fix` is one command, or a function that runs several with `exec`. The function form is for one change that takes
+more than one command, where the halfway state is not something you would check:
+
+```ts
+await h.ensure("Install Caddy", {
+  check: "dpkg -s caddy",
+  fix: async (exec) => {
+    await exec("sudo apt-get update")
+    await exec("sudo apt-get install -y caddy")
+  },
+})
+```
+
+Each `exec` call runs one command and returns its stdout, with trailing newlines stripped. A non-zero exit throws, which
+stops the fix there, and the error names the command. That replaces `set -e` or `&&` chains, and it puts TypeScript
+between the commands. A later command can use an earlier one's output:
+
+```ts
+fix: async (exec) => {
+  const id = await exec(`docker create ${image}`)
+  await exec(`docker cp ./seed ${id}:/data`)
+  await exec(`docker start ${id}`)
+}
+```
+
+The fix function only runs in `apply`, so it can change things and do work on the control machine.
+
+**One step or several.** A fix re-runs every command whenever its check fails. If one command's effect can be in place
+while the check still fails, that effect is state of its own, and it gets its own step. In the apt example, an updated
+package index does not matter, so running `apt-get update` again is harmless. This one is wrong:
+
+```ts
+await h.ensure("Set up Sonarr", {
+  check: "systemctl is-active sonarr",
+  fix: async (exec) => {
+    await exec("sudo useradd --system sonarr")
+    await exec("sudo install -d -o sonarr /var/lib/sonarr")
+    await exec("sudo systemctl enable --now sonarr")
+  },
+})
+```
+
+If `systemctl` fails, the next run starts the fix from the top, and `useradd` fails because the user already exists, so
+the step can never finish. The check only covers the last piece, so a data dir with the wrong owner still reports ok.
+`plan` shows one line that does not say what is missing. Written as three steps, each piece has its own check, and each
+fix runs only when its own state is wrong:
+
+```ts
+await h.ensure("Create the sonarr user", { check: "id sonarr", fix: "sudo useradd --system sonarr" })
+await h.ensureValue("Create the sonarr data dir", {
+  read: "stat -c %U /var/lib/sonarr",
+  want: "sonarr",
+  fix: "sudo install -d -o sonarr /var/lib/sonarr",
+})
+await h.ensure("Start Sonarr", { check: "systemctl is-active sonarr", fix: "sudo systemctl enable --now sonarr" })
+```
+
+There is no list form of `fix`. A multi-line string runs like any shell script, so it carries on past a failed line
+unless it starts with `set -e`. Use the function form for anything past one command.
+
+**`sudo: true`** runs a string fix under `sudo`. In a fix function, pass `{ sudo: true }` to each `exec` that needs it.
+
+**Verification.** After a fix runs, the check runs again. If it still does not pass, the step fails with "the check for
+step '...' still fails after the fix", plus the details: the read and want values for `ensureValue`, and the exit code
+and stderr of a command that exited non-zero. A step that reports a change on every run is a bug, and this is what
+surfaces it the first time. `verify: false` is for fixes whose effect is genuinely delayed, like a setting that needs a
+re-login. The step then reports `changed` as soon as the fix succeeds.
 
 **Plan mode** runs the check and never the fix. A step that would change reports `would-change`.
 
@@ -132,15 +261,15 @@ home on the target.
 ## `run`
 
 ```ts
-type RunOptions = {
-  when: boolean // run the command on this pass
-  sudo?: boolean // run the command under sudo
+type RunOptions = CommandOptions & {
+  when: boolean // run on this pass
   requires?: Need[]
   provides?: Need[]
 }
 ```
 
-A command with no check. `when` is required, so every `run` says when it runs. Unconditional work is `when: true`,
+An action with no check: one command, or a function given `exec` for one action that takes several commands. `sudo`
+and `secret` apply to a string command. A function passes them to each `exec`. `when` is required, so every `run` says when it runs. Unconditional work is `when: true`,
 written out rather than assumed, so a forgotten guard is a type error instead of a command that quietly runs every time.
 
 ```ts
@@ -170,8 +299,48 @@ machines.
 see drift. A run guarded by a step only fires when that step changes, and the step already counts. A `when: true` run is
 a deliberate choice to run every time, which says nothing about the machine's state.
 
-Anything that can be checked should be a `step`. That includes a check hidden in `when`, like
-`when: (await h.read("...")) !== "x"`. It works, but it never counts as drift.
+Two actions are usually two runs, each with its own name in the output. The function form is for one action that takes
+several commands under one `when`:
+
+```ts
+await h.run(
+  "Update the stack",
+  async (exec) => {
+    await exec("docker compose pull")
+    await exec("docker compose up -d")
+  },
+  { when: compose.changed },
+)
+```
+
+A function that takes `h` shares runs and steps between hosts:
+
+```ts
+const updateComposeStack = async (h: Host, when: boolean) => {
+  await h.run("Pull images", "docker compose pull", { when })
+  await h.run("Start the stack", "docker compose up -d", { when })
+}
+
+await updateComposeStack(h, compose.changed)
+```
+
+The same works for steps, as in `aptPackage(h, "caddy")`. Helpers like these are how tsinfra gets modules, whether you
+write them or tsinfra ships them (see [Open questions](./open-questions.md#helpers-worth-shipping)).
+
+Anything that can be checked should be a step. That includes a check hidden in `when`, like
+`when: (await h.read("...")) !== "x"`, and one hidden in a run function:
+
+```ts
+await h.run(
+  "Set up sonarr",
+  async (exec) => {
+    if ((await exec("id -u sonarr || true")) === "") await exec("sudo useradd --system sonarr")
+  },
+  { when: true },
+)
+```
+
+Both work, but they never count as drift, and `plan` says "would run" whether or not anything would change.
 
 ## `read`
 
@@ -180,10 +349,14 @@ observations a script branches on:
 
 ```ts
 const arch = await h.read("uname -m")
+const firewall = await h.read("ufw status", { sudo: true })
 ```
 
 A non-zero exit fails the host, with the command's stderr. Append `|| true` when a non-zero exit is a legitimate
 answer. A `read` must not change anything, because it also runs during `plan`. Nothing can enforce that.
+
+`secret: true` keeps the command out of errors and output, for a command that carries a token. The output itself is
+only ever returned to the script.
 
 ## Failure
 
@@ -192,7 +365,8 @@ stops the script at that point. The CLI reports the host as failed, with the cal
 
 Catching the error does not recover the host. It stays failed, and every later call on `h` throws the same error
 straight away without touching the target. Code between the catch and the next call on `h` still runs, so do not catch
-around calls on `h`. A command whose non-zero exit is a legitimate answer says so itself, with `|| true`.
+around calls on `h`. The same holds inside a check, read, fix, or run function. A step or run whose function catches a
+failed `h.read` or `exec` still fails. A command whose non-zero exit is a legitimate answer says so itself, with `|| true`.
 
 If the host function throws for any other reason (a bug in the script), the CLI catches it and reports the host as
 failed in the same way.

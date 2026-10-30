@@ -71,7 +71,7 @@ describe("tsinfra", () => {
   it("should only run a step's fix in apply", async () => {
     const { dir, run } = await createProject()
     const marker = path.join(dir, "marker")
-    const step = `h.step("Make marker", { check: "test -f '${marker}'", fix: "touch '${marker}'" })`
+    const step = `h.ensure("Make marker", { check: "test -f '${marker}'", fix: "touch '${marker}'" })`
     await Bun.write(
       path.join(dir, "hosts", "a.ts"),
       `import { host } from "tsinfra"\n\nexport default host("@local", async (h) => void (await ${step}))\n`,

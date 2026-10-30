@@ -104,8 +104,9 @@ The first command to a host opens the connection. An unreachable host fails at t
 `sudo: true`. The Incus containers already have it, via cloud-init. The Mac and the first run on the Incus host do not.
 See [Open questions](./open-questions.md).
 
-On `step` and `run`, `sudo: true` covers the fix or the command only. A `step` check runs as the connecting user unless
-the check itself says `sudo`, because the user writes that command.
+On `ensure`, `ensureValue`, and `run`, `sudo: true` covers a string fix or command only. Inside a fix or run function, each `exec` takes
+its own `sudo`, and `h.read` takes one too. A step's string `check` or `read` runs as the connecting user unless the
+command itself says `sudo`, because the user writes that command.
 
 On `file`, `sudo: true` covers the whole operation: the check, the diff, and the write. tsinfra generates all three, so
 there is nowhere for the user to add `sudo`. A root-only file under `/etc` could not be hashed or read otherwise. This

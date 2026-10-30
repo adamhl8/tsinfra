@@ -1,2 +1,6 @@
-export type { Host, HostDefinition, HostFunction, StepOptions, StepResult } from "#hosts/host.ts"
+export type { HostDefinition, HostFunction } from "#hosts/host.ts"
 export { host } from "#hosts/host.ts"
+export type { EnsureValueOptions } from "#session/methods/ensure-value.ts"
+export type { EnsureOptions } from "#session/methods/ensure.ts"
+export type { Host } from "#session/session.ts"
+export type { FixOptions, StepResult } from "#session/step.ts"

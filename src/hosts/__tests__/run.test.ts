@@ -2,9 +2,10 @@ import { describe, expect, it } from "bun:test"
 
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
-import type { Host, HostFunction } from "#hosts/host.ts"
+import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
 import { runHost } from "#hosts/run.ts"
+import type { Host } from "#session/session.ts"
 
 const throwBoom = () => {
   throw new Error("boom")

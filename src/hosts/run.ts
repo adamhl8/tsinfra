@@ -1,9 +1,9 @@
 import type { Result } from "ts-explicit-errors"
 import { attempt, err, isErr } from "ts-explicit-errors"
 
-import type { Mode } from "#hosts/host.ts"
+import type { Mode } from "#cli/program.ts"
 import type { HostEntry } from "#hosts/load.ts"
-import { createHostSession } from "#hosts/session.ts"
+import { createHostSession } from "#session/session.ts"
 
 export const runHost = async (hostEntry: HostEntry, mode: Mode): Promise<Result> => {
   const { host, getFailure } = createHostSession(hostEntry, mode)

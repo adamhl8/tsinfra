@@ -4,9 +4,10 @@ import { defineProgram } from "@optique/core/program"
 import { path } from "@optique/run"
 
 import { HOST_FILE_EXTENSION } from "#hosts/discover.ts"
-import type { Mode } from "#hosts/host.ts"
-import { MODES } from "#hosts/host.ts"
 import packageJson from "#package.json" with { type: "json" }
+
+const MODES = ["plan", "apply"] as const
+export type Mode = (typeof MODES)[number]
 
 const DEFAULT_HOSTS_DIR = "hosts"
 

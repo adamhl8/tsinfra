@@ -86,14 +86,16 @@ import { dotnet } from "../lib/needs.ts"
 export default host("sonarr.lan", async (h) => {
   await base(h)
 
-  await h.step("Install Sonarr", {
+  await h.ensure("Install Sonarr", {
     requires: [dotnet],
     check: "test -x ~/Sonarr/Sonarr",
-    fix: [
-      "curl -fsSLo sonarr.tar.gz 'https://services.sonarr.tv/v1/download/main/latest?version=4&os=linux&arch=x64'",
-      "tar -xzf sonarr.tar.gz",
-      "rm sonarr.tar.gz",
-    ],
+    fix: async (exec) => {
+      await exec(
+        "curl -fsSLo sonarr.tar.gz 'https://services.sonarr.tv/v1/download/main/latest?version=4&os=linux&arch=x64'",
+      )
+      await exec("tar -xzf sonarr.tar.gz")
+      await exec("rm sonarr.tar.gz")
+    },
   })
 
   const unit = await h.file("/etc/systemd/system/sonarr.service", {
@@ -102,7 +104,7 @@ export default host("sonarr.lan", async (h) => {
   })
   await h.run("Reload systemd", "sudo systemctl daemon-reload", { when: unit.changed })
 
-  await h.step("Sonarr is running", {
+  await h.ensureValue("Start Sonarr", {
     read: "systemctl is-active sonarr",
     want: "active",
     fix: "sudo systemctl enable --now sonarr",
@@ -128,7 +130,7 @@ tsinfra plan            # every host
 
 ## Contents
 
-- **[Steps](./steps.md)**: `step`, `file`, `run`, `read`, verification, and what happens on failure
+- **[Steps](./steps.md)**: `ensure`, `ensureValue`, `file`, `run`, `read`, verification, and what happens on failure
 - **[Requirements](./requirements.md)**: `need`, `requires`, `provides`, and how order is checked
 - **[Transport](./transport.md)**: local and SSH, ControlMaster, sudo, and how commands and files cross
 - **[CLI](./cli.md)**: the `hosts/` folder, `plan` and `apply`, output, and exit codes

@@ -6,7 +6,7 @@ import { runLocal } from "#transport/local.ts"
 
 const LOCAL_TARGET = "@local"
 
-type Transport = (script: string) => Promise<Result<ShellOutput>>
+export type Transport = (script: string) => Promise<Result<ShellOutput>>
 
 /** Returns how to run scripts on `target`. An unsupported target fails at its first command, like an unreachable host. */
 export const getTransport = (target: string): Transport => {
