@@ -15,10 +15,10 @@ export interface EnsureValueOptions extends FixOptions {
   want: string
 }
 
-const compareToWant = (value: string, want: string): CheckResult => {
+const compareToWant = (value: string, wantedValue: string): CheckResult => {
   const read = stripTrailingNewlines(value)
-  const wanted = stripTrailingNewlines(want)
-  return read === wanted ? { checkPassed: true } : { checkPassed: false, detail: `read: ${read}\nwant: ${wanted}` }
+  const want = stripTrailingNewlines(wantedValue)
+  return read === want ? { checkPassed: true } : { checkPassed: false, mismatch: { read, want } }
 }
 
 export const runEnsureValue = async (
@@ -32,13 +32,11 @@ export const runEnsureValue = async (
 
     const { stdout, exitError } = checkRun.commandResult
     const checkResult = compareToWant(stdout, want)
-    if (!exitError) return checkResult
 
     // Fail a broken read whose output happens to match, so it can't look converged.
-    if (checkResult.checkPassed) return err(`failed to check step '${stepCall.stepName}'`, exitError)
+    if (exitError && checkResult.checkPassed) return err(`failed to check step '${stepCall.stepName}'`, exitError)
 
-    // Keep the exit error in the detail, because it can show that the read itself is broken.
-    return { checkPassed: false, detail: `${checkResult.detail ?? ""}\n${exitError.message}` }
+    return { ...checkResult, exitError }
   }
 
   return converge(stepCall, evaluate, fix)

@@ -22,14 +22,25 @@ export interface StepCall {
 
 export interface CheckResult {
   checkPassed: boolean
-  /** Why the check fails, shown when it still fails after the fix. */
-  detail?: string
+  /** The values `ensureValue` compared, when they differ. */
+  mismatch?: { read: string; want: string }
+  /** Set when a check command exited non-zero. */
+  exitError?: Error | undefined
 }
 
 /** What a check produced: a check function's value, or a check command's result. */
 export type CheckRun<T> = { type: "function"; value: T } | { type: "command"; commandResult: CommandResult }
 
 const indentLines = (text: string) => text.replaceAll(/^/gmv, "  ")
+
+/** Lists what a failing check found, one indented line each, to follow the error's first line. */
+const formatCheckFacts = ({ mismatch, exitError }: CheckResult) => {
+  const facts = [
+    ...(mismatch ? [`read: ${mismatch.read}`, `want: ${mismatch.want}`] : []),
+    ...(exitError ? [exitError.message] : []),
+  ]
+  return facts.map((fact) => `\n${indentLines(fact)}`).join("")
+}
 
 /** Runs a step's check, as a command or a function, and names the step when it can't run. */
 export const runCheck = async <T>(
@@ -66,8 +77,8 @@ export const converge = async (
   const after = await evaluate()
   if (isErr(after)) return after
   if (!after.checkPassed) {
-    const detail = after.detail === undefined ? "" : `\n${indentLines(after.detail)}`
-    return err(`the check for step '${stepName}' still fails after the fix${detail}`, undefined)
+    const facts = formatCheckFacts(after)
+    return err(`the check for step '${stepName}' still fails after the fix${facts}`, undefined)
   }
 
   return { changed: true }

@@ -19,7 +19,7 @@ export const runEnsure = async (stepCall: StepCall, { check, fix }: EnsureOption
     if (checkRun.type === "function") return { checkPassed: checkRun.value }
 
     const { exitError } = checkRun.commandResult
-    return exitError ? { checkPassed: false, detail: exitError.message } : { checkPassed: true }
+    return { checkPassed: exitError === undefined, exitError }
   }
 
   return converge(stepCall, evaluate, fix)

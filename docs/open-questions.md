@@ -5,6 +5,7 @@ What still needs an answer. Most are best settled by porting real hosts first (s
 <!-- toc -->
 
 - [What `plan` output should look like](#what-plan-output-should-look-like)
+- [Showing what commands printed](#showing-what-commands-printed)
 - [Interactive sudo](#interactive-sudo)
 - [Interactive commands](#interactive-commands)
 - [Published, or personal](#published-or-personal)
@@ -23,6 +24,24 @@ What still needs an answer. Most are best settled by porting real hosts first (s
 [CLI](./cli.md#output) has a first guess. The evidence so far is `~/homelab/justfile`, whose `plan` recipe filters
 pyinfra's JSON down to just the names of pending changes. That suggests the default should be terse, with diffs. Settle
 it by running `plan` on the ported Mac and reacting to what it shows.
+
+## Showing what commands printed
+
+Today a command's output is thrown away once a step has used it. A check that passes keeps none of its stdout or stderr.
+A failure keeps only the exit code and stderr, inside the error message. A mode that shows everything that ran on a
+host needs more than that.
+
+Record it in the session's `Shell`, not in step results. Every command on a host goes through `shell.inspect` or
+`shell.run`, and there is one shell per host. The shell can append each command to a per-host transcript: the command,
+its raw stdout and stderr, its exit code, and how long it took. The CLI then decides how much to show. `--verbose` could
+print the whole transcript, and a failure could show the commands that led up to it.
+
+Carrying output in `CheckResult` and `StepResult` instead would mean every layer passes along output it never reads. It
+would also miss commands with no result of their own, like the `h.read` calls inside a check function that returns a
+boolean. `CheckResult` stays the decision: whether the check passed, and why not.
+
+A `secret` command must leave its command text and output out of the transcript, and the shell is the one place to
+enforce that. Settle it with the output piece.
 
 ## Interactive sudo
 
