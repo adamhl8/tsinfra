@@ -2,10 +2,12 @@ import type { Result } from "ts-explicit-errors"
 import { attempt, err, isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
+import type { Exec } from "#session/exec.ts"
 import type { CommandResult, Shell } from "#session/shell.ts"
 
 export interface FixOptions {
-  fix: string
+  /** A command, or a function that runs several with `exec`. It only runs in `apply`. */
+  fix: string | ((exec: Exec) => Promise<void>)
 }
 
 export interface StepResult {
@@ -16,6 +18,7 @@ export interface StepResult {
 /** What stays the same for one call of a step method like `h.ensure`. */
 export interface StepCall {
   shell: Shell
+  exec: Exec
   mode: Mode
   stepName: string
 }
@@ -60,18 +63,27 @@ export const runCheck = async <T>(
   return { type: "command", commandResult }
 }
 
+const runFix = async ({ shell, exec }: StepCall, fix: FixOptions["fix"]): Promise<Result> => {
+  if (typeof fix === "function") return attempt(async () => fix(exec))
+
+  const stdout = await shell.run(fix)
+  if (isErr(stdout)) return stdout
+}
+
 /** Runs the part every step shares: check, fix in `apply`, then check again. */
 export const converge = async (
-  { shell, mode, stepName }: StepCall,
+  stepCall: StepCall,
   evaluate: () => Promise<Result<CheckResult>>,
-  fix: string,
+  fix: FixOptions["fix"],
 ): Promise<Result<StepResult>> => {
+  const { mode, stepName } = stepCall
+
   const before = await evaluate()
   if (isErr(before)) return before
   if (before.checkPassed) return { changed: false }
   if (mode === "plan") return { changed: true }
 
-  const fixResult = await shell.run(fix)
+  const fixResult = await runFix(stepCall, fix)
   if (isErr(fixResult)) return err(`failed to run the fix for step '${stepName}'`, fixResult)
 
   const after = await evaluate()

@@ -3,13 +3,15 @@ import { isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import type { HostEntry } from "#hosts/load.ts"
+import type { Exec } from "#session/exec.ts"
+import { runExecCommand } from "#session/exec.ts"
 import type { EnsureValueOptions } from "#session/methods/ensure-value.ts"
 import { runEnsureValue } from "#session/methods/ensure-value.ts"
 import type { EnsureOptions } from "#session/methods/ensure.ts"
 import { runEnsure } from "#session/methods/ensure.ts"
 import { readOutput } from "#session/methods/read.ts"
 import { createShell } from "#session/shell.ts"
-import type { StepResult } from "#session/step.ts"
+import type { StepCall, StepResult } from "#session/step.ts"
 import { getTransport } from "#transport/transport.ts"
 
 export interface Host {
@@ -49,8 +51,9 @@ export interface HostSession {
  * the script.
  */
 export const createHostSession = ({ name, target }: HostEntry, mode: Mode): HostSession => {
-  const shell = createShell(getTransport(target))
   let failure: Error | undefined
+  // Read `failure` through `getFailure` after an `await`, because TypeScript keeps the narrowing from an earlier check.
+  const getFailure = () => failure
 
   // Keep the first failure, because calls made at once with `Promise.all` can each fail.
   // Replace it only with an error that wraps it, which adds context such as the step's name.
@@ -66,15 +69,23 @@ export const createHostSession = ({ name, target }: HostEntry, mode: Mode): Host
 
     const value = await run()
     if (isErr(value)) fail(value)
+
+    // Throw a failure recorded during `run`, because a function in the script may have caught it and returned normally.
+    const recordedFailure = getFailure()
+    if (recordedFailure) throw recordedFailure
     return value
   }
+
+  const shell = createShell(getTransport(target))
+  const exec: Exec = async (cmd) => runOrFail(async () => runExecCommand(shell, cmd))
+  const createStepCall = (stepName: string): StepCall => ({ shell, exec, mode, stepName })
 
   const host: Host = {
     name,
     read: async (cmd) => runOrFail(async () => readOutput(shell, cmd)),
-    ensure: async (stepName, options) => runOrFail(async () => runEnsure({ shell, mode, stepName }, options)),
-    ensureValue: async (stepName, options) => runOrFail(async () => runEnsureValue({ shell, mode, stepName }, options)),
+    ensure: async (stepName, options) => runOrFail(async () => runEnsure(createStepCall(stepName), options)),
+    ensureValue: async (stepName, options) => runOrFail(async () => runEnsureValue(createStepCall(stepName), options)),
   }
 
-  return { host, getFailure: () => failure }
+  return { host, getFailure }
 }

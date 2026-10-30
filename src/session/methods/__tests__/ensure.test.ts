@@ -2,8 +2,10 @@ import { describe, expect, it } from "bun:test"
 import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
+import { attempt } from "ts-explicit-errors"
 
 import { createSession, ensureOrMessage, getFailureMessage, throwBoom } from "#__tests__/session.ts"
+import type { Exec } from "#session/exec.ts"
 
 /** Returns a path in a new temp dir, plus a step that creates a file there. */
 const createMarkerStep = async () => {
@@ -72,5 +74,86 @@ describe("h.ensure", () => {
 
     expect(await ensureOrMessage(hostSession.host, { check, fix: "true" })).toBe(message)
     expect(getFailureMessage(hostSession)).toBe(message)
+  })
+
+  it("should fail the step when a function check catches a failed read", async () => {
+    const { host: h } = createSession()
+    const check = async () => {
+      await attempt(async () => h.read("exit 1"))
+      return true
+    }
+
+    expect(await ensureOrMessage(h, { check, fix: "true" })).toBe("failed to read 'exit 1' -> exited with code 1")
+  })
+})
+
+describe("h.ensure with a fix function", () => {
+  it("should run the commands in order and return changed", async () => {
+    const file = path.join(await makeTempDir("step-"), "lines")
+    const fix = async (exec: Exec) => {
+      await exec(`echo a >> '${file}'`)
+      await exec(`echo b >> '${file}'`)
+    }
+    const { host: h } = createSession()
+
+    expect(await ensureOrMessage(h, { check: `test -s '${file}'`, fix })).toStrictEqual({ changed: true })
+    expect(await Bun.file(file).text()).toBe("a\nb\n")
+  })
+
+  it("should return each command's stdout without trailing newlines", async () => {
+    const file = path.join(await makeTempDir("step-"), "value")
+    const fix = async (exec: Exec) => {
+      const value = await exec(String.raw`printf 'v\n\n'`)
+      await exec(`printf '%s' '${value}' > '${file}'`)
+    }
+    const { host: h } = createSession()
+
+    expect(await ensureOrMessage(h, { check: `test -f '${file}'`, fix })).toStrictEqual({ changed: true })
+    expect(await Bun.file(file).text()).toBe("v")
+  })
+
+  it("should stop at the first failed command and fail the host with the step's name", async () => {
+    const { marker, options } = await createMarkerStep()
+    const fix = async (exec: Exec) => {
+      await exec("echo nope >&2; exit 2")
+      await exec(`touch '${marker}'`)
+    }
+    const hostSession = createSession()
+    const message =
+      "failed to run the fix for step 'Make marker' -> failed to run 'echo nope >&2; exit 2' -> exited with code 2: nope"
+
+    expect(await ensureOrMessage(hostSession.host, { ...options, fix })).toBe(message)
+    expect(getFailureMessage(hostSession)).toBe(message)
+    expect(await Bun.file(marker).exists()).toBe(false)
+  })
+
+  it("should fail the step when the fix function catches a failed command", async () => {
+    const { marker, options } = await createMarkerStep()
+    const cmd = `touch '${marker}'; exit 1`
+    const fix = async (exec: Exec) => {
+      await attempt(async () => exec(cmd))
+    }
+    const { host: h } = createSession()
+
+    expect(await ensureOrMessage(h, { ...options, fix })).toBe(`failed to run '${cmd}' -> exited with code 1`)
+  })
+
+  it("should fail the host with the step's name when the fix function throws", async () => {
+    const { host: h } = createSession()
+
+    expect(await ensureOrMessage(h, { check: "false", fix: throwBoom })).toBe(
+      "failed to run the fix for step 'Make marker' -> boom",
+    )
+  })
+
+  it("should not call the fix function in plan", async () => {
+    const { marker, options } = await createMarkerStep()
+    const fix = async (exec: Exec) => {
+      await exec(`touch '${marker}'`)
+    }
+    const { host: h } = createSession("plan")
+
+    expect(await ensureOrMessage(h, { ...options, fix })).toStrictEqual({ changed: true })
+    expect(await Bun.file(marker).exists()).toBe(false)
   })
 })

@@ -1,4 +1,5 @@
 export type { HostDefinition, HostFunction } from "#hosts/host.ts"
+export type { Exec } from "#session/exec.ts"
 export { host } from "#hosts/host.ts"
 export type { EnsureValueOptions } from "#session/methods/ensure-value.ts"
 export type { EnsureOptions } from "#session/methods/ensure.ts"
