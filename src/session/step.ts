@@ -8,6 +8,11 @@ import type { CommandResult, Shell } from "#session/shell.ts"
 export interface FixOptions {
   /** A command, or a function that runs several with `exec`. It only runs in `apply`. */
   fix: string | ((exec: Exec) => Promise<void>)
+  /**
+   * Runs the check again after the fix, and fails the step when it still fails. Defaults to true. Set it to false only
+   * for a fix whose effect nothing in the run can make visible, like one that needs a reboot.
+   */
+  verify?: boolean
 }
 
 export interface StepResult {
@@ -37,7 +42,8 @@ export type CheckRun<T> = { type: "function"; value: T } | { type: "command"; co
 const indentLines = (text: string) => text.replaceAll(/^/gmv, "  ")
 
 /** Lists what a failing check found, one indented line each, to follow the error's first line. */
-const formatCheckFacts = ({ mismatch, exitError }: CheckResult) => {
+const formatCheckFacts = (checkResult: CheckResult) => {
+  const { mismatch, exitError } = checkResult
   const facts = [
     ...(mismatch ? [`read: ${mismatch.read}`, `want: ${mismatch.want}`] : []),
     ...(exitError ? [exitError.message] : []),
@@ -47,9 +53,11 @@ const formatCheckFacts = ({ mismatch, exitError }: CheckResult) => {
 
 /** Runs a step's check, as a command or a function, and names the step when it can't run. */
 export const runCheck = async <T>(
-  { shell, stepName }: StepCall,
+  stepCall: StepCall,
   check: string | (() => Promise<T>),
 ): Promise<Result<CheckRun<T>>> => {
+  const { shell, stepName } = stepCall
+
   if (typeof check === "function") {
     const value = await attempt(async () => check())
     if (isErr(value)) return err(`failed to check step '${stepName}'`, value)
@@ -63,7 +71,9 @@ export const runCheck = async <T>(
   return { type: "command", commandResult }
 }
 
-const runFix = async ({ shell, exec }: StepCall, fix: FixOptions["fix"]): Promise<Result> => {
+const runFix = async (stepCall: StepCall, fix: FixOptions["fix"]): Promise<Result> => {
+  const { shell, exec } = stepCall
+
   if (typeof fix === "function") return attempt(async () => fix(exec))
 
   const stdout = await shell.run(fix)
@@ -74,9 +84,10 @@ const runFix = async ({ shell, exec }: StepCall, fix: FixOptions["fix"]): Promis
 export const converge = async (
   stepCall: StepCall,
   evaluate: () => Promise<Result<CheckResult>>,
-  fix: FixOptions["fix"],
+  fixOptions: FixOptions,
 ): Promise<Result<StepResult>> => {
   const { mode, stepName } = stepCall
+  const { fix, verify = true } = fixOptions
 
   const before = await evaluate()
   if (isErr(before)) return before
@@ -85,6 +96,7 @@ export const converge = async (
 
   const fixResult = await runFix(stepCall, fix)
   if (isErr(fixResult)) return err(`failed to run the fix for step '${stepName}'`, fixResult)
+  if (!verify) return { changed: true }
 
   const after = await evaluate()
   if (isErr(after)) return after

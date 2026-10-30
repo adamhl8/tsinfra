@@ -50,7 +50,8 @@ export interface HostSession {
  * The functions it calls return errors as values. Its methods turn them into throws, because that's the contract with
  * the script.
  */
-export const createHostSession = ({ name, target }: HostEntry, mode: Mode): HostSession => {
+export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession => {
+  const { name, target } = hostEntry
   let failure: Error | undefined
   // Read `failure` through `getFailure` after an `await`, because TypeScript keeps the narrowing from an earlier check.
   const getFailure = () => failure

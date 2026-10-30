@@ -22,7 +22,8 @@ export interface Shell {
 
 export const stripTrailingNewlines = (text: string) => text.replace(TRAILING_NEWLINES, "")
 
-const createCommandExitError = ({ exitCode, stderr }: ShellOutput) => {
+const createCommandExitError = (shellOutput: ShellOutput) => {
+  const { exitCode, stderr } = shellOutput
   let trimmedStderr = stderr.trim()
   trimmedStderr &&= `: ${trimmedStderr}`
   return err(`exited with code ${exitCode}${trimmedStderr}`, undefined)

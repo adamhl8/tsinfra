@@ -12,7 +12,8 @@ export interface HostEntry extends HostDefinition {
 
 const hostModuleSchema = type({ default: hostDefinitionSchema })
 
-const loadHost = async ({ name, file }: HostFile): Promise<Result<HostEntry>> => {
+const loadHost = async (hostFile: HostFile): Promise<Result<HostEntry>> => {
+  const { name, file } = hostFile
   const hostModule = await attempt(async (): Promise<unknown> => import(file))
   if (isErr(hostModule)) return err(`failed to load host '${name}'`, hostModule)
 

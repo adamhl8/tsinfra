@@ -12,7 +12,9 @@ export interface EnsureOptions extends FixOptions {
   check: string | (() => Promise<boolean>)
 }
 
-export const runEnsure = async (stepCall: StepCall, { check, fix }: EnsureOptions): Promise<Result<StepResult>> => {
+export const runEnsure = async (stepCall: StepCall, options: EnsureOptions): Promise<Result<StepResult>> => {
+  const { check, ...fixOptions } = options
+
   const evaluate = async (): Promise<Result<CheckResult>> => {
     const checkRun = await runCheck(stepCall, check)
     if (isErr(checkRun)) return checkRun
@@ -22,5 +24,5 @@ export const runEnsure = async (stepCall: StepCall, { check, fix }: EnsureOption
     return { checkPassed: exitError === undefined, exitError }
   }
 
-  return converge(stepCall, evaluate, fix)
+  return converge(stepCall, evaluate, fixOptions)
 }

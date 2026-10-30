@@ -87,6 +87,22 @@ describe("h.ensure", () => {
   })
 })
 
+describe("h.ensure with verify: false", () => {
+  it("should return changed without checking again after the fix", async () => {
+    const { host: h } = createSession()
+
+    expect(await ensureOrMessage(h, { check: "false", fix: "true", verify: false })).toStrictEqual({ changed: true })
+  })
+
+  it("should still fail the host when the fix fails", async () => {
+    const { host: h } = createSession()
+
+    expect(await ensureOrMessage(h, { check: "false", fix: "exit 2", verify: false })).toBe(
+      "failed to run the fix for step 'Make marker' -> exited with code 2",
+    )
+  })
+})
+
 describe("h.ensure with a fix function", () => {
   it("should run the commands in order and return changed", async () => {
     const file = path.join(await makeTempDir("step-"), "lines")

@@ -21,10 +21,9 @@ const compareToWant = (value: string, wantedValue: string): CheckResult => {
   return read === want ? { checkPassed: true } : { checkPassed: false, mismatch: { read, want } }
 }
 
-export const runEnsureValue = async (
-  stepCall: StepCall,
-  { read, want, fix }: EnsureValueOptions,
-): Promise<Result<StepResult>> => {
+export const runEnsureValue = async (stepCall: StepCall, options: EnsureValueOptions): Promise<Result<StepResult>> => {
+  const { read, want, ...fixOptions } = options
+
   const evaluate = async (): Promise<Result<CheckResult>> => {
     const checkRun = await runCheck(stepCall, read)
     if (isErr(checkRun)) return checkRun
@@ -39,5 +38,5 @@ export const runEnsureValue = async (
     return { ...checkResult, exitError }
   }
 
-  return converge(stepCall, evaluate, fix)
+  return converge(stepCall, evaluate, fixOptions)
 }

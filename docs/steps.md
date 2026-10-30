@@ -67,9 +67,10 @@ command inside a fix is part of one change that the step's name already covers.
 **A function holds commands, not decisions.** A fix or run function that tests the machine before acting is a step in
 disguise (see [`run`](#run)).
 
-**No steps inside steps.** Do not call `h.ensure`, `h.ensureValue`, `h.file`, or `h.run` inside a check, read, fix, or run function. A step
-inside a fix never shows in `plan`, because `plan` never runs the fix. A step inside a check runs its fix while
-checking. Nothing enforces this yet (see [Open questions](./open-questions.md#steps-inside-step-functions)).
+**No steps inside steps.** Do not call `h.ensure`, `h.ensureValue`, `h.file`, or `h.run` inside a check, read, fix, or
+run function. A step inside a fix never shows in `plan`, because `plan` never runs the fix. A step inside a check runs
+its fix while checking. Nothing enforces this yet
+(see [Open questions](./open-questions.md#steps-inside-step-functions)).
 
 ## Steps
 
@@ -222,8 +223,41 @@ unless it starts with `set -e`. Use the function form for anything past one comm
 **Verification.** After a fix runs, the check runs again. If it still does not pass, the step fails with "the check for
 step '...' still fails after the fix", plus the details: the read and want values for `ensureValue`, and the exit code
 and stderr of a command that exited non-zero. A step that reports a change on every run is a bug, and this is what
-surfaces it the first time. `verify: false` is for fixes whose effect is genuinely delayed, like a setting that needs a
-re-login. The step then reports `changed` as soon as the fix succeeds.
+surfaces it the first time.
+
+`verify: false` skips the check after the fix, and the step reports `changed` as soon as the fix succeeds. It is for a
+fix whose effect nothing in the run can make visible, like one that needs a reboot or a new desktop login. The next
+run's check confirms it. Before reaching for it, try these:
+
+- **Make the change take effect in the fix.** If one more command makes the effect visible, the fix runs it too. A
+  resized swap file only shows in `swapon --show` once it is switched back on:
+
+  ```ts
+  await h.ensureValue("Resize swap", {
+    read: "swapon --show=SIZE --noheadings --raw",
+    want: "8G",
+    fix: async (exec) => {
+      await exec("sudo swapoff /swapfile")
+      await exec("sudo fallocate -l 8G /swapfile")
+      await exec("sudo mkswap /swapfile")
+      await exec("sudo swapon /swapfile")
+    },
+  })
+  ```
+
+- **Refresh after the step that needs it.** When another step's change needs a refresh, the refresh is a `run` guarded
+  by that step, not part of a later fix. `systemctl daemon-reload` follows the unit file it applies, so a unit change
+  reloads even when the service is already running:
+
+  ```ts
+  const unit = await h.file("/etc/systemd/system/sonarr.service", { content: sonarrUnit, sudo: true })
+  await h.run("Reload systemd", "sudo systemctl daemon-reload", { when: unit.changed })
+  await h.ensure("Start Sonarr", { check: "systemctl is-active sonarr", fix: "sudo systemctl enable --now sonarr" })
+  ```
+
+- **Check the stored state, not the current session.** After `usermod -aG docker sonarr`, plain `id` in an existing
+  session does not show the group until a new login. `id -nG sonarr` reads the user database and shows it straight
+  away.
 
 **Plan mode** runs the check and never the fix. A step that would change reports `would-change`.
 
@@ -268,9 +302,10 @@ type RunOptions = CommandOptions & {
 }
 ```
 
-An action with no check: one command, or a function given `exec` for one action that takes several commands. `sudo`
-and `secret` apply to a string command. A function passes them to each `exec`. `when` is required, so every `run` says when it runs. Unconditional work is `when: true`,
-written out rather than assumed, so a forgotten guard is a type error instead of a command that quietly runs every time.
+An action with no check: one command, or a function given `exec` for one action that takes several commands. `sudo` and
+`secret` apply to a string command. A function passes them to each `exec`. `when` is required, so every `run` says when
+it runs. Unconditional work is `when: true`, written out rather than assumed, so a forgotten guard is a type error
+instead of a command that quietly runs every time.
 
 ```ts
 const unit = await h.file("/etc/systemd/system/sonarr.service", { content: sonarrUnit, sudo: true })
@@ -366,7 +401,8 @@ stops the script at that point. The CLI reports the host as failed, with the cal
 Catching the error does not recover the host. It stays failed, and every later call on `h` throws the same error
 straight away without touching the target. Code between the catch and the next call on `h` still runs, so do not catch
 around calls on `h`. The same holds inside a check, read, fix, or run function. A step or run whose function catches a
-failed `h.read` or `exec` still fails. A command whose non-zero exit is a legitimate answer says so itself, with `|| true`.
+failed `h.read` or `exec` still fails. A command whose non-zero exit is a legitimate answer says so itself, with `||
+true`.
 
 If the host function throws for any other reason (a bug in the script), the CLI catches it and reports the host as
 failed in the same way.

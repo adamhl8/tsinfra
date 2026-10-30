@@ -37,7 +37,7 @@ export const ensureValueOrMessage = async (h: Host, options: EnsureValueOptions)
 }
 
 /** Returns the message chain of the host's recorded failure, if any. */
-export const getFailureMessage = ({ getFailure }: ReturnType<typeof createSession>) => {
-  const failure = getFailure()
+export const getFailureMessage = (hostSession: ReturnType<typeof createSession>) => {
+  const failure = hostSession.getFailure()
   return failure && messageChain(failure)
 }
