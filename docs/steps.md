@@ -61,11 +61,11 @@ Two shapes follow from that:
   `exec` once per command. It only runs in `apply`.
 
 `h.read` and `exec` are the primitives. Each runs one command, returns its stdout, and takes `CommandOptions`. `exec`
-only exists inside a fix or run function. It is not `h.run`. A run is an action with its own name in the output, and a
+only exists inside a fix or run function. It is not `h.run`. A run is a step with its own name in the output, and a
 command inside a fix is part of one change that the step's name already covers.
 
-**A function holds commands, not decisions.** A fix or run function that tests the machine before acting is a step in
-disguise (see [`run`](#run)).
+**A function holds commands, not decisions.** A fix or run function that tests the machine before acting is an
+`ensure` step in disguise (see [`run`](#run)).
 
 **No steps inside steps.** Do not call `h.ensure`, `h.ensureValue`, `h.file`, or `h.run` inside a check, read, fix, or
 run function. A step inside a fix never shows in `plan`, because `plan` never runs the fix. A step inside a check runs
@@ -74,8 +74,10 @@ its fix while checking. Nothing enforces this yet
 
 ## Steps
 
-A step checks one piece of state, and in `apply` runs a fix when the check fails. `ensure` and `ensureValue` are steps
-you write the check for. [`file`](#file) is a step whose check tsinfra writes. All three return a `StepResult`.
+A step is anything on `h` that can change the target. Most steps check one piece of state, and in `apply` run a fix
+when the check fails. `ensure` and `ensureValue` are steps you write the check for. [`file`](#file) is a step whose
+check tsinfra writes. [`run`](#run) is a step with no check. Every step returns a `StepResult`. `h.read` is not a step,
+because it only observes.
 
 ```ts
 type FixOptions = {
@@ -158,8 +160,8 @@ because `h.read` inside it throws on a non-zero exit.
 
 ### `fix`
 
-`fix` is one command, or a function that runs several with `exec`. The function form is for one change that takes
-more than one command, where the halfway state is not something you would check:
+`fix` is one command, or a function that runs several commands by calling `exec`. The function form is for one change
+that takes more than one command, where the halfway state is not something you would check:
 
 ```ts
 await h.ensure("Install Caddy", {
@@ -302,7 +304,7 @@ type RunOptions = CommandOptions & {
 }
 ```
 
-An action with no check: one command, or a function given `exec` for one action that takes several commands. `sudo` and
+A step with no check: one command, or a function given `exec` for one action that takes several commands. `sudo` and
 `secret` apply to a string command. A function passes them to each `exec`. `when` is required, so every `run` says when
 it runs. Unconditional work is `when: true`, written out rather than assumed, so a forgotten guard is a type error
 instead of a command that quietly runs every time.
@@ -331,8 +333,8 @@ knows the run exists, so verbose output can list it. An `if` fits around a block
 machines.
 
 **Drift.** A `run` never counts toward `plan` exiting 2 (see [CLI](./cli.md#exit-codes)). It has no check, so it cannot
-see drift. A run guarded by a step only fires when that step changes, and the step already counts. A `when: true` run is
-a deliberate choice to run every time, which says nothing about the machine's state.
+see drift. A run guarded by a step with a check only fires when that step changes, and that step already counts. A
+`when: true` run is a deliberate choice to run every time, which says nothing about the machine's state.
 
 Two actions are usually two runs, each with its own name in the output. The function form is for one action that takes
 several commands under one `when`:
@@ -348,7 +350,7 @@ await h.run(
 )
 ```
 
-A function that takes `h` shares runs and steps between hosts:
+A function that takes `h` shares steps between hosts:
 
 ```ts
 const updateComposeStack = async (h: Host, when: boolean) => {
@@ -359,11 +361,11 @@ const updateComposeStack = async (h: Host, when: boolean) => {
 await updateComposeStack(h, compose.changed)
 ```
 
-The same works for steps, as in `aptPackage(h, "caddy")`. Helpers like these are how tsinfra gets modules, whether you
-write them or tsinfra ships them (see [Open questions](./open-questions.md#helpers-worth-shipping)).
+The same works for steps with a check, as in `aptPackage(h, "caddy")`. Helpers like these are how tsinfra gets modules,
+whether you write them or tsinfra ships them (see [Open questions](./open-questions.md#helpers-worth-shipping)).
 
-Anything that can be checked should be a step. That includes a check hidden in `when`, like
-`when: (await h.read("...")) !== "x"`, and one hidden in a run function:
+Anything that can be checked should be an `ensure` or `ensureValue` step, not a `run`. That includes a check hidden in
+`when`, like `when: (await h.read("...")) !== "x"`, and one hidden in a run function:
 
 ```ts
 await h.run(

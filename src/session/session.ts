@@ -3,15 +3,17 @@ import { isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import type { HostEntry } from "#hosts/load.ts"
-import type { Exec } from "#session/exec.ts"
-import { runExecCommand } from "#session/exec.ts"
 import type { EnsureValueOptions } from "#session/methods/ensure-value.ts"
-import { runEnsureValue } from "#session/methods/ensure-value.ts"
+import { handleEnsureValue } from "#session/methods/ensure-value.ts"
 import type { EnsureOptions } from "#session/methods/ensure.ts"
-import { runEnsure } from "#session/methods/ensure.ts"
-import { readOutput } from "#session/methods/read.ts"
+import { handleEnsure } from "#session/methods/ensure.ts"
+import type { Exec } from "#session/methods/exec.ts"
+import { handleExec } from "#session/methods/exec.ts"
+import { handleRead } from "#session/methods/read.ts"
+import type { RunOptions } from "#session/methods/run.ts"
+import { handleRun } from "#session/methods/run.ts"
 import { createShell } from "#session/shell.ts"
-import type { StepCall, StepResult } from "#session/step.ts"
+import type { Action, StepCall, StepResult } from "#session/step.ts"
 import { getTransport } from "#transport/transport.ts"
 
 export interface Host {
@@ -37,6 +39,13 @@ export interface Host {
    * A failing fix, or a value that still differs after it, fails the host and throws.
    */
   ensureValue: (name: string, options: EnsureValueOptions) => Promise<StepResult>
+  /**
+   * Runs `cmd`, a command or a function given `exec`, when `when` is true. There is no check, so it never counts as
+   * drift. In `plan` it never runs, and reports changed when `when` is true.
+   *
+   * A failing command fails the host and throws.
+   */
+  run: (name: string, cmd: Action, options: RunOptions) => Promise<StepResult>
 }
 
 export interface HostSession {
@@ -47,8 +56,9 @@ export interface HostSession {
 /**
  * Builds the `Host` passed to a host's function, and tracks the run's failure where the script can't see it.
  *
- * The functions it calls return errors as values. Its methods turn them into throws, because that's the contract with
- * the script.
+ * This is the only code that throws, because throwing is the contract with the script. Every function the script can
+ * call, on `h` or as `exec`, is `callOrFail` around an internal function from `methods/` that returns errors as
+ * values.
  */
 export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession => {
   const { name, target } = hostEntry
@@ -65,27 +75,31 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
     throw failure
   }
 
-  const runOrFail = async <T>(run: () => Promise<Result<T>>) => {
+  // oxlint-disable-next-line promise/prefer-await-to-callbacks - `callback` is awaited, and the rule only matches its name
+  const callOrFail = async <T>(callback: () => Promise<Result<T>>) => {
     if (failure) throw failure
 
-    const value = await run()
+    // oxlint-disable-next-line promise/prefer-await-to-callbacks - `callback` is awaited, and the rule only matches its name
+    const value = await callback()
     if (isErr(value)) fail(value)
 
-    // Throw a failure recorded during `run`, because a function in the script may have caught it and returned normally.
+    // Throw a failure recorded during `callback`, because a function in the script may have caught it and returned normally.
     const recordedFailure = getFailure()
     if (recordedFailure) throw recordedFailure
     return value
   }
 
   const shell = createShell(getTransport(target))
-  const exec: Exec = async (cmd) => runOrFail(async () => runExecCommand(shell, cmd))
+  const exec: Exec = async (cmd) => callOrFail(async () => handleExec(shell, cmd))
   const createStepCall = (stepName: string): StepCall => ({ shell, exec, mode, stepName })
 
   const host: Host = {
     name,
-    read: async (cmd) => runOrFail(async () => readOutput(shell, cmd)),
-    ensure: async (stepName, options) => runOrFail(async () => runEnsure(createStepCall(stepName), options)),
-    ensureValue: async (stepName, options) => runOrFail(async () => runEnsureValue(createStepCall(stepName), options)),
+    read: async (cmd) => callOrFail(async () => handleRead(shell, cmd)),
+    ensure: async (stepName, options) => callOrFail(async () => handleEnsure(createStepCall(stepName), options)),
+    ensureValue: async (stepName, options) =>
+      callOrFail(async () => handleEnsureValue(createStepCall(stepName), options)),
+    run: async (stepName, cmd, options) => callOrFail(async () => handleRun(createStepCall(stepName), cmd, options)),
   }
 
   return { host, getFailure }

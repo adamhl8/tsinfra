@@ -4,8 +4,10 @@ import type { Mode } from "#cli/program.ts"
 import { host } from "#hosts/host.ts"
 import type { EnsureValueOptions } from "#session/methods/ensure-value.ts"
 import type { EnsureOptions } from "#session/methods/ensure.ts"
+import type { RunOptions } from "#session/methods/run.ts"
 import type { Host } from "#session/session.ts"
 import { createHostSession } from "#session/session.ts"
+import type { Action } from "#session/step.ts"
 
 const doNothing = async () => {
   /* empty */
@@ -33,6 +35,12 @@ export const ensureOrMessage = async (h: Host, options: EnsureOptions) => {
 /** Runs `h.ensureValue` and returns its result, or the thrown error's message chain. */
 export const ensureValueOrMessage = async (h: Host, options: EnsureValueOptions) => {
   const result = await attempt(async () => h.ensureValue("Make marker", options))
+  return isErr(result) ? messageChain(result) : result
+}
+
+/** Runs `h.run` and returns its result, or the thrown error's message chain. */
+export const runOrMessage = async (h: Host, cmd: Action, options: RunOptions) => {
+  const result = await attempt(async () => h.run("Make marker", cmd, options))
   return isErr(result) ? messageChain(result) : result
 }
 

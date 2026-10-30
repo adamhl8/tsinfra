@@ -76,5 +76,5 @@ see [Open questions](./open-questions.md).
 `plan` exiting 2 makes a drift check in CI or a cron job a one-liner. `apply` never exits 2, because a run that changed
 things succeeded.
 
-Only steps and files decide whether `plan` exits 2. A `run` shows up in the plan as "would run" but never counts, because
-it has no check. See [Steps](./steps.md#run).
+Only steps with a check decide whether `plan` exits 2. A `run` shows up in the plan as "would run" but never counts,
+because it has no check. See [Steps](./steps.md#run).

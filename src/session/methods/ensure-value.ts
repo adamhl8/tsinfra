@@ -1,9 +1,10 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
+import type { CheckResult, FixOptions } from "#session/converge.ts"
+import { converge, runCheck } from "#session/converge.ts"
 import { stripTrailingNewlines } from "#session/shell.ts"
-import type { CheckResult, FixOptions, StepCall, StepResult } from "#session/step.ts"
-import { converge, runCheck } from "#session/step.ts"
+import type { StepCall, StepResult } from "#session/step.ts"
 
 export interface EnsureValueOptions extends FixOptions {
   /**
@@ -21,7 +22,10 @@ const compareToWant = (value: string, wantedValue: string): CheckResult => {
   return read === want ? { checkPassed: true } : { checkPassed: false, mismatch: { read, want } }
 }
 
-export const runEnsureValue = async (stepCall: StepCall, options: EnsureValueOptions): Promise<Result<StepResult>> => {
+export const handleEnsureValue = async (
+  stepCall: StepCall,
+  options: EnsureValueOptions,
+): Promise<Result<StepResult>> => {
   const { read, want, ...fixOptions } = options
 
   const evaluate = async (): Promise<Result<CheckResult>> => {

@@ -5,7 +5,7 @@ import { makeTempDir } from "@adamhl8/configs/test"
 import { attempt } from "ts-explicit-errors"
 
 import { createSession, ensureOrMessage, getFailureMessage, throwBoom } from "#__tests__/session.ts"
-import type { Exec } from "#session/exec.ts"
+import type { Exec } from "#session/methods/exec.ts"
 
 /** Returns a path in a new temp dir, plus a step that creates a file there. */
 const createMarkerStep = async () => {

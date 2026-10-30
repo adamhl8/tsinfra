@@ -1,8 +1,9 @@
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
-import type { CheckResult, FixOptions, StepCall, StepResult } from "#session/step.ts"
-import { converge, runCheck } from "#session/step.ts"
+import type { CheckResult, FixOptions } from "#session/converge.ts"
+import { converge, runCheck } from "#session/converge.ts"
+import type { StepCall, StepResult } from "#session/step.ts"
 
 export interface EnsureOptions extends FixOptions {
   /**
@@ -12,7 +13,7 @@ export interface EnsureOptions extends FixOptions {
   check: string | (() => Promise<boolean>)
 }
 
-export const runEnsure = async (stepCall: StepCall, options: EnsureOptions): Promise<Result<StepResult>> => {
+export const handleEnsure = async (stepCall: StepCall, options: EnsureOptions): Promise<Result<StepResult>> => {
   const { check, ...fixOptions } = options
 
   const evaluate = async (): Promise<Result<CheckResult>> => {
