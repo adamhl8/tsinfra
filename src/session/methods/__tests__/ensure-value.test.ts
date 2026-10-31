@@ -83,11 +83,15 @@ describe("h.ensureValue", () => {
     )
   })
 
-  it("should accept a function read that uses h.read", async () => {
+  it("should accept a function read that uses the given read", async () => {
     const { host: h } = createSession()
-    const read = async () => (await h.read("echo V2")).toLowerCase()
+    const result = await ensureValueOrMessage(h, {
+      read: async ({ read }) => (await read("echo V2")).toLowerCase(),
+      want: "v2",
+      fix: "exit 1",
+    })
 
-    expect(await ensureValueOrMessage(h, { read, want: "v2", fix: "exit 1" })).toStrictEqual({ changed: false })
+    expect(result).toStrictEqual({ changed: false })
   })
 
   it("should fail the host with the step's name when a function read throws", async () => {

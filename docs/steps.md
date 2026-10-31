@@ -23,9 +23,18 @@ interface Host {
   ensure(name: string, options: EnsureOptions): Promise<StepResult>
   ensureValue(name: string, options: EnsureValueOptions): Promise<StepResult>
   file(path: string, options: FileOptions): Promise<StepResult>
-  run(name: string, cmd: string | ((exec: Exec) => Promise<void>), options: RunOptions): Promise<StepResult>
+  run(name: string, cmd: string | ((tools: ExecTools) => Promise<void>), options: RunOptions): Promise<StepResult>
   read(cmd: string, options?: CommandOptions): Promise<string>
 }
+
+// Given to a check or read function.
+type ReadTools = { read: Read }
+
+// Given to a fix or run function.
+type ExecTools = { exec: Exec }
+
+// Runs one command inside a check or read function, and returns its stdout.
+type Read = (cmd: string, options?: CommandOptions) => Promise<string>
 
 // Runs one command inside a fix or run function, and returns its stdout.
 type Exec = (cmd: string, options?: CommandOptions) => Promise<string>
@@ -55,22 +64,34 @@ Shell is for basic commands like `systemctl` or `docker compose`. Work out value
 
 Two shapes follow from that:
 
-- **Computing a value** (a step's `check` and `read`) takes a command, or a function that returns the value. The
-  function calls `h.read` as many times as it needs. It also runs during `plan`, so it must not change anything.
+- **Computing a value** (a step's `check` and `read`) takes a command, or a function given `read` that returns the
+  value. The function calls `read` as many times as it needs. It also runs during `plan`, so it must not change
+  anything.
 - **Changing the target** (a step's `fix`, and `run`) takes a command, or a function given `exec`. The function calls
   `exec` once per command. It only runs in `apply`.
 
-`h.read` and `exec` are the primitives. Each runs one command, returns its stdout, and takes `CommandOptions`. `exec`
-only exists inside a fix or run function. It is not `h.run`. A run is a step with its own name in the output, and a
-command inside a fix is part of one change that the step's name already covers.
+`read` and `exec` are the primitives. Each runs one command, returns its stdout, and takes `CommandOptions`. A function
+gets its tool in an object, as in `async ({ read }) =>` or `async ({ exec }) =>`, so tools can be added later without
+changing existing scripts. Inside a fix, `exec` is also how you read the target, because it returns stdout. `exec` is
+not `h.run`. A run is a step with its own name in the output, and a command inside a fix is part of one change that the
+step's name already covers.
 
 **A function holds commands, not decisions.** A fix or run function that tests the machine before acting is an
 `ensure` step in disguise (see [`run`](#run)).
 
-**No steps inside steps.** Do not call `h.ensure`, `h.ensureValue`, `h.file`, or `h.run` inside a check, read, fix, or
-run function. A step inside a fix never shows in `plan`, because `plan` never runs the fix. A step inside a check runs
-its fix while checking. Nothing enforces this yet
-(see [Open questions](./open-questions.md#steps-inside-step-functions)).
+**`h` is for the top level.** Inside a check, read, fix, or run function, use only the tools the function is given.
+Every method on `h` fails the host while a step is running, with an error like `'h.read' can't run while step 'A' is
+running`. That rules out these mistakes:
+
+- **A step inside a step.** A step inside a fix never shows in `plan`, because `plan` never runs the fix. A step inside
+  a check runs its fix while checking.
+- **`h.read` inside a check or read function.** The function's own `read` does the same job, so there is one way to
+  read inside a step.
+- **Steps side by side.** Steps on one host run one at a time, so `Promise.all` over steps fails as soon as the second
+  one starts. Commands inside one step can still run at once, with `Promise.all` over `exec` in a fix.
+
+A check or read function runs in `plan`, so a mistake there shows up on the first `plan`. A fix or run function only
+runs in `apply`, so a mistake there shows up in `apply`.
 
 ## Steps
 
@@ -81,7 +102,7 @@ because it only observes.
 
 ```ts
 type FixOptions = {
-  fix: string | ((exec: Exec) => Promise<void>)
+  fix: string | ((tools: ExecTools) => Promise<void>)
   noop?: string // message shown when already right, in verbose output
   sudo?: boolean // run a string fix under sudo
   verify?: boolean // default true
@@ -91,11 +112,11 @@ type FixOptions = {
 }
 
 type EnsureOptions = FixOptions & {
-  check: string | (() => Promise<boolean>) // exit 0, or true, means already right
+  check: string | ((tools: ReadTools) => Promise<boolean>) // exit 0, or true, means already right
 }
 
 type EnsureValueOptions = FixOptions & {
-  read: string | (() => Promise<string>) // compared to `want`
+  read: string | ((tools: ReadTools) => Promise<string>) // compared to `want`
   want: string
 }
 ```
@@ -113,18 +134,21 @@ Anything else means the fix runs. There is nothing to diff, so `plan` shows only
 await h.ensure("Install Caddy", { check: "dpkg -s caddy", fix: "sudo apt-get install -y caddy" })
 ```
 
-`check` can also be a function that returns `true` when the state is already right. It can call `h.read` and work out
-the answer in TypeScript, for state that is awkward to test in shell:
+`check` can also be a function that returns `true` when the state is already right. It calls the `read` it is given
+and works out the answer in TypeScript, for state that is awkward to test in shell:
 
 ```ts
 await h.ensure("Enable the app", {
-  check: async () => JSON.parse(await h.read("cat /etc/app/config.json")).enabled === true,
+  check: async ({ read }) => JSON.parse(await read("cat /etc/app/config.json")).enabled === true,
   fix: "...",
 })
 ```
 
 Like any check, it also runs during `plan`, so it must not change anything. If it throws, the step fails with the
 step's name in the error.
+
+Read inside the function, not before the step. The check runs again after the fix (see [Verification](#fix)). A value
+read before the step would still hold the state from before the fix, so the step would fail even when the fix worked.
 
 ### `ensureValue`
 
@@ -147,7 +171,7 @@ easier to pull out in TypeScript than in shell:
 ```ts
 const latest = await latestCaddyVersion() // fetch() on the control machine
 await h.ensureValue("Update Caddy", {
-  read: async () => (await h.read("caddy version")).split(" ")[0] ?? "",
+  read: async ({ read }) => (await read("caddy version")).split(" ")[0] ?? "",
   want: latest,
   fix: buildCaddy,
 })
@@ -156,7 +180,7 @@ await h.ensureValue("Update Caddy", {
 A broken `read` must not look converged. If `read` exits non-zero and its output still equals `want`, the step fails
 instead of reporting ok. A read whose non-zero exit is legitimate (`systemctl is-active` exits 3 for inactive) already
 produces output that differs from `want`, so this only catches the broken case. A function `read` gets this for free,
-because `h.read` inside it throws on a non-zero exit.
+because the `read` it is given throws on a non-zero exit.
 
 ### `fix`
 
@@ -166,7 +190,7 @@ that takes more than one command, where the halfway state is not something you w
 ```ts
 await h.ensure("Install Caddy", {
   check: "dpkg -s caddy",
-  fix: async (exec) => {
+  fix: async ({ exec }) => {
     await exec("sudo apt-get update")
     await exec("sudo apt-get install -y caddy")
   },
@@ -178,7 +202,7 @@ stops the fix there, and the error names the command. That replaces `set -e` or 
 between the commands. A later command can use an earlier one's output:
 
 ```ts
-fix: async (exec) => {
+fix: async ({ exec }) => {
   const id = await exec(`docker create ${image}`)
   await exec(`docker cp ./seed ${id}:/data`)
   await exec(`docker start ${id}`)
@@ -194,7 +218,7 @@ package index does not matter, so running `apt-get update` again is harmless. Th
 ```ts
 await h.ensure("Set up Sonarr", {
   check: "systemctl is-active sonarr",
-  fix: async (exec) => {
+  fix: async ({ exec }) => {
     await exec("sudo useradd --system sonarr")
     await exec("sudo install -d -o sonarr /var/lib/sonarr")
     await exec("sudo systemctl enable --now sonarr")
@@ -238,7 +262,7 @@ run's check confirms it. Before reaching for it, try these:
   await h.ensureValue("Resize swap", {
     read: "swapon --show=SIZE --noheadings --raw",
     want: "8G",
-    fix: async (exec) => {
+    fix: async ({ exec }) => {
       await exec("sudo swapoff /swapfile")
       await exec("sudo fallocate -l 8G /swapfile")
       await exec("sudo mkswap /swapfile")
@@ -342,7 +366,7 @@ several commands under one `when`:
 ```ts
 await h.run(
   "Update the stack",
-  async (exec) => {
+  async ({ exec }) => {
     await exec("docker compose pull")
     await exec("docker compose up -d")
   },
@@ -370,7 +394,7 @@ Anything that can be checked should be an `ensure` or `ensureValue` step, not a 
 ```ts
 await h.run(
   "Set up sonarr",
-  async (exec) => {
+  async ({ exec }) => {
     if ((await exec("id -u sonarr || true")) === "") await exec("sudo useradd --system sonarr")
   },
   { when: true },
@@ -403,7 +427,7 @@ stops the script at that point. The CLI reports the host as failed, with the cal
 Catching the error does not recover the host. It stays failed, and every later call on `h` throws the same error
 straight away without touching the target. Code between the catch and the next call on `h` still runs, so do not catch
 around calls on `h`. The same holds inside a check, read, fix, or run function. A step or run whose function catches a
-failed `h.read` or `exec` still fails. A command whose non-zero exit is a legitimate answer says so itself, with `||
+failed `read` or `exec` still fails. A command whose non-zero exit is a legitimate answer says so itself, with `||
 true`.
 
 If the host function throws for any other reason (a bug in the script), the CLI catches it and reports the host as

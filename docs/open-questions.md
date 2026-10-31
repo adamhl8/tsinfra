@@ -11,8 +11,10 @@ What still needs an answer. Most are best settled by porting real hosts first (s
 - [Published, or personal](#published-or-personal)
 - [Helpers worth shipping](#helpers-worth-shipping)
 - [A directory step](#a-directory-step)
-- [A fix that runs local code](#a-fix-that-runs-local-code)
-- [Steps inside step functions](#steps-inside-step-functions)
+- [Sending data to a command](#sending-data-to-a-command)
+- [How `file` sends content](#how-file-sends-content)
+- [Rebooting a host](#rebooting-a-host)
+- [Steps side by side within a host](#steps-side-by-side-within-a-host)
 - [Quoting values in commands](#quoting-values-in-commands)
 - [Ordering between hosts](#ordering-between-hosts)
 - [No state](#no-state)
@@ -27,21 +29,12 @@ it by running `plan` on the ported Mac and reacting to what it shows.
 
 ## Showing what commands printed
 
-Today a command's output is thrown away once a step has used it. A check that passes keeps none of its stdout or stderr.
-A failure keeps only the exit code and stderr, inside the error message. A mode that shows everything that ran on a
-host needs more than that.
+Every command is recorded with its stdout, stderr, and exit code, under the step that ran it (see
+[CLI](./cli.md#what-a-host-records)). The default output shows none of it. What is open is how much to show, and when.
+`--verbose` could print each step's commands, and a failure could show the commands of the step that failed.
 
-Record it in the session's `Shell`, not in step results. Every command on a host goes through `shell.inspect` or
-`shell.run`, and there is one shell per host. The shell can append each command to a per-host transcript: the command,
-its raw stdout and stderr, its exit code, and how long it took. The CLI then decides how much to show. `--verbose` could
-print the whole transcript, and a failure could show the commands that led up to it.
-
-Carrying output in `CheckResult` and `StepResult` instead would mean every layer passes along output it never reads. It
-would also miss commands with no result of their own, like the `h.read` calls inside a check function that returns a
-boolean. `CheckResult` stays the decision: whether the check passed, and why not.
-
-A `secret` command must leave its command text and output out of the transcript, and the shell is the one place to
-enforce that. Settle it with the output piece.
+A `secret` command must leave its command text and output out of the record. `shell.inspect` records every command, so
+it is the one place to enforce that.
 
 ## Interactive sudo
 
@@ -87,20 +80,58 @@ tsinfra only once two hosts use it the same way.
 `file` creates missing parent directories with default permissions. pyinfra's `put_files` also manages directory modes.
 Add `h.dir(path, { mode })` if a port needs it.
 
-## A fix that runs local code
+## Sending data to a command
 
-A fix function only runs in `apply`, so work on the control machine (like a download) can go inside it and stay out of
-`plan`. `exec` only runs commands, though, so the fix has no way to send what it built to the target. Revisit if a port
-hits this.
+A command's stdin is `/dev/null`, because the script itself travels on stdin (see
+[Transport](./transport.md#commands-travel-on-stdin)). A script has no clean way to hand a command data from the control
+machine, like a binary built locally, or an image for `docker load`. `exec` can carry the data inside a hand-written
+base64 heredoc, but that is the multi-line shell this design avoids. The same gap stops a fix from writing a file,
+because `h.file` inside a fix is a step inside a step.
 
-## Steps inside step functions
+The likely answer is an `input` option in `CommandOptions`, sent to the command's stdin:
 
-Calling `h.ensure`, `h.ensureValue`, `h.file`, or `h.run` inside a check, read, fix, or run function is a mistake (see
-[Steps](./steps.md#commands)), and today only the docs say so. The session could enforce it with `AsyncLocalStorage`
-from `node:async_hooks`. Each function would run inside a scope that holds its step's name, and those methods would fail
-when they find one. The scope follows the async chain, so a step running next to it in `Promise.all` is not affected.
-The error would read `failed to run the fix for step 'A' -> step 'B' can't run inside another step`. Add it if the
-mistake shows up in practice.
+```ts
+await exec("docker load", { input: imageTarball })
+```
+
+A command that only takes a path gets the data written to a file first:
+
+```ts
+const tmp = await exec("mktemp")
+await exec(`cat > '${tmp}'`, { input: dump })
+await exec(`restore-tool --file '${tmp}'`)
+```
+
+How the data travels should follow [how `file` sends content](#how-file-sends-content). Add it when a port needs it.
+
+## How `file` sends content
+
+[Transport](./transport.md#file-writes) sends file content inside the write script, base64-encoded in a heredoc. That
+needs no SFTP, keeps secrets off the command line, and writes as root under `sudo -n sh -s`. The shell parses the whole
+script before it runs, so a large file sits in the shell's memory before the write starts. Base64 also adds a third to
+every transfer. `scp` or SFTP is the obvious alternative, though writing a root-owned file through it takes a second
+command. Revisit before building `file`.
+
+## Rebooting a host
+
+Some changes need a reboot, like a kernel update. Running `reboot` with `exec` drops the connection, so the command looks
+like it failed, and nothing waits for the host to come back. A reboot needs its own support: run it, wait for the
+transport to reconnect, then carry on with the rest of the script. In `plan` nothing reboots, so later steps are checked
+against the current state, like any step after a would-change step. Add it when a port needs it.
+
+## Steps side by side within a host
+
+Steps on one host run one at a time, and a step that starts while another is running fails the host (see
+[Steps](./steps.md#commands)). That is how the session knows which step a command belongs to, with one variable for the
+current step. Running steps side by side is not worth supporting yet:
+
+- **Order usually matters.** You install before you configure, and the plan reads the same way on every run.
+- **The slow steps tend to collide.** Two `apt-get install` steps fight over the dpkg lock.
+- **Most of the waiting is across hosts,** which `--parallel` already covers.
+
+Commands inside one step can already run at once, with `Promise.all` over `exec` in a fix. If a host ever needs steps
+side by side, `AsyncLocalStorage` from `node:async_hooks` can track the current step for each async chain instead of
+one variable for the host.
 
 ## Quoting values in commands
 

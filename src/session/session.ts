@@ -9,6 +9,7 @@ import type { EnsureOptions } from "#session/methods/ensure.ts"
 import { handleEnsure } from "#session/methods/ensure.ts"
 import type { Exec } from "#session/methods/exec.ts"
 import { handleExec } from "#session/methods/exec.ts"
+import type { Read } from "#session/methods/read.ts"
 import { handleRead } from "#session/methods/read.ts"
 import type { RunOptions } from "#session/methods/run.ts"
 import { handleRun } from "#session/methods/run.ts"
@@ -25,7 +26,7 @@ export interface Host {
    * A non-zero exit fails the host and throws. Catching it does not recover the host. Append `|| true` to `cmd` when a
    * non-zero exit is a legitimate answer.
    */
-  read: (cmd: string) => Promise<string>
+  read: Read
   /**
    * Runs `check`, and in `apply` runs `fix` when it fails, then runs `check` again. In `plan` the fix never runs.
    *
@@ -57,8 +58,8 @@ export interface HostSession {
  * Builds the `Host` passed to a host's function, and tracks the run's failure where the script can't see it.
  *
  * This is the only code that throws, because throwing is the contract with the script. Every function the script can
- * call, on `h` or as `exec`, is `callOrFail` around an internal function from `methods/` that returns errors as
- * values.
+ * call, on `h` or as `read` and `exec`, is `callOrFail` around an internal function from `methods/` that returns errors
+ * as values.
  */
 export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession => {
   const { name, target } = hostEntry
@@ -90,12 +91,13 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
   }
 
   const shell = createShell(getTransport(target))
+  const read: Read = async (cmd) => callOrFail(async () => handleRead(shell, cmd))
   const exec: Exec = async (cmd) => callOrFail(async () => handleExec(shell, cmd))
-  const createStepCall = (stepName: string): StepCall => ({ shell, exec, mode, stepName })
+  const createStepCall = (stepName: string): StepCall => ({ shell, read, exec, mode, stepName })
 
   const host: Host = {
     name,
-    read: async (cmd) => callOrFail(async () => handleRead(shell, cmd)),
+    read,
     ensure: async (stepName, options) => callOrFail(async () => handleEnsure(createStepCall(stepName), options)),
     ensureValue: async (stepName, options) =>
       callOrFail(async () => handleEnsureValue(createStepCall(stepName), options)),

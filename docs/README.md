@@ -89,7 +89,7 @@ export default host("sonarr.lan", async (h) => {
   await h.ensure("Install Sonarr", {
     requires: [dotnet],
     check: "test -x ~/Sonarr/Sonarr",
-    fix: async (exec) => {
+    fix: async ({ exec }) => {
       await exec(
         "curl -fsSLo sonarr.tar.gz 'https://services.sonarr.tv/v1/download/main/latest?version=4&os=linux&arch=x64'",
       )

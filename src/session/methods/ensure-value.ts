@@ -3,15 +3,16 @@ import { err, isErr } from "ts-explicit-errors"
 
 import type { CheckResult, FixOptions } from "#session/converge.ts"
 import { converge, runCheck } from "#session/converge.ts"
+import type { ReadTools } from "#session/methods/read.ts"
 import { stripTrailingNewlines } from "#session/shell.ts"
 import type { StepCall, StepResult } from "#session/step.ts"
 
 export interface EnsureValueOptions extends FixOptions {
   /**
-   * A command whose output is compared to `want`, or a function that returns the value to compare. It also runs during
-   * `plan`, so it must not change anything.
+   * A command whose output is compared to `want`, or a function given `read` that returns the value to compare. It also
+   * runs during `plan`, so it must not change anything.
    */
-  read: string | (() => Promise<string>)
+  read: string | ((tools: ReadTools) => Promise<string>)
   /** The value `read` should produce. Trailing newlines are ignored on both sides. */
   want: string
 }

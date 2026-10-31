@@ -1,6 +1,7 @@
 import type { Result } from "ts-explicit-errors"
 import { attempt, err, isErr } from "ts-explicit-errors"
 
+import type { ReadTools } from "#session/methods/read.ts"
 import type { CommandResult } from "#session/shell.ts"
 import type { Action, StepCall, StepResult } from "#session/step.ts"
 import { runAction } from "#session/step.ts"
@@ -38,15 +39,18 @@ const formatCheckFacts = (checkResult: CheckResult) => {
   return facts.map((fact) => `\n${indentLines(fact)}`).join("")
 }
 
-/** Runs a step's check as a command, or calls the script's check function and catches what it throws. */
+/**
+ * Runs a step's check as a command, or calls the script's check function, passing it `read`, and catches what it
+ * throws.
+ */
 export const runCheck = async <T>(
   stepCall: StepCall,
-  check: string | (() => Promise<T>),
+  check: string | ((tools: ReadTools) => Promise<T>),
 ): Promise<Result<CheckRun<T>>> => {
-  const { shell, stepName } = stepCall
+  const { shell, read, stepName } = stepCall
 
   if (typeof check === "function") {
-    const value = await attempt(async () => check())
+    const value = await attempt(async () => check({ read }))
     if (isErr(value)) return err(`failed to check step '${stepName}'`, value)
 
     return { type: "function", value }
