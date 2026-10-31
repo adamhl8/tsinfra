@@ -11,6 +11,7 @@ What still needs an answer. Most are best settled by porting real hosts first (s
 - [Published, or personal](#published-or-personal)
 - [Helpers worth shipping](#helpers-worth-shipping)
 - [A directory step](#a-directory-step)
+- [A read whose exit code is the answer](#a-read-whose-exit-code-is-the-answer)
 - [Sending data to a command](#sending-data-to-a-command)
 - [How `file` sends content](#how-file-sends-content)
 - [Rebooting a host](#rebooting-a-host)
@@ -79,6 +80,21 @@ tsinfra only once two hosts use it the same way.
 
 `file` creates missing parent directories with default permissions. pyinfra's `put_files` also manages directory modes.
 Add `h.dir(path, { mode })` if a port needs it.
+
+## A read whose exit code is the answer
+
+`h.read` fails the host on a non-zero exit and returns only stdout. Two cases fit it badly:
+
+- **The exit code is the answer.** `command -v docker` exits 1 when docker is missing, so today the script writes
+  `(await h.read("command -v docker || true")) !== ""`.
+- **The output is on stderr.** `java -version` and `ssh -V` print their version there, so today the command ends in
+  `2>&1`.
+
+The leading idea is `h.inspect(cmd)`, a step that never fails on a non-zero exit and returns
+`{ stdout, stderr, exitCode }`, plus an `inspect` tool for check and read functions. It mirrors `shell.inspect` and
+`shell.run` in the session. `read` keeps returning a string, because most reads only want stdout. Changing what `read`
+returns would make every one of those reads destructure an object. An option on `read` that changes its return type
+would need overloads. Build it with `CommandOptions`, because `sudo` and `secret` apply to it the same way.
 
 ## Sending data to a command
 

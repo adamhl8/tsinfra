@@ -3,7 +3,7 @@ import { attempt, err, isErr } from "ts-explicit-errors"
 
 import type { ReadTools } from "#session/methods/read.ts"
 import type { CommandResult } from "#session/shell.ts"
-import type { Action, StepCall, StepResult } from "#session/step.ts"
+import type { Action, Mismatch, StepCall, StepDetails } from "#session/step.ts"
 import { runAction } from "#session/step.ts"
 
 export interface FixOptions {
@@ -18,8 +18,7 @@ export interface FixOptions {
 
 export interface CheckResult {
   checkPassed: boolean
-  /** The values `ensureValue` compared, when they differ. */
-  mismatch?: { read: string; want: string }
+  mismatch?: Mismatch
   /** Set when a check command exited non-zero. */
   exitError?: Error | undefined
 }
@@ -67,18 +66,21 @@ export const converge = async (
   stepCall: StepCall,
   evaluate: () => Promise<Result<CheckResult>>,
   fixOptions: FixOptions,
-): Promise<Result<StepResult>> => {
+): Promise<Result<StepDetails>> => {
   const { mode, stepName } = stepCall
   const { fix, verify = true } = fixOptions
 
   const before = await evaluate()
   if (isErr(before)) return before
   if (before.checkPassed) return { changed: false }
-  if (mode === "plan") return { changed: true }
+
+  const { mismatch } = before
+  const changedDetails: StepDetails = mismatch ? { changed: true, mismatch } : { changed: true }
+  if (mode === "plan") return changedDetails
 
   const fixResult = await runAction(stepCall, fix)
   if (isErr(fixResult)) return err(`failed to run the fix for step '${stepName}'`, fixResult)
-  if (!verify) return { changed: true }
+  if (!verify) return changedDetails
 
   const after = await evaluate()
   if (isErr(after)) return after
@@ -87,5 +89,5 @@ export const converge = async (
     return err(`the check for step '${stepName}' still fails after the fix${facts}`, undefined)
   }
 
-  return { changed: true }
+  return changedDetails
 }

@@ -5,7 +5,7 @@ import type { CheckResult, FixOptions } from "#session/methods/converge/converge
 import { converge, runCheck } from "#session/methods/converge/converge.ts"
 import type { ReadTools } from "#session/methods/read.ts"
 import { stripTrailingNewlines } from "#session/shell.ts"
-import type { StepCall, StepResult } from "#session/step.ts"
+import type { StepCall, StepDetails } from "#session/step.ts"
 
 export interface EnsureValueOptions extends FixOptions {
   /**
@@ -26,7 +26,7 @@ const compareToWant = (value: string, wantedValue: string): CheckResult => {
 export const handleEnsureValue = async (
   stepCall: StepCall,
   options: EnsureValueOptions,
-): Promise<Result<StepResult>> => {
+): Promise<Result<StepDetails>> => {
   const { read, want, ...fixOptions } = options
 
   const evaluate = async (): Promise<Result<CheckResult>> => {

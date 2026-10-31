@@ -11,6 +11,18 @@ export interface StepResult {
   changed: boolean
 }
 
+/** The values `ensureValue` compared, when they differ. */
+export interface Mismatch {
+  read: string
+  want: string
+}
+
+/** What a step reports to the session. The script's type only shows `changed`, and the rest is for the output. */
+export interface StepDetails extends StepResult {
+  /** The values from the check before the fix. */
+  mismatch?: Mismatch
+}
+
 /** What stays the same for one call of a step, like `h.ensure` or `h.run`. */
 export interface StepCall {
   shell: Shell

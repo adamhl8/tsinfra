@@ -19,6 +19,14 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
 4. **Requirements.** `need`, `requires`, `provides`, waiting in plan, and the wrong-order message.
 5. **CLI.** Discover `hosts/`, run hosts in parallel, hold output per host, the summary, and exit codes.
 
+## Follow-ups
+
+- **Fail a tool saved for later.** A script can keep the `read` or `exec` a step function was given and call it after
+  that step finished. At the top level its command goes unrecorded, and during a later step it is recorded under the
+  wrong step. Build the tools inside `callStep`, bound to the step's record, and fail the host through `callOrFail` when
+  that step is no longer the running one. Do not throw in `recordCommands`, because only `session.ts` throws, and a
+  throw there would skip `fail()`.
+
 ## Port
 
 6. **The Mac.** Port `~/homelab/pyinfra/macbook` to `hosts/macbook.ts`, with its helpers in `~/homelab/lib`. Compare

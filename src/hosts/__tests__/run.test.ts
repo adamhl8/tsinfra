@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 
-import { attempt, isErr, messageChain } from "ts-explicit-errors"
+import { attempt, messageChain } from "ts-explicit-errors"
 
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
@@ -19,15 +19,28 @@ const catchFailedRead = async (h: Host) => {
   await attempt(async () => h.read("exit 1"))
 }
 
-/** Runs a host 'a' with `fn` and returns the error's message chain, if any. */
-const runAndGetMessage = async (fn: HostFunction) => {
-  const result = await runHost({ name: "a", ...host("@local", fn) }, "apply")
-  return isErr(result) ? messageChain(result) : result
+const readTwice = async (h: Host) => {
+  await h.read("echo hi")
+  await h.read("exit 1")
 }
 
+const runHostA = async (fn: HostFunction) => runHost({ name: "a", ...host("@local", fn) }, "apply")
+
+const getMessage = (failure: Error | undefined) => failure && messageChain(failure)
+
+/** Runs a host 'a' with `fn` and returns its failure's message chain, if any. */
+const runAndGetMessage = async (fn: HostFunction) => getMessage((await runHostA(fn)).failure)
+
 describe("runHost", () => {
-  it("should return nothing when the host succeeds", async () => {
+  it("should report no failure when the host succeeds", async () => {
     expect(await runAndGetMessage(doNothing)).toBeUndefined()
+  })
+
+  it("should return the records of the steps that ran, even when the host fails", async () => {
+    const { stepRecords, failure } = await runHostA(readTwice)
+
+    expect(stepRecords.map(({ name }) => name)).toStrictEqual(["echo hi", "exit 1"])
+    expect(getMessage(failure)).toBe("failed to run host 'a' -> failed to read 'exit 1' -> exited with code 1")
   })
 
   it("should wrap the error when the host fails", async () => {
@@ -39,7 +52,7 @@ describe("runHost", () => {
     // oxlint-disable-next-line typescript/require-await - a `HostFunction` must return a promise
     const recordName = async (h: Host) => void names.push(h.name)
 
-    await runHost({ name: "a", ...host("@local", recordName) }, "apply")
+    await runHostA(recordName)
 
     expect(names).toStrictEqual(["a"])
   })

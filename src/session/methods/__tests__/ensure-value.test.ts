@@ -37,7 +37,7 @@ describe("h.ensureValue", () => {
     const { file, options } = await createValueStep("v2")
     const { host: h } = createSession("plan")
 
-    expect(await ensureValueOrMessage(h, options)).toStrictEqual({ changed: true })
+    expect(await ensureValueOrMessage(h, options)).toMatchObject({ changed: true })
     expect(await Bun.file(file).exists()).toBe(false)
   })
 
@@ -45,7 +45,7 @@ describe("h.ensureValue", () => {
     const { file, options } = await createValueStep("v2")
     const { host: h } = createSession("apply")
 
-    expect(await ensureValueOrMessage(h, options)).toStrictEqual({ changed: true })
+    expect(await ensureValueOrMessage(h, options)).toMatchObject({ changed: true })
     expect(await Bun.file(file).text()).toBe("v2\n")
   })
 
@@ -76,7 +76,7 @@ describe("h.ensureValue", () => {
   it("should treat a read that exits non-zero with other output as a mismatch", async () => {
     const { host: h } = createSession("plan")
 
-    expect(await ensureValueOrMessage(h, { read: "echo inactive; exit 3", want: "active", fix: "true" })).toStrictEqual(
+    expect(await ensureValueOrMessage(h, { read: "echo inactive; exit 3", want: "active", fix: "true" })).toMatchObject(
       {
         changed: true,
       },

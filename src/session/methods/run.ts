@@ -1,7 +1,7 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { Action, StepCall, StepResult } from "#session/step.ts"
+import type { Action, StepCall, StepDetails } from "#session/step.ts"
 import { runAction } from "#session/step.ts"
 
 export interface RunOptions {
@@ -16,7 +16,7 @@ export const handleRun = async (
   stepCall: StepCall,
   action: Action,
   options: RunOptions,
-): Promise<Result<StepResult>> => {
+): Promise<Result<StepDetails>> => {
   const { mode, stepName } = stepCall
   const { when } = options
 
