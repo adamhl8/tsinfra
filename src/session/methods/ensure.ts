@@ -1,8 +1,8 @@
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
-import type { CheckResult, FixOptions } from "#session/converge.ts"
-import { converge, runCheck } from "#session/converge.ts"
+import type { CheckResult, FixOptions } from "#session/methods/converge/converge.ts"
+import { converge, runCheck } from "#session/methods/converge/converge.ts"
 import type { ReadTools } from "#session/methods/read.ts"
 import type { StepCall, StepResult } from "#session/step.ts"
 

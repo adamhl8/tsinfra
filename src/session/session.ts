@@ -1,5 +1,5 @@
 import type { Result } from "ts-explicit-errors"
-import { isErr } from "ts-explicit-errors"
+import { err, isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import type { HostEntry } from "#hosts/load.ts"
@@ -17,6 +17,7 @@ import { createShell } from "#session/shell.ts"
 import type { Action, StepCall, StepResult } from "#session/step.ts"
 import { getTransport } from "#transport/transport.ts"
 
+/** What a host's function is given. Each method call is one step, and steps run one at a time at the top level. */
 export interface Host {
   readonly name: string
   /**
@@ -49,6 +50,8 @@ export interface Host {
   run: (name: string, cmd: Action, options: RunOptions) => Promise<StepResult>
 }
 
+type StepKind = Exclude<keyof Host, "name">
+
 export interface HostSession {
   host: Host
   getFailure: () => Error | undefined
@@ -58,8 +61,8 @@ export interface HostSession {
  * Builds the `Host` passed to a host's function, and tracks the run's failure where the script can't see it.
  *
  * This is the only code that throws, because throwing is the contract with the script. Every function the script can
- * call, on `h` or as `read` and `exec`, is `callOrFail` around an internal function from `methods/` that returns errors
- * as values.
+ * call, on `h` or as `read` and `exec`, goes through `callOrFail` around an internal function from `methods/` that
+ * returns errors as values.
  */
 export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession => {
   const { name, target } = hostEntry
@@ -90,18 +93,35 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
     return value
   }
 
+  // Describes the running step, like "step 'A'" or "read 'uname -m'", for the error a call on `h` gets while it runs.
+  let currentStep: string | undefined
+
   const shell = createShell(getTransport(target))
   const read: Read = async (cmd) => callOrFail(async () => handleRead(shell, cmd))
   const exec: Exec = async (cmd) => callOrFail(async () => handleExec(shell, cmd))
-  const createStepCall = (stepName: string): StepCall => ({ shell, read, exec, mode, stepName })
+
+  // Fail a step that starts while another is running, because a step's functions use the tools they are given.
+  // This also catches steps run at once with `Promise.all`.
+  const callStep = async <T>(kind: StepKind, stepName: string, handler: (stepCall: StepCall) => Promise<Result<T>>) =>
+    callOrFail(async () => {
+      if (currentStep !== undefined) return err(`'${kind}' can't run while ${currentStep} is running`, undefined)
+
+      // Name a read by its command, because `h.read` takes no name.
+      currentStep = kind === "read" ? `read '${stepName}'` : `step '${stepName}'`
+      const value = await handler({ shell, read, exec, mode, stepName })
+      currentStep = undefined
+      return value
+    })
 
   const host: Host = {
     name,
-    read,
-    ensure: async (stepName, options) => callOrFail(async () => handleEnsure(createStepCall(stepName), options)),
+    read: async (cmd) => callStep("read", cmd, async () => handleRead(shell, cmd)),
+    ensure: async (stepName, options) =>
+      callStep("ensure", stepName, async (stepCall) => handleEnsure(stepCall, options)),
     ensureValue: async (stepName, options) =>
-      callOrFail(async () => handleEnsureValue(createStepCall(stepName), options)),
-    run: async (stepName, cmd, options) => callOrFail(async () => handleRun(createStepCall(stepName), cmd, options)),
+      callStep("ensureValue", stepName, async (stepCall) => handleEnsureValue(stepCall, options)),
+    run: async (stepName, cmd, options) =>
+      callStep("run", stepName, async (stepCall) => handleRun(stepCall, cmd, options)),
   }
 
   return { host, getFailure }

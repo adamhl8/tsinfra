@@ -80,25 +80,29 @@ step's name already covers.
 `ensure` step in disguise (see [`run`](#run)).
 
 **`h` is for the top level.** Inside a check, read, fix, or run function, use only the tools the function is given.
-Every method on `h` fails the host while a step is running, with an error like `'h.read' can't run while step 'A' is
-running`. That rules out these mistakes:
+Every method on `h` fails the host while another step is running, with an error like `'read' can't run while step
+'A' is running`. When the running step is a read, the error names its command instead, as in `read 'uname -m'`. That
+rules out these mistakes:
 
 - **A step inside a step.** A step inside a fix never shows in `plan`, because `plan` never runs the fix. A step inside
   a check runs its fix while checking.
 - **`h.read` inside a check or read function.** The function's own `read` does the same job, so there is one way to
   read inside a step.
 - **Steps side by side.** Steps on one host run one at a time, so `Promise.all` over steps fails as soon as the second
-  one starts. Commands inside one step can still run at once, with `Promise.all` over `exec` in a fix.
+  one starts. That includes reads. Commands inside one step can still run at once, with `Promise.all` over `exec` in a
+  fix.
 
 A check or read function runs in `plan`, so a mistake there shows up on the first `plan`. A fix or run function only
 runs in `apply`, so a mistake there shows up in `apply`.
 
 ## Steps
 
-A step is anything on `h` that can change the target. Most steps check one piece of state, and in `apply` run a fix
-when the check fails. `ensure` and `ensureValue` are steps you write the check for. [`file`](#file) is a step whose
-check tsinfra writes. [`run`](#run) is a step with no check. Every step returns a `StepResult`. `h.read` is not a step,
-because it only observes.
+A step is one call on `h`. A host function is a series of steps, run one at a time at the top level of the script.
+[`read`](#read) is a step that only observes. The others can change the target, and each returns a `StepResult`.
+
+Most steps that can change the target check one piece of state, and in `apply` run a fix when the check fails. `ensure`
+and `ensureValue` are steps you write the check for. [`file`](#file) is a step whose check tsinfra writes.
+[`run`](#run) is a step with no check.
 
 ```ts
 type FixOptions = {
@@ -405,8 +409,9 @@ Both work, but they never count as drift, and `plan` says "would run" whether or
 
 ## `read`
 
-Runs a command on the target in both modes and returns its output, with trailing newlines stripped. It is for
-observations a script branches on:
+Runs a command on the target in both modes and returns its output, with trailing newlines stripped. Each `h.read` is a
+step of its own. It has no name, so errors and verbose output show its command. It is for observations a script
+branches on:
 
 ```ts
 const arch = await h.read("uname -m")

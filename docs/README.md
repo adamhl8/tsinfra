@@ -123,7 +123,7 @@ tsinfra plan            # every host
 |                 |                                                                                         |
 | --------------- | --------------------------------------------------------------------------------------- |
 | **Host**        | A file in `hosts/` that exports `host(target, fn)`. The file name is what the CLI uses. |
-| **Step**        | One idempotent change: a check (or a read and a wanted value), and a fix.               |
+| **Step**        | One call on `h`, like `h.ensure` or `h.read`. Steps run one at a time.                  |
 | **Requirement** | A named check, like "docker is installed", that steps can require or provide.           |
 | **Plan**        | Run every check, no fix. Show what would change.                                        |
 | **Apply**       | Run every check, and the fix wherever the check fails.                                  |

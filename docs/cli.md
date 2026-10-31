@@ -69,19 +69,18 @@ see [Open questions](./open-questions.md).
 
 ### What a host records
 
-The output is built from a record of each host's run. It is one list of steps and commands, in the order the script
-called them.
+The output is built from a record of each host's run. It is one list of steps, in the order the script called them.
 
-- **A step** records its name, its kind (`ensure`, `ensureValue`, `run`, or `file`), whether it changed, and its error
-  if it failed. An `ensureValue` that differed also records the read and want values.
+- **A step** records its kind (`read`, `ensure`, `ensureValue`, `run`, or `file`), its name, whether it changed, and its
+  error if it failed. A read has no name, so it records its command. An `ensureValue` that differed also records the
+  read and want values.
 - **A step's commands** are every command that ran while it was running, including those from its check, read, and fix
-  functions.
+  functions. A read has exactly one.
 - **A command** records the command, its stdout and stderr, and its exit code. A command that could not run at all
   records the error instead.
-- **A command outside any step,** like a top-level `h.read`, sits in the list between the steps.
 
-The record is the same in `plan` and `apply`. `changed` means the check did not pass, or a run's `when` was true. The CLI
-knows the mode, so it shows that as "would change" or "would run" in `plan`. The read and want values come from the
+The record is the same in `plan` and `apply`. `changed` means the check did not pass, or a run's `when` was true. A read
+never changes. The CLI knows the mode, so it shows `changed` as "would change" or "would run" in `plan`. The read and want values come from the
 check before the fix, so `apply` can show what a step changed too.
 
 A failed step records its error. Steps called after the host failed throw without running, so they are not recorded. A
