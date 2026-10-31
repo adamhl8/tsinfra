@@ -72,10 +72,12 @@ export const converge = async (
 
   const before = await evaluate()
   if (isErr(before)) return before
-  if (before.checkPassed) return { changed: false }
+  if (before.checkPassed) return { status: "ok", changed: false }
 
   const { mismatch } = before
-  const changedDetails: StepDetails = mismatch ? { changed: true, mismatch } : { changed: true }
+  const changedDetails: StepDetails = mismatch
+    ? { status: "changed", changed: true, mismatch }
+    : { status: "changed", changed: true }
   if (mode === "plan") return changedDetails
 
   const fixResult = await runAction(stepCall, fix)

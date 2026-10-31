@@ -4,7 +4,7 @@ import { attempt, messageChain } from "ts-explicit-errors"
 
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
-import { runHost } from "#hosts/run.ts"
+import { hasPendingChange, runHost } from "#hosts/run.ts"
 import type { Host } from "#session/session.ts"
 
 const throwBoom = () => {
@@ -25,6 +25,25 @@ const readTwice = async (h: Host) => {
 }
 
 const runHostA = async (fn: HostFunction) => runHost({ name: "a", ...host("@local", fn) }, "apply")
+
+/** Plans a host 'a' with `fn` and reports whether it has a change pending. */
+const planHasPendingChange = async (fn: HostFunction) => {
+  const { stepRecords } = await runHost({ name: "a", ...host("@local", fn) }, "plan")
+  return hasPendingChange(stepRecords)
+}
+
+const ensurePending = async (h: Host) => {
+  await h.ensure("Pending", { check: "false", fix: "true" })
+}
+
+const runOnly = async (h: Host) => {
+  await h.read("true")
+  await h.run("Prune", "true", { when: true })
+}
+
+const failCheck = async (h: Host) => {
+  await h.ensure("Broken", { check: throwBoom, fix: "true" })
+}
 
 const getMessage = (failure: Error | undefined) => failure && messageChain(failure)
 
@@ -74,5 +93,19 @@ describe("runHost", () => {
     expect(await runAndGetMessage(catchFailedRead)).toBe(
       "failed to run host 'a' -> failed to read 'exit 1' -> exited with code 1",
     )
+  })
+})
+
+describe("hasPendingChange", () => {
+  it("should be true when a step's check did not pass", async () => {
+    expect(await planHasPendingChange(ensurePending)).toBe(true)
+  })
+
+  it("should be false when only a read and a run happened", async () => {
+    expect(await planHasPendingChange(runOnly)).toBe(false)
+  })
+
+  it("should be false when the only step failed", async () => {
+    expect(await planHasPendingChange(failCheck)).toBe(false)
   })
 })

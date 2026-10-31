@@ -16,14 +16,14 @@ describe("h.ensure", () => {
   it("should return ok without running the fix when the check passes", async () => {
     const { host: h } = createSession()
 
-    expect(await ensureOrMessage(h, { check: "true", fix: "exit 1" })).toStrictEqual({ changed: false })
+    expect(await ensureOrMessage(h, { check: "true", fix: "exit 1" })).toMatchObject({ changed: false })
   })
 
   it("should run the fix in apply and return changed", async () => {
     const { marker, options } = await createMarkerStep()
     const { host: h } = createSession("apply")
 
-    expect(await ensureOrMessage(h, options)).toStrictEqual({ changed: true })
+    expect(await ensureOrMessage(h, options)).toMatchObject({ changed: true })
     expect(await Bun.file(marker).exists()).toBe(true)
   })
 
@@ -31,7 +31,7 @@ describe("h.ensure", () => {
     const { marker, options } = await createMarkerStep()
     const { host: h } = createSession("plan")
 
-    expect(await ensureOrMessage(h, options)).toStrictEqual({ changed: true })
+    expect(await ensureOrMessage(h, options)).toMatchObject({ changed: true })
     expect(await Bun.file(marker).exists()).toBe(false)
   })
 
@@ -58,7 +58,7 @@ describe("h.ensure", () => {
       fix: "exit 1",
     })
 
-    expect(result).toStrictEqual({ changed: false })
+    expect(result).toMatchObject({ changed: false })
   })
 
   it("should fail the host with the step's name when a function check throws", async () => {
@@ -99,7 +99,7 @@ describe("h.ensure with verify: false", () => {
   it("should return changed without checking again after the fix", async () => {
     const { host: h } = createSession()
 
-    expect(await ensureOrMessage(h, { check: "false", fix: "true", verify: false })).toStrictEqual({ changed: true })
+    expect(await ensureOrMessage(h, { check: "false", fix: "true", verify: false })).toMatchObject({ changed: true })
   })
 
   it("should still fail the host when the fix fails", async () => {
@@ -123,7 +123,7 @@ describe("h.ensure with a fix function", () => {
       },
     })
 
-    expect(result).toStrictEqual({ changed: true })
+    expect(result).toMatchObject({ changed: true })
     expect(await Bun.file(file).text()).toBe("a\nb\n")
   })
 
@@ -138,7 +138,7 @@ describe("h.ensure with a fix function", () => {
       },
     })
 
-    expect(result).toStrictEqual({ changed: true })
+    expect(result).toMatchObject({ changed: true })
     expect(await Bun.file(file).text()).toBe("v")
   })
 
@@ -192,7 +192,7 @@ describe("h.ensure with a fix function", () => {
       },
     })
 
-    expect(result).toStrictEqual({ changed: true })
+    expect(result).toMatchObject({ changed: true })
     expect(await Bun.file(marker).exists()).toBe(false)
   })
 })

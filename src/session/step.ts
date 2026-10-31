@@ -17,11 +17,16 @@ export interface Mismatch {
   want: string
 }
 
-/** What a step reports to the session. The script's type only shows `changed`, and the rest is for the output. */
-export interface StepDetails extends StepResult {
-  /** The values from the check before the fix. */
-  mismatch?: Mismatch
-}
+/**
+ * What a step reports to the session. The script's type only shows `changed`, and the rest is for the output. A
+ * `changed` status means a check did not pass, so it is the only status that counts as drift in `plan`. A `ran` status
+ * means a run's `when` was true.
+ */
+export type StepDetails =
+  | { status: "ok"; changed: false }
+  // `mismatch` holds the values from the check before the fix.
+  | { status: "changed"; changed: true; mismatch?: Mismatch }
+  | { status: "ran"; changed: true }
 
 /** What stays the same for one call of a step, like `h.ensure` or `h.run`. */
 export interface StepCall {

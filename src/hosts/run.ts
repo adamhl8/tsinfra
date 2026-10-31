@@ -12,6 +12,10 @@ export interface HostReport {
   failure: Error | undefined
 }
 
+/** Reports whether a step found the machine different from the script, which is what makes `plan` exit 2. */
+export const hasPendingChange = (stepRecords: StepRecord[]) =>
+  stepRecords.some(({ details }) => !isErr(details) && details?.status === "changed")
+
 /** Calls the script's host function with its `Host`, catches what it throws, and reports what the host did. */
 export const runHost = async (hostEntry: HostEntry, mode: Mode): Promise<HostReport> => {
   const { host, stepRecords, getFailure } = createHostSession(hostEntry, mode)

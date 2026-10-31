@@ -12,7 +12,7 @@ describe("h.run", () => {
     const marker = await createMarker()
     const { host: h } = createSession("apply")
 
-    expect(await runOrMessage(h, `touch '${marker}'`, { when: true })).toStrictEqual({ changed: true })
+    expect(await runOrMessage(h, `touch '${marker}'`, { when: true })).toMatchObject({ changed: true })
     expect(await Bun.file(marker).exists()).toBe(true)
   })
 
@@ -20,7 +20,7 @@ describe("h.run", () => {
     const marker = await createMarker()
     const { host: h } = createSession("apply")
 
-    expect(await runOrMessage(h, `touch '${marker}'`, { when: false })).toStrictEqual({ changed: false })
+    expect(await runOrMessage(h, `touch '${marker}'`, { when: false })).toMatchObject({ changed: false })
     expect(await Bun.file(marker).exists()).toBe(false)
   })
 
@@ -28,7 +28,7 @@ describe("h.run", () => {
     const marker = await createMarker()
     const { host: h } = createSession("plan")
 
-    expect(await runOrMessage(h, `touch '${marker}'`, { when: true })).toStrictEqual({ changed: true })
+    expect(await runOrMessage(h, `touch '${marker}'`, { when: true })).toMatchObject({ changed: true })
     expect(await Bun.file(marker).exists()).toBe(false)
   })
 
@@ -54,7 +54,7 @@ describe("h.run with a function", () => {
       { when: true },
     )
 
-    expect(result).toStrictEqual({ changed: true })
+    expect(result).toMatchObject({ changed: true })
     expect(await Bun.file(file).text()).toBe("a\nb\n")
   })
 
@@ -93,7 +93,7 @@ describe("h.run with a function", () => {
       { when: true },
     )
 
-    expect(result).toStrictEqual({ changed: true })
+    expect(result).toMatchObject({ changed: true })
     expect(await Bun.file(marker).exists()).toBe(false)
   })
 })

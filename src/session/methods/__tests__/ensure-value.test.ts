@@ -18,7 +18,7 @@ describe("h.ensureValue", () => {
   it("should return ok without running the fix when the output matches", async () => {
     const { host: h } = createSession()
 
-    expect(await ensureValueOrMessage(h, { read: "echo v2", want: "v2", fix: "exit 1" })).toStrictEqual({
+    expect(await ensureValueOrMessage(h, { read: "echo v2", want: "v2", fix: "exit 1" })).toMatchObject({
       changed: false,
     })
   })
@@ -28,9 +28,7 @@ describe("h.ensureValue", () => {
 
     expect(
       await ensureValueOrMessage(h, { read: String.raw`printf 'v2\n\n'`, want: "v2\n", fix: "exit 1" }),
-    ).toStrictEqual({
-      changed: false,
-    })
+    ).toMatchObject({ changed: false })
   })
 
   it("should return changed in plan without running the fix", async () => {
@@ -91,7 +89,7 @@ describe("h.ensureValue", () => {
       fix: "exit 1",
     })
 
-    expect(result).toStrictEqual({ changed: false })
+    expect(result).toMatchObject({ changed: false })
   })
 
   it("should fail the host with the step's name when a function read throws", async () => {

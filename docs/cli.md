@@ -71,17 +71,18 @@ see [Open questions](./open-questions.md).
 
 The output is built from a record of each host's run. It is one list of steps, in the order the script called them.
 
-- **A step** records its kind (`read`, `ensure`, `ensureValue`, `run`, or `file`), its name, whether it changed, and its
-  error if it failed. A read has no name, so it records its command. An `ensureValue` that differed also records the
-  read and want values.
+- **A step** records its kind (`read`, `ensure`, `ensureValue`, `run`, or `file`), its name, its status, and its error
+  if it failed. A read has no name, so it records its command. An `ensureValue` that differed also records the read and
+  want values.
 - **A step's commands** are every command that ran while it was running, including those from its check, read, and fix
   functions. A read has exactly one.
 - **A command** records the command, its stdout and stderr, and its exit code. A command that could not run at all
   records the error instead.
 
-The record is the same in `plan` and `apply`. `changed` means the check did not pass, or a run's `when` was true. A read
-never changes. The CLI knows the mode, so it shows `changed` as "would change" or "would run" in `plan`. The read and want values come from the
-check before the fix, so `apply` can show what a step changed too.
+A step's status is `ok`, `changed`, or `ran`. `changed` means its check did not pass. `ran` means a run's `when` was
+true. A read is always `ok`. The record is the same in `plan` and `apply`, and the CLI knows the mode, so it shows
+`changed` as "would change" and `ran` as "would run" in `plan`. The read and want values come from the check before the
+fix, so `apply` can show what a step changed too.
 
 A failed step records its error. Steps called after the host failed throw without running, so they are not recorded. A
 failure that is not a step's, like a bug in the script, is the host's own failure.
@@ -96,5 +97,8 @@ failure that is not a step's, like a bug in the script, is the host's own failur
 `plan` exiting 2 makes a drift check in CI or a cron job a one-liner. `apply` never exits 2, because a run that changed
 things succeeded.
 
-Only steps with a check decide whether `plan` exits 2. A `run` shows up in the plan as "would run" but never counts,
-because it has no check. See [Steps](./steps.md#run).
+Only steps with a check decide whether `plan` exits 2, because only a `changed` status counts. A `run` shows up in the
+plan as "would run" but never counts, because it has no check. See [Steps](./steps.md#run).
+
+A failed host wins. `plan` exits 1 when any host failed, even if another host has changes pending, because the plan for
+the failed host is incomplete.

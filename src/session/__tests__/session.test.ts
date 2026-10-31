@@ -146,8 +146,8 @@ describe("h inside a step", () => {
   it("should allow calls on h again once a step finishes", async () => {
     const { host: h } = createSession()
 
-    expect(await ensureOrMessage(h, { check: "true", fix: "true" })).toStrictEqual({ changed: false })
-    expect(await ensureOrMessage(h, { check: "true", fix: "true" })).toStrictEqual({ changed: false })
+    expect(await ensureOrMessage(h, { check: "true", fix: "true" })).toMatchObject({ changed: false })
+    expect(await ensureOrMessage(h, { check: "true", fix: "true" })).toMatchObject({ changed: false })
     expect(await readOrMessage(h, "echo hi")).toBe("hi")
   })
 })
@@ -162,7 +162,7 @@ describe("step records", () => {
       {
         kind: "ensure",
         name: "Make marker",
-        details: { changed: true },
+        details: { status: "changed", changed: true },
         commands: [`test -f '${marker}'`, `touch '${marker}'`, `test -f '${marker}'`],
       },
     ])
@@ -173,7 +173,7 @@ describe("step records", () => {
     await ensureOrMessage(hostSession.host, { check: "false", fix: "true" })
 
     expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
-      { kind: "ensure", name: "Make marker", details: { changed: true }, commands: ["false"] },
+      { kind: "ensure", name: "Make marker", details: { status: "changed", changed: true }, commands: ["false"] },
     ])
   })
 
@@ -185,7 +185,7 @@ describe("step records", () => {
       {
         kind: "ensureValue",
         name: "Make marker",
-        details: { changed: true, mismatch: { read: "old", want: "new" } },
+        details: { status: "changed", changed: true, mismatch: { read: "old", want: "new" } },
         commands: ["echo old"],
       },
     ])
@@ -197,7 +197,7 @@ describe("step records", () => {
     await readOrMessage(hostSession.host, cmd)
 
     expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
-      { kind: "read", name: cmd, details: { changed: false }, commands: [cmd] },
+      { kind: "read", name: cmd, details: { status: "ok", changed: false }, commands: [cmd] },
     ])
     expect(toPlainResult(hostSession.stepRecords[0]?.commands[0]?.output)).toStrictEqual({
       stdout: "out\n",
@@ -211,7 +211,16 @@ describe("step records", () => {
     await runOrMessage(hostSession.host, "true", { when: false })
 
     expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
-      { kind: "run", name: "Make marker", details: { changed: false }, commands: [] },
+      { kind: "run", name: "Make marker", details: { status: "ok", changed: false }, commands: [] },
+    ])
+  })
+
+  it("should record a run with `when: true` as ran, without running it in plan", async () => {
+    const hostSession = createSession("plan")
+    await runOrMessage(hostSession.host, "true", { when: true })
+
+    expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
+      { kind: "run", name: "Make marker", details: { status: "ran", changed: true }, commands: [] },
     ])
   })
 

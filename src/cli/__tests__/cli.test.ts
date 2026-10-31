@@ -1,7 +1,7 @@
 import { describe, expect, it, setDefaultTimeout } from "bun:test"
 import path from "node:path"
 
-import { createProject, writeHosts } from "#cli/__tests__/utils.ts"
+import { createProject, writeHosts, writeLocalHost } from "#cli/__tests__/utils.ts"
 
 setDefaultTimeout(30_000)
 
@@ -77,10 +77,26 @@ describe("tsinfra", () => {
       `import { host } from "tsinfra"\n\nexport default host("@local", async (h) => void (await ${step}))\n`,
     )
 
-    expect((await run`tsinfra plan`.nothrow()).exitCode).toBe(0)
+    expect((await run`tsinfra plan`.nothrow()).exitCode).toBe(2)
     expect(await Bun.file(marker).exists()).toBe(false)
 
     expect((await run`tsinfra apply`.nothrow()).exitCode).toBe(0)
     expect(await Bun.file(marker).exists()).toBe(true)
+  })
+
+  it("should exit 0 from plan when the only thing pending is a run", async () => {
+    const { dir, run } = await createProject()
+    await writeLocalHost(path.join(dir, "hosts"), "a", `await h.run("Prune", "true", { when: true })`)
+
+    expect((await run`tsinfra plan`.nothrow()).exitCode).toBe(0)
+  })
+
+  it("should exit 1 from plan when a host fails, even with changes pending on another", async () => {
+    const { dir, run } = await createProject()
+    const hostsDir = path.join(dir, "hosts")
+    await writeLocalHost(hostsDir, "a", `await h.ensure("Pending", { check: "false", fix: "true" })`)
+    await writeLocalHost(hostsDir, "b", `await h.read("exit 1")`)
+
+    expect((await run`tsinfra plan`.nothrow()).exitCode).toBe(1)
   })
 })

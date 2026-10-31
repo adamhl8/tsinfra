@@ -20,11 +20,11 @@ export const handleRun = async (
   const { mode, stepName } = stepCall
   const { when } = options
 
-  if (!when) return { changed: false }
-  if (mode === "plan") return { changed: true }
+  if (!when) return { status: "ok", changed: false }
+  if (mode === "plan") return { status: "ran", changed: true }
 
   const actionResult = await runAction(stepCall, action)
   if (isErr(actionResult)) return err(`failed to run step '${stepName}'`, actionResult)
 
-  return { changed: true }
+  return { status: "ran", changed: true }
 }

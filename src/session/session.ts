@@ -115,7 +115,7 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
 
       const value = await handler({ shell, read, exec, mode, stepName })
       // Record a read as unchanged, because it only observes.
-      finishStep(stepRecord, typeof value === "string" ? { changed: false } : value)
+      finishStep(stepRecord, typeof value === "string" ? { status: "ok", changed: false } : value)
       return value
     })
 

@@ -23,6 +23,13 @@ export const createProject = async () => {
   return { dir, run }
 }
 
+/** Writes a host file named `<name>.ts` into `dir` that targets '@local' and runs `body` inside its function. */
+export const writeLocalHost = async (dir: string, name: string, body: string) =>
+  Bun.write(
+    path.join(dir, `${name}.ts`),
+    `import { host } from "tsinfra"\n\nexport default host("@local", async (h) => {\n${body}\n})\n`,
+  )
+
 /** Writes a host file for each name into `dir` that targets `<name>.lan`. */
 export const writeHosts = async (dir: string, names: string[]) => {
   await Promise.all(names.map(async (name) => Bun.write(path.join(dir, `${name}.ts`), buildHostSource(name))))
