@@ -1,4 +1,4 @@
-import { attempt, err, isErr } from "ts-explicit-errors"
+import { attempt, isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import type { HostEntry } from "#hosts/load.ts"
@@ -7,6 +7,7 @@ import type { StepRecord } from "#session/step-records.ts"
 
 /** What a host's run did. A failed host still has the records of the steps that ran before the failure. */
 export interface HostReport {
+  name: string
   stepRecords: StepRecord[]
   /** Set when a step failed or the script threw. */
   failure: Error | undefined
@@ -22,8 +23,7 @@ export const runHost = async (hostEntry: HostEntry, mode: Mode): Promise<HostRep
   const fnResult = await attempt(async () => hostEntry.fn(host))
 
   // Report the failure recorded in the session first, because a script that catches it can go on to throw something else.
-  const hostFailure = getFailure() ?? (isErr(fnResult) ? fnResult : undefined)
-  const failure = hostFailure && err(`failed to run host '${hostEntry.name}'`, hostFailure)
+  const failure = getFailure() ?? (isErr(fnResult) ? fnResult : undefined)
 
-  return { stepRecords, failure }
+  return { name: hostEntry.name, stepRecords, failure }
 }

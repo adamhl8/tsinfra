@@ -30,7 +30,7 @@ describe("tsinfra", () => {
 
     expect(exitCode).toBe(1)
     expect(stdout).toBe("")
-    expect(stderr).toStartWith("failed to discover hosts -> failed to read hosts directory 'nowhere' -> ENOENT")
+    expect(stderr).toStartWith("Error: failed to discover hosts -> failed to read hosts directory 'nowhere' -> ENOENT")
   })
 
   it("should print the error and exit 1 when a host can't be loaded", async () => {
@@ -41,10 +41,12 @@ describe("tsinfra", () => {
 
     expect(exitCode).toBe(1)
     expect(stdout).toBe("")
-    expect(stderr).toBe("failed to load hosts:\nfailed to load host 'a' -> default must be an object (was missing)")
+    expect(stderr).toBe(
+      "Error: failed to load hosts:\nfailed to load host 'a' -> default must be an object (was missing)",
+    )
   })
 
-  it("should print the error and exit 1 when a host fails", async () => {
+  it("should print a failed host's error in its block on stdout and exit 1", async () => {
     const { dir, run } = await createProject()
     await writeHosts(path.join(dir, "hosts"), ["a"])
     const source = `import { host } from "tsinfra"\n\nexport default host("b.lan", async () => { throw new Error("boom") })\n`
@@ -53,8 +55,8 @@ describe("tsinfra", () => {
     const { stdout, stderr, exitCode } = await run`tsinfra plan`.nothrow()
 
     expect(exitCode).toBe(1)
-    expect(stdout).toBe("a ok")
-    expect(stderr).toBe("failed to run host 'b' -> boom")
+    expect(stdout).toBe("b\n  ! b.ts\n      boom\n\na   ok\nb   failed")
+    expect(stderr).toBe("")
   })
 
   it("should run a host that reads from '@local'", async () => {
@@ -65,7 +67,7 @@ describe("tsinfra", () => {
     const { stdout, exitCode } = await run`tsinfra plan`.nothrow()
 
     expect(exitCode).toBe(0)
-    expect(stdout).toBe("hi\na ok")
+    expect(stdout).toBe("hi\na   ok")
   })
 
   it("should only run a step's fix in apply", async () => {
@@ -98,5 +100,32 @@ describe("tsinfra", () => {
     await writeLocalHost(hostsDir, "b", `await h.read("exit 1")`)
 
     expect((await run`tsinfra plan`.nothrow()).exitCode).toBe(1)
+  })
+
+  it("should print a block for each host with something to show, then the summary", async () => {
+    const { dir, run } = await createProject()
+    const hostsDir = path.join(dir, "hosts")
+    const steps = [
+      `await h.ensure("Write the unit", { check: "false", fix: "true" })`,
+      `await h.run("Reload systemd", "true", { when: true })`,
+    ]
+    await writeLocalHost(hostsDir, "sonarr", steps.join("\n"))
+    await writeLocalHost(hostsDir, "caddy", `await h.read("true")`)
+
+    const { stdout, stderr } = await run`tsinfra plan`.nothrow()
+
+    expect(stdout).toBe(
+      [
+        "sonarr",
+        "  ~ Write the unit",
+        "  > Reload systemd",
+        "",
+        "Steps after a change were checked without that change, so apply may differ.",
+        "",
+        "caddy    ok",
+        "sonarr   2 changes",
+      ].join("\n"),
+    )
+    expect(stderr).toBe("")
   })
 })

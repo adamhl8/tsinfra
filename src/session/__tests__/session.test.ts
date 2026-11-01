@@ -243,6 +243,18 @@ describe("step records", () => {
     })
   })
 
+  it("should record a failure the script caught as the step's error", async () => {
+    const hostSession = createSession()
+    await ensureOrMessage(hostSession.host, {
+      check: "false",
+      fix: async ({ exec }) => {
+        await attempt(async () => exec("exit 1"))
+      },
+    })
+
+    expect(toPlainRecords(hostSession.stepRecords)[0]?.details).toBe("failed to run 'exit 1' -> exited with code 1")
+  })
+
   it("should record commands from the given read and exec under their step", async () => {
     const file = path.join(await makeTempDir("record-"), "file")
     const hostSession = createSession()

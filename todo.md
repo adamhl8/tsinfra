@@ -16,7 +16,7 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
 2. **Steps.** `step` (both check kinds), `run`, `read`, plan and apply modes, verification, and failure marking the
    host so later calls are skipped.
 3. **`file`.** The GNU and BSD check command, the local hash, diffs (text, binary, secret), the temp-file write.
-4. **Requirements.** `need`, `requires`, `provides`, waiting in plan, and the wrong-order message.
+4. **Requirements.** `requires` on `ensure` and `file`, `name` on `StepResult`, and waiting in plan.
 5. **CLI.** Discover `hosts/`, run hosts in parallel, hold output per host, the summary, and exit codes.
 
 ## Follow-ups

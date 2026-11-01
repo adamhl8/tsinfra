@@ -5,13 +5,15 @@ What still needs an answer. Most are best settled by porting real hosts first (s
 <!-- toc -->
 
 - [What `plan` output should look like](#what-plan-output-should-look-like)
+- [Choosing a diff library](#choosing-a-diff-library)
+- [JSON output](#json-output)
+- [Live progress details](#live-progress-details)
 - [Showing what commands printed](#showing-what-commands-printed)
 - [Interactive sudo](#interactive-sudo)
 - [Interactive commands](#interactive-commands)
 - [Published, or personal](#published-or-personal)
 - [Helpers worth shipping](#helpers-worth-shipping)
 - [A directory step](#a-directory-step)
-- [A read whose exit code is the answer](#a-read-whose-exit-code-is-the-answer)
 - [Sending data to a command](#sending-data-to-a-command)
 - [How `file` sends content](#how-file-sends-content)
 - [Rebooting a host](#rebooting-a-host)
@@ -26,7 +28,35 @@ What still needs an answer. Most are best settled by porting real hosts first (s
 
 [CLI](./cli.md#output) has a first guess. The evidence so far is `~/homelab/justfile`, whose `plan` recipe filters
 pyinfra's JSON down to just the names of pending changes. That suggests the default should be terse, with diffs. Settle
-it by running `plan` on the ported Mac and reacting to what it shows.
+it by running `plan` on the ported Mac and reacting to what it shows. How the report is built is settled (see
+[CLI](./cli.md#how-the-report-is-built)), so this is only about what it shows.
+
+## Choosing a diff library
+
+Diffs come from a library. The leading candidate is jsdiff (the `diff` package), the standard line-diff library for
+JavaScript. Compare it with the alternatives before choosing. A diff here needs to compare two strings line by line,
+print removed and added lines with `-` and `+`, and keep a few lines of context around a change in a long file. It has
+to work under Bun, and it should not pull in a large dependency tree.
+
+## JSON output
+
+A `--json` flag would write the report as one JSON document on stdout instead of the text blocks, for scripts and CI.
+It would serialize each host's record (see [CLI](./cli.md#what-a-host-records)), with each error as its message chain,
+and a version field so the shape can change later. No library is needed. Diagnostic logs stay on stderr either way, so
+stdout is only the document. Add it when something needs to read the output.
+
+## Live progress details
+
+The design is settled (see [CLI](./cli.md#live-progress)). These details are not:
+
+- **What tells Ink to redraw.** A spinner redraws on a timer anyway, so the live lines could read the records on each
+  tick. The other option is a callback from the step recorder when a step starts or finishes.
+- **How much a live line shows.** It could be only the step's name, or also the command running inside it.
+- **Long lines.** A failure's error can be wider than the terminal. The terminal wraps it, but the wrapped part loses
+  its indent. `Bun.wrapAnsi` could wrap it to the terminal's width and keep the indent, but then the output depends on
+  where it runs. Decide once real error output shows whether it's needed.
+- **Testing.** `ink-testing-library` renders a component to text frames. The formatting functions keep their own tests
+  either way, because they are plain functions.
 
 ## Showing what commands printed
 
@@ -80,21 +110,6 @@ tsinfra only once two hosts use it the same way.
 
 `file` creates missing parent directories with default permissions. pyinfra's `put_files` also manages directory modes.
 Add `h.dir(path, { mode })` if a port needs it.
-
-## A read whose exit code is the answer
-
-`h.read` fails the host on a non-zero exit and returns only stdout. Two cases fit it badly:
-
-- **The exit code is the answer.** `command -v docker` exits 1 when docker is missing, so today the script writes
-  `(await h.read("command -v docker || true")) !== ""`.
-- **The output is on stderr.** `java -version` and `ssh -V` print their version there, so today the command ends in
-  `2>&1`.
-
-The leading idea is `h.inspect(cmd)`, a step that never fails on a non-zero exit and returns
-`{ stdout, stderr, exitCode }`, plus an `inspect` tool for check and read functions. It mirrors `shell.inspect` and
-`shell.run` in the session. `read` keeps returning a string, because most reads only want stdout. Changing what `read`
-returns would make every one of those reads destructure an object. An option on `read` that changes its return type
-would need overloads. Build it with `CommandOptions`, because `sudo` and `secret` apply to it the same way.
 
 ## Sending data to a command
 
@@ -170,7 +185,8 @@ that already exist.
 What that costs:
 
 - **Removing a step does not undo it.** A file or package the script stops managing stays on the machine. Removing it
-  takes a step that removes it, like `check: "! test -e /etc/sonarr.conf"` with `fix: "sudo rm /etc/sonarr.conf"`.
+  takes a step that removes it, like `check: "test -e /etc/sonarr.conf"` and `want: false`, with
+  `fix: "sudo rm /etc/sonarr.conf"`.
 - **`plan` cannot say why something differs.** A hand edit on the machine and an edit to the script look the same,
   because there is no record of the last apply.
 - **Run-once work needs a marker.** A one-time migration has no natural check, so it leaves a marker on the target, like

@@ -54,11 +54,18 @@ export interface Host {
 
 export type StepKind = Exclude<keyof Host, "name">
 
+type Failure = Error | undefined
+
+// Keep the first failure, because calls made at once with `Promise.all` can each fail.
+// Replace it only with an error that wraps it, which adds context such as the step's name.
+const keepFailure = (failure: Failure, error: Error) =>
+  failure === undefined || error.cause === failure ? error : failure
+
 export interface HostSession {
   host: Host
   /** Every step that started, in the order the script called them. */
   stepRecords: StepRecord[]
-  getFailure: () => Error | undefined
+  getFailure: () => Failure
 }
 
 /**
@@ -70,16 +77,12 @@ export interface HostSession {
  */
 export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession => {
   const { name, target } = hostEntry
-  let failure: Error | undefined
-  // Read `failure` through `getFailure` after an `await`, because TypeScript keeps the narrowing from an earlier check.
-  const getFailure = () => failure
+  let failure: Failure
 
-  // Keep the first failure, because calls made at once with `Promise.all` can each fail.
-  // Replace it only with an error that wraps it, which adds context such as the step's name.
-  // Throw it on every later call, so a script that catches it still can't use the host.
+  // Throw the failure on every later call, so a script that catches it still can't use the host.
   // Type `fail` itself, not just its return, so TypeScript knows nothing runs after a call to it.
   const fail: (error: Error) => never = (error) => {
-    if (failure === undefined || error.cause === failure) failure = error
+    failure = keepFailure(failure, error)
     throw failure
   }
 
@@ -92,8 +95,10 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
     if (isErr(value)) fail(value)
 
     // Throw a failure recorded during `callback`, because a function in the script may have caught it and returned normally.
-    const recordedFailure = getFailure()
-    if (recordedFailure) throw recordedFailure
+    // Widen `failure` with `as`, because TypeScript keeps the narrowing to `undefined` from the check above.
+    // TypeScript can't know that `callback` may have set `failure` again.
+    const callbackFailure = failure as Failure
+    if (callbackFailure) throw callbackFailure
     return value
   }
 
@@ -114,8 +119,11 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
       if (isErr(stepRecord)) return stepRecord
 
       const value = await handler({ shell, read, exec, mode, stepName })
+
+      // Record the failure the host ends up with, because a function in the script may have caught an earlier one.
+      const stepFailure = isErr(value) ? keepFailure(failure, value) : failure
       // Record a read as unchanged, because it only observes.
-      finishStep(stepRecord, typeof value === "string" ? { status: "ok", changed: false } : value)
+      finishStep(stepRecord, stepFailure ?? (typeof value === "string" ? { status: "ok", changed: false } : value))
       return value
     })
 
@@ -132,5 +140,5 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
       callStep("run", stepName, async (stepCall) => handleRun(stepCall, cmd, options)),
   }
 
-  return { host, stepRecords, getFailure }
+  return { host, stepRecords, getFailure: () => failure }
 }

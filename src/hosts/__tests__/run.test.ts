@@ -59,11 +59,11 @@ describe("runHost", () => {
     const { stepRecords, failure } = await runHostA(readTwice)
 
     expect(stepRecords.map(({ name }) => name)).toStrictEqual(["echo hi", "exit 1"])
-    expect(getMessage(failure)).toBe("failed to run host 'a' -> failed to read 'exit 1' -> exited with code 1")
+    expect(getMessage(failure)).toBe("failed to read 'exit 1' -> exited with code 1")
   })
 
-  it("should wrap the error when the host fails", async () => {
-    expect(await runAndGetMessage(throwBoom)).toBe("failed to run host 'a' -> boom")
+  it("should report the error when the host function throws", async () => {
+    expect(await runAndGetMessage(throwBoom)).toBe("boom")
   })
 
   it("should pass the host's name to its function", async () => {
@@ -83,16 +83,12 @@ describe("runHost", () => {
       steps.push("after the read")
     }
 
-    expect(await runAndGetMessage(readThenRecord)).toBe(
-      "failed to run host 'a' -> failed to read 'exit 1' -> exited with code 1",
-    )
+    expect(await runAndGetMessage(readThenRecord)).toBe("failed to read 'exit 1' -> exited with code 1")
     expect(steps).toStrictEqual([])
   })
 
   it("should report a failed call even when the host function catches it", async () => {
-    expect(await runAndGetMessage(catchFailedRead)).toBe(
-      "failed to run host 'a' -> failed to read 'exit 1' -> exited with code 1",
-    )
+    expect(await runAndGetMessage(catchFailedRead)).toBe("failed to read 'exit 1' -> exited with code 1")
   })
 })
 

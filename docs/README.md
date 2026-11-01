@@ -38,7 +38,7 @@ tsinfra keeps the script shape and adds what scripts lacked:
 - A plan mode that runs every check and no fix.
 - A diff wherever a step can show one.
 - A re-check after each fix, so a fix that does not work fails loudly.
-- Requirements, so a step written before the thing it needs gets caught.
+- Requirements, so `plan` waits on an earlier change instead of checking too early.
 - One command that checks every host at once.
 
 ## Goals
@@ -81,14 +81,13 @@ import { readFile } from "node:fs/promises"
 import { host } from "tsinfra"
 
 import { base } from "../lib/base.ts"
-import { dotnet } from "../lib/needs.ts"
 
 export default host("sonarr.lan", async (h) => {
   await base(h)
 
   await h.ensure("Install Sonarr", {
-    requires: [dotnet],
     check: "test -x ~/Sonarr/Sonarr",
+    want: true,
     fix: async ({ exec }) => {
       await exec(
         "curl -fsSLo sonarr.tar.gz 'https://services.sonarr.tv/v1/download/main/latest?version=4&os=linux&arch=x64'",
@@ -102,10 +101,10 @@ export default host("sonarr.lan", async (h) => {
     content: await readFile(new URL("../files/sonarr.service", import.meta.url), "utf8"),
     sudo: true,
   })
-  await h.run("Reload systemd", "sudo systemctl daemon-reload", { when: unit.changed })
+  await h.run("Reload systemd", "sudo systemctl daemon-reload", { after: [unit] })
 
-  await h.ensureValue("Start Sonarr", {
-    read: "systemctl is-active sonarr",
+  await h.ensure("Start Sonarr", {
+    check: "systemctl is-active sonarr",
     want: "active",
     fix: "sudo systemctl enable --now sonarr",
   })
@@ -124,14 +123,15 @@ tsinfra plan            # every host
 | --------------- | --------------------------------------------------------------------------------------- |
 | **Host**        | A file in `hosts/` that exports `host(target, fn)`. The file name is what the CLI uses. |
 | **Step**        | One call on `h`, like `h.ensure` or `h.read`. Steps run one at a time.                  |
-| **Requirement** | A named check, like "docker is installed", that steps can require or provide.           |
+| **Requirement** | An earlier step whose change a step's check depends on, named in `requires`.            |
 | **Plan**        | Run every check, no fix. Show what would change.                                        |
 | **Apply**       | Run every check, and the fix wherever the check fails.                                  |
 
 ## Contents
 
-- **[Steps](./steps.md)**: `ensure`, `ensureValue`, `file`, `run`, `read`, verification, and what happens on failure
-- **[Requirements](./requirements.md)**: `need`, `requires`, `provides`, and how order is checked
+- **[Steps](./steps.md)**: choosing a method, `ensure`, `file`, `run`, `read`, `inspect`, verification, and what
+  happens on failure
+- **[Requirements](./requirements.md)**: `requires`, and how `plan` waits on an earlier change
 - **[Transport](./transport.md)**: local and SSH, ControlMaster, sudo, and how commands and files cross
 - **[CLI](./cli.md)**: the `hosts/` folder, `plan` and `apply`, output, and exit codes
 - **[Open questions](./open-questions.md)**: what still needs an answer
