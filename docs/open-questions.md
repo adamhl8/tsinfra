@@ -18,6 +18,7 @@ What still needs an answer. Most are best settled by porting real hosts first (s
 - [How `file` sends content](#how-file-sends-content)
 - [Rebooting a host](#rebooting-a-host)
 - [Steps side by side within a host](#steps-side-by-side-within-a-host)
+- [Trimming what a script gets back](#trimming-what-a-script-gets-back)
 - [Quoting values in commands](#quoting-values-in-commands)
 - [Ordering between hosts](#ordering-between-hosts)
 - [No state](#no-state)
@@ -163,6 +164,14 @@ current step. Running steps side by side is not worth supporting yet:
 Commands inside one step can already run at once, with `Promise.all` over `exec` in a fix. If a host ever needs steps
 side by side, `AsyncLocalStorage` from `node:async_hooks` can track the current step for each async chain instead of
 one variable for the host.
+
+## Trimming what a script gets back
+
+Today only trailing newlines are stripped, and only from stdout. A script comparing `stderr` then misses a match because
+of its trailing newline. One option is to trim all whitespace from `stdout` and `stderr` in what a script gets back
+(`read`, `inspect`, `exec`, and a check function's tools), because that is usually what a script compares to. tsinfra's
+own comparisons, like a string `want`, would keep stripping only trailing newlines, so leading or trailing spaces in the
+real value still count as drift. Decide before building `inspect`.
 
 ## Quoting values in commands
 

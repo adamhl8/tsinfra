@@ -8,6 +8,7 @@ import { host } from "#hosts/host.ts"
 import { runHost } from "#hosts/run.ts"
 import { formatHostBlock, formatSummary } from "#report/format.ts"
 import type { Host } from "#session/session.ts"
+import type { EnsureOptions } from "#session/steps/ensure.ts"
 
 const runNamedHost = async (name: string, fn: HostFunction, mode: Mode) =>
   runHost({ name, ...host("@local", fn) }, mode)
@@ -15,7 +16,7 @@ const runNamedHost = async (name: string, fn: HostFunction, mode: Mode) =>
 const formatBlock = async (fn: HostFunction, mode: Mode) => formatHostBlock(await runNamedHost("a", fn, mode))
 
 const changeAndRun = async (h: Host) => {
-  await h.ensure("Write the unit", { check: "false", fix: "true" })
+  await h.ensure("Write the unit", { check: "false", want: true, fix: "true" })
   await h.run("Reload systemd", "true", { when: true })
   await h.run("Prune", "true", { when: true })
 }
@@ -25,13 +26,13 @@ const runOnce = async (h: Host) => {
 }
 
 const stayRight = async (h: Host) => {
-  await h.ensure("Install Caddy", { check: "true", fix: "true" })
+  await h.ensure("Install Caddy", { check: "true", want: true, fix: "true" })
   await h.read("true")
   await h.run("Reload systemd", "true", { when: false })
 }
 
 const failVerify = async (h: Host) => {
-  await h.ensure("Make it", { check: "echo missing >&2; false", fix: "true" })
+  await h.ensure("Make it", { check: "echo missing >&2; false", want: true, fix: "true" })
 }
 
 const failRead = async (h: Host) => {
@@ -39,22 +40,23 @@ const failRead = async (h: Host) => {
 }
 
 const changeThenThrow = async (h: Host) => {
-  await h.ensure("Pending", { check: "false", fix: "true" })
+  await h.ensure("Pending", { check: "false", want: true, fix: "true" })
   throw new Error("boom")
 }
 
 const runStepsAtOnce = async (h: Host) => {
   await Promise.allSettled([
-    h.ensure("First", { check: "sleep 0.1", fix: "true" }),
-    h.ensure("Second", { check: "true", fix: "true" }),
+    h.ensure("First", { check: "sleep 0.1", want: true, fix: "true" }),
+    h.ensure("Second", { check: "true", want: true, fix: "true" }),
   ])
 }
 
 const nestStep = async (h: Host) => {
   await h.ensure("Outer", {
     check: "false",
+    want: true,
     fix: async () => {
-      await h.ensure("Inner", { check: "true", fix: "true" })
+      await h.ensure("Inner", { check: "true", want: true, fix: "true" })
     },
   })
 }
@@ -62,6 +64,7 @@ const nestStep = async (h: Host) => {
 const catchFailedExec = async (h: Host) => {
   await h.ensure("Make marker", {
     check: "false",
+    want: true,
     fix: async ({ exec }) => {
       await attempt(async () => exec("exit 1"))
     },
@@ -69,7 +72,7 @@ const catchFailedExec = async (h: Host) => {
 }
 
 const changeOnce = async (h: Host) => {
-  await h.ensure("Pending", { check: "false", fix: "true" })
+  await h.ensure("Pending", { check: "false", want: true, fix: "true" })
 }
 
 describe("formatHostBlock", () => {
@@ -90,8 +93,10 @@ describe("formatHostBlock", () => {
       [
         "a",
         "  ! Make it",
-        "      the check for step 'Make it' still fails after the fix",
-        "        exited with code 1: missing",
+        "      the host's state still differs after the fix for step 'Make it'",
+        "        got: exit code 1",
+        "        want: exit code 0",
+        "        stderr: missing",
       ].join("\n"),
     )
   })
@@ -125,6 +130,64 @@ describe("formatHostBlock", () => {
   })
 })
 
+/** Formats the block of an apply whose step still differs after its fix, as the lines under the error. */
+const formatFailedCheck = async <T extends string | boolean>(options: EnsureOptions<T>) => {
+  const block = await formatBlock(async (h) => {
+    await h.ensure("Make it", options)
+  }, "apply")
+  return block?.split("\n").slice(3)
+}
+
+describe("formatHostBlock for a host state that still differs after the fix", () => {
+  it("should show the exit codes when a want: false check still exits 0", async () => {
+    expect(await formatFailedCheck({ check: "true", want: false, fix: "true" })).toStrictEqual([
+      "        got: exit code 0",
+      "        want: a non-zero exit code",
+    ])
+  })
+
+  it("should show the booleans a function check compared", async () => {
+    const lines = await formatFailedCheck({
+      check: async ({ read }) => (await read("echo no")) === "yes",
+      want: true,
+      fix: "true",
+    })
+
+    expect(lines).toStrictEqual(["        got: false", "        want: true"])
+  })
+
+  it("should quote both values of a string check", async () => {
+    expect(await formatFailedCheck({ check: "echo v1", want: "v2", fix: "true" })).toStrictEqual([
+      "        got: 'v1'",
+      "        want: 'v2'",
+    ])
+  })
+
+  it("should quote an empty value so it shows", async () => {
+    expect(await formatFailedCheck({ check: "true", want: "v2", fix: "true" })).toStrictEqual([
+      "        got: ''",
+      "        want: 'v2'",
+    ])
+  })
+
+  it("should show stderr when a string check exits non-zero", async () => {
+    const lines = await formatFailedCheck({ check: "echo v1; echo oops >&2; exit 3", want: "v2", fix: "true" })
+
+    expect(lines).toStrictEqual(["        got: 'v1'", "        want: 'v2'", "        stderr: oops"])
+  })
+
+  it("should keep each line of a multi-line stderr at the fact indent", async () => {
+    const lines = await formatFailedCheck({ check: "echo one >&2; echo two >&2; false", want: true, fix: "true" })
+
+    expect(lines).toStrictEqual([
+      "        got: exit code 1",
+      "        want: exit code 0",
+      "        stderr: one",
+      "        two",
+    ])
+  })
+})
+
 describe("formatSummary", () => {
   it("should list each host's status, padded to the longest name, after the plan reminder", async () => {
     const hostReports = [
@@ -138,7 +201,7 @@ describe("formatSummary", () => {
       [
         "Steps after a change were checked without that change, so apply may differ.",
         "",
-        "caddy    ok",
+        "caddy    unchanged",
         "immich   failed",
         "sonarr   3 changes",
         "web      1 change",

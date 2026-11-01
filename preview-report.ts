@@ -33,9 +33,13 @@ const createScenarios = (dir: string): Scenario[] => {
       name: "changes",
       target: "@local",
       fn: async (h) => {
-        await h.ensure("Install Caddy", { check: `test -f '${marker("caddy")}'`, fix: `touch '${marker("caddy")}'` })
-        await h.ensureValue("Set the hostname", {
-          read: `cat '${marker("hostname")}' 2>/dev/null || true`,
+        await h.ensure("Install Caddy", {
+          check: `test -f '${marker("caddy")}'`,
+          want: true,
+          fix: `touch '${marker("caddy")}'`,
+        })
+        await h.ensure("Set the hostname", {
+          check: `cat '${marker("hostname")}' 2>/dev/null || true`,
           want: "web1",
           fix: `printf web1 > '${marker("hostname")}'`,
         })
@@ -47,6 +51,7 @@ const createScenarios = (dir: string): Scenario[] => {
       fn: async (h) => {
         await h.ensure("Create the data dir", {
           check: `test -d '${marker("data")}'`,
+          want: true,
           fix: `mkdir '${marker("data")}'`,
         })
       },
@@ -57,6 +62,7 @@ const createScenarios = (dir: string): Scenario[] => {
       fn: async (h) => {
         const unit = await h.ensure("Write the sonarr unit", {
           check: `test -f '${marker("unit")}'`,
+          want: true,
           fix: `touch '${marker("unit")}'`,
         })
         await h.run("Reload systemd", "true", { when: unit.changed })
@@ -65,10 +71,10 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      name: "all-ok",
+      name: "all-unchanged",
       target: "@local",
       fn: async (h) => {
-        await h.ensure("Install git", { check: "true", fix: "true" })
+        await h.ensure("Install git", { check: "true", want: true, fix: "true" })
         await h.read("uname -m")
         await h.run("Reload systemd", "true", { when: false })
       },
@@ -80,6 +86,7 @@ const createScenarios = (dir: string): Scenario[] => {
       fn: async (h) => {
         await h.ensure("Start sonarr", {
           check: "false",
+          want: true,
           fix: "echo 'Unit sonarr.service not found.' >&2; exit 5",
         })
       },
@@ -89,7 +96,7 @@ const createScenarios = (dir: string): Scenario[] => {
       target: "@local",
       modes: ["apply"],
       fn: async (h) => {
-        await h.ensureValue("Set the timezone", { read: "echo UTC", want: "America/New_York", fix: "true" })
+        await h.ensure("Set the timezone", { check: "echo UTC", want: "America/New_York", fix: "true" })
       },
     },
     {
@@ -100,6 +107,7 @@ const createScenarios = (dir: string): Scenario[] => {
           check: () => {
             throw new Error("Unexpected token '}' in JSON at position 41")
           },
+          want: true,
           fix: "true",
         })
       },
@@ -115,7 +123,11 @@ const createScenarios = (dir: string): Scenario[] => {
       name: "script-throws",
       target: "@local",
       fn: async (h) => {
-        await h.ensure("Install Caddy", { check: `test -f '${marker("throws")}'`, fix: `touch '${marker("throws")}'` })
+        await h.ensure("Install Caddy", {
+          check: `test -f '${marker("throws")}'`,
+          want: true,
+          fix: `touch '${marker("throws")}'`,
+        })
         throw new Error("the API token is missing")
       },
     },
@@ -124,8 +136,8 @@ const createScenarios = (dir: string): Scenario[] => {
       target: "@local",
       fn: async (h) => {
         await Promise.allSettled([
-          h.ensure("Install Caddy", { check: "sleep 0.1", fix: "true" }),
-          h.ensure("Install git", { check: "true", fix: "true" }),
+          h.ensure("Install Caddy", { check: "sleep 0.1", want: true, fix: "true" }),
+          h.ensure("Install git", { check: "true", want: true, fix: "true" }),
         ])
       },
     },
@@ -135,9 +147,10 @@ const createScenarios = (dir: string): Scenario[] => {
       fn: async (h) => {
         await h.ensure("Set up sonarr", {
           check: async () => {
-            await h.ensure("Create the sonarr user", { check: "true", fix: "true" })
+            await h.ensure("Create the sonarr user", { check: "true", want: true, fix: "true" })
             return false
           },
+          want: true,
           fix: "true",
         })
       },
@@ -149,6 +162,7 @@ const createScenarios = (dir: string): Scenario[] => {
       fn: async (h) => {
         await h.ensure("Install the package", {
           check: "false",
+          want: true,
           fix: async ({ exec }) => {
             await attempt(async () => exec("echo 'E: Unable to locate package nope' >&2; exit 100"))
           },

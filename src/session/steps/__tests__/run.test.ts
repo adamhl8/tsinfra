@@ -16,7 +16,7 @@ describe("h.run", () => {
     expect(await Bun.file(marker).exists()).toBe(true)
   })
 
-  it("should return ok without running when `when` is false", async () => {
+  it("should return unchanged without running when `when` is false", async () => {
     const marker = await createMarker()
     const { host: h } = createSession("apply")
 

@@ -1,12 +1,18 @@
 import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
-import type { ShellOutput } from "#transport/local.ts"
 import { runLocal } from "#transport/local.ts"
 
 const LOCAL_TARGET = "@local"
 
-export type Transport = (script: string) => Promise<Result<ShellOutput>>
+/** What a command produced on the target. Only failing to run at all is an error, so a non-zero exit is still a result. */
+export interface CommandResult {
+  stdout: string
+  stderr: string
+  exitCode: number
+}
+
+export type Transport = (script: string) => Promise<Result<CommandResult>>
 
 /** Returns how to run scripts on `target`. An unsupported target fails at its first command, like an unreachable host. */
 export const getTransport = (target: string): Transport => {

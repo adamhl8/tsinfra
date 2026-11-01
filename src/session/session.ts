@@ -3,20 +3,19 @@ import { isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import type { HostEntry } from "#hosts/load.ts"
-import type { EnsureValueOptions } from "#session/methods/ensure-value.ts"
-import { handleEnsureValue } from "#session/methods/ensure-value.ts"
-import type { EnsureOptions } from "#session/methods/ensure.ts"
-import { handleEnsure } from "#session/methods/ensure.ts"
-import type { Exec } from "#session/methods/exec.ts"
-import { handleExec } from "#session/methods/exec.ts"
-import type { Read } from "#session/methods/read.ts"
-import { handleRead } from "#session/methods/read.ts"
-import type { RunOptions } from "#session/methods/run.ts"
-import { handleRun } from "#session/methods/run.ts"
 import { createShell } from "#session/shell.ts"
+import type { Change } from "#session/step-functions/change.ts"
+import type { Exec, ChangeTools, CheckTools } from "#session/step-functions/tools.ts"
+import { handleExec } from "#session/step-functions/tools.ts"
 import type { StepRecord } from "#session/step-records.ts"
 import { createStepRecorder } from "#session/step-records.ts"
-import type { Action, StepCall, StepDetails, StepResult } from "#session/step.ts"
+import type { StepCall, StepDetails, StepResult } from "#session/step.ts"
+import type { EnsureOptions } from "#session/steps/ensure.ts"
+import { handleEnsure } from "#session/steps/ensure.ts"
+import type { Read } from "#session/steps/read.ts"
+import { handleRead } from "#session/steps/read.ts"
+import type { RunOptions } from "#session/steps/run.ts"
+import { handleRun } from "#session/steps/run.ts"
 import { getTransport } from "#transport/transport.ts"
 
 /** What a host's function is given. Each method call is one step, and steps run one at a time at the top level. */
@@ -31,25 +30,19 @@ export interface Host {
    */
   read: Read
   /**
-   * Runs `check`, and in `apply` runs `fix` when it fails, then runs `check` again. In `plan` the fix never runs.
+   * Compares what `check` gives to `want`, and in `apply` runs `fix` when they differ, then checks again. In `plan` the
+   * fix never runs.
    *
-   * A failing fix, or a check that still fails after it, fails the host and throws.
+   * A failing fix, or a check that still differs after it, fails the host and throws.
    */
-  ensure: (name: string, options: EnsureOptions) => Promise<StepResult>
-  /**
-   * Compares `read` to `want`, and in `apply` runs `fix` when they differ, then compares again. In `plan` the fix never
-   * runs.
-   *
-   * A failing fix, or a value that still differs after it, fails the host and throws.
-   */
-  ensureValue: (name: string, options: EnsureValueOptions) => Promise<StepResult>
+  ensure: <T extends string | boolean>(name: string, options: EnsureOptions<T>) => Promise<StepResult>
   /**
    * Runs `cmd`, a command or a function given `exec`, when `when` is true. There is no check, so it never counts as
    * drift. In `plan` it never runs, and reports changed when `when` is true.
    *
    * A failing command fails the host and throws.
    */
-  run: (name: string, cmd: Action, options: RunOptions) => Promise<StepResult>
+  run: (name: string, cmd: Change, options: RunOptions) => Promise<StepResult>
 }
 
 export type StepKind = Exclude<keyof Host, "name">
@@ -72,8 +65,8 @@ export interface HostSession {
  * Builds the `Host` passed to a host's function, and tracks the run's failure where the script can't see it.
  *
  * This is the only code that throws, because throwing is the contract with the script. Every function the script can
- * call, on `h` or as `read` and `exec`, goes through `callOrFail` around an internal function from `methods/` that
- * returns errors as values.
+ * call, on `h` or as `read` and `exec`, goes through `callOrFail` around an internal function from `steps/` or
+ * `tools.ts` that returns errors as values.
  */
 export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession => {
   const { name, target } = hostEntry
@@ -106,39 +99,49 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
 
   // Record each command under the running step, because every command passes through the transport.
   const shell = createShell(recordCommands(getTransport(target)))
-  const read: Read = async (cmd) => callOrFail(async () => handleRead(shell, cmd))
-  const exec: Exec = async (cmd) => callOrFail(async () => handleExec(shell, cmd))
+  const readTool: Read = async (cmd) => callOrFail(async () => handleRead(shell, cmd))
+  const execTool: Exec = async (cmd) => callOrFail(async () => handleExec(shell, cmd))
+  const checkTools: CheckTools = { read: readTool }
+  const changeTools: ChangeTools = { exec: execTool }
 
-  const callStep = async <T extends string | StepDetails>(
+  const callStep = async (
     kind: StepKind,
     stepName: string,
-    handler: (stepCall: StepCall) => Promise<Result<T>>,
+    handler: (stepCall: StepCall) => Promise<Result<StepDetails>>,
   ) =>
     callOrFail(async () => {
       const stepRecord = startStep(kind, stepName)
       if (isErr(stepRecord)) return stepRecord
 
-      const value = await handler({ shell, read, exec, mode, stepName })
+      const stepDetails = await handler({ shell, mode, stepName, checkTools, changeTools })
 
       // Record the failure the host ends up with, because a function in the script may have caught an earlier one.
-      const stepFailure = isErr(value) ? keepFailure(failure, value) : failure
-      // Record a read as unchanged, because it only observes.
-      finishStep(stepRecord, stepFailure ?? (typeof value === "string" ? { status: "ok", changed: false } : value))
-      return value
+      const stepFailure = isErr(stepDetails) ? keepFailure(failure, stepDetails) : failure
+      finishStep(stepRecord, stepFailure ?? stepDetails)
+      return stepDetails
     })
 
-  const host: Host = {
-    name,
+  const read: Host["read"] = async (cmd) => {
+    // Keep the stdout here, because a step reports only its details.
+    let stdout = ""
     // Pass `cmd` as the step name, because `h.read` takes no name.
-    // Skip `stepCall`, because `handleRead` only needs `shell`.
-    read: async (cmd) => callStep("read", cmd, async () => handleRead(shell, cmd)),
-    ensure: async (stepName, options) =>
-      callStep("ensure", stepName, async (stepCall) => handleEnsure(stepCall, options)),
-    ensureValue: async (stepName, options) =>
-      callStep("ensureValue", stepName, async (stepCall) => handleEnsureValue(stepCall, options)),
-    run: async (stepName, cmd, options) =>
-      callStep("run", stepName, async (stepCall) => handleRun(stepCall, cmd, options)),
+    await callStep("read", cmd, async () => {
+      const output = await handleRead(shell, cmd)
+      if (isErr(output)) return output
+
+      stdout = output
+      return { status: "unchanged", changed: false }
+    })
+    return stdout
   }
+
+  const ensure: Host["ensure"] = async (stepName, options) =>
+    callStep("ensure", stepName, async (stepCall) => handleEnsure(stepCall, options))
+
+  const run: Host["run"] = async (stepName, cmd, options) =>
+    callStep("run", stepName, async (stepCall) => handleRun(stepCall, cmd, options))
+
+  const host: Host = { name, read, ensure, run }
 
   return { host, stepRecords, getFailure: () => failure }
 }

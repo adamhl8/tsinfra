@@ -1,20 +1,15 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { ShellOutput } from "#transport/local.ts"
-import type { Transport } from "#transport/transport.ts"
+import type { CommandResult, Transport } from "#transport/transport.ts"
 
 const TRAILING_NEWLINES = /\n+$/v
 
-export interface CommandResult {
-  /** The command's stdout without trailing newlines. */
-  stdout: string
-  /** Set when the command exits non-zero, with the exit code and stderr in its message. */
-  exitError: Error | undefined
-}
-
 export interface Shell {
-  /** Runs `cmd` and describes how it went. Only failing to run at all is an error. */
+  /**
+   * Runs `cmd` and returns its output, with stdout's trailing newlines stripped. Only failing to run at all is an
+   * error.
+   */
   inspect: (cmd: string) => Promise<Result<CommandResult>>
   /** Runs `cmd` and returns its stdout. Failing to run and a non-zero exit are both errors. */
   run: (cmd: string) => Promise<Result<string>>
@@ -22,8 +17,9 @@ export interface Shell {
 
 export const stripTrailingNewlines = (text: string) => text.replace(TRAILING_NEWLINES, "")
 
-const createCommandExitError = (shellOutput: ShellOutput) => {
-  const { exitCode, stderr } = shellOutput
+/** Describes a non-zero exit as an error, with the exit code and stderr in its message. */
+export const createCommandExitError = (commandResult: CommandResult) => {
+  const { exitCode, stderr } = commandResult
   let trimmedStderr = stderr.trim()
   trimmedStderr &&= `: ${trimmedStderr}`
   return err(`exited with code ${exitCode}${trimmedStderr}`, undefined)
@@ -35,18 +31,15 @@ export const createShell = (transport: Transport): Shell => {
     const output = await transport(cmd)
     if (isErr(output)) return output
 
-    const stdout = stripTrailingNewlines(output.stdout)
-    const exitError = output.exitCode === 0 ? undefined : createCommandExitError(output)
-
-    return { stdout, exitError }
+    return { ...output, stdout: stripTrailingNewlines(output.stdout) }
   }
 
   const run = async (cmd: string): Promise<Result<string>> => {
-    const commandResult = await inspect(cmd)
-    if (isErr(commandResult)) return commandResult
-    if (commandResult.exitError) return commandResult.exitError
+    const output = await inspect(cmd)
+    if (isErr(output)) return output
+    if (output.exitCode !== 0) return createCommandExitError(output)
 
-    return commandResult.stdout
+    return output.stdout
   }
 
   return { inspect, run }

@@ -21,18 +21,18 @@ Everything a host script does to a target goes through `h`, the context passed t
 ```ts
 interface Host {
   readonly name: string // the host file's name, e.g. "sonarr"
-  ensure(name: string, options: EnsureOptions): Promise<StepResult>
+  ensure<T extends string | boolean>(name: string, options: EnsureOptions<T>): Promise<StepResult>
   file(path: string, options: FileOptions): Promise<StepResult>
-  run(name: string, cmd: string | ((tools: ExecTools) => Promise<void>), options: RunOptions): Promise<StepResult>
+  run(name: string, cmd: string | ((tools: ChangeTools) => Promise<void>), options: RunOptions): Promise<StepResult>
   read(cmd: string, options?: CommandOptions): Promise<string>
   inspect(cmd: string, options?: CommandOptions): Promise<CommandResult>
 }
 
 // Given to a check function. These are the same as `h.read` and `h.inspect`.
-type ReadTools = { read: Read; inspect: Inspect }
+type CheckTools = { read: Read; inspect: Inspect }
 
 // Given to a fix or run function.
-type ExecTools = { exec: Exec; inspect: Inspect }
+type ChangeTools = { exec: Exec; inspect: Inspect }
 
 // Runs one command and returns its stdout.
 type Read = (cmd: string, options?: CommandOptions) => Promise<string>
@@ -64,7 +64,7 @@ type StepResult = {
 "would change", so the follow-up shows up in the plan as a `>` line exactly when it would run for real.
 
 Scripts only see `changed`. They cannot tell a real change from a would-be one, so they cannot branch on the mode and
-make the plan differ from what `apply` does. The output shows each step's full status: ok, changed, would change,
+make the plan differ from what `apply` does. The output shows each step's full status: unchanged, changed, would change,
 waiting, or failed.
 
 ## Choosing a method
@@ -167,26 +167,17 @@ is the step you write the check for. [`file`](#file) is a step whose check tsinf
 [`run`](#run) is a step with no check.
 
 ```ts
-type FixOptions = {
-  fix: string | ((tools: ExecTools) => Promise<void>)
+// `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string.
+type EnsureOptions<T extends string | boolean> = {
+  check: string | ((tools: CheckTools) => Promise<T>)
+  // `true` means exit 0, or a function returning true, is already right. `false` means the opposite.
+  // A string is compared to the command's stdout, or the function's value.
+  want: T
+  fix: string | ((tools: ChangeTools) => Promise<void>)
   sudo?: boolean // run a string fix under sudo
   verify?: boolean // default true
   secret?: boolean // hide the diff
   requires?: (StepResult | undefined)[] // earlier steps this step's check depends on
-}
-
-type EnsureOptions = FixOptions & (ExitCheck | OutputCheck)
-
-// `want: true` means exit 0, or a function returning true, is already right. `want: false` means the opposite.
-type ExitCheck = {
-  check: string | ((tools: ReadTools) => Promise<boolean>)
-  want: boolean
-}
-
-// The command's stdout, or the function's value, is compared to `want`.
-type OutputCheck = {
-  check: string | ((tools: ReadTools) => Promise<string>)
-  want: string
 }
 ```
 
@@ -221,8 +212,8 @@ await h.ensure("Start Sonarr", {
 })
 ```
 
-A broken check must not look converged. If the command exits non-zero and its output still equals `want`, the step
-fails instead of reporting ok. A check whose non-zero exit is legitimate (`systemctl is-active` exits 3 for inactive)
+A broken check must not look converged. If the command exits non-zero and its output still equals `want`, the step fails
+instead of reporting `unchanged`. A check whose non-zero exit is legitimate (`systemctl is-active` exits 3 for inactive)
 already produces output that differs from `want`, so this only catches the broken case.
 
 There is no number form for a specific exit code. `want: 0` would mean the same as `want: true`, and the cases that
@@ -325,9 +316,9 @@ await h.ensure("Set up Sonarr", {
 ```
 
 If `systemctl` fails, the next run starts the fix from the top, and `useradd` fails because the user already exists, so
-the step can never finish. The check only covers the last piece, so a data dir with the wrong owner still reports ok.
-`plan` shows one line that does not say what is missing. Written as three steps, each piece has its own check, and each
-fix runs only when its own state is wrong:
+the step can never finish. The check only covers the last piece, so a data dir with the wrong owner still reports
+`unchanged`. `plan` shows one line that does not say what is missing. Written as three steps, each piece has its own
+check, and each fix runs only when its own state is wrong:
 
 ```ts
 await h.ensure("Create the sonarr user", { check: "id sonarr", want: true, fix: "sudo useradd --system sonarr" })
@@ -348,10 +339,17 @@ unless it starts with `set -e`. Use the function form for anything past one comm
 
 **`sudo: true`** runs a string fix under `sudo`. In a fix function, pass `{ sudo: true }` to each `exec` that needs it.
 
-**Verification.** After a fix runs, the check runs again. If it still does not pass, the step fails with "the check for
-step '...' still fails after the fix", plus the details: `got:` and `want:` lines for a string `want`, and the exit code
-and stderr of a command that exited non-zero. A step that reports a change on every run is a bug, and this is what
-surfaces it the first time.
+**Verification.** After a fix runs, the check runs again. If it still does not pass, the step fails with "the host's
+state still differs after the fix for step '...'", followed by a `got:` and a `want:` line. A string is quoted, so an
+empty value shows as `''`. A boolean shows as `true` or `false`. An exit status shows as `exit code 1`, against
+`exit code 0` or `a non-zero exit code`. A `stderr:` line follows when the check command printed any. A step that
+reports a change on every run is a bug, and this is what surfaces it the first time.
+
+```
+the host's state still differs after the fix for step 'Remove the old user'
+  got: exit code 0
+  want: a non-zero exit code
+```
 
 `verify: false` skips the check after the fix, and the step reports `changed` as soon as the fix succeeds. It is for a
 fix whose effect nothing in the run can make visible, like one that needs a reboot or a new desktop login. The next
@@ -457,11 +455,11 @@ await h.run("Prune docker", "docker system prune -f", { always: true })
 that only runs on some code paths can be passed as it is, as in `after: [unit]` when `unit` is
 `StepResult | undefined`.
 
-|                       | `apply`                    | `plan`                                            |
-| --------------------- | -------------------------- | ------------------------------------------------- |
-| `after`, one changed  | runs, reports `changed`    | does not run, reports `would-change` (a `>` line) |
-| `after`, none changed | does not run, reports `ok` | does not run, reports `ok`                        |
-| `always: true`        | runs, reports `changed`    | does not run, reports `would-change` (a `>` line) |
+|                       | `apply`                           | `plan`                                            |
+| --------------------- | --------------------------------- | ------------------------------------------------- |
+| `after`, one changed  | runs, reports `changed`           | does not run, reports `would-change` (a `>` line) |
+| `after`, none changed | does not run, reports `unchanged` | does not run, reports `unchanged`                 |
+| `always: true`        | runs, reports `changed`           | does not run, reports `would-change` (a `>` line) |
 
 Because `changed` is true for `would-change`, one `run` can follow another (`after: [reload]`), and the plan shows the
 chain exactly as it would run for real.

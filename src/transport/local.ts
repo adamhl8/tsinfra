@@ -3,11 +3,7 @@ import os from "node:os"
 import type { Result } from "ts-explicit-errors"
 import { attempt, err, isErr } from "ts-explicit-errors"
 
-export interface ShellOutput {
-  stdout: string
-  stderr: string
-  exitCode: number
-}
+import type { CommandResult } from "#transport/transport.ts"
 
 const LOCAL_SHELL = ["sh", "-s"]
 
@@ -18,7 +14,7 @@ const LOCAL_SHELL = ["sh", "-s"]
 const wrapScript = (script: string) => `{ ${script}\n} </dev/null`
 
 /** Runs `script` in `sh -s` on the control machine, from the home directory, like an SSH session would. */
-export const runLocal = async (script: string): Promise<Result<ShellOutput>> => {
+export const runLocal = async (script: string): Promise<Result<CommandResult>> => {
   const shell = attempt(() =>
     Bun.spawn(LOCAL_SHELL, {
       cwd: os.homedir(),

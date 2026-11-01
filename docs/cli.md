@@ -62,7 +62,7 @@ macbook
 
 Steps after a change were checked without that change, so apply may differ.
 
-caddy     ok
+caddy     unchanged
 immich    failed
 macbook   1 change, 1 waiting
 sonarr    2 changes
@@ -96,9 +96,9 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   the script throwing, is the block's last `!` line, named after the host's file (like `sonarr.ts`), with its error
   under it the same way. The block's header already names the host, so the error is not wrapped in "failed to run host".
 - **A host with nothing to show** gets no block, only its line in the summary.
-- **The summary** has one line per host: `ok`, `failed`, or a count of changes, where a count includes both `changed`
-  and `ran` steps, so it matches the `~` lines in the blocks. In `plan`, when any check did not pass, it starts with
-  the reminder that steps after a change were checked without it (see
+- **The summary** has one line per host: `unchanged`, `failed`, or a count of changes, where a count includes both
+  `changed` and `ran` steps, so it matches the `~` lines in the blocks. In `plan`, when any check did not pass, it
+  starts with the reminder that steps after a change were checked without it (see
   [Steps](./steps.md#what-plan-can-and-cannot-show)).
 - **Diffs** come from a diff library, not hand-written code. Which one is open (see
   [Open questions](./open-questions.md#choosing-a-diff-library)).
@@ -150,9 +150,10 @@ The output is built from a record of each host's run. It is one list of steps, i
 - **A command** records the command, its stdout and stderr, and its exit code. A command that could not run at all
   records the error instead.
 
-A step's status is `ok`, `changed`, or `ran`. `changed` means its check did not pass. `ran` means a run's trigger fired,
-or it was `always`. A read or inspect is always `ok`. The record is the same in `plan` and `apply`, and so is each
-step's line. The output and `want` come from the check before the fix, so `apply` can show what a step changed too.
+A step's status is `unchanged`, `changed`, or `ran`. `changed` means its check did not pass. `ran` means a run's trigger
+fired, or it was `always`. A read or inspect is always `unchanged`. The record is the same in `plan` and `apply`, and so
+is each step's line. The output and `want` come from the check before the fix, so `apply` can show what a step changed
+too.
 
 A failed step records its error. Steps called after the host failed throw without running, so they are not recorded. A
 failure that is not a step's, like a bug in the script, is the host's own failure.

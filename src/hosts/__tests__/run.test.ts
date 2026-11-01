@@ -33,7 +33,7 @@ const planHasPendingChange = async (fn: HostFunction) => {
 }
 
 const ensurePending = async (h: Host) => {
-  await h.ensure("Pending", { check: "false", fix: "true" })
+  await h.ensure("Pending", { check: "false", want: true, fix: "true" })
 }
 
 const runOnly = async (h: Host) => {
@@ -42,7 +42,7 @@ const runOnly = async (h: Host) => {
 }
 
 const failCheck = async (h: Host) => {
-  await h.ensure("Broken", { check: throwBoom, fix: "true" })
+  await h.ensure("Broken", { check: throwBoom, want: true, fix: "true" })
 }
 
 const getMessage = (failure: Error | undefined) => failure && messageChain(failure)

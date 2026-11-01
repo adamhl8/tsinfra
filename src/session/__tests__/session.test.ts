@@ -5,14 +5,7 @@ import { makeTempDir } from "@adamhl8/configs/test"
 import type { Result } from "ts-explicit-errors"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
-import {
-  createSession,
-  ensureOrMessage,
-  ensureValueOrMessage,
-  getFailureMessage,
-  readOrMessage,
-  runOrMessage,
-} from "#__tests__/session.ts"
+import { createSession, ensureOrMessage, getFailureMessage, readOrMessage, runOrMessage } from "#__tests__/session.ts"
 import type { StepRecord } from "#session/step-records.ts"
 
 const toPlainResult = <T>(result: Result<T> | undefined) => (isErr(result) ? messageChain(result) : result)
@@ -43,8 +36,8 @@ describe("createHostSession", () => {
     const { host: h } = hostSession
 
     await Promise.allSettled([
-      h.ensure("First", { check: "sleep 0.1; false", fix: "exit 1" }),
-      h.ensure("Second", { check: "true", fix: "true" }),
+      h.ensure("First", { check: "sleep 0.1; false", want: true, fix: "exit 1" }),
+      h.ensure("Second", { check: "true", want: true, fix: "true" }),
     ])
 
     expect(getFailureMessage(hostSession)).toBe("'ensure' can't run while step 'First' is running")
@@ -63,18 +56,23 @@ describe("h inside a step", () => {
   it("should fail the host when a check function calls h.read", async () => {
     const hostSession = createSession()
     const { host: h } = hostSession
-    const message = "failed to check step 'Make marker' -> 'read' can't run while step 'Make marker' is running"
-    const result = await ensureOrMessage(h, { check: async () => (await h.read("true")) === "", fix: "true" })
+    const message =
+      "failed to read the host's state for step 'Make marker' -> 'read' can't run while step 'Make marker' is running"
+    const result = await ensureOrMessage(h, {
+      check: async () => (await h.read("true")) === "",
+      want: true,
+      fix: "true",
+    })
 
     expect(result).toBe(message)
     expect(getFailureMessage(hostSession)).toBe(message)
   })
 
-  it("should fail the host when a read function calls h.ensureValue", async () => {
+  it("should fail the host when a check function calls h.ensure", async () => {
     const { host: h } = createSession()
-    const result = await ensureValueOrMessage(h, {
-      read: async () => {
-        await h.ensureValue("Inner", { read: "echo v", want: "v", fix: "true" })
+    const result = await ensureOrMessage(h, {
+      check: async () => {
+        await h.ensure("Inner", { check: "echo v", want: "v", fix: "true" })
         return "v"
       },
       want: "v",
@@ -82,7 +80,7 @@ describe("h inside a step", () => {
     })
 
     expect(result).toBe(
-      "failed to check step 'Make marker' -> 'ensureValue' can't run while step 'Make marker' is running",
+      "failed to read the host's state for step 'Make marker' -> 'ensure' can't run while step 'Make marker' is running",
     )
   })
 
@@ -90,8 +88,9 @@ describe("h inside a step", () => {
     const { host: h } = createSession()
     const result = await ensureOrMessage(h, {
       check: "false",
+      want: true,
       fix: async () => {
-        await h.ensure("Inner", { check: "true", fix: "true" })
+        await h.ensure("Inner", { check: "true", want: true, fix: "true" })
       },
     })
 
@@ -118,8 +117,8 @@ describe("h inside a step", () => {
     const { host: h } = hostSession
 
     await Promise.allSettled([
-      h.ensure("First", { check: "sleep 0.1", fix: "true" }),
-      h.ensure("Second", { check: "true", fix: "true" }),
+      h.ensure("First", { check: "sleep 0.1", want: true, fix: "true" }),
+      h.ensure("Second", { check: "true", want: true, fix: "true" }),
     ])
 
     expect(getFailureMessage(hostSession)).toBe("'ensure' can't run while step 'First' is running")
@@ -129,7 +128,7 @@ describe("h inside a step", () => {
     const hostSession = createSession()
     const { host: h } = hostSession
 
-    await Promise.allSettled([h.read("sleep 0.1"), h.ensure("Second", { check: "true", fix: "true" })])
+    await Promise.allSettled([h.read("sleep 0.1"), h.ensure("Second", { check: "true", want: true, fix: "true" })])
 
     expect(getFailureMessage(hostSession)).toBe("'ensure' can't run while read 'sleep 0.1' is running")
   })
@@ -138,7 +137,7 @@ describe("h inside a step", () => {
     const hostSession = createSession()
     const { host: h } = hostSession
 
-    await Promise.allSettled([h.ensure("First", { check: "sleep 0.1", fix: "true" }), h.read("true")])
+    await Promise.allSettled([h.ensure("First", { check: "sleep 0.1", want: true, fix: "true" }), h.read("true")])
 
     expect(getFailureMessage(hostSession)).toBe("'read' can't run while step 'First' is running")
   })
@@ -146,8 +145,8 @@ describe("h inside a step", () => {
   it("should allow calls on h again once a step finishes", async () => {
     const { host: h } = createSession()
 
-    expect(await ensureOrMessage(h, { check: "true", fix: "true" })).toMatchObject({ changed: false })
-    expect(await ensureOrMessage(h, { check: "true", fix: "true" })).toMatchObject({ changed: false })
+    expect(await ensureOrMessage(h, { check: "true", want: true, fix: "true" })).toMatchObject({ changed: false })
+    expect(await ensureOrMessage(h, { check: "true", want: true, fix: "true" })).toMatchObject({ changed: false })
     expect(await readOrMessage(h, "echo hi")).toBe("hi")
   })
 })
@@ -156,13 +155,17 @@ describe("step records", () => {
   it("should record an ensure's check, fix, and second check in apply", async () => {
     const marker = path.join(await makeTempDir("record-"), "marker")
     const hostSession = createSession("apply")
-    await ensureOrMessage(hostSession.host, { check: `test -f '${marker}'`, fix: `touch '${marker}'` })
+    await ensureOrMessage(hostSession.host, { check: `test -f '${marker}'`, want: true, fix: `touch '${marker}'` })
 
     expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
       {
         kind: "ensure",
         name: "Make marker",
-        details: { status: "changed", changed: true },
+        details: {
+          status: "changed",
+          changed: true,
+          comparison: { kind: "exit", got: 1, want: true },
+        },
         commands: [`test -f '${marker}'`, `touch '${marker}'`, `test -f '${marker}'`],
       },
     ])
@@ -170,22 +173,27 @@ describe("step records", () => {
 
   it("should record only the check in plan", async () => {
     const hostSession = createSession("plan")
-    await ensureOrMessage(hostSession.host, { check: "false", fix: "true" })
-
-    expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
-      { kind: "ensure", name: "Make marker", details: { status: "changed", changed: true }, commands: ["false"] },
-    ])
-  })
-
-  it("should record the values an ensureValue compared", async () => {
-    const hostSession = createSession("plan")
-    await ensureValueOrMessage(hostSession.host, { read: "echo old", want: "new", fix: "true" })
+    await ensureOrMessage(hostSession.host, { check: "false", want: true, fix: "true" })
 
     expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
       {
-        kind: "ensureValue",
+        kind: "ensure",
         name: "Make marker",
-        details: { status: "changed", changed: true, mismatch: { read: "old", want: "new" } },
+        details: { status: "changed", changed: true, comparison: { kind: "exit", got: 1, want: true } },
+        commands: ["false"],
+      },
+    ])
+  })
+
+  it("should record the values a string check compared", async () => {
+    const hostSession = createSession("plan")
+    await ensureOrMessage(hostSession.host, { check: "echo old", want: "new", fix: "true" })
+
+    expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
+      {
+        kind: "ensure",
+        name: "Make marker",
+        details: { status: "changed", changed: true, comparison: { kind: "string", got: "old", want: "new" } },
         commands: ["echo old"],
       },
     ])
@@ -197,7 +205,7 @@ describe("step records", () => {
     await readOrMessage(hostSession.host, cmd)
 
     expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
-      { kind: "read", name: cmd, details: { status: "ok", changed: false }, commands: [cmd] },
+      { kind: "read", name: cmd, details: { status: "unchanged", changed: false }, commands: [cmd] },
     ])
     expect(toPlainResult(hostSession.stepRecords[0]?.commands[0]?.output)).toStrictEqual({
       stdout: "out\n",
@@ -211,7 +219,7 @@ describe("step records", () => {
     await runOrMessage(hostSession.host, "true", { when: false })
 
     expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
-      { kind: "run", name: "Make marker", details: { status: "ok", changed: false }, commands: [] },
+      { kind: "run", name: "Make marker", details: { status: "unchanged", changed: false }, commands: [] },
     ])
   })
 
@@ -226,7 +234,7 @@ describe("step records", () => {
 
   it("should record a failed step's error and its failing command's output", async () => {
     const hostSession = createSession()
-    await ensureOrMessage(hostSession.host, { check: "false", fix: "echo nope >&2; exit 2" })
+    await ensureOrMessage(hostSession.host, { check: "false", want: true, fix: "echo nope >&2; exit 2" })
 
     expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
       {
@@ -247,6 +255,7 @@ describe("step records", () => {
     const hostSession = createSession()
     await ensureOrMessage(hostSession.host, {
       check: "false",
+      want: true,
       fix: async ({ exec }) => {
         await attempt(async () => exec("exit 1"))
       },
@@ -260,6 +269,7 @@ describe("step records", () => {
     const hostSession = createSession()
     await ensureOrMessage(hostSession.host, {
       check: async ({ read }) => (await read(`cat '${file}' 2>/dev/null || true`)) === "done",
+      want: true,
       fix: async ({ exec }) => {
         await exec(`echo done > '${file}'`)
       },
@@ -288,7 +298,7 @@ describe("step records", () => {
   it("should record steps in the order the script calls them", async () => {
     const hostSession = createSession()
     await readOrMessage(hostSession.host, "echo hi")
-    await ensureOrMessage(hostSession.host, { check: "true", fix: "true" })
+    await ensureOrMessage(hostSession.host, { check: "true", want: true, fix: "true" })
 
     expect(toPlainRecords(hostSession.stepRecords).map(({ kind }) => kind)).toStrictEqual(["read", "ensure"])
   })
@@ -298,8 +308,9 @@ describe("step records", () => {
     const { host: h } = hostSession
     await ensureOrMessage(h, {
       check: "false",
+      want: true,
       fix: async () => {
-        await h.ensure("Inner", { check: "true", fix: "true" })
+        await h.ensure("Inner", { check: "true", want: true, fix: "true" })
       },
     })
     await attempt(async () => h.read("echo after"))

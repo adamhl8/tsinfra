@@ -2,12 +2,11 @@ import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import { host } from "#hosts/host.ts"
-import type { EnsureValueOptions } from "#session/methods/ensure-value.ts"
-import type { EnsureOptions } from "#session/methods/ensure.ts"
-import type { RunOptions } from "#session/methods/run.ts"
 import type { Host } from "#session/session.ts"
 import { createHostSession } from "#session/session.ts"
-import type { Action } from "#session/step.ts"
+import type { Change } from "#session/step-functions/change.ts"
+import type { EnsureOptions } from "#session/steps/ensure.ts"
+import type { RunOptions } from "#session/steps/run.ts"
 
 const doNothing = async () => {
   /* empty */
@@ -27,19 +26,13 @@ export const readOrMessage = async (h: Host, cmd: string) => {
 }
 
 /** Runs `h.ensure` and returns its result, or the thrown error's message chain. */
-export const ensureOrMessage = async (h: Host, options: EnsureOptions) => {
+export const ensureOrMessage = async <T extends string | boolean>(h: Host, options: EnsureOptions<T>) => {
   const result = await attempt(async () => h.ensure("Make marker", options))
   return isErr(result) ? messageChain(result) : result
 }
 
-/** Runs `h.ensureValue` and returns its result, or the thrown error's message chain. */
-export const ensureValueOrMessage = async (h: Host, options: EnsureValueOptions) => {
-  const result = await attempt(async () => h.ensureValue("Make marker", options))
-  return isErr(result) ? messageChain(result) : result
-}
-
 /** Runs `h.run` and returns its result, or the thrown error's message chain. */
-export const runOrMessage = async (h: Host, cmd: Action, options: RunOptions) => {
+export const runOrMessage = async (h: Host, cmd: Change, options: RunOptions) => {
   const result = await attempt(async () => h.run("Make marker", cmd, options))
   return isErr(result) ? messageChain(result) : result
 }

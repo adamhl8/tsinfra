@@ -55,8 +55,25 @@ describe("tsinfra", () => {
     const { stdout, stderr, exitCode } = await run`tsinfra plan`.nothrow()
 
     expect(exitCode).toBe(1)
-    expect(stdout).toBe("b\n  ! b.ts\n      boom\n\na   ok\nb   failed")
+    expect(stdout).toBe("b\n  ! b.ts\n      boom\n\na   unchanged\nb   failed")
     expect(stderr).toBe("")
+  })
+
+  // Write the host file as a string, because Bun runs host files without type-checking them.
+  it("should fail a step whose want is neither a string nor a boolean", async () => {
+    const { dir, run } = await createProject()
+    await writeLocalHost(
+      path.join(dir, "hosts"),
+      "a",
+      `await h.ensure("Bad want", { check: "true", want: 1, fix: "true" })`,
+    )
+
+    const { stdout, exitCode } = await run`tsinfra plan`.nothrow()
+
+    expect(exitCode).toBe(1)
+    expect(stdout).toBe(
+      "a\n  ! Bad want\n      failed to read the host's state for step 'Bad want' -> want must be a string or a boolean, but is a number\n\na   failed",
+    )
   })
 
   it("should run a host that reads from '@local'", async () => {
@@ -67,13 +84,13 @@ describe("tsinfra", () => {
     const { stdout, exitCode } = await run`tsinfra plan`.nothrow()
 
     expect(exitCode).toBe(0)
-    expect(stdout).toBe("hi\na   ok")
+    expect(stdout).toBe("hi\na   unchanged")
   })
 
   it("should only run a step's fix in apply", async () => {
     const { dir, run } = await createProject()
     const marker = path.join(dir, "marker")
-    const step = `h.ensure("Make marker", { check: "test -f '${marker}'", fix: "touch '${marker}'" })`
+    const step = `h.ensure("Make marker", { check: "test -f '${marker}'", want: true, fix: "touch '${marker}'" })`
     await Bun.write(
       path.join(dir, "hosts", "a.ts"),
       `import { host } from "tsinfra"\n\nexport default host("@local", async (h) => void (await ${step}))\n`,
@@ -96,7 +113,7 @@ describe("tsinfra", () => {
   it("should exit 1 from plan when a host fails, even with changes pending on another", async () => {
     const { dir, run } = await createProject()
     const hostsDir = path.join(dir, "hosts")
-    await writeLocalHost(hostsDir, "a", `await h.ensure("Pending", { check: "false", fix: "true" })`)
+    await writeLocalHost(hostsDir, "a", `await h.ensure("Pending", { check: "false", want: true, fix: "true" })`)
     await writeLocalHost(hostsDir, "b", `await h.read("exit 1")`)
 
     expect((await run`tsinfra plan`.nothrow()).exitCode).toBe(1)
@@ -106,7 +123,7 @@ describe("tsinfra", () => {
     const { dir, run } = await createProject()
     const hostsDir = path.join(dir, "hosts")
     const steps = [
-      `await h.ensure("Write the unit", { check: "false", fix: "true" })`,
+      `await h.ensure("Write the unit", { check: "false", want: true, fix: "true" })`,
       `await h.run("Reload systemd", "true", { when: true })`,
     ]
     await writeLocalHost(hostsDir, "sonarr", steps.join("\n"))
@@ -122,7 +139,7 @@ describe("tsinfra", () => {
         "",
         "Steps after a change were checked without that change, so apply may differ.",
         "",
-        "caddy    ok",
+        "caddy    unchanged",
         "sonarr   2 changes",
       ].join("\n"),
     )
