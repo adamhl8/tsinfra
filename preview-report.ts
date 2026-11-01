@@ -13,7 +13,8 @@ import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
 import type { HostReport } from "#hosts/run.ts"
 import { hasPendingChange, runHost } from "#hosts/run.ts"
-import { formatHostBlock, formatSummary, printTsinfraError } from "#report/output.ts"
+import { printTsinfraError } from "#report/errors.ts"
+import { formatHostBlock, formatSummary } from "#report/format.ts"
 
 interface Scenario {
   name: string

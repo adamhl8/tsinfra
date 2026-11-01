@@ -1,13 +1,12 @@
 import { describe, expect, it } from "bun:test"
 
-import { formatMessage } from "@optique/core/message"
-import { attempt, err } from "ts-explicit-errors"
+import { attempt } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
 import { runHost } from "#hosts/run.ts"
-import { formatHostBlock, formatSummary, toErrorMessage } from "#report/output.ts"
+import { formatHostBlock, formatSummary } from "#report/format.ts"
 import type { Host } from "#session/session.ts"
 
 const runNamedHost = async (name: string, fn: HostFunction, mode: Mode) =>
@@ -157,13 +156,5 @@ describe("formatSummary", () => {
     const hostReports = [await runNamedHost("a", runOnce, "apply")]
 
     expect(formatSummary(hostReports, "apply")).toBe("a   1 change")
-  })
-})
-
-describe("toErrorMessage", () => {
-  it("should keep each line of the error's message chain", () => {
-    const error = err("failed to load hosts:\nfailed to load host 'a' -> boom", undefined)
-
-    expect(formatMessage(toErrorMessage(error))).toBe("failed to load hosts:\nfailed to load host 'a' -> boom")
   })
 })

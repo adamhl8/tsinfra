@@ -11,7 +11,8 @@ import { loadHosts } from "#hosts/load.ts"
 import type { HostReport } from "#hosts/run.ts"
 import { hasPendingChange, runHost } from "#hosts/run.ts"
 import packageJson from "#package.json" with { type: "json" }
-import { ERROR_THEME, formatHostBlock, formatSummary, printTsinfraError } from "#report/output.ts"
+import { ERROR_THEME, printTsinfraError } from "#report/errors.ts"
+import { formatHostBlock, formatSummary } from "#report/format.ts"
 
 const CHANGES_PENDING_EXIT_CODE = 2
 

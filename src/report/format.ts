@@ -1,9 +1,3 @@
-import process from "node:process"
-
-import type { Message } from "@optique/core/message"
-import { lineBreak, text } from "@optique/core/message"
-import type { TerminalTheme } from "@optique/core/terminal"
-import { printError } from "@optique/run"
 import pc from "picocolors"
 import { isErr, messageChain } from "ts-explicit-errors"
 
@@ -11,6 +5,7 @@ import type { Mode } from "#cli/program.ts"
 import { HOST_FILE_EXTENSION } from "#hosts/discover.ts"
 import type { HostReport } from "#hosts/run.ts"
 import { hasPendingChange } from "#hosts/run.ts"
+import { getMaxWidth, padToWidth } from "#report/utils.ts"
 import type { StepRecord } from "#session/step-records.ts"
 import type { StepDetails } from "#session/step.ts"
 
@@ -33,10 +28,6 @@ interface StepLine {
   name: string
   errorLines?: string[]
 }
-
-const getMaxWidth = (texts: string[]) => Math.max(0, ...texts.map((value) => Bun.stringWidth(value)))
-
-const padToWidth = (value: string, width: number) => value + " ".repeat(width - Bun.stringWidth(value))
 
 const LEADING_WHITESPACE = /^\s/v
 
@@ -102,32 +93,4 @@ export const formatSummary = (hostReports: HostReport[], mode: Mode) => {
 
   const hasChangesPending = mode === "plan" && hostReports.some(({ stepRecords }) => hasPendingChange(stepRecords))
   return [...(hasChangesPending ? [PLAN_REMINDER, ""] : []), ...hostLines].join("\n")
-}
-
-/** Styles the `Error:` label red, for the errors tsinfra prints and the ones Optique prints while parsing. */
-export const ERROR_THEME: TerminalTheme = {
-  errorLabel: (_term, { text: label }) => ({
-    type: "style",
-    style: { foreground: "red", bold: true },
-    children: [{ type: "text", text: label }],
-  }),
-}
-
-/** Turns an error into a message for Optique's `printError`, with a line break wherever the chain has one. */
-export const toErrorMessage = (error: Error): Message =>
-  messageChain(error)
-    .split("\n")
-    .flatMap((line, index) => (index === 0 ? [text(line)] : [lineBreak(), text(line)]))
-
-// Follow the color rules Optique's `run()` follows, because `printError` checks only whether stderr is a terminal.
-// Leave `colors` out otherwise, so `printError` still colors a terminal.
-const getErrorColors = (): { colors?: boolean } => {
-  if (process.env["FORCE_COLOR"]) return { colors: true }
-  if (process.env["NO_COLOR"]) return { colors: false }
-  return {}
-}
-
-/** Prints one of tsinfra's own errors to stderr, styled like the errors Optique prints while parsing. */
-export const printTsinfraError = (error: Error) => {
-  printError(toErrorMessage(error), { theme: ERROR_THEME, ...getErrorColors() })
 }
