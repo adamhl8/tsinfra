@@ -12,11 +12,21 @@ import { HOST_FILE_EXTENSION } from "#hosts/discover.ts"
 import type { HostReport } from "#hosts/run.ts"
 import { hasPendingChange } from "#hosts/run.ts"
 import type { StepRecord } from "#session/step-records.ts"
+import type { StepDetails } from "#session/step.ts"
 
 const STEP_INDENT = "  "
 const ERROR_INDENT = "      "
 const COLUMN_GAP = "   "
 const PLAN_REMINDER = "Steps after a change were checked without that change, so apply may differ."
+
+type StepStatus = StepDetails["status"] | "failed"
+
+const STEP_SYMBOLS: Record<StepStatus, string> = {
+  ok: pc.green("="),
+  changed: pc.yellow("~"),
+  ran: pc.yellow(">"),
+  failed: pc.red("!"),
+}
 
 interface StepLine {
   symbol: string
@@ -34,7 +44,7 @@ const LEADING_WHITESPACE = /^\s/v
 const colorErrorLine = (errorLine: string) => (LEADING_WHITESPACE.test(errorLine) ? errorLine : pc.red(errorLine))
 
 const toFailureLine = (name: string, error: Error): StepLine => ({
-  symbol: pc.red("!"),
+  symbol: STEP_SYMBOLS.failed,
   name,
   errorLines: messageChain(error)
     .split("\n")
@@ -46,8 +56,8 @@ const toStepLines = (stepRecord: StepRecord): StepLine[] => {
   const { name, details } = stepRecord
 
   if (isErr(details)) return [toFailureLine(name, details)]
-  if (details?.status === "changed") return [{ symbol: pc.yellow("~"), name }]
-  if (details?.status === "ran") return [{ symbol: pc.yellow(">"), name }]
+  if (details?.status === "changed" || details?.status === "ran")
+    return [{ symbol: STEP_SYMBOLS[details.status], name }]
   return []
 }
 
