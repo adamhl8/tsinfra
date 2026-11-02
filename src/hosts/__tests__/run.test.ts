@@ -38,7 +38,7 @@ const ensurePending = async (h: Host) => {
 
 const runOnly = async (h: Host) => {
   await h.read("true")
-  await h.run("Prune", "true", { when: true })
+  await h.run("Prune", "true", { after: "always" })
 }
 
 const failCheck = async (h: Host) => {

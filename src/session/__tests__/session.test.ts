@@ -52,6 +52,17 @@ describe("createHostSession", () => {
   })
 })
 
+describe("step results", () => {
+  it("should give the script only what StepResult declares", async () => {
+    const hostSession = createSession("plan")
+    const ensureResult = await hostSession.host.ensure("Change", { check: "false", want: true, fix: "true" })
+    const runResult = await hostSession.host.run("Follow up", "true", { after: [ensureResult] })
+
+    expect([ensureResult, runResult]).toStrictEqual([{ changed: true }, { changed: true }])
+    expect(hostSession.stepRecords[0]?.details).toMatchObject({ status: "changed" })
+  })
+})
+
 describe("h inside a step", () => {
   it("should fail the host when a check function calls h.inspect", async () => {
     const { host: h } = createSession()
@@ -117,9 +128,9 @@ describe("h inside a step", () => {
     const result = await runOrMessage(
       h,
       async () => {
-        await h.run("Inner", "true", { when: true })
+        await h.run("Inner", "true", { after: "always" })
       },
-      { when: true },
+      { after: "always" },
     )
 
     expect(result).toBe("failed to run step 'Make marker' -> 'run' can't run while step 'Make marker' is running")
@@ -237,18 +248,18 @@ describe("step records", () => {
     })
   })
 
-  it("should record a run with `when: false` as unchanged, with no commands", async () => {
+  it("should record a run that wasn't triggered as unchanged, with no commands", async () => {
     const hostSession = createSession()
-    await runOrMessage(hostSession.host, "true", { when: false })
+    await runOrMessage(hostSession.host, "true", { after: [{ changed: false }] })
 
     expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
       { kind: "run", name: "Make marker", details: { status: "unchanged", changed: false }, commands: [] },
     ])
   })
 
-  it("should record a run with `when: true` as ran, without running it in plan", async () => {
+  it("should record a triggered run as ran, without running it in plan", async () => {
     const hostSession = createSession("plan")
-    await runOrMessage(hostSession.host, "true", { when: true })
+    await runOrMessage(hostSession.host, "true", { after: "always" })
 
     expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
       { kind: "run", name: "Make marker", details: { status: "ran", changed: true }, commands: [] },
@@ -312,7 +323,7 @@ describe("step records", () => {
       async ({ exec }) => {
         await Promise.all([exec("sleep 0.1; echo a"), exec("echo b")])
       },
-      { when: true },
+      { after: "always" },
     )
 
     expect(toPlainRecords(hostSession.stepRecords)[0]?.commands).toStrictEqual(["sleep 0.1; echo a", "echo b"])

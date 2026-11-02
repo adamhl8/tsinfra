@@ -1,3 +1,5 @@
+import { type } from "arktype"
+
 import type { Mode } from "#cli/program.ts"
 import type { Shell } from "#session/shell.ts"
 import type { ChangeTools, CheckTools } from "#session/step-functions/tools.ts"
@@ -6,6 +8,10 @@ export interface StepResult {
   /** True when the step changed something, or would in `plan`, so a follow-up guarded by it shows up in the plan too. */
   changed: boolean
 }
+
+// Drop the keys `StepDetails` adds, so a script gets exactly a `StepResult`.
+// Declare it against `StepResult`, so the schema and the interface can't drift apart.
+export const stepResultSchema = type.declare<StepResult>().type({ changed: "boolean" }).onUndeclaredKey("delete")
 
 /** What a check gave and what it wanted, as raw values. `kind` says how the output shows them. */
 export type Comparison =
@@ -17,7 +23,7 @@ export type Comparison =
 /**
  * What a step reports to the session. The script's type only shows `changed`, and the rest is for the output. A
  * `changed` status means a check did not pass, so it is the only status that counts as drift in `plan`. A `ran` status
- * means a run's `when` was true.
+ * means a run was triggered.
  */
 export type StepDetails =
   | { status: "unchanged"; changed: false }

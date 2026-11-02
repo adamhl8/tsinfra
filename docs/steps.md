@@ -79,7 +79,7 @@ decision belongs in a step's check, where tsinfra can see it.
 | When the code...                       | Use                                                    |
 | -------------------------------------- | ------------------------------------------------------ |
 | changes state that can be checked      | [`ensure`](#ensure), or [`file`](#file) for a file     |
-| follows up on a change, or always runs | [`run`](#run) with `after` or `always`                 |
+| follows up on a change, or always runs | [`run`](#run) with `after`                             |
 | picks which steps apply                | [`read`](#read) or [`inspect`](#inspect), plus an `if` |
 
 A fact that picks steps is one that no step on the host changes, like the CPU architecture or whether the host is a
@@ -95,7 +95,7 @@ The wrong shape for a change is a read, an `if`, and a `run`:
 
 ```ts
 const docker = await h.inspect("command -v docker")
-if (docker.exitCode !== 0) await h.run("Install docker", installDocker, { always: true })
+if (docker.exitCode !== 0) await h.run("Install docker", installDocker, { after: "always" })
 ```
 
 It mostly works. `plan` runs the inspect and shows the run when docker is missing. What it loses is the check after the
@@ -181,7 +181,7 @@ type EnsureOptions<T extends string | boolean> = {
   sudo?: boolean // run a string fix under sudo
   verify?: boolean // default true
   secret?: boolean // hide the diff
-  requires?: (StepResult | undefined)[] // earlier steps this step's check depends on
+  requires?: StepResult[] // earlier steps this step's check depends on
 }
 ```
 
@@ -405,7 +405,7 @@ type FileOptions = {
   group?: string // managed only when given
   sudo?: boolean
   secret?: boolean
-  requires?: (StepResult | undefined)[]
+  requires?: StepResult[]
 }
 ```
 
@@ -428,45 +428,42 @@ home on the target.
 ## `run`
 
 ```ts
-type RunOptions = CommandOptions
-  & (
-    | { after: (StepResult | undefined)[] } // run when any of these changed
-    | { always: true } // run on every pass
-  )
+type RunOptions = CommandOptions & {
+  after: StepResult[] | "always" // run when any of these changed, or "always" on every pass
+}
 ```
 
 A step with no check: one command, or a function given `exec` for one action that takes several commands. `sudo` and
 `secret` apply to a string command. A function passes them to each `exec`.
 
-A run is for work that something in this run triggers, not the host's state. There are two kinds, and `run` takes
-exactly one of `after` or `always`, so a forgotten trigger is a type error:
+A run is for work that something in this run triggers, not the host's state. There are two kinds, and both go in
+`after`, which is required, so a forgotten trigger is a type error:
 
 - **A follow-up to a change** takes `after`, the results of the steps it follows. It runs when any of them changed.
   Restarting a service after its config changed is one. No state on the host says a restart is needed, because a
   process started before the change looks the same as one started after it.
-- **Unconditional upkeep** takes `always: true`, like `docker system prune -f`. A check for "anything to prune?" would
-  cost as much as pruning.
+- **Unconditional upkeep** takes `after: "always"`, like `docker system prune -f`. A check for "anything to prune?"
+  would cost as much as pruning.
 
 ```ts
 const unit = await h.file("/etc/systemd/system/sonarr.service", { content: sonarrUnit, sudo: true })
 const timer = await h.file("/etc/systemd/system/sonarr-backup.timer", { content: backupTimer, sudo: true })
 
 await h.run("Reload systemd", "sudo systemctl daemon-reload", { after: [unit, timer] })
-await h.run("Prune docker", "docker system prune -f", { always: true })
+await h.run("Prune docker", "docker system prune -f", { after: "always" })
 ```
 
-`after` only takes step results, so a value from `h.read` cannot be a trigger. It also takes `undefined`, so a step
-that only runs on some code paths can be passed as it is, as in `after: [unit]` when `unit` is
-`StepResult | undefined`.
+`after` only takes step results, so a value from `h.read` cannot be a trigger. A step that only runs on some code
+paths goes in the same `if` as the run that follows it, so the run never refers to a step that didn't happen.
 
-|                       | `apply`                           | `plan`                                            |
-| --------------------- | --------------------------------- | ------------------------------------------------- |
-| `after`, one changed  | runs, reports `changed`           | does not run, reports `would-change` (a `>` line) |
-| `after`, none changed | does not run, reports `unchanged` | does not run, reports `unchanged`                 |
-| `always: true`        | runs, reports `changed`           | does not run, reports `would-change` (a `>` line) |
+|                       | `apply`                           | `plan`                                   |
+| --------------------- | --------------------------------- | ---------------------------------------- |
+| `after`, one changed  | runs, reports `ran`               | does not run, reports `ran` (a `>` line) |
+| `after`, none changed | does not run, reports `unchanged` | does not run, reports `unchanged`        |
+| `after: "always"`     | runs, reports `ran`               | does not run, reports `ran` (a `>` line) |
 
-Because `changed` is true for `would-change`, one `run` can follow another (`after: [reload]`), and the plan shows the
-chain exactly as it would run for real.
+A `ran` step returns `changed: true` in `plan` too, so one `run` can follow another (`after: [reload]`), and the plan
+shows the chain exactly as it would run for real.
 
 A condition based on a fact, like the CPU architecture, is an `if` around the `run`, the same as for any other step.
 Prefer `after` over wrapping a run in `if (unit.changed)`. They decide the same thing, but with `after` tsinfra still
@@ -476,8 +473,8 @@ knows the run exists when nothing changed, so verbose output can list it.
 
 - **There is no check after the fix.** "The unit changed" is still true after the reload, so the check would fail
   again and the step would fail.
-- **It never counts as drift** (see [CLI](./cli.md#exit-codes)). An `always` run's check would never pass, so `plan`
-  would exit 2 on every run. A follow-up only fires when a step it follows changed, and that step already counts.
+- **It never counts as drift** (see [CLI](./cli.md#exit-codes)). An `"always"` run's check would never pass, so
+  `plan` would exit 2 on every run. A follow-up only fires when a step it follows changed, and that step already counts.
 
 Two actions are usually two runs, each with its own name in the output. The function form is for one action that takes
 several commands under one trigger:
@@ -516,7 +513,7 @@ await h.run(
   async ({ exec }) => {
     if ((await exec("id -u sonarr || true")) === "") await exec("sudo useradd --system sonarr")
   },
-  { always: true },
+  { after: "always" },
 )
 ```
 

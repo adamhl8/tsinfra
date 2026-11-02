@@ -76,6 +76,30 @@ describe("tsinfra", () => {
     )
   })
 
+  it("should fail a run that has no after", async () => {
+    const { dir, run } = await createProject()
+    await writeLocalHost(path.join(dir, "hosts"), "a", `await h.run("Bad run", "true", {})`)
+
+    const { stdout, exitCode } = await run`tsinfra plan`.nothrow()
+
+    expect(exitCode).toBe(1)
+    expect(stdout).toBe(
+      "a\n  ! Bad run\n      failed to run step 'Bad run' -> after must be an array or \"always\" (was missing)\n\na   failed",
+    )
+  })
+
+  it("should fail a run whose after holds something other than step results", async () => {
+    const { dir, run } = await createProject()
+    await writeLocalHost(path.join(dir, "hosts"), "a", `await h.run("Bad run", "true", { after: [undefined] })`)
+
+    const { stdout, exitCode } = await run`tsinfra plan`.nothrow()
+
+    expect(exitCode).toBe(1)
+    expect(stdout).toBe(
+      "a\n  ! Bad run\n      failed to run step 'Bad run' -> after[0] must be an object (was undefined)\n\na   failed",
+    )
+  })
+
   it("should run a host that reads from '@local'", async () => {
     const { dir, run } = await createProject()
     const source = `import { host } from "tsinfra"\n\nexport default host("@local", async (h) => console.log(await h.read("echo hi")))\n`
@@ -105,7 +129,7 @@ describe("tsinfra", () => {
 
   it("should exit 0 from plan when the only thing pending is a run", async () => {
     const { dir, run } = await createProject()
-    await writeLocalHost(path.join(dir, "hosts"), "a", `await h.run("Prune", "true", { when: true })`)
+    await writeLocalHost(path.join(dir, "hosts"), "a", `await h.run("Prune", "true", { after: "always" })`)
 
     expect((await run`tsinfra plan`.nothrow()).exitCode).toBe(0)
   })
@@ -124,7 +148,7 @@ describe("tsinfra", () => {
     const hostsDir = path.join(dir, "hosts")
     const steps = [
       `await h.ensure("Write the unit", { check: "false", want: true, fix: "true" })`,
-      `await h.run("Reload systemd", "true", { when: true })`,
+      `await h.run("Reload systemd", "true", { after: "always" })`,
     ]
     await writeLocalHost(hostsDir, "sonarr", steps.join("\n"))
     await writeLocalHost(hostsDir, "caddy", `await h.read("true")`)

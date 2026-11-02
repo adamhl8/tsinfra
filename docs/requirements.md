@@ -37,7 +37,7 @@ macbook
 `requires` takes step results, the values earlier steps returned. `ensure` and `file` accept it.
 
 ```ts
-requires?: (StepResult | undefined)[]
+requires?: StepResult[]
 ```
 
 - **In `plan`,** when any required step would change or is waiting, the step reports `waiting` and its check does not

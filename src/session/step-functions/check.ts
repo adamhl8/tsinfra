@@ -10,12 +10,12 @@ import type { CommandOutput } from "#transport/transport.ts"
 export type Check<T> = string | ((tools: CheckTools) => Promise<T>)
 
 /**
- * How a step compares its check's answer, for each form of `Check`. A check function's value is `unknown` because host
- * files aren't type-checked, so a check function can return anything.
+ * How a step compares its check's answer, for each form of `Check`. A check function's value is `unknown` because a
+ * script can get past the types, like with `as` or `@ts-ignore`, so a check function can return anything.
  */
 export interface CheckCompare {
-  fnResult: (value: unknown) => Result<HostState>
-  cmdResult: (commandOutput: CommandOutput) => Result<HostState>
+  fnValue: (value: unknown) => Result<HostState>
+  cmdValue: (commandOutput: CommandOutput) => Result<HostState>
 }
 
 /** Runs `check` as a command, or calls the script's function with its tools, and compares the answer with `compare`. */
@@ -28,9 +28,9 @@ export const runCheck = async (
 
   if (typeof check === "function") {
     const value = await attempt(async () => check(checkTools))
-    return isErr(value) ? value : compare.fnResult(value)
+    return isErr(value) ? value : compare.fnValue(value)
   }
 
   const commandOutput = await shell.inspect(check)
-  return isErr(commandOutput) ? commandOutput : compare.cmdResult(commandOutput)
+  return isErr(commandOutput) ? commandOutput : compare.cmdValue(commandOutput)
 }

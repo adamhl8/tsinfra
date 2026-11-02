@@ -1,5 +1,6 @@
+import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
-import { isErr } from "ts-explicit-errors"
+import { err, isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import type { HostEntry } from "#hosts/load.ts"
@@ -10,6 +11,7 @@ import { handleExec } from "#session/step-functions/tools.ts"
 import type { StepRecord } from "#session/step-records.ts"
 import { createStepRecorder } from "#session/step-records.ts"
 import type { StepCall, StepDetails, StepResult } from "#session/step.ts"
+import { stepResultSchema } from "#session/step.ts"
 import type { EnsureOptions } from "#session/steps/ensure.ts"
 import { handleEnsure } from "#session/steps/ensure.ts"
 import type { CommandResult, Inspect } from "#session/steps/inspect.ts"
@@ -46,8 +48,9 @@ export interface Host {
    */
   ensure: <T extends string | boolean>(name: string, options: EnsureOptions<T>) => Promise<StepResult>
   /**
-   * Runs `cmd`, a command or a function given `exec`, when `when` is true. There is no check, so it never counts as
-   * drift. In `plan` it never runs, and reports changed when `when` is true.
+   * Runs `cmd`, a command or a function given `exec`, when a step in `after` changed, or on every pass with `after:
+   * "always"`. There is no check, so it never counts as drift. In `plan` it never runs, and reports changed when it
+   * would.
    *
    * A failing command fails the host and throws.
    */
@@ -128,7 +131,13 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
       // Record the failure the host ends up with, because a function in the script may have caught an earlier one.
       const stepFailure = isErr(stepDetails) ? keepFailure(failure, stepDetails) : failure
       finishStep(stepRecord, stepFailure ?? stepDetails)
-      return stepDetails
+      if (isErr(stepDetails)) return stepDetails
+
+      const stepResult = stepResultSchema(stepDetails)
+      if (stepResult instanceof type.errors)
+        return err(`failed to report step '${stepName}'`, err(stepResult.summary, undefined))
+
+      return stepResult
     })
 
   const read: Host["read"] = async (cmd) => {

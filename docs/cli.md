@@ -151,9 +151,9 @@ The output is built from a record of each host's run. It is one list of steps, i
   records the error instead.
 
 A step's status is `unchanged`, `changed`, or `ran`. `changed` means its check did not pass. `ran` means a run's trigger
-fired, or it was `always`. A read or inspect is always `unchanged`. The record is the same in `plan` and `apply`, and so
-is each step's line. The output and `want` come from the check before the fix, so `apply` can show what a step changed
-too.
+fired, or its `after` was `"always"`. A read or inspect is always `unchanged`. The record is the same in `plan` and
+`apply`, and so is each step's line. The output and `want` come from the check before the fix, so `apply` can show what
+a step changed too.
 
 A failed step records its error. Steps called after the host failed throw without running, so they are not recorded. A
 failure that is not a step's, like a bug in the script, is the host's own failure.

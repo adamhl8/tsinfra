@@ -74,8 +74,8 @@ export const handleEnsure = async <T extends string | boolean>(
   const { check, want, fix, verify = true } = options
 
   const checkCompare: CheckCompare = {
-    fnResult: (value) => compareFnResult(value, want),
-    cmdResult: (commandOutput) => compareCmdResult(commandOutput, want),
+    fnValue: (value) => compareFnResult(value, want),
+    cmdValue: (commandOutput) => compareCmdResult(commandOutput, want),
   }
 
   const stepDetails = await converge(stepCall, {

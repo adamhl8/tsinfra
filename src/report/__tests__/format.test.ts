@@ -17,18 +17,18 @@ const formatBlock = async (fn: HostFunction, mode: Mode) => formatHostBlock(awai
 
 const changeAndRun = async (h: Host) => {
   await h.ensure("Write the unit", { check: "false", want: true, fix: "true" })
-  await h.run("Reload systemd", "true", { when: true })
-  await h.run("Prune", "true", { when: true })
+  await h.run("Reload systemd", "true", { after: "always" })
+  await h.run("Prune", "true", { after: "always" })
 }
 
 const runOnce = async (h: Host) => {
-  await h.run("Reload systemd", "true", { when: true })
+  await h.run("Reload systemd", "true", { after: "always" })
 }
 
 const stayRight = async (h: Host) => {
-  await h.ensure("Install Caddy", { check: "true", want: true, fix: "true" })
+  const caddy = await h.ensure("Install Caddy", { check: "true", want: true, fix: "true" })
   await h.read("true")
-  await h.run("Reload systemd", "true", { when: false })
+  await h.run("Reload systemd", "true", { after: [caddy] })
 }
 
 const failVerify = async (h: Host) => {

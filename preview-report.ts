@@ -65,18 +65,19 @@ const createScenarios = (dir: string): Scenario[] => {
           want: true,
           fix: `touch '${marker("unit")}'`,
         })
-        await h.run("Reload systemd", "true", { when: unit.changed })
-        await h.run("Prune docker images", "true", { when: true })
-        await h.run("Restart caddy", "true", { when: false })
+        await h.run("Reload systemd", "true", { after: [unit] })
+        await h.run("Prune docker images", "true", { after: "always" })
+        const caddyfile = await h.ensure("Write the Caddyfile", { check: "true", want: true, fix: "true" })
+        await h.run("Restart caddy", "true", { after: [caddyfile] })
       },
     },
     {
       name: "all-unchanged",
       target: "@local",
       fn: async (h) => {
-        await h.ensure("Install git", { check: "true", want: true, fix: "true" })
+        const git = await h.ensure("Install git", { check: "true", want: true, fix: "true" })
         await h.read("uname -m")
-        await h.run("Reload systemd", "true", { when: false })
+        await h.run("Reload systemd", "true", { after: [git] })
       },
     },
     {
