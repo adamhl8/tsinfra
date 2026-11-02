@@ -27,10 +27,8 @@ const readTwice = async (h: Host) => {
 const runHostA = async (fn: HostFunction) => runHost({ name: "a", ...host("@local", fn) }, "apply")
 
 /** Plans a host 'a' with `fn` and reports whether it has a change pending. */
-const planHasPendingChange = async (fn: HostFunction) => {
-  const { stepRecords } = await runHost({ name: "a", ...host("@local", fn) }, "plan")
-  return hasPendingChange(stepRecords)
-}
+const planHasPendingChange = async (fn: HostFunction) =>
+  hasPendingChange(await runHost({ name: "a", ...host("@local", fn) }, "plan"))
 
 const ensurePending = async (h: Host) => {
   await h.ensure("Pending", { check: "false", want: true, fix: "true" })
@@ -51,15 +49,27 @@ const getMessage = (failure: Error | undefined) => failure && messageChain(failu
 const runAndGetMessage = async (fn: HostFunction) => getMessage((await runHostA(fn)).failure)
 
 describe("runHost", () => {
+  it("should fail before the script runs when the host can't run commands", async () => {
+    const { failure, ...hostReport } = await runHost({ name: "a", ...host("a.lan", throwBoom) }, "apply")
+
+    expect({ ...hostReport, message: getMessage(failure) }).toStrictEqual({
+      name: "a",
+      target: "a.lan",
+      started: false,
+      message:
+        "failed to start the session -> failed to read the SSH user's home directory -> target 'a.lan' isn't supported yet (only '@local')",
+    })
+  })
+
   it("should report no failure when the host succeeds", async () => {
     expect(await runAndGetMessage(doNothing)).toBeUndefined()
   })
 
   it("should return the records of the steps that ran, even when the host fails", async () => {
-    const { stepRecords, failure } = await runHostA(readTwice)
+    const hostReport = await runHostA(readTwice)
 
-    expect(stepRecords.map(({ name }) => name)).toStrictEqual(["echo hi", "exit 1"])
-    expect(getMessage(failure)).toBe("failed to read 'exit 1' -> exited with code 1")
+    expect(hostReport).toMatchObject({ started: true, stepRecords: [{ name: "echo hi" }, { name: "exit 1" }] })
+    expect(getMessage(hostReport.failure)).toBe("failed to read 'exit 1' -> exited with code 1")
   })
 
   it("should report the error when the host function throws", async () => {

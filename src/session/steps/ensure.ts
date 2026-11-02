@@ -4,14 +4,15 @@ import { err } from "ts-explicit-errors"
 
 import type { HostState } from "#session/converge.ts"
 import { converge } from "#session/converge.ts"
-import { createCommandExitError, stripTrailingNewlines } from "#session/shell.ts"
+import { createCommandExitError } from "#session/shell.ts"
 import type { Change } from "#session/step-functions/change.ts"
 import { runChange } from "#session/step-functions/change.ts"
 import type { Check, CheckCompare } from "#session/step-functions/check.ts"
 import { runCheck } from "#session/step-functions/check.ts"
-import type { NeededSteps, StepCall, StepDetails } from "#session/step.ts"
+import type { NeededSteps, StepContext, StepDetails } from "#session/step.ts"
 import { needsSchema } from "#session/step.ts"
 import type { CommandOutput } from "#transport/transport.ts"
+import { stripTrailingNewlines } from "#utils.ts"
 
 /** `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string. */
 export interface EnsureOptions<T extends string | boolean> {
@@ -39,6 +40,13 @@ export interface EnsureOptions<T extends string | boolean> {
   needs?: NeededSteps
 }
 
+/** What the check gave and what it wanted, as raw values. `kind` says how the output shows them. */
+export type ValueComparison =
+  | { kind: "string"; got: string; want: string }
+  | { kind: "boolean"; got: boolean; want: boolean }
+  // `got` is the exit code, and `want: true` means exit 0.
+  | { kind: "exit"; got: number; want: boolean }
+
 const compareStrings = (value: string, wantedValue: string): HostState => {
   const got = stripTrailingNewlines(value)
   const want = stripTrailingNewlines(wantedValue)
@@ -46,7 +54,7 @@ const compareStrings = (value: string, wantedValue: string): HostState => {
 }
 
 /** Compares a check function's value to `want`. */
-const compareFnResult = (value: unknown, want: string | boolean): Result<HostState> => {
+const compareFnValue = (value: unknown, want: string | boolean): Result<HostState> => {
   if (typeof value === "string" && typeof want === "string") return compareStrings(value, want)
 
   if (typeof value === "boolean" && typeof want === "boolean")
@@ -56,7 +64,7 @@ const compareFnResult = (value: unknown, want: string | boolean): Result<HostSta
 }
 
 /** Compares a check command's stdout, or its exit code, to `want`. */
-const compareCmdResult = (commandOutput: CommandOutput, want: string | boolean): Result<HostState> => {
+const compareCmdValue = (commandOutput: CommandOutput, want: string | boolean): Result<HostState> => {
   const { stdout, exitCode } = commandOutput
 
   if (typeof want === "string") {
@@ -75,10 +83,10 @@ const compareCmdResult = (commandOutput: CommandOutput, want: string | boolean):
 }
 
 export const handleEnsure = async <T extends string | boolean>(
-  stepCall: StepCall,
+  ctx: StepContext,
   options: EnsureOptions<T>,
 ): Promise<Result<StepDetails>> => {
-  const { stepName } = stepCall
+  const { stepName } = ctx
   const { check, want, fix, verify = true, needs = [] } = options
 
   const validNeeds = needsSchema({ needs })
@@ -86,14 +94,14 @@ export const handleEnsure = async <T extends string | boolean>(
     return err(`failed to validate the needs of step '${stepName}'`, err(validNeeds.summary, undefined))
 
   const checkCompare: CheckCompare = {
-    fnValue: (value) => compareFnResult(value, want),
-    cmdValue: (commandOutput) => compareCmdResult(commandOutput, want),
+    fnValue: (value) => compareFnValue(value, want),
+    cmdValue: (commandOutput) => compareCmdValue(commandOutput, want),
   }
 
-  const stepDetails = await converge(stepCall, {
+  const stepDetails = await converge(ctx, {
     needs,
-    readState: async () => runCheck(stepCall, check, checkCompare),
-    fix: async () => runChange(stepCall, fix),
+    readState: async () => runCheck(ctx, check, checkCompare),
+    fix: async () => runChange(ctx, fix),
     verify,
   })
 

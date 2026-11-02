@@ -1,17 +1,20 @@
 import type { Result } from "ts-explicit-errors"
-import { isErr } from "ts-explicit-errors"
+import { err, isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import type { HostEntry } from "#hosts/load.ts"
+import { readHomeDirectory } from "#session/paths/home.ts"
 import { createShell } from "#session/shell.ts"
 import type { Change } from "#session/step-functions/change.ts"
 import type { Exec, ChangeTools, CheckTools } from "#session/step-functions/tools.ts"
 import { handleExec } from "#session/step-functions/tools.ts"
-import type { StepRecord } from "#session/step-records.ts"
-import { createStepRecorder } from "#session/step-records.ts"
-import type { StepCall, StepDetails, StepResult } from "#session/step.ts"
+import type { StepRecord } from "#session/step-recorder.ts"
+import { createStepRecorder } from "#session/step-recorder.ts"
+import type { StepContext, StepDetails, StepResult } from "#session/step.ts"
 import type { EnsureOptions } from "#session/steps/ensure.ts"
 import { handleEnsure } from "#session/steps/ensure.ts"
+import type { FileOptions } from "#session/steps/file.ts"
+import { handleFile } from "#session/steps/file.ts"
 import type { CommandResult, Inspect } from "#session/steps/inspect.ts"
 import { handleInspect } from "#session/steps/inspect.ts"
 import type { Read } from "#session/steps/read.ts"
@@ -38,6 +41,13 @@ export interface Host {
    * A non-zero exit is an answer, not a failure. Only a command that can't run at all fails the host and throws.
    */
   inspect: Inspect
+  /**
+   * Writes `content` to `path`, and manages the file's mode, owner, and group when they are given. A leading `~/` means
+   * the SSH user's home. In `plan` it only checks, and shows a diff of what would change.
+   *
+   * A path that is a symlink or isn't a regular file fails the host and throws, and so does a failed write.
+   */
+  file: (path: string, options: FileOptions) => Promise<StepResult<"file">>
   /**
    * Compares what `check` gives to `want`, and in `apply` runs `fix` when they differ, then checks again. In `plan` the
    * fix never runs.
@@ -72,13 +82,14 @@ export interface HostSession {
 }
 
 /**
- * Builds the `Host` passed to a host's function, and tracks the run's failure where the script can't see it.
+ * Builds the `Host` passed to a host's function, and tracks the run's failure where the script can't see it. It fails
+ * when it can't read the SSH user's home directory, which means the host can't run commands at all.
  *
  * This is the only code that throws, because throwing is the contract with the script. Every function the script can
  * call, on `h` or as `read` and `exec`, goes through `callOrFail` around an internal function from `steps/` or
  * `tools.ts` that returns errors as values.
  */
-export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession => {
+export const createHostSession = async (hostEntry: HostEntry, mode: Mode): Promise<Result<HostSession>> => {
   const { name, target } = hostEntry
   let failure: Failure
 
@@ -115,16 +126,21 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
   const checkTools: CheckTools = { read: readTool, inspect: inspectTool }
   const changeTools: ChangeTools = { exec: execTool, inspect: inspectTool }
 
+  // Read the SSH user's home before the script runs, because a path that starts with `~/` needs it.
+  // An unset `$HOME` comes back empty, so this fails only when the host can't run commands at all.
+  const home = await readHomeDirectory(shell)
+  if (isErr(home)) return err("failed to start the session", err("failed to read the SSH user's home directory", home))
+
   const callStep = async <K extends StepKind>(
-    kind: K,
     stepName: string,
-    handler: (stepCall: StepCall) => Promise<Result<StepDetails>>,
+    kind: K,
+    handler: (ctx: StepContext) => Promise<Result<StepDetails>>,
   ): Promise<StepResult<K>> =>
     callOrFail(async () => {
-      const stepRecord = startStep(kind, stepName)
+      const stepRecord = startStep(stepName, kind)
       if (isErr(stepRecord)) return stepRecord
 
-      const stepDetails = await handler({ shell, mode, stepName, checkTools, changeTools })
+      const stepDetails = await handler({ stepName, mode, shell, home, checkTools, changeTools })
 
       // Record the failure the host ends up with, because a function in the script may have caught an earlier one.
       const stepFailure = isErr(stepDetails) ? keepFailure(failure, stepDetails) : failure
@@ -139,7 +155,7 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
     // Keep the stdout here, because a step reports only its details.
     let stdout = ""
     // Pass `cmd` as the step name, because `h.read` takes no name.
-    await callStep("read", cmd, async () => {
+    await callStep(cmd, "read", async () => {
       const output = await handleRead(shell, cmd)
       if (isErr(output)) return output
 
@@ -154,7 +170,7 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
     // Start from an empty result, which is never returned, because `callStep` throws when the inspect fails.
     let commandResult: CommandResult = { stdout: "", stderr: "", exitCode: 0 }
     // Pass `cmd` as the step name, because `h.inspect` takes no name.
-    await callStep("inspect", cmd, async () => {
+    await callStep(cmd, "inspect", async () => {
       const result = await handleInspect(shell, cmd)
       if (isErr(result)) return result
 
@@ -164,13 +180,16 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
     return commandResult
   }
 
+  const file: Host["file"] = async (path, options) =>
+    callStep(path, "file", async (ctx) => handleFile(ctx, path, options))
+
   const ensure: Host["ensure"] = async (stepName, options) =>
-    callStep("ensure", stepName, async (stepCall) => handleEnsure(stepCall, options))
+    callStep(stepName, "ensure", async (ctx) => handleEnsure(ctx, options))
 
   const run: Host["run"] = async (stepName, cmd, options) =>
-    callStep("run", stepName, async (stepCall) => handleRun(stepCall, cmd, options))
+    callStep(stepName, "run", async (ctx) => handleRun(ctx, cmd, options))
 
-  const host: Host = { name, read, inspect, ensure, run }
+  const host: Host = { name, read, inspect, file, ensure, run }
 
   return { host, stepRecords, getFailure: () => failure }
 }

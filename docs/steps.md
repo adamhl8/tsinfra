@@ -10,6 +10,11 @@ Everything a host script does to a target goes through `h`, the context passed t
   - [`ensure`](#ensure)
   - [`fix`](#fix)
 - [`file`](#file)
+  - [The check](#the-check)
+  - [The diff](#the-diff)
+  - [The write](#the-write)
+  - [`sudo` and permissions](#sudo-and-permissions)
+  - [Links](#links)
 - [`run`](#run)
 - [`read`](#read)
 - [`inspect`](#inspect)
@@ -182,7 +187,7 @@ type EnsureOptions<T extends string | boolean> = {
   sudo?: boolean // run a string fix under sudo
   verify?: boolean // default true
   secret?: boolean // hide the diff
-  needs?: StepResult<"ensure" | "file">[] // earlier steps this step's check depends on
+  needs?: StepResult<"file" | "ensure">[] // earlier steps this step's check depends on
 }
 ```
 
@@ -400,38 +405,234 @@ run's check confirms it. Before reaching for it, try these:
 ## `file`
 
 ```ts
-type FileOptions = {
-  content: string | Buffer // computed on the control machine
-  mode?: string // octal, default "644", or "600" when secret
-  owner?: string // managed only when given
-  group?: string // managed only when given
+// Either a regular file with `content`, or a symlink with `link`. The two forms can't be mixed.
+type FileOptions = ContentFileOptions | LinkFileOptions
+
+type ContentFileOptions = {
+  content: string | Uint8Array // computed on the control machine
+  mode?: FileMode // "644", "rw-r--r--", or a constant like PUBLIC_FILE_MODE. Managed only when given
+  owner?: string | number // a name is compared with the owner's name, a number with its uid
+  group?: string | number // a name is compared with the group's name, a number with its gid
+  sudo?: boolean // run the check, the diff, and the write as root
+  secret?: boolean // never fetch or show the old content
+  needs?: StepResult<"file" | "ensure">[]
+}
+
+type LinkFileOptions = {
+  link: string // the absolute path the link points to, on the same host
+  force?: boolean // replace a regular file at the path, like `ln -f`
   sudo?: boolean
-  secret?: boolean
-  needs?: StepResult<"ensure" | "file">[]
+  needs?: StepResult<"file" | "ensure">[]
 }
 ```
 
-Writes `content` to `path` on the target and reports whether it changed. A leading `~/` means the connecting user's
-home on the target.
+```ts
+const unit = await h.file("/etc/systemd/system/sonarr.service", { content: sonarrUnit, sudo: true })
+const fishConfig = new URL("../dotfiles/fish/config.fish", import.meta.url).pathname
+await h.file("~/.config/fish/config.fish", { link: fishConfig })
+```
 
-- **The check** is one command that prints the remote file's sha256, mode, and owner and group when they are declared,
-  or a marker meaning the file is absent. The content's sha256 is computed locally and compared. No file is transferred
-  just to learn that it is unchanged. The command has to work on GNU and BSD alike (`sha256sum` or `shasum -a 256`,
-  `stat -c` or `stat -f`), because the Mac is a host too.
-- **The diff** fetches the remote contents with `cat`, only when the hashes differ. Binary content (null bytes) shows
-  sizes instead of a diff. `secret: true` shows "contents hidden".
-- **The write** creates missing parent directories, writes the content to a temp file next to the destination, sets
-  mode and ownership on the temp file, then moves it into place. The file never exists at its destination with the
-  wrong permissions, which matters for secrets. See [Transport](./transport.md#file-writes).
-- **Verification** re-runs the check.
-- **`sudo: true`** runs the check and the diff under sudo too, not just the write. See
-  [Transport](./transport.md#sudo).
+Writes `content` to `path` on the target, or makes `path` a symlink to `link`, and reports whether it changed. The step
+is named by its path, and returns a `StepResult<"file">`, so a run can follow it and a later step can need it.
+
+**Modes.** `mode` takes octal, like `"644"` or `"4755"`, or the symbolic form `ls -l` prints, like `"rw-r--r--"`,
+with `s`/`S` and `t`/`T` for setuid, setgid, and the sticky bit. Both are template literal types, so a typo like `"648"`
+or `"rw-r--r-"` fails to type-check. chmod's `u=rw,g=r` form isn't supported, because its `+` and `-` are relative to the
+current mode, and a step states the mode it wants. A changed mode shows both notations, whichever one the script wrote, like
+`rw------- (600) -> rw-r--r-- (644)`. tsinfra exports named modes, each a symbolic string, so hovering one shows its permissions:
+
+| Constant                  | Mode        | Octal | For                                        |
+| ------------------------- | ----------- | ----- | ------------------------------------------ |
+| `PUBLIC_FILE_MODE`        | `rw-r--r--` | `644` | Most config files                          |
+| `GROUP_FILE_MODE`         | `rw-r-----` | `640` | A secret a service reads through its group |
+| `PRIVATE_FILE_MODE`       | `rw-------` | `600` | Keys, tokens, and other secrets            |
+| `PUBLIC_EXECUTABLE_MODE`  | `rwxr-xr-x` | `755` | Scripts and binaries                       |
+| `GROUP_EXECUTABLE_MODE`   | `rwxr-x---` | `750` | A script only a group may run              |
+| `PRIVATE_EXECUTABLE_MODE` | `rwx------` | `700` | A script only its owner may run            |
+
+**Defaults.** `mode`, `owner`, and `group` are managed only when given. An existing file keeps its own otherwise, the
+way Ansible, Salt, Chef, and Puppet all do, so a `file` step never loosens a `0600` file or takes ownership away from an
+app. A new file gets mode `644`, or `600` with `secret`, and is owned by whichever user ran the write: the SSH user, or
+root under `sudo`.
+
+**Paths.** A path must be absolute, starting with `/` or `~/`. A relative path fails, like `'app.conf' isn't an
+absolute path, so start it with / or ~/`, because it would land wherever the shell starts. A leading `~/` means the
+connecting user's home on the target, even under `sudo`. A path goes into every
+command fully single-quoted, with each `'` written as `'\''`, so a space or a quote can't break the command. Quoting
+also stops the shell from expanding `~`, which only happens when `~` is unquoted at the start of a word. So tsinfra
+resolves `~/` itself:
+
+- **It reads the home directory when the host's session starts,** before the script runs, as the SSH user, with
+  `printf '%s' "$HOME"`. That's one command per host, and it doubles as the first contact with the host, so a host that
+  can't run commands fails before its script starts. It runs without `sudo`, because under `sudo` the shell's `$HOME` is
+  usually root's. `printf '%s'` prints the value exactly, and avoids the way some shells treat backslashes or `-n` in
+  `echo`.
+- **It replaces the leading `~/` with that path,** then quotes the whole path. Every command `file` builds uses a plain
+  absolute path, the same with or without `sudo`. A bare `~` means the home directory itself. `link` targets get the
+  same treatment.
+- **An empty or relative `HOME` is an error,** like `can't resolve ~/ in '~/.config/fish/config.fish', because $HOME
+  isn't set on the host`. `printf` prints nothing whether `HOME` is unset or empty, so one check covers both. The check runs only for a path that
+  uses `~`, so a host without `HOME` still runs a script that doesn't. Over
+  SSH, sshd sets `HOME` from the user's account, so this only happens when tsinfra itself runs without one. A `HOME` of
+  `/` is odd but valid, so it's allowed.
+- **`~otheruser/` is an error,** because it isn't an absolute path. Resolving another user's home would need an
+  account lookup that nothing needs yet.
+
+The shell's own `~` is just `$HOME` too. POSIX leaves the result unspecified when `HOME` is unset, and shells differ:
+bash, zsh, and macOS `/bin/sh` fall back to the account database, while dash and busybox sh leave `~` in place, which
+would quietly make a directory named `~`. Reading `$HOME` ourselves turns that into an error. pyinfra leaves a leading
+`~/` unquoted so the shell expands it, and runs `sudo -H`, so under sudo its `~` means root's home. That suits pyinfra,
+which can sudo to any user. tsinfra only escalates to root, where `~` as `/root` is rarely what a script means.
+
+**With `content`, symlinks and other non-files are refused.** If `path` is a symlink, a directory, or anything but a
+regular file, the step fails, like `'/etc/x' is a symlink, so file won't replace it`. Managing a link is what the `link`
+form is for (see [Links](#links)). Whether the `content` form should follow a link and write to its target is open (see
+[Open questions](./open-questions.md#following-symlinks-in-file)).
+
+### The check
+
+One command prints what tsinfra needs, or a marker for a path that isn't a regular file:
+
+```sh
+if [ -L "$p" ]; then echo kind=link
+elif [ ! -e "$p" ]; then echo kind=absent
+elif [ ! -f "$p" ]; then echo kind=other
+else
+  echo kind=file
+  { sha256sum < "$p" || shasum -a 256 < "$p" || sha256 < "$p"; } 2>/dev/null
+  stat -c '%a %u %g %U %G %s' "$p" 2>/dev/null || stat -f '%Mp%Lp %u %g %Su %Sg %z' "$p"
+fi
+```
+
+- **The hash is sha256,** the default in Salt, Chef, and Puppet. POSIX has no sha256 command, so the check tries each
+  common one: `sha256sum` (GNU coreutils, busybox, current macOS), `shasum -a 256` (older macOS), and `sha256` (FreeBSD,
+  OpenBSD). This is the same chain pyinfra uses. The file goes in on stdin, because GNU `sha256sum` escapes odd
+  filenames in its output and prefixes the line with `\`. tsinfra reads the first 64 hex characters, because GNU,
+  busybox, and `shasum` print `<hash>  -` and BSD `sha256` prints the bare hash. Empty output is an error.
+- **`stat -c` goes first,** because GNU's `stat -f fmt file` doesn't fail. It prints filesystem information instead.
+  BSD needs `%Mp%Lp`, because `%Lp` alone drops setuid and setgid.
+- **The local hash** comes from `Bun.CryptoHasher("sha256")`. No file is transferred just to learn it is unchanged.
+- **The file is in sync** when the hash matches, and so does each attribute that was given. Modes are compared as octal
+  numbers, because GNU prints `644` and BSD prints `0644`. An owner or group given as a name is compared with the name
+  `stat` prints, and one given as a number with the uid or gid. There's no portable command to turn a group name into
+  its id, because `getent` is Linux-only and macOS uses `dscl`, so names stay names. GNU and busybox print `UNKNOWN` for
+  an id with no name, which only matters for an id, and those are compared as numbers.
+- **Verification** runs the same check again after the write, through `converge`. A file still out of sync fails with
+  "the host's state still differs after the fix", with the facts under it.
+
+### The diff
+
+When the hashes differ, a second command fetches the old content with `cat`, so the step's line can show a diff (see
+[CLI](./cli.md#how-the-report-is-built)). It skips that fetch, and shows a `content:` line instead, in these cases:
+
+| Case                                                | Line                                           |
+| --------------------------------------------------- | ---------------------------------------------- |
+| The file doesn't exist yet                          | `content: new file, 2.05 kB`                   |
+| `secret: true`                                      | `content: hidden, 1.2 kB -> 1.3 kB`            |
+| Either side is binary: a NUL byte, or invalid UTF-8 | `content: binary, 12 kB -> 14 kB`              |
+| Either side is over 100 kB                          | `content: too large to diff, 300 kB -> 310 kB` |
+
+Sizes use SI units, 1 kB = 1000 bytes, the way npm and most file managers show them. A size under 1 kB is spelled
+out, like `15 bytes`, because a lone `B` reads like "billion". The words are italic, and the sizes are colored like
+`got` and `want`, old in red and new in green. Every `content:` line ends with
+the sizes, old to new, or just the new size for a new file. The sizes come from `stat`, so a `secret` file shows them
+without its content being fetched.
+
+With `secret`, tsinfra never runs `cat` and never prints a full hash. The 100 kB limit follows Ansible, which caps its
+diff at about 100 kB. A changed attribute shows on a line of its own, old value to new, lined up with any `content:`
+line:
+
+```
+  ~ /etc/app/app.conf
+       3  port = 8080
+         -workers = 4
+       4 +workers = 8
+       5  log = info
+      mode:  rw-r--r-- (644) -> rw------- (600)
+      owner: root -> sonarr
+```
+
+### The write
+
+The write is one script, run on the target. Content travels inside it, base64-encoded in a heredoc, and lands in a temp
+file next to the destination, which one rename puts in place. See [Transport](./transport.md#file-writes) for the
+script and why each step comes in its order. The destination is only ever the old file or the complete new one, already
+with its owner and mode.
+
+**Size limit.** Content over 10 MB fails before anything is sent, like `content is 14 MB, above file's 10 MB limit`. The
+shell holds the whole script in memory, and base64 adds a third, so the heredoc suits config files, not large binaries.
+A streaming path for large files is open (see [Open questions](./open-questions.md#files-over-10-mb)).
+
+### `sudo` and permissions
+
+`file` runs as one user from start to finish, with no upload-then-move hop:
+
+| Option       | Runs as                   | For                                                             |
+| ------------ | ------------------------- | --------------------------------------------------------------- |
+| no `sudo`    | the SSH user, via `sh -s` | files the SSH user can write, like anything under `~`           |
+| `sudo: true` | root, via `sudo -n sh -s` | files under `/etc`, root-only files, or another user as `owner` |
+
+Under `sudo: true`, every part runs as root: the check, the `cat` for the diff, and the write. tsinfra writes all of
+those commands, so there is nowhere for a script to add `sudo` itself. This means `plan` also needs passwordless sudo on
+a host that manages such a file (see [Transport](./transport.md#sudo)).
+
+`sudo` isn't the default, because a file written as root under `~` would end up owned by root, and because some hosts,
+like the Mac, have no passwordless sudo. A `file` step only escalates when it asks to.
+
+Two mistakes get errors of their own instead of a raw shell error:
+
+- **`owner` names another user without `sudo`,** like `owner 'sonarr' needs sudo: true, because only root can give a
+  file away`. Only root can `chown` a file to someone else.
+- **The check can't read the file without `sudo`,** like `can't read '/etc/shadow' as the SSH user, so it needs sudo:
+  true`. That way an unreadable file doesn't look missing.
+
+### Links
+
+`link` makes `path` a symlink, which is how dotfiles in a repo can be linked into place on the control machine, so an
+edit in the repo shows up straight away:
+
+```ts
+// The file at ~/.config/fish/config.fish links to the repo's copy.
+const fishConfig = new URL("../dotfiles/fish/config.fish", import.meta.url).pathname
+await h.file("~/.config/fish/config.fish", { link: fishConfig })
+```
+
+The words are easy to mix up. In `ln -s TARGET LINK`, the target is the original file the link points to, and the link
+is the new path. `file`'s `path` is the link, because that is the path the step manages. `link` holds the target.
+
+- **The target is a path on the same host as the link.** A symlink stores a path, and the system looks it up wherever
+  the link lives. For `@local`, that is the control machine, so a link into the repo works. On a remote host, a link
+  points at that host's own files, like `/etc/nginx/sites-enabled/app` to `/etc/nginx/sites-available/app`.
+- **The target must be absolute,** starting with `/` or `~/`. A relative target is resolved from the link's own
+  directory, every time the link is followed, not from where the script runs. That is the classic mistake: a link to
+  `dotfiles/config.fish` made from the repo looks for `~/.config/fish/dotfiles/config.fish`. A relative target fails
+  with `link must be an absolute path, like /etc/... or ~/..., because a relative target is resolved from the link's
+  directory`. `~/` means the SSH user's home, as it does for `path`.
+- **The target may not exist yet,** because a later step might create it, or a mounted drive might not be there. The
+  link is still made, and its line shows `points to a missing path`, so a typo in the repo path stands out.
+- **The check** reads the existing link's target with `readlink` and compares it with `link`. It is in sync when `path`
+  is a symlink that points there.
+- **An existing symlink is always updated** to point at `link`, because managing it is the point.
+- **A regular file at `path` is an error** unless `force: true`, like `'~/.config/fish/config.fish' is a regular file,
+  so file won't replace it with a link`. This is the first run for dotfiles, where the real file still sits where the
+  link will go. Move it into the repo, or set `force` to replace it. That is the same as `ln -f`.
+- **A directory at `path` is always an error,** even with `force`, because replacing it would throw away everything in
+  it. `ln -f` won't replace a directory either.
+- **The output** shows `new link` for a new link, and a changed target as an attribute line, like
+  `link: ~/old/config.fish -> ~/dotfiles/fish/config.fish`. Forcing out a regular file shows `replaces a file`.
+- **The write** makes the link under a temp name next to `path`, then renames it into place, so there is never a moment
+  with nothing at `path`. Renaming over an existing link to a directory follows that link with a plain `mv`, so the
+  write has to avoid that. GNU has `mv -T`, and BSD differs, which gets settled when this is built.
+- **`mode` doesn't apply** to a symlink. `owner` would need `chown -h`, and is left out until a port needs a link owned
+  by someone else.
+- **It returns a `StepResult<"file">`,** so `needs` and `after` work the same as for a regular file. A run can follow a
+  link that changed.
 
 ## `run`
 
 ```ts
 type RunOptions = CommandOptions & {
-  after: StepResult<"ensure" | "file" | "run">[] | "always" // run when any of these changed, or "always" on every pass
+  after: StepResult<"file" | "ensure" | "run">[] | "always" // run when any of these changed, or "always" on every pass
 }
 ```
 

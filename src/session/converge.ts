@@ -1,7 +1,7 @@
 import type { Result } from "ts-explicit-errors"
 import { err, getContext, isErr } from "ts-explicit-errors"
 
-import type { Comparison, NeededSteps, StepCall, StepDetails } from "#session/step.ts"
+import type { Comparison, NeededSteps, StepContext, StepDetails } from "#session/step.ts"
 import type { CommandOutput } from "#transport/transport.ts"
 
 /** The part of the host's state one step manages: whether it's as wanted, and the values the step compared. */
@@ -28,8 +28,8 @@ const FAILED_STATE_KEY = "failedState"
 export const getFailedState = (error: Error) => getContext<HostState>(error, FAILED_STATE_KEY)
 
 /** Reads the host's state, then in `apply` runs the fix when it differs, and reads it again. */
-export const converge = async (stepCall: StepCall, spec: ConvergeSpec): Promise<Result<StepDetails>> => {
-  const { mode, stepName } = stepCall
+export const converge = async (ctx: StepContext, spec: ConvergeSpec): Promise<Result<StepDetails>> => {
+  const { stepName, mode } = ctx
   const { needs, readState, fix, verify } = spec
 
   // Skip the check in `plan` when a needed step would change, because the check would read the host without that change.

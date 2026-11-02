@@ -14,7 +14,10 @@ What still needs an answer. Most are best settled by porting real hosts first (s
 - [Helpers worth shipping](#helpers-worth-shipping)
 - [A directory step](#a-directory-step)
 - [Sending data to a command](#sending-data-to-a-command)
-- [How `file` sends content](#how-file-sends-content)
+- [Following symlinks in `file`](#following-symlinks-in-file)
+- [Files over 10 MB](#files-over-10-mb)
+- [`fsync` before the rename](#fsync-before-the-rename)
+- [Backups of replaced files](#backups-of-replaced-files)
 - [Rebooting a host](#rebooting-a-host)
 - [Steps side by side within a host](#steps-side-by-side-within-a-host)
 - [Quoting values in commands](#quoting-values-in-commands)
@@ -125,15 +128,38 @@ await exec(`cat > '${tmp}'`, { input: dump })
 await exec(`restore-tool --file '${tmp}'`)
 ```
 
-How the data travels should follow [how `file` sends content](#how-file-sends-content). Add it when a port needs it.
+How the data travels should follow how `file` sends content, base64 in a heredoc (see
+[Transport](./transport.md#file-writes)). Add it when a port needs it.
 
-## How `file` sends content
+## Following symlinks in `file`
 
-[Transport](./transport.md#file-writes) sends file content inside the write script, base64-encoded in a heredoc. That
-needs no SFTP, keeps secrets off the command line, and writes as root under `sudo -n sh -s`. The shell parses the whole
-script before it runs, so a large file sits in the shell's memory before the write starts. Base64 also adds a third to
-every transfer. `scp` or SFTP is the obvious alternative, though writing a root-owned file through it takes a second
-command. Revisit before building `file`.
+With `content`, `file` refuses a path that is a symlink, so it never replaces a link with a regular file, or writes
+somewhere the script didn't name (see [Steps](./steps.md#file)). Making a link is the `link` form's job. This question
+is only whether the `content` form should follow an existing link and write to its target instead. The tools split on
+this. Chef writes through the link to its target, and Ansible makes it an option. Following links would mean the check
+resolves the real path first and reports it, and the write goes there. Decide when a port needs to manage a file that
+is reached through a symlink.
+
+## Files over 10 MB
+
+`file` sends content in a base64 heredoc inside the write script, which the shell holds in memory before it runs, and
+base64 adds a third. That is fine for config files, so content over 10 MB is refused (see [Steps](./steps.md#file)).
+Every agentless tool uses SFTP or scp instead, which streams. A streaming path for large files would upload with `scp`
+to a temp file in the destination's directory as the SSH user, which works without `sudo`. With `sudo`, it needs a
+user-writable place and a root `mv`, the two-hop step the heredoc avoids. Add it when a port needs a large file.
+
+## `fsync` before the rename
+
+The write doesn't `fsync` the temp file before the rename (see [Transport](./transport.md#file-writes)). After a crash
+at the wrong moment, the file could be in place but empty. Puppet and Salt `fsync`, and Ansible and Chef don't.
+`sync "$tmp"` would add it, but busybox ignores the argument and flushes everything. Add it if a host turns out to lose
+power or crash often enough to matter.
+
+## Backups of replaced files
+
+Chef, Puppet, Ansible, and Salt can each keep a copy of the file they replace. tsinfra doesn't, because the script in
+version control is the record of what a file should be, and `plan` shows the diff before anything changes. Revisit if a
+port manages files that something else on the host also edits.
 
 ## Rebooting a host
 
@@ -161,6 +187,9 @@ one variable for the host.
 Computing values in TypeScript means putting them into command strings, and a value with a space or a quote breaks the
 command. A tagged template that escapes what is put into it would fix this: `` sh`curl -fsSL ${url} -o ${dest}` ``.
 Bun ships `$.escape`, so it would be a thin wrapper. It applies to `check`, `read`, `fix`, `exec`, and `run` alike.
+`file` already quotes the paths it puts into its own commands, with POSIX single quotes (see
+[Steps](./steps.md#file)). That helper could be the start of this tag, since `$.escape` targets Bun Shell, not POSIX
+`sh`.
 
 ## Ordering between hosts
 

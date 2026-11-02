@@ -12,9 +12,9 @@ interface CommandRecord {
 }
 
 export interface StepRecord {
-  kind: StepKind
   /** The name the script gave the step, or a read's command. */
   name: string
+  kind: StepKind
   commands: CommandRecord[]
   /** Unset until the step finishes. */
   details?: Result<StepDetails>
@@ -26,14 +26,14 @@ interface StepRecorder {
   /** Wraps `transport` so each command is recorded under the running step. */
   recordCommands: (transport: Transport) => Transport
   /** Records a new step and marks it running, or fails when another step is running. */
-  startStep: (kind: StepKind, stepName: string) => Result<StepRecord>
+  startStep: (stepName: string, kind: StepKind) => Result<StepRecord>
   /** Records the step's details or error, and marks no step as running. */
   finishStep: (stepRecord: StepRecord, details: Result<StepDetails>) => void
 }
 
 // Name a read by its command, because `h.read` takes no name.
 const describeStep = (stepRecord: StepRecord) => {
-  const { kind, name } = stepRecord
+  const { name, kind } = stepRecord
   return kind === "read" ? `read '${name}'` : `step '${name}'`
 }
 
@@ -55,10 +55,10 @@ export const createStepRecorder = (): StepRecorder => {
 
   // Fail a step that starts while another is running, because a step's functions use the tools they are given.
   // This also catches steps run at once with `Promise.all`.
-  const startStep = (kind: StepKind, stepName: string): Result<StepRecord> => {
+  const startStep = (stepName: string, kind: StepKind): Result<StepRecord> => {
     if (currentStep) return err(`'${kind}' can't run while ${describeStep(currentStep)} is running`, undefined)
 
-    const stepRecord: StepRecord = { kind, name: stepName, commands: [] }
+    const stepRecord: StepRecord = { name: stepName, kind, commands: [] }
     stepRecords.push(stepRecord)
     currentStep = stepRecord
     return stepRecord

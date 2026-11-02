@@ -4,7 +4,7 @@ import { err, isErr } from "ts-explicit-errors"
 
 import type { Change } from "#session/step-functions/change.ts"
 import { runChange } from "#session/step-functions/change.ts"
-import type { StepCall, StepDetails, TriggerSteps } from "#session/step.ts"
+import type { StepContext, StepDetails, TriggerSteps } from "#session/step.ts"
 import { stepResultSchema } from "#session/step.ts"
 
 export interface RunOptions {
@@ -19,7 +19,7 @@ export interface RunOptions {
 // Reject an empty `after`, because a run that follows nothing never runs, which is a mistake.
 // Declare it against `RunOptions`, so the schema and the interface can't drift apart.
 const runOptionsSchema = type.declare<RunOptions>().type({
-  after: type("'always'").or(stepResultSchema.and({ kind: "'ensure' | 'run'" }).array().atLeastLength(1)),
+  after: type("'always'").or(stepResultSchema.and({ kind: "'file' | 'ensure' | 'run'" }).array().atLeastLength(1)),
 })
 
 /** Returns whether the run is due: on every pass for `"always"`, or when a step in `after` changed. */
@@ -35,11 +35,11 @@ const evaluateTrigger = (options: RunOptions): Result<boolean> => {
 }
 
 export const handleRun = async (
-  stepCall: StepCall,
+  ctx: StepContext,
   change: Change,
   options: RunOptions,
 ): Promise<Result<StepDetails>> => {
-  const { mode, stepName } = stepCall
+  const { stepName, mode } = ctx
 
   const shouldRun = evaluateTrigger(options)
   if (isErr(shouldRun)) return err(`failed to run step '${stepName}'`, shouldRun)
@@ -47,7 +47,7 @@ export const handleRun = async (
   if (!shouldRun) return { status: "unchanged", changed: false }
   if (mode === "plan") return { status: "ran", changed: true }
 
-  const changeResult = await runChange(stepCall, change)
+  const changeResult = await runChange(ctx, change)
   if (isErr(changeResult)) return err(`failed to run step '${stepName}'`, changeResult)
 
   return { status: "ran", changed: true }

@@ -17,14 +17,14 @@ const createMarkerStep = async () => {
 
 describe("h.ensure", () => {
   it("should return unchanged without running the fix when the check passes", async () => {
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
 
     expect(await ensureOrMessage(h, { check: "true", want: true, fix: "exit 1" })).toMatchObject({ changed: false })
   })
 
   it("should run the fix in apply and return changed", async () => {
     const { marker, options } = await createMarkerStep()
-    const { host: h } = createSession("apply")
+    const { host: h } = await createSession("apply")
 
     expect(await ensureOrMessage(h, options)).toMatchObject({ changed: true })
     expect(await Bun.file(marker).exists()).toBe(true)
@@ -32,14 +32,14 @@ describe("h.ensure", () => {
 
   it("should return changed in plan without running the fix", async () => {
     const { marker, options } = await createMarkerStep()
-    const { host: h } = createSession("plan")
+    const { host: h } = await createSession("plan")
 
     expect(await ensureOrMessage(h, options)).toMatchObject({ changed: true })
     expect(await Bun.file(marker).exists()).toBe(false)
   })
 
   it("should fail the host when the fix fails", async () => {
-    const hostSession = createSession()
+    const hostSession = await createSession()
     const message = "failed to run the fix for step 'Make marker' -> exited with code 2: nope"
 
     expect(await ensureOrMessage(hostSession.host, { check: "false", want: true, fix: "echo nope >&2; exit 2" })).toBe(
@@ -49,7 +49,7 @@ describe("h.ensure", () => {
   })
 
   it("should fail the host when the host's state still differs after the fix", async () => {
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
 
     expect(await ensureOrMessage(h, { check: "false", want: true, fix: "true" })).toBe(
       "the host's state still differs after the fix for step 'Make marker'",
@@ -57,7 +57,7 @@ describe("h.ensure", () => {
   })
 
   it("should accept a function check that uses the given read", async () => {
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
       check: async ({ read }) => (await read("echo yes")) === "yes",
       want: true,
@@ -68,7 +68,7 @@ describe("h.ensure", () => {
   })
 
   it("should return unchanged when want is false and the check exits non-zero", async () => {
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
 
     expect(await ensureOrMessage(h, { check: "false", want: false, fix: "exit 1" })).toMatchObject({ changed: false })
   })
@@ -76,7 +76,7 @@ describe("h.ensure", () => {
   it("should run the fix when want is false and the check exits 0", async () => {
     const { marker } = await createMarkerStep()
     await Bun.write(marker, "")
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
 
     expect(
       await ensureOrMessage(h, { check: `test -f '${marker}'`, want: false, fix: `rm '${marker}'` }),
@@ -85,7 +85,7 @@ describe("h.ensure", () => {
   })
 
   it("should compare the boolean a function check returns to want", async () => {
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
 
     const result = await ensureOrMessage(h, {
       check: async ({ read }) => (await read("echo no")) === "yes",
@@ -97,7 +97,7 @@ describe("h.ensure", () => {
   })
 
   it("should fail when a function check returns a different type than want", async () => {
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
       check: async ({ read }) => (await read("echo active")) === "active",
       want: toLooseWant("active"),
@@ -110,7 +110,7 @@ describe("h.ensure", () => {
   })
 
   it("should fail the host with the step's name when a function check throws", async () => {
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
 
     expect(await ensureOrMessage(h, { check: throwBoom, want: true, fix: "true" })).toBe(
       "failed to read the host's state for step 'Make marker' -> boom",
@@ -118,7 +118,7 @@ describe("h.ensure", () => {
   })
 
   it("should name the step when a read inside a function check fails", async () => {
-    const hostSession = createSession()
+    const hostSession = await createSession()
     const message =
       "failed to read the host's state for step 'Make marker' -> failed to read 'exit 1' -> exited with code 1"
     const result = await ensureOrMessage(hostSession.host, {
@@ -132,7 +132,7 @@ describe("h.ensure", () => {
   })
 
   it("should fail the step when a function check catches a failed read", async () => {
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
       check: async ({ read }) => {
         await attempt(async () => read("exit 1"))
@@ -157,7 +157,7 @@ const createValueStep = async (value: string) => {
 
 describe("h.ensure with a string want", () => {
   it("should return unchanged without running the fix when the output matches", async () => {
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
 
     expect(await ensureOrMessage(h, { check: "echo v2", want: "v2", fix: "exit 1" })).toMatchObject({
       changed: false,
@@ -165,7 +165,7 @@ describe("h.ensure with a string want", () => {
   })
 
   it("should ignore trailing newlines on both sides", async () => {
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
 
     expect(await ensureOrMessage(h, { check: String.raw`printf 'v2\n\n'`, want: "v2\n", fix: "exit 1" })).toMatchObject(
       { changed: false },
@@ -174,7 +174,7 @@ describe("h.ensure with a string want", () => {
 
   it("should return changed in plan without running the fix", async () => {
     const { file, options } = await createValueStep("v2")
-    const { host: h } = createSession("plan")
+    const { host: h } = await createSession("plan")
 
     expect(await ensureOrMessage(h, options)).toMatchObject({ changed: true })
     expect(await Bun.file(file).exists()).toBe(false)
@@ -182,14 +182,14 @@ describe("h.ensure with a string want", () => {
 
   it("should run the fix in apply and return changed", async () => {
     const { file, options } = await createValueStep("v2")
-    const { host: h } = createSession("apply")
+    const { host: h } = await createSession("apply")
 
     expect(await ensureOrMessage(h, options)).toMatchObject({ changed: true })
     expect(await Bun.file(file).text()).toBe("v2\n")
   })
 
   it("should fail a check that exits non-zero but matches want", async () => {
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
 
     expect(await ensureOrMessage(h, { check: "echo v2; echo broken >&2; exit 1", want: "v2", fix: "true" })).toBe(
       "failed to read the host's state for step 'Make marker' -> exited with code 1: broken",
@@ -197,7 +197,7 @@ describe("h.ensure with a string want", () => {
   })
 
   it("should treat a check that exits non-zero with other output as a mismatch", async () => {
-    const { host: h } = createSession("plan")
+    const { host: h } = await createSession("plan")
 
     expect(await ensureOrMessage(h, { check: "echo inactive; exit 3", want: "active", fix: "true" })).toMatchObject({
       changed: true,
@@ -205,7 +205,7 @@ describe("h.ensure with a string want", () => {
   })
 
   it("should compare the string a function check returns", async () => {
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
       check: async ({ read }) => (await read("echo V2")).toLowerCase(),
       want: "v2",
@@ -218,7 +218,7 @@ describe("h.ensure with a string want", () => {
 
 describe("h.ensure with verify: false", () => {
   it("should return changed without checking again after the fix", async () => {
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
 
     expect(await ensureOrMessage(h, { check: "false", want: true, fix: "true", verify: false })).toMatchObject({
       changed: true,
@@ -226,7 +226,7 @@ describe("h.ensure with verify: false", () => {
   })
 
   it("should still fail the host when the fix fails", async () => {
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
 
     expect(await ensureOrMessage(h, { check: "false", want: true, fix: "exit 2", verify: false })).toBe(
       "failed to run the fix for step 'Make marker' -> exited with code 2",
@@ -236,7 +236,7 @@ describe("h.ensure with verify: false", () => {
 
 describe("h.ensure with needs", () => {
   it("should wait in plan without checking when a needed step would change", async () => {
-    const hostSession = createSession("plan")
+    const hostSession = await createSession("plan")
     const { host: h } = hostSession
     const brew = await h.ensure("Install brew packages", { check: "false", want: true, fix: "true" })
     const result = await h.ensure("Install fish plugins", { needs: [brew], check: "exit 1", want: true, fix: "true" })
@@ -249,7 +249,7 @@ describe("h.ensure with needs", () => {
   })
 
   it("should check as usual in plan when every needed step is unchanged", async () => {
-    const hostSession = createSession("plan")
+    const hostSession = await createSession("plan")
     const { host: h } = hostSession
     const brew = await h.ensure("Install brew packages", { check: "true", want: true, fix: "true" })
     await h.ensure("Install fish plugins", { needs: [brew], check: "false", want: true, fix: "true" })
@@ -258,7 +258,7 @@ describe("h.ensure with needs", () => {
   })
 
   it("should wait on a needed step that is itself waiting, and name it", async () => {
-    const hostSession = createSession("plan")
+    const hostSession = await createSession("plan")
     const { host: h } = hostSession
     const brew = await h.ensure("Install brew packages", { check: "false", want: true, fix: "true" })
     const fish = await h.ensure("Install fish", { needs: [brew], check: "true", want: true, fix: "true" })
@@ -272,7 +272,7 @@ describe("h.ensure with needs", () => {
   })
 
   it("should ignore needs in apply", async () => {
-    const hostSession = createSession("apply")
+    const hostSession = await createSession("apply")
     const { host: h } = hostSession
     const brew = await h.ensure("Install brew packages", { check: "false", want: true, fix: "true", verify: false })
     await h.ensure("Install fish plugins", { needs: [brew], check: "true", want: true, fix: "true" })
@@ -284,7 +284,7 @@ describe("h.ensure with needs", () => {
 describe("h.ensure with the inspect tool", () => {
   it("should treat a missing file as a needed fix in a check function", async () => {
     const { marker } = await createMarkerStep()
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
       check: async ({ inspect }) => (await inspect(`cat '${marker}'`)).exitCode === 0,
       want: true,
@@ -297,7 +297,7 @@ describe("h.ensure with the inspect tool", () => {
 
   it("should give a fix function the exit code of a command", async () => {
     const { marker, options } = await createMarkerStep()
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
       ...options,
       fix: async ({ exec, inspect }) => {
@@ -314,7 +314,7 @@ describe("h.ensure with the inspect tool", () => {
 describe("h.ensure with a fix function", () => {
   it("should run the commands in order and return changed", async () => {
     const file = path.join(await makeTempDir("step-"), "lines")
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
       check: `test -s '${file}'`,
       want: true,
@@ -330,7 +330,7 @@ describe("h.ensure with a fix function", () => {
 
   it("should return each command's stdout trimmed", async () => {
     const file = path.join(await makeTempDir("step-"), "value")
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
       check: `test -f '${file}'`,
       want: true,
@@ -346,7 +346,7 @@ describe("h.ensure with a fix function", () => {
 
   it("should stop at the first failed command and fail the host with the step's name", async () => {
     const { marker, options } = await createMarkerStep()
-    const hostSession = createSession()
+    const hostSession = await createSession()
     const message =
       "failed to run the fix for step 'Make marker' -> failed to run 'echo nope >&2; exit 2' -> exited with code 2: nope"
     const result = await ensureOrMessage(hostSession.host, {
@@ -365,7 +365,7 @@ describe("h.ensure with a fix function", () => {
   it("should fail the step when the fix function catches a failed command", async () => {
     const { marker, options } = await createMarkerStep()
     const cmd = `touch '${marker}'; exit 1`
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
       ...options,
       fix: async ({ exec }) => {
@@ -377,7 +377,7 @@ describe("h.ensure with a fix function", () => {
   })
 
   it("should fail the host with the step's name when the fix function throws", async () => {
-    const { host: h } = createSession()
+    const { host: h } = await createSession()
 
     expect(await ensureOrMessage(h, { check: "false", want: true, fix: throwBoom })).toBe(
       "failed to run the fix for step 'Make marker' -> boom",
@@ -386,7 +386,7 @@ describe("h.ensure with a fix function", () => {
 
   it("should not call the fix function in plan", async () => {
     const { marker, options } = await createMarkerStep()
-    const { host: h } = createSession("plan")
+    const { host: h } = await createSession("plan")
     const result = await ensureOrMessage(h, {
       ...options,
       fix: async ({ exec }) => {

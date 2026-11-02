@@ -1,15 +1,30 @@
 import pc from "picocolors"
+import prettyBytes from "pretty-bytes"
 import { isErr, messageChain } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
-import { HOST_FILE_EXTENSION } from "#hosts/discover.ts"
 import type { HostReport } from "#hosts/run.ts"
 import { hasPendingChange } from "#hosts/run.ts"
-import { formatComparison, formatStateFacts } from "#report/facts.ts"
-import { STATUS_COLORS, STEP_SYMBOLS, styleNote, styleValue } from "#report/styles.ts"
-import { getMaxWidth, padToWidth } from "#report/utils.ts"
-import { getFailedState } from "#session/converge.ts"
-import type { StepRecord } from "#session/step-records.ts"
+import { formatDiff } from "#report/diff.ts"
+import type { Detail, NameKind, StepEntry } from "#report/entries.ts"
+import { toStepEntries } from "#report/entries.ts"
+import type { Style } from "#report/styles.ts"
+import {
+  STATUS_STYLES,
+  styleError,
+  styleGot,
+  styleGotExitCode,
+  styleGotString,
+  styleNote,
+  styleValue,
+  styleWant,
+  styleWantExitCode,
+  styleWantString,
+} from "#report/styles.ts"
+import type { ValueComparison } from "#session/steps/ensure.ts"
+import type { Bytes, FileNote } from "#session/steps/file/comparison.ts"
+import { isFileNote } from "#session/steps/file/comparison.ts"
+import { getMaxWidth, padToWidth, quoteNames } from "#utils.ts"
 
 const INDENT = "  "
 const DETAIL_INDENT = INDENT.repeat(3)
@@ -21,125 +36,190 @@ export interface FormatOptions {
   verbose?: boolean
 }
 
-interface StepLine {
-  symbol: string
-  name: string
-  /** Text after the name, like the steps a waiting step needs. */
-  note?: string
-  /** Lines under the step line, like an error, or how a value would change. */
-  detailLines?: string[]
+/** One printed `label: value` row, with a multi-line value's later lines under its first. */
+interface LabelRow {
+  label: string
+  valueLines: string[]
 }
 
-// Color the error red, but not the facts, because they describe the host's state, not the error itself.
-// Indent the facts under the error, so they read as its details.
-const toFailureLine = (name: string, error: Error, formatOptions: FormatOptions): StepLine => {
-  const errorLines = messageChain(error)
-    .split("\n")
-    .map((errorLine) => pc.red(errorLine))
-
-  const failedState = getFailedState(error)
-  const factLines = failedState
-    ? formatStateFacts(failedState, formatOptions).map((factLine) => `${INDENT}${factLine}`)
-    : []
-  return { symbol: STEP_SYMBOLS.failed, name, detailLines: [...errorLines, ...factLines] }
+interface ValueKindRules {
+  formatGot: (got: ValueComparison["got"]) => string
+  formatWant: (want: ValueComparison["want"]) => string
 }
 
-/**
- * Returns the line a block shows for a step. A step that was already right, or only looked, shows only with `verbose`.
- * A step that never finished shows nothing.
- */
-const toStepLines = (stepRecord: StepRecord, formatOptions: FormatOptions): StepLine[] => {
-  const { kind, details } = stepRecord
-  const { verbose = false } = formatOptions
-  // Style a read's or an inspect's name, because it's the command itself.
-  const name = kind === "read" || kind === "inspect" ? styleValue(stepRecord.name) : stepRecord.name
+const VALUE_KIND_RULES: Record<ValueComparison["kind"], ValueKindRules> = {
+  string: {
+    formatGot: (got) => styleGotString(String(got)),
+    formatWant: (want) => styleWantString(String(want)),
+  },
+  boolean: {
+    formatGot: (got) => styleGot(String(got)),
+    formatWant: (want) => styleWant(String(want)),
+  },
+  exit: {
+    formatGot: (got) => styleGotExitCode(`exit code ${String(got)}`),
+    formatWant: (want) => styleWantExitCode(want === true ? "exit code 0" : "a non-zero exit code"),
+  },
+}
 
-  if (isErr(details)) return [toFailureLine(name, details, formatOptions)]
-  if (details === undefined) return []
+// Spell out a size in bytes, because a lone `B` reads like "billion".
+const BYTE_UNIT = / B$/v
 
-  const isQuiet = details.status === "unchanged" || details.status === "observed"
-  if (isQuiet && !verbose) return []
+/** Formats a size like `15 bytes`, `1 byte`, or `2.05 kB`. */
+const formatSize = (size: Bytes): string => prettyBytes(size).replace(BYTE_UNIT, size === 1 ? " byte" : " bytes")
 
-  if (details.status === "waiting") {
-    const neededNames = details.needs.map((neededName) => `'${neededName}'`)
-    return [{ symbol: STEP_SYMBOLS.waiting, name, note: `needs ${neededNames.join(", ")}` }]
+// Give each note its words. The sizes follow every note, so they all read the same way.
+const FILE_NOTE_WORDS: Record<FileNote["kind"], string> = {
+  new: "new file",
+  hidden: "hidden",
+  binary: "binary",
+  large: "too large to diff",
+}
+
+// Style a value name, because it's a command, a path, or a target, and a script file in italics, because it isn't a step.
+const NAME_STYLES: Record<NameKind, Style> = {
+  step: (name) => name,
+  value: styleValue,
+  scriptFile: pc.italic,
+}
+
+/** Formats a note in place of a diff, like `binary, 12 kB -> 14 kB`, or `new file, 2 kB` when there's no file yet. */
+const formatFileNote = (fileNote: FileNote): string => {
+  const { kind, gotSize, wantSize } = fileNote
+  // Color the sizes like `got` and `want`, because they're the change, like an attribute's values.
+  const wantText = styleWant(formatSize(wantSize))
+  const sizes = gotSize === undefined ? wantText : `${styleGot(formatSize(gotSize))} -> ${wantText}`
+  // Italicize the words, because they describe the content rather than show a value.
+  return `${pc.italic(FILE_NOTE_WORDS[kind])}, ${sizes}`
+}
+
+/** Returns the `label: value` rows a detail prints as. A diff has none, because it prints as lines of its own. */
+const toLabelRows = (detail: Detail): LabelRow[] => {
+  if (detail.kind === "diff") return []
+
+  if (detail.kind === "valueComparison") {
+    const { comparison } = detail
+    const { formatGot, formatWant } = VALUE_KIND_RULES[comparison.kind]
+    return [
+      { label: "got", valueLines: [formatGot(comparison.got)] },
+      { label: "want", valueLines: [formatWant(comparison.want)] },
+    ]
   }
 
-  // Show how a string value would change, because the step's name doesn't say.
-  // A boolean or an exit code needs no detail, because the name already says what yes and no mean.
-  if (details.status === "changed" && details.comparison.kind === "string") {
-    const detailLines = formatComparison(details.comparison, formatOptions)
-    return [{ symbol: STEP_SYMBOLS.changed, name, detailLines }]
+  if (detail.kind === "fileComparison") {
+    const { content, attributes } = detail.comparison
+    // Show a note for content the output can't diff, because a text diff prints as its own detail.
+    const contentRows = isFileNote(content) ? [{ label: "content", valueLines: [formatFileNote(content)] }] : []
+    const attributeRows = attributes.map(({ name, got, want }) => ({
+      label: name,
+      valueLines: [`${styleGot(got)} -> ${styleWant(want)}`],
+    }))
+    return [...contentRows, ...attributeRows]
   }
 
-  return [{ symbol: STEP_SYMBOLS[details.status], name }]
+  // Style each line of stderr, so a continuation line starts in the value's color too.
+  return [{ label: "stderr", valueLines: detail.stderr.split("\n").map((stderrLine) => styleValue(stderrLine)) }]
 }
 
-const formatStepLines = (stepLines: StepLine[]) => {
-  // Line up every note in a block in one column, past the longest name that has one.
-  const noteColumn = getMaxWidth(stepLines.filter(({ note }) => note).map(({ name }) => name))
+/** Formats rows as `label: value` lines, with each value starting at `valueColumn`. */
+const formatLabelRows = (labelRows: LabelRow[], valueColumn: number): string[] => {
+  const continuationIndent = " ".repeat(valueColumn)
 
-  return stepLines.flatMap((stepLine) => {
-    const { symbol, name, note, detailLines = [] } = stepLine
-
-    // Dim the note, so the step's name stays the main thing on the line.
-    const nameText = note ? `${padToWidth(name, noteColumn)}${COLUMN_GAP}${pc.dim(note)}` : name
-    const headLine = `${INDENT}${symbol} ${nameText}`
-    const indentedDetailLines = detailLines.map((detailLine) => `${DETAIL_INDENT}${detailLine}`)
-
-    return [headLine, ...indentedDetailLines]
+  return labelRows.flatMap(({ label, valueLines }) => {
+    // Dim the label, so the value is what stands out.
+    const labelText = pc.dim(padToWidth(`${label}: `, valueColumn))
+    return valueLines.map((valueLine, index) => `${index === 0 ? labelText : continuationIndent}${valueLine}`)
   })
 }
 
 /**
- * Formats a host's block: its name, then a line for each step that changed, ran, waits, or failed. With `verbose`,
- * every step gets a line, and a host with no steps still gets a block, so it's clear the host ran.
+ * Formats the lines under an entry's head line: its error in red, if any, then its details. Lines up the values of
+ * every `label: value` row in the entry in one column. Indents the details under an error, so an error stands apart and
+ * its details read as belonging to it.
  */
-export const formatHostBlock = (hostReport: HostReport, formatOptions: FormatOptions = {}): string | undefined => {
-  const { name, stepRecords, failure } = hostReport
-  const { verbose = false } = formatOptions
+const formatEntryBody = (stepEntry: StepEntry, formatOptions: FormatOptions): string[] => {
+  const { error, details = [] } = stepEntry
+  const labels = details.flatMap((detail) => toLabelRows(detail)).map(({ label }) => `${label}: `)
+  const valueColumn = getMaxWidth(labels)
 
-  const stepLines = stepRecords.flatMap((stepRecord) => toStepLines(stepRecord, formatOptions))
+  const detailLines = details.flatMap((detail) =>
+    detail.kind === "diff"
+      ? formatDiff(detail.got, detail.want, formatOptions)
+      : formatLabelRows(toLabelRows(detail), valueColumn),
+  )
+  if (!error) return detailLines
 
-  // Show a failure that no step owns, like the script throwing, after the steps.
-  const isStepFailure = stepRecords.some(({ details }) => details === failure)
-  if (failure && !isStepFailure) {
-    // Name it after the host's file, in italics, because it comes from the script, not a step.
-    const scriptName = pc.italic(`${name}${HOST_FILE_EXTENSION}`)
-    stepLines.push(toFailureLine(scriptName, failure, formatOptions))
-  }
-
-  if (stepLines.length === 0 && verbose) return [pc.bold(name), `${INDENT}${styleNote("no steps")}`].join("\n")
-  if (stepLines.length === 0) return
-
-  return [pc.bold(name), ...formatStepLines(stepLines)].join("\n")
+  const errorLines = messageChain(error)
+    .split("\n")
+    .map((errorLine) => styleError(errorLine))
+  return [...errorLines, ...detailLines.map((detailLine) => `${INDENT}${detailLine}`)]
 }
 
-const formatHostStatus = (hostReport: HostReport) => {
-  const { stepRecords, failure } = hostReport
-  if (failure) return STATUS_COLORS.failed("failed")
+/** Formats a waiting step's step note, like `needs 'A', 'B'`. */
+const formatNeedsNote = (needs: string[]): string => `needs ${quoteNames(needs)}`
+
+const formatStepEntries = (stepEntries: StepEntry[], formatOptions: FormatOptions): string[] => {
+  // Line up every step note in a block in one column, past the longest name that has one.
+  const stepNoteColumn = getMaxWidth(stepEntries.filter(({ needs }) => needs).map(({ name }) => name.text))
+
+  return stepEntries.flatMap((stepEntry) => {
+    const { status, name, needs } = stepEntry
+    const { color, symbol } = STATUS_STYLES[status]
+    const stepNote = needs ? formatNeedsNote(needs) : undefined
+
+    const styledName = NAME_STYLES[name.kind](name.text)
+    const nameText = stepNote ? padToWidth(styledName, stepNoteColumn) : styledName
+    // Dim a step note, so the step's name stays the main thing on the line.
+    const stepNoteText = stepNote ? `${COLUMN_GAP}${pc.dim(stepNote)}` : ""
+    const headLine = `${INDENT}${color(symbol)} ${nameText}${stepNoteText}`
+    const bodyLines = formatEntryBody(stepEntry, formatOptions).map((bodyLine) => `${DETAIL_INDENT}${bodyLine}`)
+
+    return [headLine, ...bodyLines]
+  })
+}
+
+/**
+ * Formats a host's block: its name, then an entry for each step that changed, ran, waits, or failed. With `verbose`,
+ * every step gets an entry, and a host with no steps still gets a block, so it's clear the host ran.
+ */
+export const formatHostBlock = (hostReport: HostReport, formatOptions: FormatOptions = {}): string | undefined => {
+  const { name } = hostReport
+  const { verbose = false } = formatOptions
+  const stepEntries = toStepEntries(hostReport, formatOptions)
+
+  if (stepEntries.length === 0 && verbose) return [pc.bold(name), `${INDENT}${styleNote("no steps")}`].join("\n")
+  if (stepEntries.length === 0) return
+
+  return [pc.bold(name), ...formatStepEntries(stepEntries, formatOptions)].join("\n")
+}
+
+const formatHostStatus = (hostReport: HostReport): string => {
+  if (!hostReport.started || hostReport.failure) return STATUS_STYLES.failed.color("failed")
+
+  const { stepRecords } = hostReport
 
   const statuses = stepRecords.map(({ details }) => (isErr(details) ? undefined : details?.status))
   // Count `ran` steps too, so the count matches the `~` and `>` lines in the block.
   const changeCount = statuses.filter((status) => status === "changed" || status === "ran").length
   const waitingCount = statuses.filter((status) => status === "waiting").length
-  if (changeCount === 0 && waitingCount === 0) return STATUS_COLORS.unchanged("unchanged")
+  if (changeCount === 0 && waitingCount === 0) return STATUS_STYLES.unchanged.color("unchanged")
 
   // Color each count like its symbol, and leave the comma between them uncolored.
-  const counts = []
-  if (changeCount > 0) counts.push(STATUS_COLORS.changed(`${changeCount} ${changeCount === 1 ? "change" : "changes"}`))
-  if (waitingCount > 0) counts.push(STATUS_COLORS.waiting(`${waitingCount} waiting`))
+  const counts: string[] = []
+  if (changeCount > 0)
+    counts.push(STATUS_STYLES.changed.color(`${changeCount} ${changeCount === 1 ? "change" : "changes"}`))
+  if (waitingCount > 0) counts.push(STATUS_STYLES.waiting.color(`${waitingCount} waiting`))
   return counts.join(", ")
 }
 
 /** Formats one line per host, with the plan reminder first when anything would change. */
-export const formatSummary = (hostReports: HostReport[], mode: Mode) => {
+export const formatSummary = (hostReports: HostReport[], mode: Mode): string => {
   const nameWidth = getMaxWidth(hostReports.map(({ name }) => name))
   const hostLines = hostReports.map(
     (hostReport) => `${padToWidth(hostReport.name, nameWidth)}${COLUMN_GAP}${formatHostStatus(hostReport)}`,
   )
 
-  const hasChangesPending = mode === "plan" && hostReports.some(({ stepRecords }) => hasPendingChange(stepRecords))
+  const hasChangesPending = mode === "plan" && hostReports.some((hostReport) => hasPendingChange(hostReport))
   // Dim the reminder, so the host lines stay the main thing in the summary.
   return [...(hasChangesPending ? [pc.dim(PLAN_REMINDER), ""] : []), ...hostLines].join("\n")
 }

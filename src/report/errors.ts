@@ -30,6 +30,6 @@ const getErrorColors = (): { colors?: boolean } => {
 }
 
 /** Prints one of tsinfra's own errors to stderr, styled like the errors Optique prints while parsing. */
-export const printTsinfraError = (error: Error) => {
+export const printTsinfraError = (error: Error): void => {
   printError(toErrorMessage(error), { theme: ERROR_THEME, ...getErrorColors() })
 }

@@ -8,6 +8,7 @@ the remote shell.
 - [Commands travel on stdin](#commands-travel-on-stdin)
 - [Login shells](#login-shells)
 - [File writes](#file-writes)
+  - [How other tools write files](#how-other-tools-write-files)
 - [SSH and ControlMaster](#ssh-and-controlmaster)
 - [sudo](#sudo)
 
@@ -53,27 +54,81 @@ commands (the `file` check and write) are POSIX sh, so any `shell` must be POSIX
 
 ## File writes
 
-File content travels inside the write script, base64-encoded in a quoted heredoc:
+`file` writes with one script, run on the target by `sh -s`, or `sudo -n sh -s` with `sudo: true`. The content travels
+inside the script, base64-encoded in a quoted heredoc, and lands in a temp file next to the destination:
 
 ```sh
-umask 077
-mkdir -p '<dir>'
-base64 -d > '<tmp>' <<'TSINFRA_EOF'
+set -eu
+mkdir -p -- '/etc/app'                              # 1. parent directories, before the umask
+umask 077                                           # 2. new files start private
+tmp=$(mktemp '/etc/app/.app.conf.tsinfra.XXXXXX')   # 3. a unique temp file next to the destination
+trap 'rm -f -- "$tmp"' EXIT                         #    removed if anything below fails
+base64 -d > "$tmp" <<'__TSINFRA_EOF__'              # 4. the content, decoded into the temp file
 <content as base64, wrapped at 76 columns>
-TSINFRA_EOF
-chmod 644 '<tmp>' && mv -f '<tmp>' '<dest>'
+__TSINFRA_EOF__
+chown -- '1000:1000' "$tmp"                         # 5. owner and group first
+chmod -- 0644 "$tmp"                                #    then the mode
+chcon --reference='/etc/app/app.conf' "$tmp"        # 6. an existing file's SELinux label, when chcon exists
+mv -f -- "$tmp" '/etc/app/app.conf'                 # 7. one rename puts it in place
+trap - EXIT
+restorecon '/etc/app/app.conf'                      # 8. a new file's default SELinux label, when restorecon exists
 ```
 
-The shell parses the heredoc as part of the script, so the content arrives intact whatever the shell's buffering. The
-paths are quoted inside the script, which the shell on the target parses, so there is still no quoting for the login
-shell. No SFTP is involved, and secrets never appear in a command line. Base64 costs a third more bytes, which is cheap
-for files small enough to manage this way.
+Each step's place in the order matters:
+
+1. **`mkdir -p` runs before `umask 077`,** so a parent directory it creates gets the usual permissions. After the
+   umask it would come out `0700`, and a daemon that isn't root couldn't reach the file.
+2. **`umask 077`** means the temp file exists only as private, so a secret is never readable while it is written.
+3. **`mktemp` creates the temp file exclusively,** with a name nobody can predict. A fixed name could be a symlink
+   someone planted, and writing to it would follow the link. The temp file sits in the destination's directory, so the
+   final rename stays on one filesystem and is atomic. `mktemp` exists on GNU, BSD and macOS, and busybox.
+4. **The heredoc** is part of the script, so the shell parses it before running anything, and the content arrives
+   intact whatever the shell's buffering. The delimiter has underscores, which base64 never contains, so no line of the
+   content can end it early.
+5. **`chown` comes before `chmod`,** because `chown` clears setuid and setgid, even when root runs it. Chef and cdist
+   both have comments about this. Each runs only when the value changes. With no `owner`, `group`, or `mode` given, the
+   values come from the existing file, as the check found them, or the defaults for a new file.
+6. **SELinux.** `mv` keeps the temp file's label, so the replacement takes the old file's label first. Both SELinux
+   steps run only when the command exists, and skip quietly otherwise.
+7. **`mv -f`** is the only moment the destination changes, so it is always either the old file or the complete new one,
+   already with its owner and mode.
+8. **`restorecon`** gives a newly created file the label the policy expects.
+
+No step runs `fsync` before the rename. A crash at the wrong moment could leave the new file empty after a reboot.
+Ansible and Chef skip it too, and Puppet and Salt don't (see
+[Open questions](./open-questions.md#fsync-before-the-rename)).
 
 An earlier draft streamed the raw bytes after the script and let `cat` read them. dash and busybox sh both read ahead on
 stdin and swallow part of the content, so that only worked under bash and zsh. A 3 MB binary through the heredoc arrives
 intact under dash, bash, busybox sh, zsh, and macOS `/bin/sh`.
 
-With `sudo: true`, the starting command is `sudo -n sh -s`, so the whole write runs as root and ownership can be set.
+### How other tools write files
+
+Researched from the source of Ansible, pyinfra, Salt, Chef, Puppet, and cdist:
+
+| Tool    | Hash                 | Transfer    | Temp file                                | sudo                       |
+| ------- | -------------------- | ----------- | ---------------------------------------- | -------------------------- |
+| Ansible | sha1, in Python      | SFTP or scp | `~/.ansible/tmp`, then a rename          | upload, then root moves it |
+| pyinfra | sha1, md5, or sha256 | SFTP        | the destination, or `/tmp` then `cp`     | upload, then `sudo cp`     |
+| Salt    | sha256               | agent       | destination's directory, `fsync`, rename | runs as root               |
+| Chef    | sha256               | agent       | destination's directory, `mv`            | runs as root               |
+| Puppet  | sha256               | agent       | destination's directory, `fsync`, rename | runs as root               |
+| cdist   | `cksum` (CRC32)      | scp         | destination's directory, not atomic      | connects as root           |
+
+Ansible applies the mode and owner after its rename, and falls back to the destination's directory when the rename
+would cross filesystems. pyinfra writes straight to the destination without sudo, so its write isn't atomic there.
+Chef sets the owner before the mode. Puppet sets the mode before its rename. cdist sets the mode last.
+
+What tsinfra takes from them, and where it differs:
+
+- **The hash, the temp file in the destination's directory, and owner before mode** match the careful tools.
+- **Setting mode and owner on the temp file before the rename** follows Puppet. Ansible, Chef, Salt, and pyinfra apply
+  them after, which leaves a moment where the file is in place with the wrong permissions.
+- **The transfer differs.** Every agentless tool uses SFTP or scp. SFTP always writes as the SSH user, so for a
+  root-owned file they upload to a user-writable place like `/tmp`, then a root command copies or moves it into place.
+  That second hop is where pyinfra (a `cp`) and Chef (an `mv` across filesystems from `/tmp`) lose atomicity. SFTP's
+  real advantage is streaming large files. tsinfra's script runs as one user from start to finish, so there is no hop,
+  and the 10 MB limit keeps the heredoc to the files it suits (see [Steps](./steps.md#file)).
 
 ## SSH and ControlMaster
 
@@ -96,7 +151,8 @@ Every `ssh` call passes:
 - **BatchMode** makes ssh fail instead of prompting. Hosts run in parallel, and a password or host-key prompt from one
   of them would hang the run. The error says to run `ssh <host>` once by hand.
 
-The first command to a host opens the connection. An unreachable host fails at that point, with ssh's error.
+The first command to a host, the home read when its session starts, opens the connection. An unreachable host fails
+there, before its script runs, with ssh's error.
 
 ## sudo
 
@@ -110,4 +166,6 @@ connecting user unless the command itself says `sudo`, because the user writes t
 
 On `file`, `sudo: true` covers the whole operation: the check, the diff, and the write. tsinfra generates all three, so
 there is nowhere for the user to add `sudo`. A root-only file under `/etc` could not be hashed or read otherwise. This
-means `plan` also needs passwordless sudo on a host that manages such a file.
+means `plan` also needs passwordless sudo on a host that manages such a file. Content travels on stdin, inside the
+script, so it never shows up in `ps` or in the sudo log, unless sudoers sets `log_input`, which records stdin. See
+[Steps](./steps.md#sudo-and-permissions) for when to use it.

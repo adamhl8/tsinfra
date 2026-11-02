@@ -18,10 +18,11 @@ describe("formatDiff", () => {
     ])
   })
 
-  it("should show a long diff with --verbose", () => {
+  it("should show a long diff with --verbose, framed by a rule above and below", () => {
     const diffLines = formatDiff(numberedLines("a", 10), numberedLines("b", 10), { verbose: true })
+    const rule = "─".repeat(6)
 
-    expect(diffLines).toHaveLength(20)
-    expect(diffLines.slice(9, 11)).toStrictEqual(["   -a9", " 1 +b0"])
+    expect(diffLines).toHaveLength(22)
+    expect([diffLines[0], diffLines.slice(10, 12), diffLines.at(-1)]).toStrictEqual([rule, ["   -a9", " 1 +b0"], rule])
   })
 })

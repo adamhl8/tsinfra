@@ -49,7 +49,7 @@ describe("tsinfra", () => {
   it("should print a failed host's error in its block on stdout and exit 1", async () => {
     const { dir, run } = await createProject()
     await writeHosts(path.join(dir, "hosts"), ["a"])
-    const source = `import { host } from "tsinfra"\n\nexport default host("b.lan", async () => { throw new Error("boom") })\n`
+    const source = `import { host } from "tsinfra"\n\nexport default host("@local", async () => { throw new Error("boom") })\n`
     await Bun.write(path.join(dir, "hosts", "b.ts"), source)
 
     const { stdout, stderr, exitCode } = await run`tsinfra plan`.nothrow()
@@ -109,7 +109,7 @@ describe("tsinfra", () => {
 
     expect(exitCode).toBe(1)
     expect(stdout).toBe(
-      'a\n  ! Bad run\n      failed to run step \'Bad run\' -> after[0].kind must be "ensure" or "run" (was "read")\n\na   failed',
+      'a\n  ! Bad run\n      failed to run step \'Bad run\' -> after[0].kind must be "ensure", "file" or "run" (was "read")\n\na   failed',
     )
   })
 
@@ -141,7 +141,7 @@ describe("tsinfra", () => {
 
     expect(exitCode).toBe(1)
     expect(stdout).toBe(
-      'a\n  > Prune\n  ! Bad needs\n      failed to validate the needs of step \'Bad needs\' -> needs[0].kind must be "ensure" (was "run")\n\na   failed',
+      'a\n  > Prune\n  ! Bad needs\n      failed to validate the needs of step \'Bad needs\' -> needs[0].kind must be "ensure" or "file" (was "run")\n\na   failed',
     )
   })
 

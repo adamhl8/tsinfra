@@ -16,7 +16,7 @@ import { formatHostBlock, formatSummary } from "#report/format.ts"
 
 const CHANGES_PENDING_EXIT_CODE = 2
 
-/** Runs the hosts, prints each one's block and then the summary, and returns the exit code. */
+/** Runs the hosts, prints each one's host block and then the summary, and returns the exit code. */
 const runTsinfra = async (): Promise<Result<number>> => {
   const config = run(program, { help: "option", version: packageJson.version, showDefault: true, theme: ERROR_THEME })
 
@@ -33,15 +33,15 @@ const runTsinfra = async (): Promise<Result<number>> => {
     const hostReport = await runHost(hostEntry, config.mode)
     hostReports.push(hostReport)
 
-    const block = formatHostBlock(hostReport, { verbose: config.verbose })
-    if (block) console.log(`${block}\n`)
+    const hostBlock = formatHostBlock(hostReport, { verbose: config.verbose })
+    if (hostBlock) console.log(`${hostBlock}\n`)
   }
 
   console.log(formatSummary(hostReports, config.mode))
 
   // Exit 1 for a failed host even when another has changes pending, because the plan is incomplete.
   if (hostReports.some(({ failure }) => failure)) return 1
-  const hasChangesPending = hostReports.some(({ stepRecords }) => hasPendingChange(stepRecords))
+  const hasChangesPending = hostReports.some((hostReport) => hasPendingChange(hostReport))
   return config.mode === "plan" && hasChangesPending ? CHANGES_PENDING_EXIT_CODE : 0
 }
 

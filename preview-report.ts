@@ -1,7 +1,7 @@
 // Prints the report for one example host per way a block can look, to inspect the output by eye.
 // It runs `plan`, `apply`, and then `plan --verbose`.
 // Run it with `bun run report:preview`, and with `NO_COLOR=1` to see it without colors.
-import { mkdtemp, rm } from "node:fs/promises"
+import { chmod, mkdtemp, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import process from "node:process"
@@ -16,6 +16,7 @@ import type { HostReport } from "#hosts/run.ts"
 import { hasPendingChange, runHost } from "#hosts/run.ts"
 import { printTsinfraError } from "#report/errors.ts"
 import { formatHostBlock, formatSummary } from "#report/format.ts"
+import { PUBLIC_FILE_MODE } from "#session/steps/file/mode.ts"
 
 interface Scenario {
   name: string
@@ -81,6 +82,29 @@ const createScenarios = (dir: string): Scenario[] => {
           want: wantedConfig.join("\n"),
           fix: `${printLines(wantedConfig)} > '${marker("config")}'`,
         })
+      },
+    },
+    {
+      // A file's path in the value color, a diff with a `mode:` row after it, and a `content:` row for each case that
+      // can't show a diff, lined up with an `owner:` row. With `--verbose`, a file that's already right shows `=`.
+      // Only `plan` shows these, because `apply` can't write files yet.
+      name: "files",
+      target: "@local",
+      modes: ["plan"],
+      fn: async (h) => {
+        await Bun.write(marker("app.conf"), "port = 8080\nworkers = 4\nlog = info\n")
+        await chmod(marker("app.conf"), 0o600)
+        await Bun.write(marker("token"), "old-token\n")
+        await Bun.write(marker("logo.png"), "logo\n")
+        await Bun.write(marker("access.log"), "GET /\n".repeat(30_000))
+        await Bun.write(marker("motd"), "welcome\n")
+
+        await h.file(marker("app.conf"), { content: "port = 8080\nworkers = 8\nlog = info\n", mode: PUBLIC_FILE_MODE })
+        await h.file(marker("new.conf"), { content: "enabled = true\n" })
+        await h.file(marker("token"), { content: "new-token\n", secret: true, owner: "root" })
+        await h.file(marker("logo.png"), { content: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]) })
+        await h.file(marker("access.log"), { content: "" })
+        await h.file(marker("motd"), { content: "welcome\n" })
       },
     },
     {
@@ -218,6 +242,14 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
+      // A host whose session couldn't start, named after its target, because its script never ran.
+      name: "unreachable",
+      target: "web.lan",
+      fn: async (h) => {
+        await h.read("true")
+      },
+    },
+    {
       // A failure no step owns, named after the host's file, after a step that changed.
       name: "script-error",
       target: "@local",
@@ -231,7 +263,7 @@ const createScenarios = (dir: string): Scenario[] => {
 
 const getExitCode = (hostReports: HostReport[], mode: Mode) => {
   if (hostReports.some(({ failure }) => failure)) return 1
-  return mode === "plan" && hostReports.some(({ stepRecords }) => hasPendingChange(stepRecords)) ? 2 : 0
+  return mode === "plan" && hostReports.some((hostReport) => hasPendingChange(hostReport)) ? 2 : 0
 }
 
 /** Runs every scenario in `mode` and prints each block, the summary, and the exit code the CLI would return. */

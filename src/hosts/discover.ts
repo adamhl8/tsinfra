@@ -4,15 +4,14 @@ import { Glob } from "bun"
 import type { Result } from "ts-explicit-errors"
 import { attempt, err, isErr } from "ts-explicit-errors"
 
+import { quoteNames } from "#utils.ts"
+
 export const HOST_FILE_EXTENSION = ".ts"
 
 export interface HostFile {
   name: string
   file: string
 }
-
-/** Wraps each name in single quotes and joins them into a list. */
-const quoteNames = (names: Iterable<string>) => Array.from(names, (name) => `'${name}'`).join(", ")
 
 /** Lists the host files directly inside `dir`, narrowed to `names` when any are given. */
 export const discoverHosts = async (dir: string, names: readonly string[]): Promise<Result<HostFile[]>> => {

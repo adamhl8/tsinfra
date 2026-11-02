@@ -1,42 +1,49 @@
 import pc from "picocolors"
 
-import type { StepDetails } from "#session/step.ts"
+import type { StepStatus } from "#report/entries.ts"
 
-export type StepStatus = StepDetails["status"] | "failed"
+/** Styles a piece of text, like `styleGot` or a color from picocolors. */
+export type Style = (text: string) => string
 
 // Give each status one color, so a step's symbol and its count in the summary always match.
-export const STATUS_COLORS: Record<StepStatus, (text: string) => string> = {
-  unchanged: pc.green,
-  observed: pc.gray,
-  changed: pc.yellow,
-  ran: pc.yellow,
-  waiting: pc.blue,
-  failed: pc.red,
-}
-
-export const STEP_SYMBOLS: Record<StepStatus, string> = {
-  unchanged: STATUS_COLORS.unchanged("="),
-  observed: STATUS_COLORS.observed("·"),
-  changed: STATUS_COLORS.changed("~"),
-  ran: STATUS_COLORS.ran(">"),
-  waiting: STATUS_COLORS.waiting("?"),
-  failed: STATUS_COLORS.failed("!"),
+export const STATUS_STYLES: Record<StepStatus, { color: Style; symbol: string }> = {
+  unchanged: { color: pc.green, symbol: "=" },
+  observed: { color: pc.gray, symbol: "·" },
+  changed: { color: pc.yellow, symbol: "~" },
+  ran: { color: pc.yellow, symbol: ">" },
+  waiting: { color: pc.blue, symbol: "?" },
+  failed: { color: pc.red, symbol: "!" },
 }
 
 // Color text that came from the script or the host, so it stands apart from tsinfra's own words.
 // That covers a check's values and a read's command.
-export const styleValue = (text: string) => pc.cyan(text)
+export const styleValue = (text: string): string => pc.cyan(text)
+
+// Color an error bright red, so it stands apart from a `got` value, which is red too.
+export const styleError = (text: string): string => pc.redBright(text)
 
 // Color `got` red and `want` green, like a diff's `-` and `+` lines, because `got` is what's there and `want` replaces it.
-export const styleGot = (text: string) => pc.red(text)
-export const styleWant = (text: string) => pc.green(text)
+export const styleGot = (text: string): string => pc.red(text)
+export const styleWant = (text: string): string => pc.green(text)
 
-// Italicize an exit code too, because unlike a string it isn't quoted, and it should still read as a value.
-export const styleExitCode = (text: string, style: (text: string) => string) => pc.italic(style(text))
+/** Combines styles into one, applied left to right. */
+const pipeStyles =
+  (...styles: Style[]): Style =>
+  (text) => {
+    let styled = text
+    for (const style of styles) styled = style(styled)
+    return styled
+  }
 
 // Quote a string value, so an empty value or stray spaces still show without color.
-// Leave the quotes unstyled, so they don't read as part of the value.
-export const styleQuotedValue = (text: string, style: (text: string) => string) => `'${style(text)}'`
+// Color the text before quoting it, so the quotes stay uncolored and don't read as part of the value.
+const styleQuoted = (text: string): string => `'${text}'`
+export const styleGotString = pipeStyles(styleGot, styleQuoted)
+export const styleWantString = pipeStyles(styleWant, styleQuoted)
+
+// Italicize an exit code, because unlike a string it isn't quoted, and it should still read as a value.
+export const styleGotExitCode = pipeStyles(styleGot, pc.italic)
+export const styleWantExitCode = pipeStyles(styleWant, pc.italic)
 
 /** Styles tsinfra's own aside, like "no steps" or a note in place of a diff. */
-export const styleNote = (note: string) => pc.dim(pc.italic(note))
+export const styleNote = pipeStyles(pc.dim, pc.italic)

@@ -37,7 +37,7 @@ macbook
 `needs` takes step results, the values earlier steps returned. `ensure` and `file` accept it.
 
 ```ts
-needs?: StepResult<"ensure" | "file">[]
+needs?: StepResult<"file" | "ensure">[]
 ```
 
 - **In `plan`,** when any needed step would change or is waiting, the step reports `waiting` and its check does not

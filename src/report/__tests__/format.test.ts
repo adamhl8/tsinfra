@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test"
+import { chmod } from "node:fs/promises"
+import path from "node:path"
 
+import { makeTempDir } from "@adamhl8/configs/test"
 import { attempt } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
@@ -156,6 +159,17 @@ describe("formatHostBlock", () => {
     expect(await formatBlock(changeThenThrow, "plan")).toBe("a\n  ~ Pending\n  ! a.ts\n      boom")
   })
 
+  it("should name a host whose session couldn't start after its target, and count it as failed", async () => {
+    const hostReport = await runHost({ name: "a", ...host("a.lan", changeThenThrow) }, "plan")
+    const startError =
+      "failed to start the session -> failed to read the SSH user's home directory -> target 'a.lan' isn't supported yet (only '@local')"
+
+    expect([formatHostBlock(hostReport), formatSummary([hostReport], "plan")]).toStrictEqual([
+      `a\n  ! a.lan\n      ${startError}`,
+      "a   failed",
+    ])
+  })
+
   it("should show the error from steps run at once under the step that was running", async () => {
     expect(await formatBlock(runStepsAtOnce, "plan")).toBe(
       "a\n  ! First\n      'ensure' can't run while step 'First' is running",
@@ -177,34 +191,45 @@ describe("formatHostBlock", () => {
 
 /** Formats the block of an apply whose step still differs after its fix, as the lines under the error. */
 const formatFailedCheck = async <T extends string | boolean>(options: EnsureOptions<T>) => {
-  const block = await formatBlock(async (h) => {
+  const hostBlock = await formatBlock(async (h) => {
     await h.ensure("Make it", options)
   }, "apply")
-  return block?.split("\n").slice(3)
+  return hostBlock?.split("\n").slice(3)
 }
 
 describe("formatHostBlock for a step that would change a string", () => {
   it("should show got and want under the step for a single-line value", async () => {
-    const block = await formatBlock(async (h) => {
+    const hostBlock = await formatBlock(async (h) => {
       await h.ensure("Start Sonarr", { check: "echo inactive", want: "active", fix: "true" })
     }, "plan")
 
-    expect(block).toBe(["a", "  ~ Start Sonarr", "      got:  'inactive'", "      want: 'active'"].join("\n"))
+    expect(hostBlock).toBe(["a", "  ~ Start Sonarr", "      got:  'inactive'", "      want: 'active'"].join("\n"))
   })
 
   it("should show a diff under the step for a multi-line value", async () => {
-    const block = await formatBlock(async (h) => {
+    const hostBlock = await formatBlock(async (h) => {
       await h.ensure("Write the config", { check: String.raw`printf 'a\nb\nc\n'`, want: "a\nB\nc", fix: "true" })
     }, "plan")
 
-    expect(block).toBe(["a", "  ~ Write the config", "      1  a", "        -b", "      2 +B", "      3  c"].join("\n"))
+    expect(hostBlock).toBe(
+      [
+        "a",
+        "  ~ Write the config",
+        `      ${"─".repeat(4)}`,
+        "      1  a",
+        "        -b",
+        "      2 +B",
+        "      3  c",
+        `      ${"─".repeat(4)}`,
+      ].join("\n"),
+    )
   })
 
   it("should number lines by want, leave removed lines unnumbered, and rule off each hunk", async () => {
     const lines = Array.from({ length: 20 }, (_, index) => `line ${index + 1}`)
     const wanted = [...lines.slice(0, -1), "line twenty"]
     wanted[0] = "line one"
-    const block = await formatBlock(async (h) => {
+    const hostBlock = await formatBlock(async (h) => {
       await h.ensure("Write the config", {
         check: `printf '%s\\n' ${lines.map((line) => `'${line}'`).join(" ")}`,
         want: wanted.join("\n"),
@@ -212,10 +237,11 @@ describe("formatHostBlock for a step that would change a string", () => {
       })
     }, "plan")
 
-    expect(block).toBe(
+    expect(hostBlock).toBe(
       [
         "a",
         "  ~ Write the config",
+        `      ${"─".repeat(15)}`,
         "         -line 1",
         "       1 +line one",
         "       2  line 2",
@@ -223,6 +249,58 @@ describe("formatHostBlock for a step that would change a string", () => {
         "      19  line 19",
         "         -line 20",
         "      20 +line twenty",
+        `      ${"─".repeat(15)}`,
+      ].join("\n"),
+    )
+  })
+})
+
+describe("formatHostBlock for a file step", () => {
+  it("should show a file's diff and each attribute that changes, old value to new", async () => {
+    const filePath = path.join(await makeTempDir("format-"), "app.conf")
+    await Bun.write(filePath, "port = 8080\nworkers = 4\n")
+    await chmod(filePath, 0o600)
+    const hostBlock = await formatBlock(async (h) => {
+      await h.file(filePath, { content: "port = 8080\nworkers = 8\n", mode: "644" })
+    }, "plan")
+
+    expect(hostBlock).toBe(
+      [
+        "a",
+        `  ~ ${filePath}`,
+        `      ${"─".repeat(14)}`,
+        "      1  port = 8080",
+        "        -workers = 4",
+        "      2 +workers = 8",
+        `      ${"─".repeat(14)}`,
+        "      mode: rw------- (600) -> rw-r--r-- (644)",
+      ].join("\n"),
+    )
+  })
+
+  it("should show a note for a new file", async () => {
+    const filePath = path.join(await makeTempDir("format-"), "app.conf")
+    const hostBlock = await formatBlock(async (h) => {
+      await h.file(filePath, { content: "a".repeat(2048) })
+    }, "plan")
+
+    expect(hostBlock).toBe(["a", `  ~ ${filePath}`, "      content: new file, 2.05 kB"].join("\n"))
+  })
+
+  it("should spell out a size under 1 kB in bytes", async () => {
+    const filePath = path.join(await makeTempDir("format-"), "app.conf")
+    const hostBlock = await formatBlock(async (h) => {
+      await h.file(filePath, { content: "a" })
+      await h.file(`${filePath}.new`, { content: "abc" })
+    }, "plan")
+
+    expect(hostBlock).toBe(
+      [
+        "a",
+        `  ~ ${filePath}`,
+        "      content: new file, 1 byte",
+        `  ~ ${filePath}.new`,
+        "      content: new file, 3 bytes",
       ].join("\n"),
     )
   })
@@ -281,7 +359,14 @@ describe("formatHostBlock for a host state that still differs after the fix", ()
     const check = String.raw`printf 'a\nb\n'; echo warn >&2`
     const lines = await formatFailedCheck({ check, want: "a\nc", fix: "true" })
 
-    expect(lines).toStrictEqual(["        1  a", "          -b", "        2 +c", "        stderr: warn"])
+    expect(lines).toStrictEqual([
+      `        ${"─".repeat(4)}`,
+      "        1  a",
+      "          -b",
+      "        2 +c",
+      `        ${"─".repeat(4)}`,
+      "        stderr: warn",
+    ])
   })
 })
 
