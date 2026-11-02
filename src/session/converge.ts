@@ -2,14 +2,14 @@ import type { Result } from "ts-explicit-errors"
 import { err, getContext, isErr } from "ts-explicit-errors"
 
 import type { Comparison, StepCall, StepDetails } from "#session/step.ts"
-import type { CommandResult } from "#transport/transport.ts"
+import type { CommandOutput } from "#transport/transport.ts"
 
 /** The part of the host's state one step manages: whether it's as wanted, and the values the step compared. */
 export interface HostState {
   inSync: boolean
   comparison: Comparison
   /** The check command's output. A check function can run several commands, so it has none. */
-  commandResult?: CommandResult
+  commandOutput?: CommandOutput
 }
 
 /** What a step gives `converge`: how to read the host's state, how to fix it, and whether to read it again after. */

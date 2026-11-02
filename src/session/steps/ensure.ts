@@ -9,7 +9,7 @@ import { runChange } from "#session/step-functions/change.ts"
 import type { Check, CheckCompare } from "#session/step-functions/check.ts"
 import { runCheck } from "#session/step-functions/check.ts"
 import type { StepCall, StepDetails } from "#session/step.ts"
-import type { CommandResult } from "#transport/transport.ts"
+import type { CommandOutput } from "#transport/transport.ts"
 
 /** `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string. */
 export interface EnsureOptions<T extends string | boolean> {
@@ -49,20 +49,20 @@ const compareFnResult = (value: unknown, want: string | boolean): Result<HostSta
 }
 
 /** Compares a check command's stdout, or its exit code, to `want`. */
-const compareCmdResult = (commandResult: CommandResult, want: string | boolean): Result<HostState> => {
-  const { stdout, exitCode } = commandResult
+const compareCmdResult = (commandOutput: CommandOutput, want: string | boolean): Result<HostState> => {
+  const { stdout, exitCode } = commandOutput
 
   if (typeof want === "string") {
     const hostState = compareStrings(stdout, want)
 
     // Fail a broken check whose output happens to match, so it can't look converged.
-    if (exitCode !== 0 && hostState.inSync) return createCommandExitError(commandResult)
+    if (exitCode !== 0 && hostState.inSync) return createCommandExitError(commandOutput)
 
-    return { ...hostState, commandResult }
+    return { ...hostState, commandOutput }
   }
 
   if (typeof want === "boolean")
-    return { inSync: (exitCode === 0) === want, comparison: { kind: "exit", got: exitCode, want }, commandResult }
+    return { inSync: (exitCode === 0) === want, comparison: { kind: "exit", got: exitCode, want }, commandOutput }
 
   return err(`want must be a string or a boolean, but is a ${typeof want}`, undefined)
 }
@@ -75,7 +75,7 @@ export const handleEnsure = async <T extends string | boolean>(
 
   const checkCompare: CheckCompare = {
     fnResult: (value) => compareFnResult(value, want),
-    cmdResult: (commandResult) => compareCmdResult(commandResult, want),
+    cmdResult: (commandOutput) => compareCmdResult(commandOutput, want),
   }
 
   const stepDetails = await converge(stepCall, {

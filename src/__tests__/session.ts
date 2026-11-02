@@ -25,6 +25,12 @@ export const readOrMessage = async (h: Host, cmd: string) => {
   return isErr(output) ? messageChain(output) : output
 }
 
+/** Inspects `cmd` and returns its result, or the thrown error's message chain. */
+export const inspectOrMessage = async (h: Host, cmd: string) => {
+  const result = await attempt(async () => h.inspect(cmd))
+  return isErr(result) ? messageChain(result) : result
+}
+
 /** Runs `h.ensure` and returns its result, or the thrown error's message chain. */
 export const ensureOrMessage = async <T extends string | boolean>(h: Host, options: EnsureOptions<T>) => {
   const result = await attempt(async () => h.ensure("Make marker", options))

@@ -46,12 +46,12 @@ const describeComparison = (comparison: Comparison) => {
  * multi-line fact keeps the same indent.
  */
 const formatStateFacts = (hostState: HostState) => {
-  const { comparison, commandResult } = hostState
+  const { comparison, commandOutput } = hostState
   const { got, want } = describeComparison(comparison)
 
   const facts = [`got: ${got}`, `want: ${want}`]
   // Leave out empty stderr, so a quiet command shows only `got` and `want`.
-  const stderr = commandResult?.stderr.trim()
+  const stderr = commandOutput?.stderr.trim()
   if (stderr) facts.push(`stderr: ${stderr}`)
 
   const factLines = facts.flatMap((fact) => fact.split("\n"))

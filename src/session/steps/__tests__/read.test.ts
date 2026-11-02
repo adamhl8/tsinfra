@@ -3,10 +3,10 @@ import { describe, expect, it } from "bun:test"
 import { createSession, getFailureMessage, readOrMessage } from "#__tests__/session.ts"
 
 describe("h.read", () => {
-  it("should return stdout without trailing newlines", async () => {
+  it("should return stdout trimmed", async () => {
     const hostSession = createSession()
 
-    expect(await hostSession.host.read(String.raw`printf 'a\nb\n\n'`)).toBe("a\nb")
+    expect(await hostSession.host.read(String.raw`printf '  a\nb  \n\n'`)).toBe("a\nb")
   })
 
   it("should throw and record a failure with the exit code and stderr when the command fails", async () => {

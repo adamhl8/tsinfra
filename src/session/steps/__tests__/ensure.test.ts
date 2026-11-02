@@ -234,6 +234,36 @@ describe("h.ensure with verify: false", () => {
   })
 })
 
+describe("h.ensure with the inspect tool", () => {
+  it("should treat a missing file as a needed fix in a check function", async () => {
+    const { marker } = await createMarkerStep()
+    const { host: h } = createSession()
+    const result = await ensureOrMessage(h, {
+      check: async ({ inspect }) => (await inspect(`cat '${marker}'`)).exitCode === 0,
+      want: true,
+      fix: `touch '${marker}'`,
+    })
+
+    expect(result).toMatchObject({ changed: true })
+    expect(await Bun.file(marker).exists()).toBe(true)
+  })
+
+  it("should give a fix function the exit code of a command", async () => {
+    const { marker, options } = await createMarkerStep()
+    const { host: h } = createSession()
+    const result = await ensureOrMessage(h, {
+      ...options,
+      fix: async ({ exec, inspect }) => {
+        const { exitCode } = await inspect("exit 4")
+        await exec(`printf '%s' '${exitCode}' > '${marker}'`)
+      },
+    })
+
+    expect(result).toMatchObject({ changed: true })
+    expect(await Bun.file(marker).text()).toBe("4")
+  })
+})
+
 describe("h.ensure with a fix function", () => {
   it("should run the commands in order and return changed", async () => {
     const file = path.join(await makeTempDir("step-"), "lines")
@@ -251,14 +281,14 @@ describe("h.ensure with a fix function", () => {
     expect(await Bun.file(file).text()).toBe("a\nb\n")
   })
 
-  it("should return each command's stdout without trailing newlines", async () => {
+  it("should return each command's stdout trimmed", async () => {
     const file = path.join(await makeTempDir("step-"), "value")
     const { host: h } = createSession()
     const result = await ensureOrMessage(h, {
       check: `test -f '${file}'`,
       want: true,
       fix: async ({ exec }) => {
-        const value = await exec(String.raw`printf 'v\n\n'`)
+        const value = await exec(String.raw`printf '  v\n\n'`)
         await exec(`printf '%s' '${value}' > '${file}'`)
       },
     })

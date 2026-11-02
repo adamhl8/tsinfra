@@ -53,6 +53,19 @@ describe("createHostSession", () => {
 })
 
 describe("h inside a step", () => {
+  it("should fail the host when a check function calls h.inspect", async () => {
+    const { host: h } = createSession()
+    const result = await ensureOrMessage(h, {
+      check: async () => (await h.inspect("true")).exitCode === 0,
+      want: true,
+      fix: "true",
+    })
+
+    expect(result).toBe(
+      "failed to read the host's state for step 'Make marker' -> 'inspect' can't run while step 'Make marker' is running",
+    )
+  })
+
   it("should fail the host when a check function calls h.read", async () => {
     const hostSession = createSession()
     const { host: h } = hostSession
@@ -196,6 +209,16 @@ describe("step records", () => {
         details: { status: "changed", changed: true, comparison: { kind: "string", got: "old", want: "new" } },
         commands: ["echo old"],
       },
+    ])
+  })
+
+  it("should record an inspect as unchanged, even when its command exits non-zero", async () => {
+    const cmd = "exit 3"
+    const hostSession = createSession()
+    await hostSession.host.inspect(cmd)
+
+    expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
+      { kind: "inspect", name: cmd, details: { status: "unchanged", changed: false }, commands: [cmd] },
     ])
   })
 

@@ -3,12 +3,12 @@ import { err } from "ts-explicit-errors"
 
 import type { StepKind } from "#session/session.ts"
 import type { StepDetails } from "#session/step.ts"
-import type { CommandResult, Transport } from "#transport/transport.ts"
+import type { CommandOutput, Transport } from "#transport/transport.ts"
 
 interface CommandRecord {
   cmd: string
   /** Unset until the command finishes. */
-  output?: Result<CommandResult>
+  output?: Result<CommandOutput>
 }
 
 export interface StepRecord {

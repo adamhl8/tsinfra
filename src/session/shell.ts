@@ -1,16 +1,13 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { CommandResult, Transport } from "#transport/transport.ts"
+import type { CommandOutput, Transport } from "#transport/transport.ts"
 
 const TRAILING_NEWLINES = /\n+$/v
 
 export interface Shell {
-  /**
-   * Runs `cmd` and returns its output, with stdout's trailing newlines stripped. Only failing to run at all is an
-   * error.
-   */
-  inspect: (cmd: string) => Promise<Result<CommandResult>>
+  /** Runs `cmd` and returns its output untouched. Only failing to run at all is an error. */
+  inspect: (cmd: string) => Promise<Result<CommandOutput>>
   /** Runs `cmd` and returns its stdout. Failing to run and a non-zero exit are both errors. */
   run: (cmd: string) => Promise<Result<string>>
 }
@@ -18,8 +15,8 @@ export interface Shell {
 export const stripTrailingNewlines = (text: string) => text.replace(TRAILING_NEWLINES, "")
 
 /** Describes a non-zero exit as an error, with the exit code and stderr in its message. */
-export const createCommandExitError = (commandResult: CommandResult) => {
-  const { exitCode, stderr } = commandResult
+export const createCommandExitError = (commandOutput: CommandOutput) => {
+  const { exitCode, stderr } = commandOutput
   let trimmedStderr = stderr.trim()
   trimmedStderr &&= `: ${trimmedStderr}`
   return err(`exited with code ${exitCode}${trimmedStderr}`, undefined)
@@ -27,12 +24,7 @@ export const createCommandExitError = (commandResult: CommandResult) => {
 
 /** Binds `transport` into the two ways the session runs commands. */
 export const createShell = (transport: Transport): Shell => {
-  const inspect = async (cmd: string): Promise<Result<CommandResult>> => {
-    const output = await transport(cmd)
-    if (isErr(output)) return output
-
-    return { ...output, stdout: stripTrailingNewlines(output.stdout) }
-  }
+  const inspect = transport
 
   const run = async (cmd: string): Promise<Result<string>> => {
     const output = await inspect(cmd)

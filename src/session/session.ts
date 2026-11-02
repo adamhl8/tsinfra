@@ -12,6 +12,8 @@ import { createStepRecorder } from "#session/step-records.ts"
 import type { StepCall, StepDetails, StepResult } from "#session/step.ts"
 import type { EnsureOptions } from "#session/steps/ensure.ts"
 import { handleEnsure } from "#session/steps/ensure.ts"
+import type { CommandResult, Inspect } from "#session/steps/inspect.ts"
+import { handleInspect } from "#session/steps/inspect.ts"
 import type { Read } from "#session/steps/read.ts"
 import { handleRead } from "#session/steps/read.ts"
 import type { RunOptions } from "#session/steps/run.ts"
@@ -22,13 +24,20 @@ import { getTransport } from "#transport/transport.ts"
 export interface Host {
   readonly name: string
   /**
-   * Runs `cmd` on the host and returns its stdout without trailing newlines. It must not change anything, because it
-   * also runs during `plan`.
+   * Runs `cmd` on the host and returns its stdout, trimmed. It must not change anything, because it also runs during
+   * `plan`.
    *
-   * A non-zero exit fails the host and throws. Catching it does not recover the host. Append `|| true` to `cmd` when a
-   * non-zero exit is a legitimate answer.
+   * A non-zero exit fails the host and throws. Catching it does not recover the host. Use `inspect` when a non-zero
+   * exit is a legitimate answer.
    */
   read: Read
+  /**
+   * Runs `cmd` on the host and returns its stdout and stderr, both trimmed, and its exit code. It must not change
+   * anything, because it also runs during `plan`.
+   *
+   * A non-zero exit is an answer, not a failure. Only a command that can't run at all fails the host and throws.
+   */
+  inspect: Inspect
   /**
    * Compares what `check` gives to `want`, and in `apply` runs `fix` when they differ, then checks again. In `plan` the
    * fix never runs.
@@ -100,9 +109,10 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
   // Record each command under the running step, because every command passes through the transport.
   const shell = createShell(recordCommands(getTransport(target)))
   const readTool: Read = async (cmd) => callOrFail(async () => handleRead(shell, cmd))
+  const inspectTool: Inspect = async (cmd) => callOrFail(async () => handleInspect(shell, cmd))
   const execTool: Exec = async (cmd) => callOrFail(async () => handleExec(shell, cmd))
-  const checkTools: CheckTools = { read: readTool }
-  const changeTools: ChangeTools = { exec: execTool }
+  const checkTools: CheckTools = { read: readTool, inspect: inspectTool }
+  const changeTools: ChangeTools = { exec: execTool, inspect: inspectTool }
 
   const callStep = async (
     kind: StepKind,
@@ -135,13 +145,28 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
     return stdout
   }
 
+  const inspect: Host["inspect"] = async (cmd) => {
+    // Keep the result here, because a step reports only its details.
+    // Start from an empty result, which is never returned, because `callStep` throws when the inspect fails.
+    let commandResult: CommandResult = { stdout: "", stderr: "", exitCode: 0 }
+    // Pass `cmd` as the step name, because `h.inspect` takes no name.
+    await callStep("inspect", cmd, async () => {
+      const result = await handleInspect(shell, cmd)
+      if (isErr(result)) return result
+
+      commandResult = result
+      return { status: "unchanged", changed: false }
+    })
+    return commandResult
+  }
+
   const ensure: Host["ensure"] = async (stepName, options) =>
     callStep("ensure", stepName, async (stepCall) => handleEnsure(stepCall, options))
 
   const run: Host["run"] = async (stepName, cmd, options) =>
     callStep("run", stepName, async (stepCall) => handleRun(stepCall, cmd, options))
 
-  const host: Host = { name, read, ensure, run }
+  const host: Host = { name, read, inspect, ensure, run }
 
   return { host, stepRecords, getFailure: () => failure }
 }

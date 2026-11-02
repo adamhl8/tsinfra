@@ -49,8 +49,8 @@ type CommandOptions = {
 }
 
 type CommandResult = {
-  stdout: string // trailing newlines stripped
-  stderr: string
+  stdout: string // trimmed
+  stderr: string // trimmed
   exitCode: number
 }
 
@@ -123,6 +123,10 @@ Two shapes follow from that:
 `read`, `inspect`, and `exec` are the tools. Each runs one command and takes `CommandOptions`. `read` and `exec` return
 stdout and fail on a non-zero exit. `inspect` never fails on a non-zero exit, for a command whose exit code or stderr is
 the answer.
+
+Every output a script gets back is trimmed of leading and trailing whitespace, because that is what a script usually
+compares to. That covers `read`, `exec`, and both streams from `inspect`, on `h` and as tools. tsinfra's own comparison
+for a string `want` strips only trailing newlines, so stray spaces in the real value still count as drift.
 
 `read` and `exec` behave the same, and the name says which mode the function runs in. A check function also runs in
 `plan`, so it gets `read` and `inspect`, the same pair `h` has. A fix or run function only runs in `apply`, so it gets
@@ -285,9 +289,9 @@ await h.ensure("Install Caddy", {
 })
 ```
 
-Each `exec` call runs one command and returns its stdout, with trailing newlines stripped. A non-zero exit throws, which
-stops the fix there, and the error names the command. That replaces `set -e` or `&&` chains, and it puts TypeScript
-between the commands. A later command can use an earlier one's output:
+Each `exec` call runs one command and returns its stdout, trimmed. A non-zero exit throws, which stops the fix there,
+and the error names the command. That replaces `set -e` or `&&` chains, and it puts TypeScript between the commands. A
+later command can use an earlier one's output:
 
 ```ts
 fix: async ({ exec }) => {
@@ -521,9 +525,8 @@ because a function can run any code.
 
 ## `read`
 
-Runs a command on the target in both modes and returns its output, with trailing newlines stripped. Each `h.read` is a
-step of its own. It has no name, so errors and verbose output show its command. It is for observations a script
-branches on:
+Runs a command on the target in both modes and returns its output, trimmed. Each `h.read` is a step of its own. It has
+no name, so errors and verbose output show its command. It is for observations a script branches on:
 
 ```ts
 const arch = await h.read("uname -m")

@@ -1,6 +1,7 @@
 export type { HostDefinition, HostFunction } from "#hosts/host.ts"
 export { host } from "#hosts/host.ts"
 export type { EnsureOptions } from "#session/steps/ensure.ts"
+export type { CommandResult, Inspect } from "#session/steps/inspect.ts"
 export type { Read } from "#session/steps/read.ts"
 export type { Change } from "#session/step-functions/change.ts"
 export type { Check } from "#session/step-functions/check.ts"

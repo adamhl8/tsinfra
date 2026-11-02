@@ -5,14 +5,17 @@ import { runLocal } from "#transport/local.ts"
 
 const LOCAL_TARGET = "@local"
 
-/** What a command produced on the target. Only failing to run at all is an error, so a non-zero exit is still a result. */
-export interface CommandResult {
+/**
+ * What a command produced on the target, exactly as it printed it. Only failing to run at all is an error, so a
+ * non-zero exit is still output.
+ */
+export interface CommandOutput {
   stdout: string
   stderr: string
   exitCode: number
 }
 
-export type Transport = (script: string) => Promise<Result<CommandResult>>
+export type Transport = (script: string) => Promise<Result<CommandOutput>>
 
 /** Returns how to run scripts on `target`. An unsupported target fails at its first command, like an unreachable host. */
 export const getTransport = (target: string): Transport => {
