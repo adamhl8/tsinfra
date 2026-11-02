@@ -1,4 +1,5 @@
-// Prints the report for a set of example hosts in `plan` and then `apply`, to inspect the output by eye.
+// Prints the report for one example host per way a block can look, to inspect the output by eye.
+// It runs `plan`, `apply`, and then `plan --verbose`.
 // Run it with `bun run report:preview`, and with `NO_COLOR=1` to see it without colors.
 import { mkdtemp, rm } from "node:fs/promises"
 import os from "node:os"
@@ -6,7 +7,7 @@ import path from "node:path"
 import process from "node:process"
 
 import pc from "picocolors"
-import { attempt, err } from "ts-explicit-errors"
+import { err } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import type { HostFunction } from "#hosts/host.ts"
@@ -24,107 +25,118 @@ interface Scenario {
   fn: HostFunction
 }
 
-/** Returns the example hosts, with markers in `dir` so `apply` can make and see real changes. */
+/**
+ * Returns one example host for each way a block can look, with markers in `dir` so `apply` can make and see real
+ * changes. Cases that only differ in their words, like two errors that both print as red lines, share one example.
+ */
 const createScenarios = (dir: string): Scenario[] => {
   const marker = (file: string) => path.join(dir, file)
+  const touchStep = (file: string) => ({
+    check: `test -f '${marker(file)}'`,
+    want: true,
+    fix: `touch '${marker(file)}'`,
+  })
 
   return [
     {
+      // `~` lines, and a plural change count.
       name: "changes",
       target: "@local",
       fn: async (h) => {
-        await h.ensure("Install Caddy", {
-          check: `test -f '${marker("caddy")}'`,
-          want: true,
-          fix: `touch '${marker("caddy")}'`,
-        })
-        await h.ensure("Set the hostname", {
-          check: `cat '${marker("hostname")}' 2>/dev/null || true`,
-          want: "web1",
-          fix: `printf web1 > '${marker("hostname")}'`,
-        })
+        await h.ensure("Install Caddy", touchStep("caddy"))
+        await h.ensure("Set the hostname", touchStep("hostname"))
       },
     },
     {
-      name: "one-change",
-      target: "@local",
-      fn: async (h) => {
-        await h.ensure("Create the data dir", {
-          check: `test -d '${marker("data")}'`,
-          want: true,
-          fix: `mkdir '${marker("data")}'`,
-        })
-      },
-    },
-    {
+      // `?` lines with notes in one column, a note that names two steps, and a waiting count.
       name: "waiting",
       target: "@local",
       fn: async (h) => {
-        const brew = await h.ensure("Install brew packages", {
-          check: `test -f '${marker("brew")}'`,
-          want: true,
-          fix: `touch '${marker("brew")}'`,
-        })
-        const fish = await h.ensure("Install fish", {
-          needs: [brew],
-          check: `test -f '${marker("fish")}'`,
-          want: true,
-          fix: `touch '${marker("fish")}'`,
-        })
-        await h.ensure("Install fish plugins", {
-          needs: [fish],
-          check: `test -f '${marker("plugins")}'`,
-          want: true,
-          fix: `touch '${marker("plugins")}'`,
-        })
+        const brew = await h.ensure("Install brew packages", touchStep("brew"))
+        const fish = await h.ensure("Install fish", { needs: [brew], ...touchStep("fish") })
+        await h.ensure("Install editor plugins", { needs: [brew, fish], ...touchStep("editor") })
       },
     },
     {
+      // `>` lines, and with `--verbose`, `=` for an already-right step and an untriggered run, and `·` for a read.
       name: "runs",
       target: "@local",
       fn: async (h) => {
-        const unit = await h.ensure("Write the sonarr unit", {
-          check: `test -f '${marker("unit")}'`,
-          want: true,
-          fix: `touch '${marker("unit")}'`,
-        })
+        const unit = await h.ensure("Write the sonarr unit", touchStep("unit"))
         await h.run("Reload systemd", "true", { after: [unit] })
         await h.run("Prune docker images", "true", { after: "always" })
         const caddyfile = await h.ensure("Write the Caddyfile", { check: "true", want: true, fix: "true" })
         await h.run("Restart caddy", "true", { after: [caddyfile] })
+        await h.read("uname -m")
       },
     },
     {
-      name: "all-unchanged",
+      // No block, and an `unchanged` summary line, except with `--verbose`.
+      name: "unchanged",
       target: "@local",
       fn: async (h) => {
-        const git = await h.ensure("Install git", { check: "true", want: true, fix: "true" })
-        await h.read("uname -m")
-        await h.run("Reload systemd", "true", { after: [git] })
+        await h.ensure("Install git", { check: "true", want: true, fix: "true" })
       },
     },
     {
-      name: "fix-fails",
+      // A block with "no steps", only with `--verbose`.
+      name: "no-steps",
+      target: "@local",
+      fn: async () => {
+        // A script with no steps.
+      },
+    },
+    {
+      // A quoted string value, and a one-line stderr.
+      name: "string-value",
       target: "@local",
       modes: ["apply"],
       fn: async (h) => {
-        await h.ensure("Start sonarr", {
-          check: "false",
-          want: true,
-          fix: "echo 'Unit sonarr.service not found.' >&2; exit 5",
+        await h.ensure("Start Sonarr", {
+          check: "echo inactive; echo 'Unit sonarr.service could not be found.' >&2; exit 3",
+          want: "active",
+          fix: "true",
         })
       },
     },
     {
-      name: "still-differs",
+      // A multi-line string value and a multi-line stderr, each lined up under its first line.
+      name: "multi-line-value",
       target: "@local",
       modes: ["apply"],
       fn: async (h) => {
-        await h.ensure("Set the timezone", { check: "echo UTC", want: "America/New_York", fix: "true" })
+        await h.ensure("Set the allowed hosts", {
+          check: String.raw`printf 'sonarr.lan\nradarr.lan\n'; printf 'warning: radarr.lan is deprecated\nsee the docs\n' >&2`,
+          want: "sonarr.lan\nprowlarr.lan",
+          fix: "true",
+        })
       },
     },
     {
-      name: "check-throws",
+      // An exit code, which is italic because it isn't quoted.
+      name: "exit-code-value",
+      target: "@local",
+      modes: ["apply"],
+      fn: async (h) => {
+        await h.ensure("Remove the old user", { check: "true", want: false, fix: "true" })
+      },
+    },
+    {
+      // A boolean, which is neither quoted nor italic.
+      name: "boolean-value",
+      target: "@local",
+      modes: ["apply"],
+      fn: async (h) => {
+        await h.ensure("Enable the app", {
+          check: async ({ read }) => (await read("echo false")) === "true",
+          want: true,
+          fix: "true",
+        })
+      },
+    },
+    {
+      // An error with no facts under it, which is how every failure without a comparison looks.
+      name: "error",
       target: "@local",
       fn: async (h) => {
         await h.ensure("Enable the app", {
@@ -137,83 +149,41 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      name: "read-fails",
+      // A failed read, whose `!` line is named by its command.
+      name: "command-error",
       target: "@local",
       fn: async (h) => {
         await h.read("cat /etc/tsinfra-preview.conf")
       },
     },
     {
-      name: "script-throws",
+      // A failure no step owns, named after the host's file, after a step that changed.
+      name: "script-error",
       target: "@local",
       fn: async (h) => {
-        await h.ensure("Install Caddy", {
-          check: `test -f '${marker("throws")}'`,
-          want: true,
-          fix: `touch '${marker("throws")}'`,
-        })
+        await h.ensure("Install Caddy", touchStep("throws"))
         throw new Error("the API token is missing")
-      },
-    },
-    {
-      name: "steps-at-once",
-      target: "@local",
-      fn: async (h) => {
-        await Promise.allSettled([
-          h.ensure("Install Caddy", { check: "sleep 0.1", want: true, fix: "true" }),
-          h.ensure("Install git", { check: "true", want: true, fix: "true" }),
-        ])
-      },
-    },
-    {
-      name: "nested-step",
-      target: "@local",
-      fn: async (h) => {
-        await h.ensure("Set up sonarr", {
-          check: async () => {
-            await h.ensure("Create the sonarr user", { check: "true", want: true, fix: "true" })
-            return false
-          },
-          want: true,
-          fix: "true",
-        })
-      },
-    },
-    {
-      name: "caught-exec",
-      target: "@local",
-      modes: ["apply"],
-      fn: async (h) => {
-        await h.ensure("Install the package", {
-          check: "false",
-          want: true,
-          fix: async ({ exec }) => {
-            await attempt(async () => exec("echo 'E: Unable to locate package nope' >&2; exit 100"))
-          },
-        })
-      },
-    },
-    {
-      name: "unreachable",
-      target: "web.lan",
-      fn: async (h) => {
-        await h.read("uname -m")
       },
     },
   ]
 }
 
-/** Returns the exit code the CLI would return for these reports. */
 const getExitCode = (hostReports: HostReport[], mode: Mode) => {
   if (hostReports.some(({ failure }) => failure)) return 1
   return mode === "plan" && hostReports.some(({ stepRecords }) => hasPendingChange(stepRecords)) ? 2 : 0
 }
 
 /** Runs every scenario in `mode` and prints each block, the summary, and the exit code the CLI would return. */
-const previewMode = async (mode: Mode) => {
+interface PreviewPass {
+  mode: Mode
+  verbose?: boolean
+}
+
+const previewMode = async (previewPass: PreviewPass) => {
+  const { mode, verbose = false } = previewPass
   const dir = await mkdtemp(path.join(os.tmpdir(), "tsinfra-preview-"))
   try {
-    console.log(pc.cyan(pc.bold(`==== tsinfra ${mode} ====`)))
+    console.log(pc.cyan(pc.bold(`==== tsinfra ${mode}${verbose ? " --verbose" : ""} ====`)))
     console.log()
 
     const hostReports: HostReport[] = []
@@ -223,7 +193,7 @@ const previewMode = async (mode: Mode) => {
       const hostReport = await runHost({ name, ...host(target, fn) }, mode)
       hostReports.push(hostReport)
 
-      const block = formatHostBlock(hostReport)
+      const block = formatHostBlock(hostReport, { verbose })
       if (block) console.log(`${block}\n`)
     }
 
@@ -258,8 +228,9 @@ const previewOwnErrors = () => {
 }
 
 const main = async (): Promise<number> => {
-  await previewMode("plan")
-  await previewMode("apply")
+  await previewMode({ mode: "plan" })
+  await previewMode({ mode: "apply" })
+  await previewMode({ mode: "plan", verbose: true })
   previewOwnErrors()
   return 0
 }

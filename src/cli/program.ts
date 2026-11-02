@@ -15,6 +15,9 @@ const hostOptions = object({
   hostsDir: option("--hosts-dir", path({ metavar: "DIR" }), {
     description: message`The directory of host files`,
   }).withDefault(DEFAULT_HOSTS_DIR),
+  verbose: option("-v", "--verbose", {
+    description: message`Show every step, even the ones that didn't change anything`,
+  }),
   hosts: argument(string({ metavar: "HOST" }), {
     description: message`A host to run, by its file name without ${text(HOST_FILE_EXTENSION)} (default: every host)`,
   }).multiple(),

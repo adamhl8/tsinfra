@@ -352,7 +352,7 @@ reports a change on every run is a bug, and this is what surfaces it the first t
 
 ```
 the host's state still differs after the fix for step 'Remove the old user'
-  got: exit code 0
+  got:  exit code 0
   want: a non-zero exit code
 ```
 

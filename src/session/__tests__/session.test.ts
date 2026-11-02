@@ -226,13 +226,13 @@ describe("step records", () => {
     ])
   })
 
-  it("should record an inspect as unchanged, even when its command exits non-zero", async () => {
+  it("should record an inspect as observed, even when its command exits non-zero", async () => {
     const cmd = "exit 3"
     const hostSession = createSession()
     await hostSession.host.inspect(cmd)
 
     expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
-      { kind: "inspect", name: cmd, details: { status: "unchanged", changed: false }, commands: [cmd] },
+      { kind: "inspect", name: cmd, details: { status: "observed", changed: false }, commands: [cmd] },
     ])
   })
 
@@ -242,7 +242,7 @@ describe("step records", () => {
     await readOrMessage(hostSession.host, cmd)
 
     expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
-      { kind: "read", name: cmd, details: { status: "unchanged", changed: false }, commands: [cmd] },
+      { kind: "read", name: cmd, details: { status: "observed", changed: false }, commands: [cmd] },
     ])
     expect(toPlainResult(hostSession.stepRecords[0]?.commands[0]?.output)).toStrictEqual({
       stdout: "out\n",

@@ -33,7 +33,7 @@ const runTsinfra = async (): Promise<Result<number>> => {
     const hostReport = await runHost(hostEntry, config.mode)
     hostReports.push(hostReport)
 
-    const block = formatHostBlock(hostReport)
+    const block = formatHostBlock(hostReport, { verbose: config.verbose })
     if (block) console.log(`${block}\n`)
   }
 

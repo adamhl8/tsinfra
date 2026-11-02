@@ -47,10 +47,13 @@ export type Comparison =
 /**
  * What a step reports to the session. The script only gets `changed`, and the rest is for the output. A `changed`
  * status means a check did not pass, so it is the only status that counts as drift in `plan`. A `ran` status means a
- * run was triggered. A `waiting` status means a step it needs would change, so `plan` skipped its check.
+ * run was triggered. A `waiting` status means a step it needs would change, so `plan` skipped its check. An `observed`
+ * status is a read or an inspect.
  */
 export type StepDetails =
   | { status: "unchanged"; changed: false }
+  // A read or an inspect only looks, so it has a status of its own.
+  | { status: "observed"; changed: false }
   // `comparison` holds the values from the check before the fix.
   | { status: "changed"; changed: true; comparison: Comparison }
   | { status: "ran"; changed: true }

@@ -15,6 +15,9 @@ const runNamedHost = async (name: string, fn: HostFunction, mode: Mode) =>
 
 const formatBlock = async (fn: HostFunction, mode: Mode) => formatHostBlock(await runNamedHost("a", fn, mode))
 
+const formatVerboseBlock = async (fn: HostFunction) =>
+  formatHostBlock(await runNamedHost("a", fn, "plan"), { verbose: true })
+
 const changeAndRun = async (h: Host) => {
   await h.ensure("Write the unit", { check: "false", want: true, fix: "true" })
   await h.run("Reload systemd", "true", { after: "always" })
@@ -37,6 +40,12 @@ const failVerify = async (h: Host) => {
 
 const waitOnBrew = async (h: Host) => {
   const brew = await h.ensure("Install brew packages", { check: "false", want: true, fix: "true" })
+  await h.ensure("Install fish plugins", { needs: [brew], check: "true", want: true, fix: "true" })
+}
+
+const waitTwiceOnBrew = async (h: Host) => {
+  const brew = await h.ensure("Install brew packages", { check: "false", want: true, fix: "true" })
+  await h.ensure("Install fish", { needs: [brew], check: "true", want: true, fix: "true" })
   await h.ensure("Install fish plugins", { needs: [brew], check: "true", want: true, fix: "true" })
 }
 
@@ -93,6 +102,31 @@ describe("formatHostBlock", () => {
     expect(await formatBlock(stayRight, "plan")).toBeUndefined()
   })
 
+  it("should show every step with --verbose, a read by its command", async () => {
+    expect(await formatVerboseBlock(stayRight)).toBe(
+      ["a", "  = Install Caddy", "  · true", "  = Reload systemd"].join("\n"),
+    )
+  })
+
+  it("should give a host with no steps a block with --verbose", async () => {
+    expect(
+      await formatVerboseBlock(async () => {
+        /* empty */
+      }),
+    ).toBe(["a", "  no steps"].join("\n"))
+  })
+
+  it("should line up the notes of a block's waiting steps in one column", async () => {
+    expect(await formatBlock(waitTwiceOnBrew, "plan")).toBe(
+      [
+        "a",
+        "  ~ Install brew packages",
+        "  ? Install fish           needs 'Install brew packages'",
+        "  ? Install fish plugins   needs 'Install brew packages'",
+      ].join("\n"),
+    )
+  })
+
   it("should mark a waiting step with '?' and the steps it needs", async () => {
     expect(await formatBlock(waitOnBrew, "plan")).toBe(
       ["a", "  ~ Install brew packages", "  ? Install fish plugins   needs 'Install brew packages'"].join("\n"),
@@ -105,8 +139,8 @@ describe("formatHostBlock", () => {
         "a",
         "  ! Make it",
         "      the host's state still differs after the fix for step 'Make it'",
-        "        got: exit code 1",
-        "        want: exit code 0",
+        "        got:    exit code 1",
+        "        want:   exit code 0",
         "        stderr: missing",
       ].join("\n"),
     )
@@ -152,7 +186,7 @@ const formatFailedCheck = async <T extends string | boolean>(options: EnsureOpti
 describe("formatHostBlock for a host state that still differs after the fix", () => {
   it("should show the exit codes when a want: false check still exits 0", async () => {
     expect(await formatFailedCheck({ check: "true", want: false, fix: "true" })).toStrictEqual([
-      "        got: exit code 0",
+      "        got:  exit code 0",
       "        want: a non-zero exit code",
     ])
   })
@@ -164,19 +198,19 @@ describe("formatHostBlock for a host state that still differs after the fix", ()
       fix: "true",
     })
 
-    expect(lines).toStrictEqual(["        got: false", "        want: true"])
+    expect(lines).toStrictEqual(["        got:  false", "        want: true"])
   })
 
   it("should quote both values of a string check", async () => {
     expect(await formatFailedCheck({ check: "echo v1", want: "v2", fix: "true" })).toStrictEqual([
-      "        got: 'v1'",
+      "        got:  'v1'",
       "        want: 'v2'",
     ])
   })
 
   it("should quote an empty value so it shows", async () => {
     expect(await formatFailedCheck({ check: "true", want: "v2", fix: "true" })).toStrictEqual([
-      "        got: ''",
+      "        got:  ''",
       "        want: 'v2'",
     ])
   })
@@ -184,18 +218,24 @@ describe("formatHostBlock for a host state that still differs after the fix", ()
   it("should show stderr when a string check exits non-zero", async () => {
     const lines = await formatFailedCheck({ check: "echo v1; echo oops >&2; exit 3", want: "v2", fix: "true" })
 
-    expect(lines).toStrictEqual(["        got: 'v1'", "        want: 'v2'", "        stderr: oops"])
+    expect(lines).toStrictEqual(["        got:    'v1'", "        want:   'v2'", "        stderr: oops"])
   })
 
-  it("should keep each line of a multi-line stderr at the fact indent", async () => {
+  it("should line up a multi-line stderr under its first line", async () => {
     const lines = await formatFailedCheck({ check: "echo one >&2; echo two >&2; false", want: true, fix: "true" })
 
     expect(lines).toStrictEqual([
-      "        got: exit code 1",
-      "        want: exit code 0",
+      "        got:    exit code 1",
+      "        want:   exit code 0",
       "        stderr: one",
-      "        two",
+      "                two",
     ])
+  })
+
+  it("should line up a multi-line string under its first line's text, inside the quote", async () => {
+    const lines = await formatFailedCheck({ check: String.raw`printf 'a\nb\n'`, want: "a\nc", fix: "true" })
+
+    expect(lines).toStrictEqual(["        got:  'a", "               b'", "        want: 'a", "               c'"])
   })
 })
 

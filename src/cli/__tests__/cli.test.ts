@@ -188,6 +188,17 @@ describe("tsinfra", () => {
     expect((await run`tsinfra plan`.nothrow()).exitCode).toBe(1)
   })
 
+  it("should show reads and steps that were already right with --verbose", async () => {
+    const { dir, run } = await createProject()
+    const steps = [`await h.read("true")`, `await h.ensure("Install git", { check: "true", want: true, fix: "true" })`]
+    await writeLocalHost(path.join(dir, "hosts"), "a", steps.join("\n"))
+
+    const { stdout, exitCode } = await run`tsinfra plan --verbose`.nothrow()
+
+    expect(exitCode).toBe(0)
+    expect(stdout).toBe("a\n  · true\n  = Install git\n\na   unchanged")
+  })
+
   it("should print a block for each host with something to show, then the summary", async () => {
     const { dir, run } = await createProject()
     const hostsDir = path.join(dir, "hosts")

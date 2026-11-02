@@ -42,8 +42,10 @@ order. A step that starts while another is running fails the host (see [Steps](.
 Each host's output is held until that host finishes, then printed as one block, so lines from different hosts never
 mix. A summary follows.
 
-By default a block lists only the steps that changed, would change, are waiting, or failed. `--verbose` adds steps that
-were already right, as `=` lines.
+By default a block lists only the steps that changed, would change, are waiting, or failed. `--verbose` (`-v`) adds the
+rest: steps that were already right as `=` lines, and each read or inspect as a `·` line named by its command. With
+`--verbose`, a host whose script made no steps still gets a block, with "no steps" under its name, so it's clear the
+host ran.
 
 ```
 sonarr
@@ -68,9 +70,9 @@ macbook   1 change, 1 waiting
 sonarr    2 changes
 ```
 
-`~` is a change, `>` is a run, `?` is waiting, `!` is a failure, and `=` (verbose only) is already right. A step's
-symbol is the same in `plan` and `apply`, because `plan` never changes the target, so a line needs no "would". The exact
-format is open: see [Open questions](./open-questions.md).
+`~` is a change, `>` is a run, `?` is waiting, `!` is a failure, and `=` and `·` (verbose only) are already right and a
+read. A step's symbol is the same in `plan` and `apply`, because `plan` never changes the target, so a line needs no
+"would". The exact format is open: see [Open questions](./open-questions.md).
 
 ### How the report is built
 
@@ -89,12 +91,21 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
 - **Step lines.** The symbol names what kind of step it was. A `changed` step from `ensure` or `file` is `~`,
   and a `ran` step from `run` is `>`. Any failed step is `!`, because the status matters more than the kind once
   something broke, and the error already says what failed. In `--verbose`, every step that was already right is `=`,
-  whatever its kind, so it doesn't rely on color to tell it from a change.
+  whatever its kind, so it doesn't rely on color to tell it from a change. A run whose trigger didn't fire is `=` too,
+  because nothing needed doing. A read or inspect has its own `observed` status, so it gets a gray `·` rather than `=`.
 - **Failures.** A failed step shows its error's message chain on indented lines under it, in red. That includes a
   failure the script caught inside the step, because the step still fails. The facts a check found, like `got:` and
-  `want:`, are indented further and stay plain, because they are not the error. A failure that is not any step's, like
-  the script throwing, is the block's last `!` line, named after the host's file (like `sonarr.ts`), with its error
-  under it the same way. The block's header already names the host, so the error is not wrapped in "failed to run host".
+  `want:`, are indented further and are not red, because they are not the error. A failure that is not any step's, like
+  the script throwing, is the block's last `!` line, named after the host's file in italics (like `sonarr.ts`), so it
+  doesn't read as a step, with its error under it the same way. The block's header already names the host, so the error
+  is not wrapped in "failed to run host".
+- **Values** are cyan: the values after `got:`, `want:`, and `stderr:`, and the command a read or inspect is named by.
+  That sets text from the script or the host apart from tsinfra's own words. A string value keeps its quotes, so an
+  empty one still shows without color, but the quotes stay uncolored, so they don't read as part of the value. An exit
+  code is also italic, because it isn't quoted. A multi-line value's later lines line up under its first line's text.
+- **Colors** follow the status: a summary's change count matches `~` and `>`, and its waiting count matches `?`. The
+  plan reminder is dim, so the host lines stay the main thing in the summary. In a block, the notes of waiting steps
+  line up in one column.
 - **A host with nothing to show** gets no block, only its line in the summary.
 - **The summary** has one line per host: `unchanged`, `failed`, or a count of changes, where a count includes both
   `changed` and `ran` steps, so it matches the `~` lines in the blocks. In `plan`, when any check did not pass, it
@@ -150,10 +161,10 @@ The output is built from a record of each host's run. It is one list of steps, i
 - **A command** records the command, its stdout and stderr, and its exit code. A command that could not run at all
   records the error instead.
 
-A step's status is `unchanged`, `changed`, or `ran`. `changed` means its check did not pass. `ran` means a run's trigger
-fired, or its `after` was `"always"`. A read or inspect is always `unchanged`. The record is the same in `plan` and
-`apply`, and so is each step's line. The output and `want` come from the check before the fix, so `apply` can show what
-a step changed too.
+A step's status is `unchanged`, `changed`, `ran`, `waiting`, or `observed`. `changed` means its check did not pass.
+`ran` means a run's trigger fired, or its `after` was `"always"`. `waiting` means a step it needs would change. A read
+or inspect is always `observed`. The record is the same in `plan` and `apply`, and so is each step's line. The output
+and `want` come from the check before the fix, so `apply` can show what a step changed too.
 
 A failed step records its error. Steps called after the host failed throw without running, so they are not recorded. A
 failure that is not a step's, like a bug in the script, is the host's own failure.

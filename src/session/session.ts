@@ -144,7 +144,7 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
       if (isErr(output)) return output
 
       stdout = output
-      return { status: "unchanged", changed: false }
+      return { status: "observed", changed: false }
     })
     return stdout
   }
@@ -159,7 +159,7 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
       if (isErr(result)) return result
 
       commandResult = result
-      return { status: "unchanged", changed: false }
+      return { status: "observed", changed: false }
     })
     return commandResult
   }
