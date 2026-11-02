@@ -5,37 +5,20 @@ import type { Mode } from "#cli/program.ts"
 import { HOST_FILE_EXTENSION } from "#hosts/discover.ts"
 import type { HostReport } from "#hosts/run.ts"
 import { hasPendingChange } from "#hosts/run.ts"
-import { formatDiff } from "#report/diff.ts"
+import { formatComparison, formatStateFacts } from "#report/facts.ts"
+import { STATUS_COLORS, STEP_SYMBOLS, styleNote, styleValue } from "#report/styles.ts"
 import { getMaxWidth, padToWidth } from "#report/utils.ts"
-import type { HostState } from "#session/converge.ts"
 import { getFailedState } from "#session/converge.ts"
 import type { StepRecord } from "#session/step-records.ts"
-import type { Comparison, StepDetails } from "#session/step.ts"
 
 const INDENT = "  "
 const DETAIL_INDENT = INDENT.repeat(3)
 const COLUMN_GAP = "   "
 const PLAN_REMINDER = "Steps after a change were checked without that change, so apply may differ."
 
-type StepStatus = StepDetails["status"] | "failed"
-
-// Give each status one color, so a step's symbol and its count in the summary always match.
-const STATUS_COLORS: Record<StepStatus, (text: string) => string> = {
-  unchanged: pc.green,
-  observed: pc.gray,
-  changed: pc.yellow,
-  ran: pc.yellow,
-  waiting: pc.blue,
-  failed: pc.red,
-}
-
-const STEP_SYMBOLS: Record<StepStatus, string> = {
-  unchanged: STATUS_COLORS.unchanged("="),
-  observed: STATUS_COLORS.observed("·"),
-  changed: STATUS_COLORS.changed("~"),
-  ran: STATUS_COLORS.ran(">"),
-  waiting: STATUS_COLORS.waiting("?"),
-  failed: STATUS_COLORS.failed("!"),
+export interface FormatOptions {
+  /** Shows every step, even the ones that didn't change anything. */
+  verbose?: boolean
 }
 
 interface StepLine {
@@ -47,86 +30,17 @@ interface StepLine {
   detailLines?: string[]
 }
 
-interface Fact {
-  label: string
-  valueLines: string[]
-}
-
-// Color text that came from the script or the host, so it stands apart from tsinfra's own words.
-// That covers a check's values and a read's command.
-const styleValue = (text: string) => pc.cyan(text)
-
-// Color `got` red and `want` green, like a diff's `-` and `+` lines, because `got` is what's there and `want` replaces it.
-const styleGot = (text: string) => pc.red(text)
-const styleWant = (text: string) => pc.green(text)
-
-// Quote a string value, so an empty value or stray spaces still show without color.
-// Leave the quotes unstyled, so they don't read as part of the value.
-const quoteValue = (text: string, style: (text: string) => string) => `'${style(text)}'`
-
-// Italicize an exit code too, because unlike a string it isn't quoted, and it should still read as a value.
-const describeExitCode = (text: string, style: (text: string) => string) => pc.italic(style(text))
-
-/** Returns a single-line comparison's `got` and `want` as the output shows them. */
-const describeComparison = (comparison: Comparison) => {
-  if (comparison.kind === "string")
-    return { got: quoteValue(comparison.got, styleGot), want: quoteValue(comparison.want, styleWant) }
-  if (comparison.kind === "boolean")
-    return { got: styleGot(String(comparison.got)), want: styleWant(String(comparison.want)) }
-
-  const want = comparison.want ? "exit code 0" : "a non-zero exit code"
-  return { got: describeExitCode(`exit code ${comparison.got}`, styleGot), want: describeExitCode(want, styleWant) }
-}
-
-/** Formats labeled facts with their values lined up in one column, and a multi-line value's later lines under its first. */
-const formatFacts = (facts: Fact[]) => {
-  const valueColumn = getMaxWidth(facts.map(({ label }) => `${label}: `))
-  const continuationIndent = " ".repeat(valueColumn)
-
-  return facts.flatMap(({ label, valueLines }) => {
-    // Dim the label, so the value is what stands out.
-    const labelText = pc.dim(padToWidth(`${label}: `, valueColumn))
-    return valueLines.map((valueLine, index) => `${index === 0 ? labelText : continuationIndent}${valueLine}`)
-  })
-}
-
-const isMultiLine = (comparison: Comparison) =>
-  comparison.kind === "string" && (comparison.got.includes("\n") || comparison.want.includes("\n"))
-
-/**
- * Returns how a comparison differs: a diff for a multi-line string, or `got` and `want` lines otherwise. `extraFacts`
- * follow, lined up with `got` and `want`.
- */
-const formatComparison = (comparison: Comparison, verbose: boolean, extraFacts: Fact[] = []) => {
-  if (comparison.kind === "string" && isMultiLine(comparison))
-    return [...formatDiff(comparison.got, comparison.want, verbose), ...formatFacts(extraFacts)]
-
-  const { got, want } = describeComparison(comparison)
-  return formatFacts([{ label: "got", valueLines: [got] }, { label: "want", valueLines: [want] }, ...extraFacts])
-}
-
-/** Lists what a step found in the host's state when it still differed after the fix. */
-const formatStateFacts = (hostState: HostState, verbose: boolean) => {
-  const { comparison, commandOutput } = hostState
-
-  // Leave out empty stderr, so a quiet command shows only how the value differs.
-  // Style each line of it, so a continuation line starts in the value's color too.
-  const stderr = commandOutput?.stderr.trim()
-  const stderrLines = stderr ? stderr.split("\n").map((stderrLine) => styleValue(stderrLine)) : []
-  const extraFacts = stderrLines.length > 0 ? [{ label: "stderr", valueLines: stderrLines }] : []
-
-  return formatComparison(comparison, verbose, extraFacts)
-}
-
 // Color the error red, but not the facts, because they describe the host's state, not the error itself.
 // Indent the facts under the error, so they read as its details.
-const toFailureLine = (name: string, error: Error, verbose: boolean): StepLine => {
+const toFailureLine = (name: string, error: Error, formatOptions: FormatOptions): StepLine => {
   const errorLines = messageChain(error)
     .split("\n")
     .map((errorLine) => pc.red(errorLine))
 
   const failedState = getFailedState(error)
-  const factLines = failedState ? formatStateFacts(failedState, verbose).map((factLine) => `${INDENT}${factLine}`) : []
+  const factLines = failedState
+    ? formatStateFacts(failedState, formatOptions).map((factLine) => `${INDENT}${factLine}`)
+    : []
   return { symbol: STEP_SYMBOLS.failed, name, detailLines: [...errorLines, ...factLines] }
 }
 
@@ -134,12 +48,13 @@ const toFailureLine = (name: string, error: Error, verbose: boolean): StepLine =
  * Returns the line a block shows for a step. A step that was already right, or only looked, shows only with `verbose`.
  * A step that never finished shows nothing.
  */
-const toStepLines = (stepRecord: StepRecord, verbose: boolean): StepLine[] => {
+const toStepLines = (stepRecord: StepRecord, formatOptions: FormatOptions): StepLine[] => {
   const { kind, details } = stepRecord
+  const { verbose = false } = formatOptions
   // Style a read's or an inspect's name, because it's the command itself.
   const name = kind === "read" || kind === "inspect" ? styleValue(stepRecord.name) : stepRecord.name
 
-  if (isErr(details)) return [toFailureLine(name, details, verbose)]
+  if (isErr(details)) return [toFailureLine(name, details, formatOptions)]
   if (details === undefined) return []
 
   const isQuiet = details.status === "unchanged" || details.status === "observed"
@@ -153,7 +68,7 @@ const toStepLines = (stepRecord: StepRecord, verbose: boolean): StepLine[] => {
   // Show how a string value would change, because the step's name doesn't say.
   // A boolean or an exit code needs no detail, because the name already says what yes and no mean.
   if (details.status === "changed" && details.comparison.kind === "string") {
-    const detailLines = formatComparison(details.comparison, verbose)
+    const detailLines = formatComparison(details.comparison, formatOptions)
     return [{ symbol: STEP_SYMBOLS.changed, name, detailLines }]
   }
 
@@ -176,11 +91,6 @@ const formatStepLines = (stepLines: StepLine[]) => {
   })
 }
 
-export interface FormatOptions {
-  /** Shows every step, even the ones that didn't change anything. */
-  verbose?: boolean
-}
-
 /**
  * Formats a host's block: its name, then a line for each step that changed, ran, waits, or failed. With `verbose`,
  * every step gets a line, and a host with no steps still gets a block, so it's clear the host ran.
@@ -189,15 +99,17 @@ export const formatHostBlock = (hostReport: HostReport, formatOptions: FormatOpt
   const { name, stepRecords, failure } = hostReport
   const { verbose = false } = formatOptions
 
-  const stepLines = stepRecords.flatMap((stepRecord) => toStepLines(stepRecord, verbose))
+  const stepLines = stepRecords.flatMap((stepRecord) => toStepLines(stepRecord, formatOptions))
 
   // Show a failure that no step owns, like the script throwing, after the steps.
-  // Name it after the host's file, because the failure comes from the script itself.
   const isStepFailure = stepRecords.some(({ details }) => details === failure)
-  // Italicize the file name, so it doesn't read as a step's name.
-  const scriptName = pc.italic(`${name}${HOST_FILE_EXTENSION}`)
-  if (failure && !isStepFailure) stepLines.push(toFailureLine(scriptName, failure, verbose))
-  if (stepLines.length === 0 && verbose) return [pc.bold(name), `${INDENT}${pc.dim(pc.italic("no steps"))}`].join("\n")
+  if (failure && !isStepFailure) {
+    // Name it after the host's file, in italics, because it comes from the script, not a step.
+    const scriptName = pc.italic(`${name}${HOST_FILE_EXTENSION}`)
+    stepLines.push(toFailureLine(scriptName, failure, formatOptions))
+  }
+
+  if (stepLines.length === 0 && verbose) return [pc.bold(name), `${INDENT}${styleNote("no steps")}`].join("\n")
   if (stepLines.length === 0) return
 
   return [pc.bold(name), ...formatStepLines(stepLines)].join("\n")

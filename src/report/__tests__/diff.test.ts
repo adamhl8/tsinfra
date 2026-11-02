@@ -7,19 +7,19 @@ const numberedLines = (prefix: string, count: number) =>
 
 describe("formatDiff", () => {
   it("should show a note, not a diff, when the diff takes too long", () => {
-    expect(formatDiff(numberedLines("a", 20_000), numberedLines("b", 20_000), false)).toStrictEqual([
+    expect(formatDiff(numberedLines("a", 20_000), numberedLines("b", 20_000), {})).toStrictEqual([
       "diff took too long to compute, run with --verbose to see it",
     ])
   })
 
   it("should hide a diff longer than 15 lines, and say how long it is", () => {
-    expect(formatDiff(numberedLines("a", 10), numberedLines("b", 10), false)).toStrictEqual([
+    expect(formatDiff(numberedLines("a", 10), numberedLines("b", 10), {})).toStrictEqual([
       "long diff (20 lines), run with --verbose to see it",
     ])
   })
 
   it("should show a long diff with --verbose", () => {
-    const diffLines = formatDiff(numberedLines("a", 10), numberedLines("b", 10), true)
+    const diffLines = formatDiff(numberedLines("a", 10), numberedLines("b", 10), { verbose: true })
 
     expect(diffLines).toHaveLength(20)
     expect(diffLines.slice(9, 11)).toStrictEqual(["   -a9", " 1 +b0"])

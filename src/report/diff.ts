@@ -2,6 +2,8 @@ import type { StructuredPatchHunk } from "diff"
 import { structuredPatch } from "diff"
 import pc from "picocolors"
 
+import type { FormatOptions } from "#report/format.ts"
+import { styleGot, styleNote, styleWant } from "#report/styles.ts"
 import { getMaxWidth } from "#report/utils.ts"
 
 // Show one unchanged line around each change, so a plan stays short.
@@ -11,13 +13,13 @@ const DIFF_TIMEOUT_MS = 200
 const VERBOSE_DIFF_TIMEOUT_MS = 10_000
 // Hide a diff longer than this, rules included, so one big change can't push the rest of a plan off the screen.
 const MAX_DIFF_LINES = 15
+const VERBOSE_HINT = ", run with --verbose to see it"
 
-const formatNote = (note: string) => pc.dim(pc.italic(note))
-
+// Style a removed line like `got` and an added one like `want`, because they are the two sides of the same comparison.
 // Leave the unchanged lines in the terminal's own text color, which reads in any theme.
 const styleDiffLine = (diffLine: string) => {
-  if (diffLine.startsWith("-")) return pc.red(diffLine)
-  if (diffLine.startsWith("+")) return pc.green(diffLine)
+  if (diffLine.startsWith("-")) return styleGot(diffLine)
+  if (diffLine.startsWith("+")) return styleWant(diffLine)
   return diffLine
 }
 
@@ -25,7 +27,7 @@ const styleDiffLine = (diffLine: string) => {
  * Returns a hunk's lines, each after a gutter with its line number in `want`. A removed line gets a blank gutter,
  * because it isn't in `want`.
  */
-const numberHunkLines = (hunk: StructuredPatchHunk, gutterWidth: number) => {
+const formatHunk = (hunk: StructuredPatchHunk, gutterWidth: number) => {
   let lineNumber = hunk.newStart
   return hunk.lines.map((diffLine) => {
     if (diffLine.startsWith("-")) return `${" ".repeat(gutterWidth)} ${styleDiffLine(diffLine)}`
@@ -41,23 +43,22 @@ const numberHunkLines = (hunk: StructuredPatchHunk, gutterWidth: number) => {
  * `verbose`, a diff that is too long to show, or that takes too long to compute, becomes a note that suggests
  * `--verbose`.
  */
-export const formatDiff = (got: string, want: string, verbose: boolean): string[] => {
-  // End both sides with a newline, so jsdiff never adds its "No newline at end of file" line.
+export const formatDiff = (got: string, want: string, formatOptions: FormatOptions): string[] => {
+  const { verbose = false } = formatOptions
+
   const timeout = verbose ? VERBOSE_DIFF_TIMEOUT_MS : DIFF_TIMEOUT_MS
+  // End both sides with a newline, so jsdiff never adds its "No newline at end of file" line.
   const patch = structuredPatch("", "", `${got}\n`, `${want}\n`, undefined, undefined, {
     context: DIFF_CONTEXT_LINES,
     timeout,
   })
 
-  if (patch === undefined) {
-    if (verbose) return [formatNote("diff took too long to compute")]
-    return [formatNote("diff took too long to compute, run with --verbose to see it")]
-  }
+  if (patch === undefined) return [styleNote(`diff took too long to compute${verbose ? "" : VERBOSE_HINT}`)]
 
   // Pad every gutter to the widest line number, so the diff lines start in one column.
   const lastLineNumbers = patch.hunks.map(({ newStart, newLines }) => newStart + newLines - 1)
   const gutterWidth = String(Math.max(1, ...lastLineNumbers)).length
-  const hunkLines = patch.hunks.map((hunk) => numberHunkLines(hunk, gutterWidth))
+  const hunkLines = patch.hunks.map((hunk) => formatHunk(hunk, gutterWidth))
 
   // Draw the rule as wide as the diff's widest line, so it reads as a divider within the diff.
   const ruleWidth = getMaxWidth(hunkLines.flat())
@@ -69,7 +70,7 @@ export const formatDiff = (got: string, want: string, verbose: boolean): string[
   }
 
   if (diffLines.length > MAX_DIFF_LINES && !verbose)
-    return [formatNote(`long diff (${diffLines.length} lines), run with --verbose to see it`)]
+    return [styleNote(`long diff (${diffLines.length} lines)${VERBOSE_HINT}`)]
 
   return diffLines
 }
