@@ -38,7 +38,7 @@ tsinfra keeps the script shape and adds what scripts lacked:
 - A plan mode that runs every check and no fix.
 - A diff wherever a step can show one.
 - A re-check after each fix, so a fix that does not work fails loudly.
-- Requirements, so `plan` waits on an earlier change instead of checking too early.
+- Needs, so `plan` waits on an earlier change instead of checking too early.
 - One command that checks every host at once.
 
 ## Goals
@@ -119,19 +119,19 @@ tsinfra plan            # every host
 
 ## Concepts
 
-|                 |                                                                                         |
-| --------------- | --------------------------------------------------------------------------------------- |
-| **Host**        | A file in `hosts/` that exports `host(target, fn)`. The file name is what the CLI uses. |
-| **Step**        | One call on `h`, like `h.ensure` or `h.read`. Steps run one at a time.                  |
-| **Requirement** | An earlier step whose change a step's check depends on, named in `requires`.            |
-| **Plan**        | Run every check, no fix. Show what would change.                                        |
-| **Apply**       | Run every check, and the fix wherever the check fails.                                  |
+|           |                                                                                         |
+| --------- | --------------------------------------------------------------------------------------- |
+| **Host**  | A file in `hosts/` that exports `host(target, fn)`. The file name is what the CLI uses. |
+| **Step**  | One call on `h`, like `h.ensure` or `h.read`. Steps run one at a time.                  |
+| **Need**  | An earlier step whose change a step's check depends on, named in `needs`.               |
+| **Plan**  | Run every check, no fix. Show what would change.                                        |
+| **Apply** | Run every check, and the fix wherever the check fails.                                  |
 
 ## Contents
 
 - **[Steps](./steps.md)**: choosing a method, `ensure`, `file`, `run`, `read`, `inspect`, verification, and what
   happens on failure
-- **[Requirements](./requirements.md)**: `requires`, and how `plan` waits on an earlier change
+- **[Waiting on earlier steps](./needs.md)**: `needs`, and how `plan` waits on an earlier change
 - **[Transport](./transport.md)**: local and SSH, ControlMaster, sudo, and how commands and files cross
 - **[CLI](./cli.md)**: the `hosts/` folder, `plan` and `apply`, output, and exit codes
 - **[Open questions](./open-questions.md)**: what still needs an answer

@@ -58,7 +58,10 @@ describe("step results", () => {
     const ensureResult = await hostSession.host.ensure("Change", { check: "false", want: true, fix: "true" })
     const runResult = await hostSession.host.run("Follow up", "true", { after: [ensureResult] })
 
-    expect([ensureResult, runResult]).toStrictEqual([{ changed: true }, { changed: true }])
+    expect([ensureResult, runResult]).toStrictEqual([
+      { name: "Change", kind: "ensure", changed: true },
+      { name: "Follow up", kind: "run", changed: true },
+    ])
     expect(hostSession.stepRecords[0]?.details).toMatchObject({ status: "changed" })
   })
 })
@@ -250,7 +253,7 @@ describe("step records", () => {
 
   it("should record a run that wasn't triggered as unchanged, with no commands", async () => {
     const hostSession = createSession()
-    await runOrMessage(hostSession.host, "true", { after: [{ changed: false }] })
+    await runOrMessage(hostSession.host, "true", { after: [{ name: "Stay right", kind: "ensure", changed: false }] })
 
     expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
       { kind: "run", name: "Make marker", details: { status: "unchanged", changed: false }, commands: [] },

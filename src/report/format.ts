@@ -22,12 +22,15 @@ const STEP_SYMBOLS: Record<StepStatus, string> = {
   unchanged: pc.green("="),
   changed: pc.yellow("~"),
   ran: pc.yellow(">"),
+  waiting: pc.cyan("?"),
   failed: pc.red("!"),
 }
 
 interface StepLine {
   symbol: string
   name: string
+  /** Text after the name, like the steps a waiting step needs. */
+  note?: string
   errorLines?: string[]
 }
 
@@ -78,14 +81,21 @@ const toStepLines = (stepRecord: StepRecord): StepLine[] => {
   // Leave out a step that never finished, and one that was already right, which only `--verbose` will show.
   if (details === undefined || details.status === "unchanged") return []
 
+  if (details.status === "waiting") {
+    const neededNames = details.needs.map((neededName) => `'${neededName}'`)
+    return [{ symbol: STEP_SYMBOLS.waiting, name, note: `needs ${neededNames.join(", ")}` }]
+  }
+
   return [{ symbol: STEP_SYMBOLS[details.status], name }]
 }
 
 const formatStepLines = (stepLines: StepLine[]) =>
   stepLines.flatMap((stepLine) => {
-    const { symbol, name, errorLines = [] } = stepLine
+    const { symbol, name, note, errorLines = [] } = stepLine
 
-    const headLine = `${INDENT}${symbol} ${name}`
+    // Dim the note, so the step's name stays the main thing on the line.
+    const noteText = note ? `${COLUMN_GAP}${pc.dim(note)}` : ""
+    const headLine = `${INDENT}${symbol} ${name}${noteText}`
     const indentedErrorLines = errorLines.map((errorLine) => `${ERROR_INDENT}${errorLine}`)
 
     return [headLine, ...indentedErrorLines]
@@ -110,11 +120,16 @@ const formatHostStatus = (hostReport: HostReport) => {
   const { stepRecords, failure } = hostReport
   if (failure) return pc.red("failed")
 
+  const statuses = stepRecords.map(({ details }) => (isErr(details) ? undefined : details?.status))
   // Count `ran` steps too, so the count matches the `~` and `>` lines in the block.
-  const changeCount = stepRecords.filter(({ details }) => !isErr(details) && details?.changed).length
-  if (changeCount === 0) return pc.green("unchanged")
+  const changeCount = statuses.filter((status) => status === "changed" || status === "ran").length
+  const waitingCount = statuses.filter((status) => status === "waiting").length
+  if (changeCount === 0 && waitingCount === 0) return pc.green("unchanged")
 
-  return pc.yellow(`${changeCount} ${changeCount === 1 ? "change" : "changes"}`)
+  const counts = []
+  if (changeCount > 0) counts.push(`${changeCount} ${changeCount === 1 ? "change" : "changes"}`)
+  if (waitingCount > 0) counts.push(`${waitingCount} waiting`)
+  return pc.yellow(counts.join(", "))
 }
 
 /** Formats one line per host, with the plan reminder first when anything would change. */

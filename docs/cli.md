@@ -58,7 +58,7 @@ immich
 
 macbook
   ~ Install brew packages
-  ? Install fish plugins   waits on 'Install brew packages'
+  ? Install fish plugins   needs 'Install brew packages'
 
 Steps after a change were checked without that change, so apply may differ.
 

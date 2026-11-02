@@ -1,7 +1,7 @@
 import type { Result } from "ts-explicit-errors"
 import { err, getContext, isErr } from "ts-explicit-errors"
 
-import type { Comparison, StepCall, StepDetails } from "#session/step.ts"
+import type { Comparison, NeededSteps, StepCall, StepDetails } from "#session/step.ts"
 import type { CommandOutput } from "#transport/transport.ts"
 
 /** The part of the host's state one step manages: whether it's as wanted, and the values the step compared. */
@@ -14,6 +14,8 @@ export interface HostState {
 
 /** What a step gives `converge`: how to read the host's state, how to fix it, and whether to read it again after. */
 export interface ConvergeSpec {
+  /** Earlier steps whose change this step's state depends on. */
+  needs: NeededSteps
   /** Returns a bare error, because `converge` names the step when it wraps it. */
   readState: () => Promise<Result<HostState>>
   fix: () => Promise<Result>
@@ -28,7 +30,11 @@ export const getFailedState = (error: Error) => getContext<HostState>(error, FAI
 /** Reads the host's state, then in `apply` runs the fix when it differs, and reads it again. */
 export const converge = async (stepCall: StepCall, spec: ConvergeSpec): Promise<Result<StepDetails>> => {
   const { mode, stepName } = stepCall
-  const { readState, fix, verify } = spec
+  const { needs, readState, fix, verify } = spec
+
+  // Skip the check in `plan` when a needed step would change, because the check would read the host without that change.
+  const pendingNeeds = needs.filter(({ changed }) => changed).map(({ name }) => name)
+  if (mode === "plan" && pendingNeeds.length > 0) return { status: "waiting", changed: true, needs: pendingNeeds }
 
   const before = await readState()
   if (isErr(before)) return err(`failed to read the host's state for step '${stepName}'`, before)

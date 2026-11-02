@@ -1,3 +1,4 @@
+import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
@@ -8,7 +9,8 @@ import type { Change } from "#session/step-functions/change.ts"
 import { runChange } from "#session/step-functions/change.ts"
 import type { Check, CheckCompare } from "#session/step-functions/check.ts"
 import { runCheck } from "#session/step-functions/check.ts"
-import type { StepCall, StepDetails } from "#session/step.ts"
+import type { NeededSteps, StepCall, StepDetails } from "#session/step.ts"
+import { needsSchema } from "#session/step.ts"
 import type { CommandOutput } from "#transport/transport.ts"
 
 /** `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string. */
@@ -30,6 +32,11 @@ export interface EnsureOptions<T extends string | boolean> {
    * for a fix whose effect nothing in the run can make visible, like one that needs a reboot.
    */
   verify?: boolean
+  /**
+   * Earlier steps this step's check depends on. In `plan`, the step waits instead of checking when one of them would
+   * change or is waiting. A run's result can't be needed, so need the step that triggered the run instead.
+   */
+  needs?: NeededSteps
 }
 
 const compareStrings = (value: string, wantedValue: string): HostState => {
@@ -71,7 +78,12 @@ export const handleEnsure = async <T extends string | boolean>(
   stepCall: StepCall,
   options: EnsureOptions<T>,
 ): Promise<Result<StepDetails>> => {
-  const { check, want, fix, verify = true } = options
+  const { stepName } = stepCall
+  const { check, want, fix, verify = true, needs = [] } = options
+
+  const validNeeds = needsSchema({ needs })
+  if (validNeeds instanceof type.errors)
+    return err(`failed to validate the needs of step '${stepName}'`, err(validNeeds.summary, undefined))
 
   const checkCompare: CheckCompare = {
     fnValue: (value) => compareFnResult(value, want),
@@ -79,6 +91,7 @@ export const handleEnsure = async <T extends string | boolean>(
   }
 
   const stepDetails = await converge(stepCall, {
+    needs,
     readState: async () => runCheck(stepCall, check, checkCompare),
     fix: async () => runChange(stepCall, fix),
     verify,

@@ -57,6 +57,29 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
+      name: "waiting",
+      target: "@local",
+      fn: async (h) => {
+        const brew = await h.ensure("Install brew packages", {
+          check: `test -f '${marker("brew")}'`,
+          want: true,
+          fix: `touch '${marker("brew")}'`,
+        })
+        const fish = await h.ensure("Install fish", {
+          needs: [brew],
+          check: `test -f '${marker("fish")}'`,
+          want: true,
+          fix: `touch '${marker("fish")}'`,
+        })
+        await h.ensure("Install fish plugins", {
+          needs: [fish],
+          check: `test -f '${marker("plugins")}'`,
+          want: true,
+          fix: `touch '${marker("plugins")}'`,
+        })
+      },
+    },
+    {
       name: "runs",
       target: "@local",
       fn: async (h) => {

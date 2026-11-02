@@ -100,6 +100,51 @@ describe("tsinfra", () => {
     )
   })
 
+  it("should fail a run that follows a step that can't change the host", async () => {
+    const { dir, run } = await createProject()
+    const body = `await h.run("Bad run", "true", { after: [{ name: "uname -m", kind: "read", changed: false }] })`
+    await writeLocalHost(path.join(dir, "hosts"), "a", body)
+
+    const { stdout, exitCode } = await run`tsinfra plan`.nothrow()
+
+    expect(exitCode).toBe(1)
+    expect(stdout).toBe(
+      'a\n  ! Bad run\n      failed to run step \'Bad run\' -> after[0].kind must be "ensure" or "run" (was "read")\n\na   failed',
+    )
+  })
+
+  it("should fail a step whose needs holds something other than step results", async () => {
+    const { dir, run } = await createProject()
+    await writeLocalHost(
+      path.join(dir, "hosts"),
+      "a",
+      `await h.ensure("Bad needs", { needs: [undefined], check: "true", want: true, fix: "true" })`,
+    )
+
+    const { stdout, exitCode } = await run`tsinfra plan`.nothrow()
+
+    expect(exitCode).toBe(1)
+    expect(stdout).toBe(
+      "a\n  ! Bad needs\n      failed to validate the needs of step 'Bad needs' -> needs[0] must be an object (was undefined)\n\na   failed",
+    )
+  })
+
+  it("should fail a step that needs a run", async () => {
+    const { dir, run } = await createProject()
+    const body = [
+      `const prune = await h.run("Prune", "true", { after: "always" })`,
+      `await h.ensure("Bad needs", { needs: [prune], check: "true", want: true, fix: "true" })`,
+    ].join("\n")
+    await writeLocalHost(path.join(dir, "hosts"), "a", body)
+
+    const { stdout, exitCode } = await run`tsinfra plan`.nothrow()
+
+    expect(exitCode).toBe(1)
+    expect(stdout).toBe(
+      'a\n  > Prune\n  ! Bad needs\n      failed to validate the needs of step \'Bad needs\' -> needs[0].kind must be "ensure" (was "run")\n\na   failed',
+    )
+  })
+
   it("should run a host that reads from '@local'", async () => {
     const { dir, run } = await createProject()
     const source = `import { host } from "tsinfra"\n\nexport default host("@local", async (h) => console.log(await h.read("echo hi")))\n`

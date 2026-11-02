@@ -54,9 +54,10 @@ type CommandResult = {
   exitCode: number
 }
 
-type StepResult = {
-  name: string // shown when another step waits on this one
-  changed: boolean // the step changed something, would change it in plan, or waits on a required step
+type StepResult<K extends StepKind = StepKind> = {
+  name: string // shown when another step needs this one
+  kind: K // the method on `h` that ran it, like "ensure" or "run", so `needs` can refuse a run's result
+  changed: boolean // the step changed something, would change it in plan, or waits on a step it needs
 }
 ```
 
@@ -138,7 +139,7 @@ covers.
 
 **An option takes a function when tsinfra decides when, or whether, it runs.** `check` runs in both modes and again
 after the fix. `fix` and a run's command run only in `apply`, and only when needed. Every other option is a plain value
-that your script computes before the call: `want`, `requires`, `after`, and `file`'s `content`. A `want` that depends on
+that your script computes before the call: `want`, `needs`, `after`, and `file`'s `content`. A `want` that depends on
 the target belongs in the check, which reads both values and returns the comparison. `h.read` and `h.inspect` run
 straight away, so they take a command, not a function. Combining several reads is ordinary code at the top level.
 
@@ -181,7 +182,7 @@ type EnsureOptions<T extends string | boolean> = {
   sudo?: boolean // run a string fix under sudo
   verify?: boolean // default true
   secret?: boolean // hide the diff
-  requires?: StepResult[] // earlier steps this step's check depends on
+  needs?: StepResult<"ensure" | "file">[] // earlier steps this step's check depends on
 }
 ```
 
@@ -405,7 +406,7 @@ type FileOptions = {
   group?: string // managed only when given
   sudo?: boolean
   secret?: boolean
-  requires?: StepResult[]
+  needs?: StepResult<"ensure" | "file">[]
 }
 ```
 
@@ -429,7 +430,7 @@ home on the target.
 
 ```ts
 type RunOptions = CommandOptions & {
-  after: StepResult[] | "always" // run when any of these changed, or "always" on every pass
+  after: StepResult<"ensure" | "file" | "run">[] | "always" // run when any of these changed, or "always" on every pass
 }
 ```
 
@@ -453,8 +454,9 @@ await h.run("Reload systemd", "sudo systemctl daemon-reload", { after: [unit, ti
 await h.run("Prune docker", "docker system prune -f", { after: "always" })
 ```
 
-`after` only takes step results, so a value from `h.read` cannot be a trigger. A step that only runs on some code
-paths goes in the same `if` as the run that follows it, so the run never refers to a step that didn't happen.
+`after` only takes results from steps that can change the host, so a value from `h.read` cannot be a trigger. A step
+that only runs on some code paths goes in the same `if` as the run that follows it, so the run never refers to a step
+that didn't happen.
 
 |                       | `apply`                           | `plan`                                   |
 | --------------------- | --------------------------------- | ---------------------------------------- |
@@ -570,9 +572,9 @@ failed in the same way.
 
 `plan` runs every check against the machine as it is now. A step after a would-change step is checked against the old
 state, not the state that step would leave behind. For most steps that does not matter. Where it does, a
-[requirement](./requirements.md) is how you say so, and `plan` then shows "waits on" instead of a misleading answer.
+[need](./needs.md) is how you say so, and `plan` then shows the step as waiting instead of a misleading answer.
 
 When any check did not pass, `plan` adds a reminder before the summary: "Steps after a change were checked without
 that change, so apply may differ." Terraform's "known after apply" is the same problem. Terraform knows which values
 depend on which resources, so it can mark exactly those. tsinfra does not know which steps depend on each other, so it
-warns in general, unless a step's `requires` says so.
+warns in general, unless a step's `needs` says so.

@@ -1,6 +1,5 @@
-import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
-import { err, isErr } from "ts-explicit-errors"
+import { isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import type { HostEntry } from "#hosts/load.ts"
@@ -11,7 +10,6 @@ import { handleExec } from "#session/step-functions/tools.ts"
 import type { StepRecord } from "#session/step-records.ts"
 import { createStepRecorder } from "#session/step-records.ts"
 import type { StepCall, StepDetails, StepResult } from "#session/step.ts"
-import { stepResultSchema } from "#session/step.ts"
 import type { EnsureOptions } from "#session/steps/ensure.ts"
 import { handleEnsure } from "#session/steps/ensure.ts"
 import type { CommandResult, Inspect } from "#session/steps/inspect.ts"
@@ -46,7 +44,7 @@ export interface Host {
    *
    * A failing fix, or a check that still differs after it, fails the host and throws.
    */
-  ensure: <T extends string | boolean>(name: string, options: EnsureOptions<T>) => Promise<StepResult>
+  ensure: <T extends string | boolean>(name: string, options: EnsureOptions<T>) => Promise<StepResult<"ensure">>
   /**
    * Runs `cmd`, a command or a function given `exec`, when a step in `after` changed, or on every pass with `after:
    * "always"`. There is no check, so it never counts as drift. In `plan` it never runs, and reports changed when it
@@ -54,7 +52,7 @@ export interface Host {
    *
    * A failing command fails the host and throws.
    */
-  run: (name: string, cmd: Change, options: RunOptions) => Promise<StepResult>
+  run: (name: string, cmd: Change, options: RunOptions) => Promise<StepResult<"run">>
 }
 
 export type StepKind = Exclude<keyof Host, "name">
@@ -117,11 +115,11 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
   const checkTools: CheckTools = { read: readTool, inspect: inspectTool }
   const changeTools: ChangeTools = { exec: execTool, inspect: inspectTool }
 
-  const callStep = async (
-    kind: StepKind,
+  const callStep = async <K extends StepKind>(
+    kind: K,
     stepName: string,
     handler: (stepCall: StepCall) => Promise<Result<StepDetails>>,
-  ) =>
+  ): Promise<StepResult<K>> =>
     callOrFail(async () => {
       const stepRecord = startStep(kind, stepName)
       if (isErr(stepRecord)) return stepRecord
@@ -133,10 +131,7 @@ export const createHostSession = (hostEntry: HostEntry, mode: Mode): HostSession
       finishStep(stepRecord, stepFailure ?? stepDetails)
       if (isErr(stepDetails)) return stepDetails
 
-      const stepResult = stepResultSchema(stepDetails)
-      if (stepResult instanceof type.errors)
-        return err(`failed to report step '${stepName}'`, err(stepResult.summary, undefined))
-
+      const stepResult: StepResult<K> = { name: stepName, kind, changed: stepDetails.changed }
       return stepResult
     })
 

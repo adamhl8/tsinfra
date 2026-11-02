@@ -234,6 +234,53 @@ describe("h.ensure with verify: false", () => {
   })
 })
 
+describe("h.ensure with needs", () => {
+  it("should wait in plan without checking when a needed step would change", async () => {
+    const hostSession = createSession("plan")
+    const { host: h } = hostSession
+    const brew = await h.ensure("Install brew packages", { check: "false", want: true, fix: "true" })
+    const result = await h.ensure("Install fish plugins", { needs: [brew], check: "exit 1", want: true, fix: "true" })
+
+    expect(result).toStrictEqual({ name: "Install fish plugins", kind: "ensure", changed: true })
+    expect(hostSession.stepRecords[1]).toMatchObject({
+      details: { status: "waiting", changed: true, needs: ["Install brew packages"] },
+      commands: [],
+    })
+  })
+
+  it("should check as usual in plan when every needed step is unchanged", async () => {
+    const hostSession = createSession("plan")
+    const { host: h } = hostSession
+    const brew = await h.ensure("Install brew packages", { check: "true", want: true, fix: "true" })
+    await h.ensure("Install fish plugins", { needs: [brew], check: "false", want: true, fix: "true" })
+
+    expect(hostSession.stepRecords[1]?.details).toMatchObject({ status: "changed" })
+  })
+
+  it("should wait on a needed step that is itself waiting, and name it", async () => {
+    const hostSession = createSession("plan")
+    const { host: h } = hostSession
+    const brew = await h.ensure("Install brew packages", { check: "false", want: true, fix: "true" })
+    const fish = await h.ensure("Install fish", { needs: [brew], check: "true", want: true, fix: "true" })
+    await h.ensure("Install fish plugins", { needs: [fish], check: "true", want: true, fix: "true" })
+
+    expect(hostSession.stepRecords[2]?.details).toStrictEqual({
+      status: "waiting",
+      changed: true,
+      needs: ["Install fish"],
+    })
+  })
+
+  it("should ignore needs in apply", async () => {
+    const hostSession = createSession("apply")
+    const { host: h } = hostSession
+    const brew = await h.ensure("Install brew packages", { check: "false", want: true, fix: "true", verify: false })
+    await h.ensure("Install fish plugins", { needs: [brew], check: "true", want: true, fix: "true" })
+
+    expect(hostSession.stepRecords[1]).toMatchObject({ details: { status: "unchanged" }, commands: [{ cmd: "true" }] })
+  })
+})
+
 describe("h.ensure with the inspect tool", () => {
   it("should treat a missing file as a needed fix in a check function", async () => {
     const { marker } = await createMarkerStep()

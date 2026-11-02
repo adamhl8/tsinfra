@@ -35,6 +35,11 @@ const failVerify = async (h: Host) => {
   await h.ensure("Make it", { check: "echo missing >&2; false", want: true, fix: "true" })
 }
 
+const waitOnBrew = async (h: Host) => {
+  const brew = await h.ensure("Install brew packages", { check: "false", want: true, fix: "true" })
+  await h.ensure("Install fish plugins", { needs: [brew], check: "true", want: true, fix: "true" })
+}
+
 const failRead = async (h: Host) => {
   await h.read("exit 1")
 }
@@ -86,6 +91,12 @@ describe("formatHostBlock", () => {
 
   it("should return nothing when every step was already right", async () => {
     expect(await formatBlock(stayRight, "plan")).toBeUndefined()
+  })
+
+  it("should mark a waiting step with '?' and the steps it needs", async () => {
+    expect(await formatBlock(waitOnBrew, "plan")).toBe(
+      ["a", "  ~ Install brew packages", "  ? Install fish plugins   needs 'Install brew packages'"].join("\n"),
+    )
   })
 
   it("should show a failed step's error on indented lines under it", async () => {
@@ -207,6 +218,12 @@ describe("formatSummary", () => {
         "web      1 change",
       ].join("\n"),
     )
+  })
+
+  it("should count waiting steps apart from changes", async () => {
+    const hostReports = [await runNamedHost("macbook", waitOnBrew, "plan")]
+
+    expect(formatSummary(hostReports, "plan").split("\n").at(-1)).toBe("macbook   1 change, 1 waiting")
   })
 
   it("should leave out the reminder when only runs would run", async () => {
