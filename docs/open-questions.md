@@ -5,7 +5,6 @@ What still needs an answer. Most are best settled by porting real hosts first (s
 <!-- toc -->
 
 - [What `plan` output should look like](#what-plan-output-should-look-like)
-- [Choosing a diff library](#choosing-a-diff-library)
 - [JSON output](#json-output)
 - [Live progress details](#live-progress-details)
 - [Showing what commands printed](#showing-what-commands-printed)
@@ -30,13 +29,6 @@ What still needs an answer. Most are best settled by porting real hosts first (s
 pyinfra's JSON down to just the names of pending changes. That suggests the default should be terse, with diffs. Settle
 it by running `plan` on the ported Mac and reacting to what it shows. How the report is built is settled (see
 [CLI](./cli.md#how-the-report-is-built)), so this is only about what it shows.
-
-## Choosing a diff library
-
-Diffs come from a library. The leading candidate is jsdiff (the `diff` package), the standard line-diff library for
-JavaScript. Compare it with the alternatives before choosing. A diff here needs to compare two strings line by line,
-print removed and added lines with `-` and `+`, and keep a few lines of context around a change in a long file. It has
-to work under Bun, and it should not pull in a large dependency tree.
 
 ## JSON output
 

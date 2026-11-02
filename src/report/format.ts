@@ -5,6 +5,7 @@ import type { Mode } from "#cli/program.ts"
 import { HOST_FILE_EXTENSION } from "#hosts/discover.ts"
 import type { HostReport } from "#hosts/run.ts"
 import { hasPendingChange } from "#hosts/run.ts"
+import { formatDiff } from "#report/diff.ts"
 import { getMaxWidth, padToWidth } from "#report/utils.ts"
 import type { HostState } from "#session/converge.ts"
 import { getFailedState } from "#session/converge.ts"
@@ -12,7 +13,7 @@ import type { StepRecord } from "#session/step-records.ts"
 import type { Comparison, StepDetails } from "#session/step.ts"
 
 const INDENT = "  "
-const ERROR_INDENT = INDENT.repeat(3)
+const DETAIL_INDENT = INDENT.repeat(3)
 const COLUMN_GAP = "   "
 const PLAN_REMINDER = "Steps after a change were checked without that change, so apply may differ."
 
@@ -42,75 +43,91 @@ interface StepLine {
   name: string
   /** Text after the name, like the steps a waiting step needs. */
   note?: string
-  errorLines?: string[]
+  /** Lines under the step line, like an error, or how a value would change. */
+  detailLines?: string[]
+}
+
+interface Fact {
+  label: string
+  valueLines: string[]
 }
 
 // Color text that came from the script or the host, so it stands apart from tsinfra's own words.
 // That covers a check's values and a read's command.
 const styleValue = (text: string) => pc.cyan(text)
 
+// Color `got` red and `want` green, like a diff's `-` and `+` lines, because `got` is what's there and `want` replaces it.
+const styleGot = (text: string) => pc.red(text)
+const styleWant = (text: string) => pc.green(text)
+
+// Quote a string value, so an empty value or stray spaces still show without color.
+// Leave the quotes unstyled, so they don't read as part of the value.
+const quoteValue = (text: string, style: (text: string) => string) => `'${style(text)}'`
+
 // Italicize an exit code too, because unlike a string it isn't quoted, and it should still read as a value.
-const styleExitCode = (text: string) => pc.italic(styleValue(text))
+const describeExitCode = (text: string, style: (text: string) => string) => pc.italic(style(text))
 
-/**
- * Returns a string value's lines, quoted, so an empty value or stray spaces still show without color. The quotes stay
- * unstyled, so they don't read as part of the value. A continuation line starts one column in, under the first line's
- * text rather than its opening quote.
- */
-const quotedValueLines = (text: string) => {
-  const lines = text.split("\n")
-  const lastIndex = lines.length - 1
-  return lines.map((line, index) => `${index === 0 ? "'" : " "}${styleValue(line)}${index === lastIndex ? "'" : ""}`)
-}
-
-/** Returns a comparison's `got` and `want` as the output shows them, one entry per line. */
+/** Returns a single-line comparison's `got` and `want` as the output shows them. */
 const describeComparison = (comparison: Comparison) => {
   if (comparison.kind === "string")
-    return { got: quotedValueLines(comparison.got), want: quotedValueLines(comparison.want) }
+    return { got: quoteValue(comparison.got, styleGot), want: quoteValue(comparison.want, styleWant) }
   if (comparison.kind === "boolean")
-    return { got: [styleValue(String(comparison.got))], want: [styleValue(String(comparison.want))] }
+    return { got: styleGot(String(comparison.got)), want: styleWant(String(comparison.want)) }
 
   const want = comparison.want ? "exit code 0" : "a non-zero exit code"
-  return { got: [styleExitCode(`exit code ${comparison.got}`)], want: [styleExitCode(want)] }
+  return { got: describeExitCode(`exit code ${comparison.got}`, styleGot), want: describeExitCode(want, styleWant) }
 }
 
-/**
- * Lists what a step found in the host's state when it still differed after the fix, one indented line each. The values
- * line up in one column, and a multi-line value's continuation lines line up under its first line.
- */
-const formatStateFacts = (hostState: HostState) => {
-  const { comparison, commandOutput } = hostState
-  const { got, want } = describeComparison(comparison)
-
-  const facts = [
-    { label: "got", valueLines: got },
-    { label: "want", valueLines: want },
-  ]
-  // Leave out empty stderr, so a quiet command shows only `got` and `want`.
-  // Style each line of it, so a continuation line starts in the value's color too.
-  const stderr = commandOutput?.stderr.trim()
-  if (stderr)
-    facts.push({ label: "stderr", valueLines: stderr.split("\n").map((stderrLine) => styleValue(stderrLine)) })
-
-  // Line up every value in one column, past the longest label.
+/** Formats labeled facts with their values lined up in one column, and a multi-line value's later lines under its first. */
+const formatFacts = (facts: Fact[]) => {
   const valueColumn = getMaxWidth(facts.map(({ label }) => `${label}: `))
   const continuationIndent = " ".repeat(valueColumn)
 
   return facts.flatMap(({ label, valueLines }) => {
-    const labelText = padToWidth(`${label}: `, valueColumn)
-    return valueLines.map((valueLine, index) => `${INDENT}${index === 0 ? labelText : continuationIndent}${valueLine}`)
+    // Dim the label, so the value is what stands out.
+    const labelText = pc.dim(padToWidth(`${label}: `, valueColumn))
+    return valueLines.map((valueLine, index) => `${index === 0 ? labelText : continuationIndent}${valueLine}`)
   })
 }
 
+const isMultiLine = (comparison: Comparison) =>
+  comparison.kind === "string" && (comparison.got.includes("\n") || comparison.want.includes("\n"))
+
+/**
+ * Returns how a comparison differs: a diff for a multi-line string, or `got` and `want` lines otherwise. `extraFacts`
+ * follow, lined up with `got` and `want`.
+ */
+const formatComparison = (comparison: Comparison, verbose: boolean, extraFacts: Fact[] = []) => {
+  if (comparison.kind === "string" && isMultiLine(comparison))
+    return [...formatDiff(comparison.got, comparison.want, verbose), ...formatFacts(extraFacts)]
+
+  const { got, want } = describeComparison(comparison)
+  return formatFacts([{ label: "got", valueLines: [got] }, { label: "want", valueLines: [want] }, ...extraFacts])
+}
+
+/** Lists what a step found in the host's state when it still differed after the fix. */
+const formatStateFacts = (hostState: HostState, verbose: boolean) => {
+  const { comparison, commandOutput } = hostState
+
+  // Leave out empty stderr, so a quiet command shows only how the value differs.
+  // Style each line of it, so a continuation line starts in the value's color too.
+  const stderr = commandOutput?.stderr.trim()
+  const stderrLines = stderr ? stderr.split("\n").map((stderrLine) => styleValue(stderrLine)) : []
+  const extraFacts = stderrLines.length > 0 ? [{ label: "stderr", valueLines: stderrLines }] : []
+
+  return formatComparison(comparison, verbose, extraFacts)
+}
+
 // Color the error red, but not the facts, because they describe the host's state, not the error itself.
-const toFailureLine = (name: string, error: Error): StepLine => {
+// Indent the facts under the error, so they read as its details.
+const toFailureLine = (name: string, error: Error, verbose: boolean): StepLine => {
   const errorLines = messageChain(error)
     .split("\n")
     .map((errorLine) => pc.red(errorLine))
 
   const failedState = getFailedState(error)
-  const factLines = failedState ? formatStateFacts(failedState) : []
-  return { symbol: STEP_SYMBOLS.failed, name, errorLines: [...errorLines, ...factLines] }
+  const factLines = failedState ? formatStateFacts(failedState, verbose).map((factLine) => `${INDENT}${factLine}`) : []
+  return { symbol: STEP_SYMBOLS.failed, name, detailLines: [...errorLines, ...factLines] }
 }
 
 /**
@@ -122,7 +139,7 @@ const toStepLines = (stepRecord: StepRecord, verbose: boolean): StepLine[] => {
   // Style a read's or an inspect's name, because it's the command itself.
   const name = kind === "read" || kind === "inspect" ? styleValue(stepRecord.name) : stepRecord.name
 
-  if (isErr(details)) return [toFailureLine(name, details)]
+  if (isErr(details)) return [toFailureLine(name, details, verbose)]
   if (details === undefined) return []
 
   const isQuiet = details.status === "unchanged" || details.status === "observed"
@@ -133,6 +150,13 @@ const toStepLines = (stepRecord: StepRecord, verbose: boolean): StepLine[] => {
     return [{ symbol: STEP_SYMBOLS.waiting, name, note: `needs ${neededNames.join(", ")}` }]
   }
 
+  // Show how a string value would change, because the step's name doesn't say.
+  // A boolean or an exit code needs no detail, because the name already says what yes and no mean.
+  if (details.status === "changed" && details.comparison.kind === "string") {
+    const detailLines = formatComparison(details.comparison, verbose)
+    return [{ symbol: STEP_SYMBOLS.changed, name, detailLines }]
+  }
+
   return [{ symbol: STEP_SYMBOLS[details.status], name }]
 }
 
@@ -141,14 +165,14 @@ const formatStepLines = (stepLines: StepLine[]) => {
   const noteColumn = getMaxWidth(stepLines.filter(({ note }) => note).map(({ name }) => name))
 
   return stepLines.flatMap((stepLine) => {
-    const { symbol, name, note, errorLines = [] } = stepLine
+    const { symbol, name, note, detailLines = [] } = stepLine
 
     // Dim the note, so the step's name stays the main thing on the line.
     const nameText = note ? `${padToWidth(name, noteColumn)}${COLUMN_GAP}${pc.dim(note)}` : name
     const headLine = `${INDENT}${symbol} ${nameText}`
-    const indentedErrorLines = errorLines.map((errorLine) => `${ERROR_INDENT}${errorLine}`)
+    const indentedDetailLines = detailLines.map((detailLine) => `${DETAIL_INDENT}${detailLine}`)
 
-    return [headLine, ...indentedErrorLines]
+    return [headLine, ...indentedDetailLines]
   })
 }
 
@@ -172,7 +196,7 @@ export const formatHostBlock = (hostReport: HostReport, formatOptions: FormatOpt
   const isStepFailure = stepRecords.some(({ details }) => details === failure)
   // Italicize the file name, so it doesn't read as a step's name.
   const scriptName = pc.italic(`${name}${HOST_FILE_EXTENSION}`)
-  if (failure && !isStepFailure) stepLines.push(toFailureLine(scriptName, failure))
+  if (failure && !isStepFailure) stepLines.push(toFailureLine(scriptName, failure, verbose))
   if (stepLines.length === 0 && verbose) return [pc.bold(name), `${INDENT}${pc.dim(pc.italic("no steps"))}`].join("\n")
   if (stepLines.length === 0) return
 

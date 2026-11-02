@@ -206,8 +206,9 @@ await h.ensure("Remove the old user", { check: "id olduser", want: false, fix: "
 
 **A string `want`** is compared to the command's stdout. `want` is computed in your script on the control machine.
 Trailing newlines are stripped from both (the way `$(cmd)` does), then the two are compared exactly. Stripping `want`
-too means a value built from a template literal that ends in a newline still matches. When they differ, `plan` shows a
-line diff.
+too means a value built from a template literal that ends in a newline still matches. When they differ, the step's line
+in `plan` and `apply` shows how: a `got:` and a `want:` line for a single-line value, or a line diff for a multi-line
+one.
 
 ```ts
 await h.ensure("Start Sonarr", {
@@ -345,10 +346,10 @@ unless it starts with `set -e`. Use the function form for anything past one comm
 **`sudo: true`** runs a string fix under `sudo`. In a fix function, pass `{ sudo: true }` to each `exec` that needs it.
 
 **Verification.** After a fix runs, the check runs again. If it still does not pass, the step fails with "the host's
-state still differs after the fix for step '...'", followed by a `got:` and a `want:` line. A string is quoted, so an
-empty value shows as `''`. A boolean shows as `true` or `false`. An exit status shows as `exit code 1`, against
-`exit code 0` or `a non-zero exit code`. A `stderr:` line follows when the check command printed any. A step that
-reports a change on every run is a bug, and this is what surfaces it the first time.
+state still differs after the fix for step '...'", followed by a `got:` and a `want:` line, or a line diff for a
+multi-line string. A string is quoted, so an empty value shows as `''`. A boolean shows as `true` or `false`. An exit
+status shows as `exit code 1`, against `exit code 0` or `a non-zero exit code`. A `stderr:` line follows when the check
+command printed any. A step that reports a change on every run is a bug, and this is what surfaces it the first time.
 
 ```
 the host's state still differs after the fix for step 'Remove the old user'

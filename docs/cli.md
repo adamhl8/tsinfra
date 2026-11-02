@@ -99,10 +99,12 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   the script throwing, is the block's last `!` line, named after the host's file in italics (like `sonarr.ts`), so it
   doesn't read as a step, with its error under it the same way. The block's header already names the host, so the error
   is not wrapped in "failed to run host".
-- **Values** are cyan: the values after `got:`, `want:`, and `stderr:`, and the command a read or inspect is named by.
-  That sets text from the script or the host apart from tsinfra's own words. A string value keeps its quotes, so an
-  empty one still shows without color, but the quotes stay uncolored, so they don't read as part of the value. An exit
-  code is also italic, because it isn't quoted. A multi-line value's later lines line up under its first line's text.
+- **Values** are cyan when they came from the script or the host, like `stderr:` and the command a read or inspect is
+  named by. That sets them apart from tsinfra's own words. A `got:` value is red and a `want:` value is green, like a
+  diff's `-` and `+` lines. A string value keeps its quotes, so an empty one still shows without color, but the quotes
+  stay uncolored, so they don't read as part of the value. An exit code is also italic, because it isn't quoted. A
+  multi-line value's later lines line up under its first line's text. The labels, like `got:`, are dim, so the values
+  stand out.
 - **Colors** follow the status: a summary's change count matches `~` and `>`, and its waiting count matches `?`. The
   plan reminder is dim, so the host lines stay the main thing in the summary. In a block, the notes of waiting steps
   line up in one column.
@@ -111,8 +113,14 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   `changed` and `ran` steps, so it matches the `~` lines in the blocks. In `plan`, when any check did not pass, it
   starts with the reminder that steps after a change were checked without it (see
   [Steps](./steps.md#what-plan-can-and-cannot-show)).
-- **Diffs** come from a diff library, not hand-written code. Which one is open (see
-  [Open questions](./open-questions.md#choosing-a-diff-library)).
+- **Diffs** come from jsdiff (the `diff` package), not hand-written code. It is the standard line-diff library for
+  JavaScript, has no dependencies, and returns hunks with context as data, which the report colors itself. A step that
+  would change a string shows how under its line: `got:` and `want:` for a single-line value, or a diff for a multi-line
+  one. A diff shows 1 unchanged line around each change. Each line is numbered by where it sits in `want`, so a removed
+  line, which isn't in `want`, has no number, the way Zed shows a combined diff. A dim rule separates the hunks. A
+  boolean or an exit code shows nothing, because the step's name says what yes and no mean. A diff longer than 15 lines,
+  rules included, shows "long diff (N lines)" instead. A diff that takes longer than 200 ms to compute shows "diff took
+  too long to compute". Both suggest `--verbose`, which shows every diff in full and allows 10 seconds to compute one.
 
 A `--json` mode that writes the report as data is a later addition (see
 [Open questions](./open-questions.md#json-output)).

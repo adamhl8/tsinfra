@@ -183,6 +183,51 @@ const formatFailedCheck = async <T extends string | boolean>(options: EnsureOpti
   return block?.split("\n").slice(3)
 }
 
+describe("formatHostBlock for a step that would change a string", () => {
+  it("should show got and want under the step for a single-line value", async () => {
+    const block = await formatBlock(async (h) => {
+      await h.ensure("Start Sonarr", { check: "echo inactive", want: "active", fix: "true" })
+    }, "plan")
+
+    expect(block).toBe(["a", "  ~ Start Sonarr", "      got:  'inactive'", "      want: 'active'"].join("\n"))
+  })
+
+  it("should show a diff under the step for a multi-line value", async () => {
+    const block = await formatBlock(async (h) => {
+      await h.ensure("Write the config", { check: String.raw`printf 'a\nb\nc\n'`, want: "a\nB\nc", fix: "true" })
+    }, "plan")
+
+    expect(block).toBe(["a", "  ~ Write the config", "      1  a", "        -b", "      2 +B", "      3  c"].join("\n"))
+  })
+
+  it("should number lines by want, leave removed lines unnumbered, and rule off each hunk", async () => {
+    const lines = Array.from({ length: 20 }, (_, index) => `line ${index + 1}`)
+    const wanted = [...lines.slice(0, -1), "line twenty"]
+    wanted[0] = "line one"
+    const block = await formatBlock(async (h) => {
+      await h.ensure("Write the config", {
+        check: `printf '%s\\n' ${lines.map((line) => `'${line}'`).join(" ")}`,
+        want: wanted.join("\n"),
+        fix: "true",
+      })
+    }, "plan")
+
+    expect(block).toBe(
+      [
+        "a",
+        "  ~ Write the config",
+        "         -line 1",
+        "       1 +line one",
+        "       2  line 2",
+        `      ${"─".repeat(15)}`,
+        "      19  line 19",
+        "         -line 20",
+        "      20 +line twenty",
+      ].join("\n"),
+    )
+  })
+})
+
 describe("formatHostBlock for a host state that still differs after the fix", () => {
   it("should show the exit codes when a want: false check still exits 0", async () => {
     expect(await formatFailedCheck({ check: "true", want: false, fix: "true" })).toStrictEqual([
@@ -232,10 +277,11 @@ describe("formatHostBlock for a host state that still differs after the fix", ()
     ])
   })
 
-  it("should line up a multi-line string under its first line's text, inside the quote", async () => {
-    const lines = await formatFailedCheck({ check: String.raw`printf 'a\nb\n'`, want: "a\nc", fix: "true" })
+  it("should show a multi-line value as a diff, with stderr after it", async () => {
+    const check = String.raw`printf 'a\nb\n'; echo warn >&2`
+    const lines = await formatFailedCheck({ check, want: "a\nc", fix: "true" })
 
-    expect(lines).toStrictEqual(["        got:  'a", "               b'", "        want: 'a", "               c'"])
+    expect(lines).toStrictEqual(["        1  a", "          -b", "        2 +c", "        stderr: warn"])
   })
 })
 
