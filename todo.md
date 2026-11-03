@@ -19,13 +19,13 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
    host so later calls are skipped.
 3. **`file`.** In four parts, each reviewed before the next (the design is in [Steps](./docs/steps.md#file) and
    [Transport](./docs/transport.md#file-writes)):
-   1. **The check and the plan output.** The GNU and BSD check command, the local hash, the `file` comparison, the
+   1. **Reading the state and the plan output.** The GNU and BSD state command, the local hash, the `file` comparison, the
       content diff and its notes (new, secret, binary, large), the `mode: 644 -> 600` attribute lines, path quoting, and
       `~/` resolved as the SSH user.
    2. **The write.** The write script in its tested order, verification, `sudo` in the shell and transport for tsinfra's
       own commands, the 10 MB limit, the symlink refusal, and the errors for `owner` or an unreadable file without
       `sudo`.
-   3. **Links.** The `link` form: the `readlink` check, absolute targets only, `force` for a regular file, an error for
+   3. **Links.** The `link` form: reading the target with `readlink`, absolute targets only, `force` for a regular file, an error for
       a directory, the `points to a missing path` note, and a write that never follows an existing link to a directory.
    4. **Docs and preview.** Preview hosts for a content diff, a new file, attribute changes, a secret file, a binary
       file, and a link.

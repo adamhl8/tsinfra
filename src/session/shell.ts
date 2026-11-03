@@ -10,6 +10,9 @@ export interface Shell {
   run: (cmd: string) => Promise<Result<string>>
 }
 
+/** Quotes `text` for a POSIX shell, so a space or a quote in it can't break the command. */
+export const quoteShellArg = (text: string): string => `'${text.replaceAll("'", String.raw`'\''`)}'`
+
 /** Describes a non-zero exit as an error, with the exit code and stderr in its message. */
 export const createCommandExitError = (commandOutput: CommandOutput) => {
   const { exitCode, stderr } = commandOutput

@@ -45,7 +45,7 @@ export type Detail =
   | { kind: "valueComparison"; comparison: ValueComparison }
   // Holds everything about a file but a text diff, which is a detail of its own.
   | { kind: "fileComparison"; comparison: FileComparison }
-  // The check command's stderr, for a failure that still differs after its fix.
+  // The stderr of the command that read the host's state, for a failure that still differs after its fix.
   | { kind: "stderr"; stderr: string }
 
 // Treat a read's or an inspect's name as a value, because it's the command itself, and a file's, because it's a path.

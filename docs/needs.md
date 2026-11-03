@@ -1,8 +1,8 @@
 # Waiting on earlier steps
 
 A step can need earlier steps. In `plan`, when a step it needs would change, the step reports `waiting` instead of
-running its check. Its check would run against a machine that does not have that change yet, so it would give the wrong
-answer or fail outright.
+reading the host's state. It would read a machine that does not have that change yet, so it would give the wrong answer
+or fail outright.
 
 <!-- toc -->
 
@@ -40,21 +40,21 @@ macbook
 needs?: StepResult<"file" | "ensure">[]
 ```
 
-- **In `plan`,** when any needed step would change or is waiting, the step reports `waiting` and its check does not
-  run. Otherwise the step runs as usual.
+- **In `plan`,** when any needed step would change or is waiting, the step reports `waiting` and doesn't read the
+  host's state. Otherwise the step runs as usual.
 - **In `apply`,** `needs` does nothing. The needed steps already ran, and a failed one stopped the host.
 - **A waiting step counts as changed,** so a step that needs it waits too, and a follow-up like `after: [x]` shows up
   in the plan. `plan` errs toward showing too much rather than too little.
 - **`StepResult` carries the step's name,** so `plan` can say what a step needs.
 - **A run's result can't be needed.** A triggered run is `changed` exactly when the step that triggered it is, so need
-  that step instead, because it is what the check depends on. A run with `after: "always"` would make every step that
+  that step instead, because it is what this step's state depends on. A run with `after: "always"` would make every step that
   needs it wait on every plan. `StepResult` carries its step's `kind`, so passing a run's result is a type error, and
   an error at runtime for a script that gets past the types.
-- **`run` does not take it.** A run never runs in `plan`, so there is no check to hold back.
+- **`run` does not take it.** A run never runs in `plan`, so there is no read to hold back.
 
 ## When to use it
 
-Need an earlier step only when this step's check depends on that step's change. A check that reads something the
+Need an earlier step only when this step's state depends on that step's change. A step that reads something the
 earlier step does not touch gives the right answer either way. `plan` already reminds you that steps after a change
 were checked without it (see [Steps](./steps.md#what-plan-can-and-cannot-show)). `needs` is how you say exactly which
 steps that applies to.

@@ -1,15 +1,6 @@
 import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
-import type { Shell } from "#session/shell.ts"
-
-// Read `$HOME` with `printf '%s'`, because it prints the value exactly, with no newline to strip.
-// `echo` treats backslashes or a leading `-n` specially in some shells.
-const READ_HOME_COMMAND = `printf '%s' "$HOME"`
-
-/** Reads the SSH user's home directory, which comes back empty when `$HOME` isn't set. */
-export const readHomeDirectory = async (shell: Shell): Promise<Result<string>> => shell.run(READ_HOME_COMMAND)
-
 /**
  * Returns `path` as an absolute path, with a leading `~/` or a bare `~` replaced by `home`, the SSH user's home
  * directory. Any other path must already start with `/`.

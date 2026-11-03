@@ -19,7 +19,7 @@ export interface StepResult<K extends StepKind = StepKind> {
   changed: boolean
 }
 
-// Check the step results a script passes in, because a script can get past the types, like with `as` or `@ts-ignore`.
+// Validate the step results a script passes in, because a script can get past the types, like with `as` or `@ts-ignore`.
 // Declare it against `StepResult`, so the schema and the interface can't drift apart.
 export const stepResultSchema = type.declare<StepResult>().type({
   name: "string",
@@ -30,10 +30,10 @@ export const stepResultSchema = type.declare<StepResult>().type({
 /** The step results `after` accepts: steps that can change the host, including another run. */
 export type TriggerSteps = StepResult<"file" | "ensure" | "run">[]
 
-/** The step results `needs` accepts: steps that have a check, so not a run. */
+/** The step results `needs` accepts: steps that read the host's state, so not a run. */
 export type NeededSteps = StepResult<"file" | "ensure">[]
 
-// Check `needs` at runtime too, because a script can get past the types, like with `as` or `@ts-ignore`.
+// Validate `needs` at runtime too, because a script can get past the types, like with `as` or `@ts-ignore`.
 // Wrap it in an object, so the error names the field, like `needs[0] must be an object`.
 export const needsSchema = type.declare<{ needs?: NeededSteps }>().type({
   "needs?": stepResultSchema.and({ kind: "'file' | 'ensure'" }).array(),
@@ -54,15 +54,15 @@ export interface StepContext {
 
 /**
  * What a step reports to the session. The script only gets `changed`, and the rest is for the output. A `changed`
- * status means a check did not pass, so it is the only status that counts as drift in `plan`. A `ran` status means a
- * run was triggered. A `waiting` status means a step it needs would change, so `plan` skipped its check. An `observed`
- * status is a read or an inspect.
+ * status means the host's state differed, so it is the only status that counts as drift in `plan`. A `ran` status means
+ * a run was triggered. A `waiting` status means a step it needs would change, so `plan` skipped reading the host's
+ * state. An `observed` status is a read or an inspect.
  */
 export type StepDetails =
   | { status: "unchanged"; changed: false }
   // A read or an inspect only looks, so it has a status of its own.
   | { status: "observed"; changed: false }
-  // `comparison` holds the values from the check before the fix.
+  // `comparison` holds the values read from the host before the fix.
   | { status: "changed"; changed: true; comparison: Comparison }
   | { status: "ran"; changed: true }
   // `needs` holds the names of the needed steps that would change or are waiting.

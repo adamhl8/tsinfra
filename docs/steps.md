@@ -10,7 +10,7 @@ Everything a host script does to a target goes through `h`, the context passed t
   - [`ensure`](#ensure)
   - [`fix`](#fix)
 - [`file`](#file)
-  - [The check](#the-check)
+  - [Reading the state](#reading-the-state)
   - [The diff](#the-diff)
   - [The write](#the-write)
   - [`sudo` and permissions](#sudo-and-permissions)
@@ -80,7 +80,7 @@ The difference is that tsinfra gets the condition and the body separately. That 
 `plan`, run the condition again after the body in `apply`, and count a condition that did not pass as drift.
 
 So plain TypeScript control flow is fine in a host script, except for one decision: whether a change is needed. That
-decision belongs in a step's check, where tsinfra can see it.
+decision belongs in how a step reads the host's state, where tsinfra can see it.
 
 | When the code...                       | Use                                                    |
 | -------------------------------------- | ------------------------------------------------------ |
@@ -172,9 +172,9 @@ runs in `apply`, so a mistake there shows up in `apply`.
 A step is one call on `h`. A host function is a series of steps, run one at a time at the top level of the script.
 [`read`](#read) is a step that only observes. The others can change the target, and each returns a `StepResult`.
 
-Most steps that can change the target check one piece of state, and in `apply` run a fix when the check fails. `ensure`
-is the step you write the check for. [`file`](#file) is a step whose check tsinfra writes.
-[`run`](#run) is a step with no check.
+Most steps that can change the target read one piece of the host's state, and in `apply` run a fix when it differs.
+`ensure` is the step where you write how to read it, as its `check`. [`file`](#file) is a step that reads the state
+itself. [`run`](#run) is a step that reads no state.
 
 ```ts
 // `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string.
@@ -400,7 +400,7 @@ run's check confirms it. Before reaching for it, try these:
   session does not show the group until a new login. `id -nG sonarr` reads the user database and shows it straight
   away.
 
-**Plan mode** runs the check and never the fix. A step that would change reports `would-change`.
+**Plan mode** runs the check and never the fix. A step that would change reports `changed`.
 
 ## `file`
 
@@ -413,7 +413,7 @@ type ContentFileOptions = {
   mode?: FileMode // "644", "rw-r--r--", or a constant like PUBLIC_FILE_MODE. Managed only when given
   owner?: string | number // a name is compared with the owner's name, a number with its uid
   group?: string | number // a name is compared with the group's name, a number with its gid
-  sudo?: boolean // run the check, the diff, and the write as root
+  sudo?: boolean // run the state command, the diff, and the write as root
   secret?: boolean // never fetch or show the old content
   needs?: StepResult<"file" | "ensure">[]
 }
@@ -489,7 +489,7 @@ regular file, the step fails, like `'/etc/x' is a symlink, so file won't replace
 form is for (see [Links](#links)). Whether the `content` form should follow a link and write to its target is open (see
 [Open questions](./open-questions.md#following-symlinks-in-file)).
 
-### The check
+### Reading the state
 
 One command prints what tsinfra needs, or a marker for a path that isn't a regular file:
 
@@ -504,7 +504,7 @@ else
 fi
 ```
 
-- **The hash is sha256,** the default in Salt, Chef, and Puppet. POSIX has no sha256 command, so the check tries each
+- **The hash is sha256,** the default in Salt, Chef, and Puppet. POSIX has no sha256 command, so the state command tries each
   common one: `sha256sum` (GNU coreutils, busybox, current macOS), `shasum -a 256` (older macOS), and `sha256` (FreeBSD,
   OpenBSD). This is the same chain pyinfra uses. The file goes in on stdin, because GNU `sha256sum` escapes odd
   filenames in its output and prefixes the line with `\`. tsinfra reads the first 64 hex characters, because GNU,
@@ -517,7 +517,7 @@ fi
   `stat` prints, and one given as a number with the uid or gid. There's no portable command to turn a group name into
   its id, because `getent` is Linux-only and macOS uses `dscl`, so names stay names. GNU and busybox print `UNKNOWN` for
   an id with no name, which only matters for an id, and those are compared as numbers.
-- **Verification** runs the same check again after the write, through `converge`. A file still out of sync fails with
+- **Verification** reads the state again after the write, through `converge`. A file still out of sync fails with
   "the host's state still differs after the fix", with the facts under it.
 
 ### The diff
@@ -572,7 +572,7 @@ A streaming path for large files is open (see [Open questions](./open-questions.
 | no `sudo`    | the SSH user, via `sh -s` | files the SSH user can write, like anything under `~`           |
 | `sudo: true` | root, via `sudo -n sh -s` | files under `/etc`, root-only files, or another user as `owner` |
 
-Under `sudo: true`, every part runs as root: the check, the `cat` for the diff, and the write. tsinfra writes all of
+Under `sudo: true`, every part runs as root: the state command, the `cat` for the diff, and the write. tsinfra writes all of
 those commands, so there is nowhere for a script to add `sudo` itself. This means `plan` also needs passwordless sudo on
 a host that manages such a file (see [Transport](./transport.md#sudo)).
 
@@ -583,7 +583,7 @@ Two mistakes get errors of their own instead of a raw shell error:
 
 - **`owner` names another user without `sudo`,** like `owner 'sonarr' needs sudo: true, because only root can give a
   file away`. Only root can `chown` a file to someone else.
-- **The check can't read the file without `sudo`,** like `can't read '/etc/shadow' as the SSH user, so it needs sudo:
+- **The state command can't read the file without `sudo`,** like `can't read '/etc/shadow' as the SSH user, so it needs sudo:
   true`. That way an unreadable file doesn't look missing.
 
 ### Links
@@ -610,7 +610,7 @@ is the new path. `file`'s `path` is the link, because that is the path the step 
   directory`. `~/` means the SSH user's home, as it does for `path`.
 - **The target may not exist yet,** because a later step might create it, or a mounted drive might not be there. The
   link is still made, and its line shows `points to a missing path`, so a typo in the repo path stands out.
-- **The check** reads the existing link's target with `readlink` and compares it with `link`. It is in sync when `path`
+- **The state command** reads the existing link's target with `readlink` and compares it with `link`. It is in sync when `path`
   is a symlink that points there.
 - **An existing symlink is always updated** to point at `link`, because managing it is the point.
 - **A regular file at `path` is an error** unless `force: true`, like `'~/.config/fish/config.fish' is a regular file,
@@ -772,11 +772,11 @@ failed in the same way.
 
 ## What `plan` can and cannot show
 
-`plan` runs every check against the machine as it is now. A step after a would-change step is checked against the old
+`plan` reads every step's state from the machine as it is now. A step after a step that would change reads the old
 state, not the state that step would leave behind. For most steps that does not matter. Where it does, a
 [need](./needs.md) is how you say so, and `plan` then shows the step as waiting instead of a misleading answer.
 
-When any check did not pass, `plan` adds a reminder before the summary: "Steps after a change were checked without
+When any step's state differed, `plan` adds a reminder before the summary: "Steps after a change were checked without
 that change, so apply may differ." Terraform's "known after apply" is the same problem. Terraform knows which values
 depend on which resources, so it can mark exactly those. tsinfra does not know which steps depend on each other, so it
 warns in general, unless a step's `needs` says so.

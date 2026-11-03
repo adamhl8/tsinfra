@@ -16,7 +16,7 @@ export const STATUS_STYLES: Record<StepStatus, { color: Style; symbol: string }>
 }
 
 // Color text that came from the script or the host, so it stands apart from tsinfra's own words.
-// That covers a check's values and a read's command.
+// That covers the values a step compared and a read's command.
 export const styleValue = (text: string): string => pc.cyan(text)
 
 // Color an error bright red, so it stands apart from a `got` value, which is red too.

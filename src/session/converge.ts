@@ -8,7 +8,7 @@ import type { CommandOutput } from "#transport/transport.ts"
 export interface HostState {
   inSync: boolean
   comparison: Comparison
-  /** The check command's output. A check function can run several commands, so it has none. */
+  /** The output of the command that read the state. A check function can run several commands, so it has none. */
   commandOutput?: CommandOutput
 }
 
@@ -32,7 +32,7 @@ export const converge = async (ctx: StepContext, spec: ConvergeSpec): Promise<Re
   const { stepName, mode } = ctx
   const { needs, readState, fix, verify } = spec
 
-  // Skip the check in `plan` when a needed step would change, because the check would read the host without that change.
+  // Skip reading the state in `plan` when a needed step would change, because the read would miss that change.
   const pendingNeeds = needs.filter(({ changed }) => changed).map(({ name }) => name)
   if (mode === "plan" && pendingNeeds.length > 0) return { status: "waiting", changed: true, needs: pendingNeeds }
 

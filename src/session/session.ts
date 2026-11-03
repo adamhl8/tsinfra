@@ -3,7 +3,7 @@ import { err, isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import type { HostEntry } from "#hosts/load.ts"
-import { readHomeDirectory } from "#session/paths/home.ts"
+import type { Shell } from "#session/shell.ts"
 import { createShell } from "#session/shell.ts"
 import type { Change } from "#session/step-functions/change.ts"
 import type { Exec, ChangeTools, CheckTools } from "#session/step-functions/tools.ts"
@@ -43,7 +43,7 @@ export interface Host {
   inspect: Inspect
   /**
    * Writes `content` to `path`, and manages the file's mode, owner, and group when they are given. A leading `~/` means
-   * the SSH user's home. In `plan` it only checks, and shows a diff of what would change.
+   * the SSH user's home. In `plan` it only reads the file's state, and shows a diff of what would change.
    *
    * A path that is a symlink or isn't a regular file fails the host and throws, and so does a failed write.
    */
@@ -57,8 +57,8 @@ export interface Host {
   ensure: <T extends string | boolean>(name: string, options: EnsureOptions<T>) => Promise<StepResult<"ensure">>
   /**
    * Runs `cmd`, a command or a function given `exec`, when a step in `after` changed, or on every pass with `after:
-   * "always"`. There is no check, so it never counts as drift. In `plan` it never runs, and reports changed when it
-   * would.
+   * "always"`. It doesn't read the host's state, so it never counts as drift. In `plan` it never runs, and reports
+   * changed when it would.
    *
    * A failing command fails the host and throws.
    */
@@ -66,6 +66,13 @@ export interface Host {
 }
 
 export type StepKind = Exclude<keyof Host, "name">
+
+// Read `$HOME` with `printf '%s'`, because it prints the value exactly, with no newline to strip.
+// `echo` treats backslashes or a leading `-n` specially in some shells.
+const READ_HOME_COMMAND = `printf '%s' "$HOME"`
+
+/** Reads the SSH user's home directory, which comes back empty when `$HOME` isn't set. */
+const readHomeDirectory = async (shell: Shell): Promise<Result<string>> => shell.run(READ_HOME_COMMAND)
 
 type Failure = Error | undefined
 
@@ -109,7 +116,7 @@ export const createHostSession = async (hostEntry: HostEntry, mode: Mode): Promi
     if (isErr(value)) fail(value)
 
     // Throw a failure recorded during `callback`, because a function in the script may have caught it and returned normally.
-    // Widen `failure` with `as`, because TypeScript keeps the narrowing to `undefined` from the check above.
+    // Widen `failure` with `as`, because TypeScript keeps the narrowing to `undefined` from the `if` above.
     // TypeScript can't know that `callback` may have set `failure` again.
     const callbackFailure = failure as Failure
     if (callbackFailure) throw callbackFailure

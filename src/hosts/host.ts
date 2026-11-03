@@ -6,7 +6,7 @@ export type HostFunction = (h: Host) => Promise<void>
 
 export const hostDefinitionSchema = type({
   target: "string",
-  // Type `fn` as a `HostFunction` because only "is a function" can be checked at runtime.
+  // Type `fn` as a `HostFunction` because only "is a function" can be validated at runtime.
   fn: type("Function").as<HostFunction>(),
 })
 

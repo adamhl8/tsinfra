@@ -30,8 +30,8 @@ With no host names, `plan` and `apply` run every host. An unknown name is an err
 
 ## plan and apply
 
-- **`plan`** runs every check and no fix. See [Steps](./steps.md).
-- **`apply`** runs every check and every needed fix, in order, with no confirmation prompt. Run `plan` first to see
+- **`plan`** reads the host's state for every step and runs no fix. See [Steps](./steps.md).
+- **`apply`** reads the host's state for every step and runs every needed fix, in order, with no confirmation prompt. Run `plan` first to see
   what will happen. That is the workflow `~/homelab/justfile` already uses, with `apply` passing `-y` to pyinfra.
 
 Hosts run in parallel, up to `--parallel <n>` at once (default 8). Steps within a host always run one at a time, in
@@ -95,7 +95,7 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   because nothing needed doing. A read or inspect has its own `observed` status, so it gets a gray `·` rather than `=`.
 - **Failures.** A failed step shows its error's message chain on indented lines under it, in bright red, so it stands
   apart from a red `got:` value. That includes a
-  failure the script caught inside the step, because the step still fails. The facts a check found, like `got:` and
+  failure the script caught inside the step, because the step still fails. The facts a step found, like `got:` and
   `want:`, are indented further and are not red, because they are not the error. A failure that is not any step's, like
   the script throwing, is the block's last `!` line, named after the host's file in italics (like `sonarr.ts`), so it
   doesn't read as a step, with its error under it the same way. The block's header already names the host, so the error
@@ -113,7 +113,7 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   line up in one column.
 - **A host with nothing to show** gets no block, only its line in the summary.
 - **The summary** has one line per host: `unchanged`, `failed`, or a count of changes, where a count includes both
-  `changed` and `ran` steps, so it matches the `~` lines in the blocks. In `plan`, when any check did not pass, it
+  `changed` and `ran` steps, so it matches the `~` lines in the blocks. In `plan`, when any step's state differed, it
   starts with the reminder that steps after a change were checked without it (see
   [Steps](./steps.md#what-plan-can-and-cannot-show)).
 - **Diffs** come from jsdiff (the `diff` package), not hand-written code. It is the standard line-diff library for
@@ -168,15 +168,15 @@ The output is built from a record of each host's run. It is one list of steps, i
 - **A step** records its kind (`read`, `inspect`, `ensure`, `run`, or `file`), its name, its status, and its error if it
   failed. A read or inspect has no name, so it records its command. An `ensure` with a string `want` that differed also
   records the `got` and `want` values.
-- **A step's commands** are every command that ran while it was running, including those from its check and fix
+- **A step's commands** are every command that ran while it was running, including those from reading its state and from its fix
   functions. A read or inspect has exactly one.
 - **A command** records the command, its stdout and stderr, and its exit code. A command that could not run at all
   records the error instead.
 
-A step's status is `unchanged`, `changed`, `ran`, `waiting`, or `observed`. `changed` means its check did not pass.
+A step's status is `unchanged`, `changed`, `ran`, `waiting`, or `observed`. `changed` means the host's state differed.
 `ran` means a run's trigger fired, or its `after` was `"always"`. `waiting` means a step it needs would change. A read
 or inspect is always `observed`. The record is the same in `plan` and `apply`, and so is each step's line. The output
-and `want` come from the check before the fix, so `apply` can show what a step changed too.
+and `want` come from reading the host's state before the fix, so `apply` can show what a step changed too.
 
 A failed step records its error. Steps called after the host failed throw without running, so they are not recorded. A
 failure that is not a step's, like a bug in the script, is the host's own failure.
@@ -205,8 +205,8 @@ Nothing logs yet. Add LogTape with the SSH transport, which is the first code wo
 `plan` exiting 2 makes a drift check in CI or a cron job a one-liner. `apply` never exits 2, because a run that changed
 things succeeded.
 
-Only steps with a check decide whether `plan` exits 2, because only a `changed` status counts. A `run` shows up in the
-plan as a `>` line but never counts, because it has no check. See [Steps](./steps.md#run).
+Only steps that read the host's state decide whether `plan` exits 2, because only a `changed` status counts. A `run` shows up in the
+plan as a `>` line but never counts, because it doesn't read the host's state. See [Steps](./steps.md#run).
 
 A failed host wins. `plan` exits 1 when any host failed, even if another host has changes pending, because the plan for
 the failed host is incomplete.

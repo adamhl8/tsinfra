@@ -3,7 +3,7 @@
 Working design notes. Nothing here is implemented yet.
 
 tsinfra is a small TypeScript library and CLI for keeping machines configured. You write one script per host. It reads
-top to bottom and is made of idempotent steps. tsinfra runs each step's check, shows what has drifted, and runs a fix
+top to bottom and is made of idempotent steps. tsinfra reads each step's state on the host, shows what has drifted, and runs a fix
 only where one is needed.
 
 An earlier design aimed at a full configuration management tool, with a typed inventory and a planning engine. This
@@ -35,10 +35,10 @@ helper anyway (`~/homelab/pyinfra/lib/operations/converge.py`), which is a check
 
 tsinfra keeps the script shape and adds what scripts lacked:
 
-- A plan mode that runs every check and no fix.
+- A plan mode that reads every step's state and runs no fix.
 - A diff wherever a step can show one.
-- A re-check after each fix, so a fix that does not work fails loudly.
-- Needs, so `plan` waits on an earlier change instead of checking too early.
+- A second read of the state after each fix, so a fix that does not work fails loudly.
+- Needs, so `plan` waits on an earlier change instead of reading the host too early.
 - One command that checks every host at once.
 
 ## Goals
@@ -47,7 +47,7 @@ tsinfra keeps the script shape and adds what scripts lacked:
 - **Your code runs on the control machine.** `fs`, `fetch`, decryption, and string building all happen locally. Only
   shell commands and file bytes reach a target.
 - **Nothing on targets** beyond `sh` and `sshd`.
-- **`plan` is honest.** It shows what each check sees right now, and marks the places where an earlier change matters.
+- **`plan` is honest.** It shows what each step sees on the host right now, and marks the places where an earlier change matters.
 - **Small.** Buildable in a few weeks and maintainable alone.
 
 ## Non-goals
@@ -123,9 +123,9 @@ tsinfra plan            # every host
 | --------- | --------------------------------------------------------------------------------------- |
 | **Host**  | A file in `hosts/` that exports `host(target, fn)`. The file name is what the CLI uses. |
 | **Step**  | One call on `h`, like `h.ensure` or `h.read`. Steps run one at a time.                  |
-| **Need**  | An earlier step whose change a step's check depends on, named in `needs`.               |
-| **Plan**  | Run every check, no fix. Show what would change.                                        |
-| **Apply** | Run every check, and the fix wherever the check fails.                                  |
+| **Need**  | An earlier step whose change a step's state depends on, named in `needs`.               |
+| **Plan**  | Read every step's state, run no fix. Show what would change.                            |
+| **Apply** | Read every step's state, and run the fix wherever it differs.                           |
 
 ## Contents
 

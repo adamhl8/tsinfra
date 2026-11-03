@@ -15,7 +15,7 @@ export interface RunOptions {
   after: TriggerSteps | "always"
 }
 
-// Check the options at runtime too, because a script can get past the types, like with `as` or `@ts-ignore`.
+// Validate the options at runtime too, because a script can get past the types, like with `as` or `@ts-ignore`.
 // Reject an empty `after`, because a run that follows nothing never runs, which is a mistake.
 // Declare it against `RunOptions`, so the schema and the interface can't drift apart.
 const runOptionsSchema = type.declare<RunOptions>().type({

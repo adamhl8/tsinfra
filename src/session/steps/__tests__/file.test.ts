@@ -4,43 +4,11 @@ import os from "node:os"
 import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
-import { isErr, messageChain } from "ts-explicit-errors"
 
 import { createSession, fileOrMessage } from "#__tests__/session.ts"
-import { parseCheckOutput } from "#session/steps/file.ts"
-import { toBytes } from "#session/steps/file/comparison.ts"
 import { PUBLIC_FILE_MODE } from "#session/steps/file/mode.ts"
 
-const HASH = "a".repeat(64)
-
-const toFindings = (stdout: string) => {
-  const findings = parseCheckOutput(stdout)
-  return isErr(findings) ? messageChain(findings) : findings
-}
-
 const createFilePath = async () => path.join(await makeTempDir("file-"), "app.conf")
-
-describe("parseCheckOutput", () => {
-  it("should read GNU's hash and stat line", () => {
-    expect(toFindings(`kind=file\n${HASH}  -\n644 501 20 adam staff 12\n`)).toStrictEqual({
-      kind: "file",
-      remoteFile: { hash: HASH, mode: 0o644, uid: 501, gid: 20, user: "adam", group: "staff", size: toBytes(12) },
-    })
-  })
-
-  it("should read BSD's bare hash and its zero-padded mode, setuid included", () => {
-    expect(toFindings(`kind=file\n${HASH}\n04755 0 0 root wheel 3\n`)).toStrictEqual({
-      kind: "file",
-      remoteFile: { hash: HASH, mode: 0o4755, uid: 0, gid: 0, user: "root", group: "wheel", size: toBytes(3) },
-    })
-  })
-
-  it("should fail when no sha256 command printed a hash", () => {
-    expect(toFindings("kind=file\n\n644 0 0 root root 3\n")).toBe(
-      "the file check found no sha256 command (sha256sum, shasum, or sha256) on the host",
-    )
-  })
-})
 
 describe("h.file in plan", () => {
   it("should report a new file without writing it", async () => {

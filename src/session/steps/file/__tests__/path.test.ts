@@ -2,19 +2,12 @@ import { describe, expect, it } from "bun:test"
 
 import { isErr, messageChain } from "ts-explicit-errors"
 
-import { toAbsolutePath } from "#session/paths/home.ts"
-import { quoteShellArg } from "#session/paths/quote.ts"
+import { toAbsolutePath } from "#session/steps/file/path.ts"
 
 const toMessage = (path: string, home: string) => {
   const resolved = toAbsolutePath(path, home)
   return isErr(resolved) ? messageChain(resolved) : resolved
 }
-
-describe("quoteShellArg", () => {
-  it(String.raw`should wrap text in single quotes, and write each single quote as '\''`, () => {
-    expect(quoteShellArg("/srv/it's here")).toBe(String.raw`'/srv/it'\''s here'`)
-  })
-})
 
 describe("toAbsolutePath", () => {
   it("should replace a leading ~/ and a bare ~ with the home directory", () => {
