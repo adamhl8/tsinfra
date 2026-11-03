@@ -147,9 +147,9 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   `want:`, are indented further and are not red, because they are not the error. A failure that is not any step's, like
   the script throwing, is the block's last `!` line, named after the host's script in italics (like `sonarr.ts`), so it
   doesn't read as a step, with its error under it the same way. The block's header already names the host, so the error
-  is not wrapped in "failed to run host". A host whose session couldn't start, like an unreachable one, never ran its
+  is not wrapped in "failed to run host". A host that couldn't be prepared, like an unreachable one, never ran its
   script, so its block has one `!` line named after its target (like `web.lan`), with an error that starts with
-  "failed to start the session".
+  "failed to prepare the host".
 - **Values** are cyan when they came from the script or the host, like `stderr:` and the command a read or inspect is
   named by. That sets them apart from tsinfra's own words. A `got:` value is red and a `want:` value is green, like a
   diff's `-` and `+` lines. A string value keeps its quotes, so an empty one still shows without color, but the quotes

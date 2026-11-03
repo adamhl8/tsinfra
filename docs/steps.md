@@ -297,7 +297,7 @@ command fully single-quoted, with each `'` written as `'\''`, so a space or a qu
 also stops the shell from expanding `~`, which only happens when `~` is unquoted at the start of a word. So tsinfra
 resolves `~/` itself:
 
-- **It reads the home directory when the host's session starts,** before the script runs, as the SSH user, with
+- **It reads the home directory when the host is prepared,** before the script runs, as the SSH user, with
   `printf '%s' "$HOME"`. That's one command per host, and it doubles as the first contact with the host, so a host that
   can't run commands fails before its script starts. It runs without `sudo`, because under `sudo` the shell's `$HOME` is
   usually root's. `printf '%s'` prints the value exactly, and avoids the way some shells treat backslashes or `-n` in

@@ -152,7 +152,7 @@ Every `ssh` call passes:
 - **BatchMode** makes ssh fail instead of prompting. Hosts run in parallel, and a password or host-key prompt from one
   of them would hang the run. The error says to run `ssh <host>` once by hand.
 
-The first command to a host, the home read when its session starts, opens the connection. An unreachable host fails
+The first command to a host, the home read when it's prepared, opens the connection. An unreachable host fails
 there, before its script runs, with ssh's error.
 
 **Host keys and timeouts follow `~/.ssh/config`, with defaults where it says nothing.** A command-line `-o` always beats
@@ -194,7 +194,7 @@ export default host("incus.lan", fn, { sudo: { password: incusSudo } }) // a pas
 One option has both forms, because a password already implies sudo. The Incus containers have passwordless sudo
 through cloud-init. The Mac and the first run on the Incus host need a password.
 
-**Preflight.** Every host's session starts before any script runs: connect, read `$HOME`, and for a host that declares
+**Preflight.** Every host is prepared before any script runs: connect, read `$HOME`, and for a host that declares
 `sudo`, probe it. Then the scripts run, one after another or in parallel. Prompts happen in between, one host at a time,
 so they never mix with a running host's output. A host that can't be reached fails here, before any other host changes
 anything. A host has to declare `sudo` because of this: by the time its script runs, it's too late to ask.

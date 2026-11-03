@@ -40,7 +40,7 @@ export interface StepContext {
   stepName: string
   mode: Mode
   shell: Shell
-  /** The SSH user's home directory, read when the session starts. It's empty when `$HOME` isn't set. */
+  /** The SSH user's home directory, read when the host is prepared. It's empty when `$HOME` isn't set. */
   home: string
   /** Given to a check function. */
   checkTools: CheckTools

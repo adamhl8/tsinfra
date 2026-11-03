@@ -9,7 +9,7 @@ import { program } from "#cli/program.ts"
 import { discoverHosts } from "#hosts/discover.ts"
 import { loadHosts } from "#hosts/load.ts"
 import type { HostReport } from "#hosts/run.ts"
-import { hasDrift, runHost } from "#hosts/run.ts"
+import { hasDrift, prepareHosts, runHost } from "#hosts/run.ts"
 import packageJson from "#package.json" with { type: "json" }
 import { ERROR_THEME, printTsinfraError } from "#report/errors.ts"
 import { formatHostBlock, formatSummary } from "#report/format.ts"
@@ -26,11 +26,13 @@ const runTsinfra = async (): Promise<Result<number>> => {
   const loadedHosts = await loadHosts(hostScripts)
   if (isErr(loadedHosts)) return loadedHosts
 
+  const preparedHosts = await prepareHosts(loadedHosts)
+
   const hostReports: HostReport[] = []
 
-  for (const loadedHost of loadedHosts) {
+  for (const preparedHost of preparedHosts) {
     // oxlint-disable-next-line no-await-in-loop - hosts run one at a time until there's a parallel option
-    const hostReport = await runHost(loadedHost, config.mode)
+    const hostReport = await runHost(preparedHost, config.mode)
     hostReports.push(hostReport)
 
     const hostBlock = formatHostBlock(hostReport, { verbose: config.verbose })

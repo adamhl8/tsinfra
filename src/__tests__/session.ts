@@ -2,10 +2,13 @@ import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import { host } from "#hosts/host.ts"
+import type { LoadedHost } from "#hosts/load.ts"
+import { prepareHost, runHost } from "#hosts/run.ts"
 import type { EnsureOptions } from "#session/handlers/ensure.ts"
 import type { FileOptions } from "#session/handlers/file.ts"
 import type { RunOptions } from "#session/handlers/run.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
+import { buildHostContext } from "#session/host-context.ts"
 import type { Host } from "#session/session.ts"
 import { createHostSession } from "#session/session.ts"
 
@@ -19,10 +22,15 @@ export const throwBoom = () => {
 
 /** Creates a session for a host 'a' on `@local`. */
 export const createSession = async (mode: Mode = "apply") => {
-  const hostSession = await createHostSession({ name: "a", ...host("@local", doNothing) }, mode)
-  if (isErr(hostSession)) throw hostSession
-  return hostSession
+  const hostContext = await buildHostContext({ name: "a", ...host("@local", doNothing) })
+  if (isErr(hostContext)) throw hostContext
+
+  return createHostSession(hostContext, mode)
 }
+
+/** Prepares one host and runs it, for a test that only cares about its report. */
+export const prepareAndRunHost = async (loadedHost: LoadedHost, mode: Mode) =>
+  runHost(await prepareHost(loadedHost), mode)
 
 /** Reads `cmd` and returns its output, or the thrown error's message chain. */
 export const readOrMessage = async (h: Host, cmd: string) => {

@@ -11,9 +11,8 @@ import { err } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import type { HostFunction } from "#hosts/host.ts"
-import { host } from "#hosts/host.ts"
 import type { HostReport } from "#hosts/run.ts"
-import { hasDrift, runHost } from "#hosts/run.ts"
+import { hasDrift, prepareHosts, runHost } from "#hosts/run.ts"
 import { printTsinfraError } from "#report/errors.ts"
 import { formatHostBlock, formatSummary } from "#report/format.ts"
 import { PUBLIC_FILE_MODE } from "#session/handlers/file/mode.ts"
@@ -278,7 +277,7 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      // A host whose session couldn't start, named after its target, because its script never ran.
+      // A host that couldn't be prepared, named after its target, because its script never ran.
       name: "unreachable",
       target: "web.lan",
       fn: async (h) => {
@@ -319,9 +318,10 @@ const previewMode = async (previewPass: PreviewPass) => {
     const scenarios = createScenarios(dir).filter(
       ({ modes, skipVerbose }) => (!modes || modes.includes(mode)) && !(verbose && skipVerbose),
     )
-    for (const { name, target, fn } of scenarios) {
+    const preparedHosts = await prepareHosts(scenarios)
+    for (const preparedHost of preparedHosts) {
       // oxlint-disable-next-line no-await-in-loop - hosts run one at a time, the same as the CLI
-      const hostReport = await runHost({ name, ...host(target, fn) }, mode)
+      const hostReport = await runHost(preparedHost, mode)
       hostReports.push(hostReport)
 
       const block = formatHostBlock(hostReport, { verbose })

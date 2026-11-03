@@ -1,7 +1,10 @@
-import { attempt, isErr } from "ts-explicit-errors"
+import type { Result } from "ts-explicit-errors"
+import { attempt, err, isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import type { LoadedHost } from "#hosts/load.ts"
+import type { HostContext } from "#session/host-context.ts"
+import { buildHostContext } from "#session/host-context.ts"
 import { createHostSession } from "#session/session.ts"
 import type { StepRecord } from "#session/step-recorder.ts"
 
@@ -14,7 +17,7 @@ interface StartedHostReport {
   failure: Error | undefined
 }
 
-/** A host whose session couldn't start, like an unreachable one, so its script never ran. */
+/** A host that couldn't be prepared, like an unreachable one, so its script never ran. */
 interface UnstartedHostReport {
   name: string
   target: string
@@ -29,14 +32,31 @@ export type HostReport = StartedHostReport | UnstartedHostReport
 export const hasDrift = (hostReport: HostReport) =>
   hostReport.started && hostReport.stepRecords.some(({ outcome }) => !isErr(outcome) && outcome?.status === "changed")
 
-/** Calls the script's host function with its `Host`, catches what it throws, and reports what the host did. */
-export const runHost = async (loadedHost: LoadedHost, mode: Mode): Promise<HostReport> => {
-  const { name, target } = loadedHost
-  const hostSession = await createHostSession(loadedHost, mode)
-  if (isErr(hostSession)) return { name, target, started: false, failure: hostSession }
+/** A loaded host and what preparing it gave, which `runHost` reports when it's an error. */
+export interface PreparedHost {
+  loadedHost: LoadedHost
+  hostContext: Result<HostContext>
+}
 
-  const { host, stepRecords, getFailure } = hostSession
-  const fnResult = await attempt(async () => loadedHost.fn(host))
+/** Prepares one host. */
+export const prepareHost = async (loadedHost: LoadedHost): Promise<PreparedHost> => {
+  const hostContext = await buildHostContext(loadedHost)
+  return { loadedHost, hostContext }
+}
+
+/** Prepares every host at once, before any script runs, and keeps them in order. */
+export const prepareHosts = async (loadedHosts: LoadedHost[]): Promise<PreparedHost[]> =>
+  Promise.all(loadedHosts.map(async (loadedHost) => prepareHost(loadedHost)))
+
+/** Calls the script's host function with its `Host`, catches what it throws, and reports what the host did. */
+export const runHost = async (preparedHost: PreparedHost, mode: Mode): Promise<HostReport> => {
+  const { loadedHost, hostContext } = preparedHost
+  const { name, target, fn: hostFunction } = loadedHost
+  if (isErr(hostContext))
+    return { name, target, started: false, failure: err("failed to prepare the host", hostContext) }
+
+  const { host, stepRecords, getFailure } = createHostSession(hostContext, mode)
+  const fnResult = await attempt(async () => hostFunction(host))
 
   // Report the failure recorded in the session first, because a script that catches it can go on to throw something else.
   const failure = getFailure() ?? (isErr(fnResult) ? fnResult : undefined)

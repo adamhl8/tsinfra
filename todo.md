@@ -32,9 +32,9 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
       file, and a link.
    5. **Validation.** `validate` on `file`, run against the temp file before the rename, with the temp name keeping the
       destination's extension (see [Steps](./docs/steps.md#the-write)).
-   6. **Sudo passwords.** A preflight phase that starts every host's session before any script runs, `sudo` declared on
-      `host()` as `true` or `{ password }`, the `sudo -n true` probe, a prompt per host with three tries, the no-TTY
-      failure, and the preamble's `sudo` function with an askpass helper, or `sudo -n` on a host that didn't declare it
+   6. **Sudo passwords.** Adding to the preflight in `prepareHosts`, which prepares every host before any script runs:
+      `sudo` declared on `host()` as `true` or `{ password }`, the `sudo -n true` probe, a prompt per host with three
+      tries, the no-TTY failure, and the preamble's `sudo` function with an askpass helper, or `sudo -n` on a host that didn't declare it
       (see [Transport](./docs/transport.md#sudo)).
    7. **Content written only once.** `overwrite: false` on `file`: write a missing file, never read or compare an
       existing one's content, and still manage its attributes (see [Steps](./docs/steps.md#the-write)).

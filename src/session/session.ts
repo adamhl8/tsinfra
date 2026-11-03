@@ -1,8 +1,7 @@
 import type { Result } from "ts-explicit-errors"
-import { err, isErr } from "ts-explicit-errors"
+import { isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
-import type { LoadedHost } from "#hosts/load.ts"
 import type { EnsureOptions } from "#session/handlers/ensure.ts"
 import { handleEnsure } from "#session/handlers/ensure.ts"
 import type { FileOptions } from "#session/handlers/file.ts"
@@ -15,12 +14,11 @@ import type { Change } from "#session/handlers/shared/change.ts"
 import { validateStepName } from "#session/handlers/step-name.ts"
 import type { ChangeTools, CheckTools, CommandResult, Exec, Inspect } from "#session/handlers/tools.ts"
 import { execCommand, inspectCommand } from "#session/handlers/tools.ts"
-import type { Shell } from "#session/shell.ts"
+import type { HostContext } from "#session/host-context.ts"
 import { createShell } from "#session/shell.ts"
 import type { StepRecord } from "#session/step-recorder.ts"
 import { createStepRecorder } from "#session/step-recorder.ts"
 import type { StepContext, StepOutcome, StepResult } from "#session/step.ts"
-import { getTransport } from "#transport/transport.ts"
 
 /** What a host's function is given. Each method call is one step, and steps run one at a time at the top level. */
 export interface Host {
@@ -66,13 +64,6 @@ export interface Host {
 
 export type StepKind = Exclude<keyof Host, "name">
 
-// Read `$HOME` with `printf '%s'`, because it prints the value exactly, with no newline to strip.
-// `echo` treats backslashes or a leading `-n` specially in some shells.
-const READ_HOME_COMMAND = `printf '%s' "$HOME"`
-
-/** Reads the SSH user's home directory, which comes back empty when `$HOME` isn't set. */
-const readHomeDirectory = async (shell: Shell): Promise<Result<string>> => shell.run(READ_HOME_COMMAND)
-
 type Failure = Error | undefined
 
 // Keep the first failure, because calls made at once with `Promise.all` can each fail.
@@ -88,15 +79,14 @@ export interface HostSession {
 }
 
 /**
- * Builds the `Host` passed to a host's function, and tracks the run's failure where the script can't see it. It fails
- * when it can't read the SSH user's home directory, which means the host can't run commands at all.
+ * Builds the `Host` passed to a host's function, and tracks the run's failure where the script can't see it.
  *
  * This is the only code that throws, because throwing is the contract with the script. Every function the script can
  * call, on `h` or as `read` and `exec`, goes through `callOrFail` around an internal function from `handlers/` that
  * returns errors as values.
  */
-export const createHostSession = async (loadedHost: LoadedHost, mode: Mode): Promise<Result<HostSession>> => {
-  const { name, target } = loadedHost
+export const createHostSession = (hostContext: HostContext, mode: Mode): HostSession => {
+  const { name, transport, home } = hostContext
   let failure: Failure
 
   // Throw the failure on every later call, so a script that catches it still can't use the host.
@@ -125,12 +115,7 @@ export const createHostSession = async (loadedHost: LoadedHost, mode: Mode): Pro
   const { stepRecords, recordCommands, startStep, finishStep } = createStepRecorder()
 
   // Record each command under the running step, because every command passes through the transport.
-  const shell = createShell(recordCommands(getTransport(target)))
-
-  // Read the SSH user's home before the script runs, because a path that starts with `~/` needs it.
-  // An unset `$HOME` comes back empty, so this fails only when the host can't run commands at all.
-  const home = await readHomeDirectory(shell)
-  if (isErr(home)) return err("failed to start the session", err("failed to read the SSH user's home directory", home))
+  const shell = createShell(recordCommands(transport))
 
   const callStep = async <K extends StepKind>(
     stepName: unknown,

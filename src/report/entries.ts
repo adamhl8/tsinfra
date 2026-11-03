@@ -132,7 +132,7 @@ const toStepEntry = (stepRecord: StepRecord, formatOptions: FormatOptions): Step
 
 /** Returns the entries a host block shows: one per step that shows, then a failure no step owns. */
 export const toStepEntries = (hostReport: HostReport, formatOptions: FormatOptions): StepEntry[] => {
-  // Name a session that couldn't start after its target, because that's what failed, and the script never ran.
+  // Name a host that couldn't be prepared after its target, because that's what failed, and the script never ran.
   if (!hostReport.started) return [toFailureEntry({ text: hostReport.target, kind: "value" }, hostReport.failure)]
 
   const { name, stepRecords, failure } = hostReport

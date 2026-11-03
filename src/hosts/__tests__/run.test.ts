@@ -1,10 +1,13 @@
 import { describe, expect, it } from "bun:test"
+import path from "node:path"
 
-import { attempt, messageChain } from "ts-explicit-errors"
+import { makeTempDir } from "@adamhl8/configs/test"
+import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
+import { prepareAndRunHost } from "#__tests__/session.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
-import { hasDrift, runHost } from "#hosts/run.ts"
+import { hasDrift, prepareHosts } from "#hosts/run.ts"
 import type { Host } from "#session/session.ts"
 
 const throwBoom = () => {
@@ -24,10 +27,11 @@ const readTwice = async (h: Host) => {
   await h.read("exit 1")
 }
 
-const runHostA = async (fn: HostFunction) => runHost({ name: "a", ...host("@local", fn) }, "apply")
+const runHostA = async (fn: HostFunction) => prepareAndRunHost({ name: "a", ...host("@local", fn) }, "apply")
 
 /** Plans a host 'a' with `fn` and reports whether it has drift. */
-const planHasDrift = async (fn: HostFunction) => hasDrift(await runHost({ name: "a", ...host("@local", fn) }, "plan"))
+const planHasDrift = async (fn: HostFunction) =>
+  hasDrift(await prepareAndRunHost({ name: "a", ...host("@local", fn) }, "plan"))
 
 const ensurePending = async (h: Host) => {
   await h.ensure("Pending", { check: "false", want: true, fix: "true" })
@@ -47,16 +51,37 @@ const getMessage = (failure: Error | undefined) => failure && messageChain(failu
 /** Runs a host 'a' with `fn` and returns its failure's message chain, if any. */
 const runAndGetMessage = async (fn: HostFunction) => getMessage((await runHostA(fn)).failure)
 
+describe("prepareHosts", () => {
+  it("should prepare every host in order without running a script", async () => {
+    const marker = path.join(await makeTempDir("prepare-"), "ran")
+    const touchMarker = async (h: Host) => {
+      await h.read(`touch '${marker}'`)
+    }
+    const preparedHosts = await prepareHosts([
+      { name: "a", ...host("@local", touchMarker) },
+      { name: "b", ...host("b.lan", touchMarker) },
+      { name: "c", ...host("@local", touchMarker) },
+    ])
+
+    expect(preparedHosts.map(({ loadedHost, hostContext }) => [loadedHost.name, isErr(hostContext)])).toStrictEqual([
+      ["a", false],
+      ["b", true],
+      ["c", false],
+    ])
+    expect(await Bun.file(marker).exists()).toBe(false)
+  })
+})
+
 describe("runHost", () => {
   it("should fail before the script runs when the host can't run commands", async () => {
-    const { failure, ...hostReport } = await runHost({ name: "a", ...host("a.lan", throwBoom) }, "apply")
+    const { failure, ...hostReport } = await prepareAndRunHost({ name: "a", ...host("a.lan", throwBoom) }, "apply")
 
     expect({ ...hostReport, message: getMessage(failure) }).toStrictEqual({
       name: "a",
       target: "a.lan",
       started: false,
       message:
-        "failed to start the session -> failed to read the SSH user's home directory -> target 'a.lan' isn't supported yet (only '@local')",
+        "failed to prepare the host -> failed to read the SSH user's home directory -> target 'a.lan' isn't supported yet (only '@local')",
     })
   })
 

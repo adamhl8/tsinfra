@@ -5,16 +5,16 @@ import path from "node:path"
 import { makeTempDir } from "@adamhl8/configs/test"
 import { attempt } from "ts-explicit-errors"
 
+import { prepareAndRunHost } from "#__tests__/session.ts"
 import type { Mode } from "#cli/program.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
-import { runHost } from "#hosts/run.ts"
 import { formatHostBlock, formatSummary } from "#report/format.ts"
 import type { EnsureOptions } from "#session/handlers/ensure.ts"
 import type { Host } from "#session/session.ts"
 
 const runNamedHost = async (name: string, fn: HostFunction, mode: Mode) =>
-  runHost({ name, ...host("@local", fn) }, mode)
+  prepareAndRunHost({ name, ...host("@local", fn) }, mode)
 
 const formatBlock = async (fn: HostFunction, mode: Mode) => formatHostBlock(await runNamedHost("a", fn, mode))
 
@@ -159,10 +159,10 @@ describe("formatHostBlock", () => {
     expect(await formatBlock(changeThenThrow, "plan")).toBe("a\n  ~ Pending\n  ! a.ts\n      boom")
   })
 
-  it("should name a host whose session couldn't start after its target, and count it as failed", async () => {
-    const hostReport = await runHost({ name: "a", ...host("a.lan", changeThenThrow) }, "plan")
+  it("should name a host that couldn't be prepared after its target, and count it as failed", async () => {
+    const hostReport = await prepareAndRunHost({ name: "a", ...host("a.lan", changeThenThrow) }, "plan")
     const startError =
-      "failed to start the session -> failed to read the SSH user's home directory -> target 'a.lan' isn't supported yet (only '@local')"
+      "failed to prepare the host -> failed to read the SSH user's home directory -> target 'a.lan' isn't supported yet (only '@local')"
 
     expect([formatHostBlock(hostReport), formatSummary([hostReport], "plan")]).toStrictEqual([
       `a\n  ! a.lan\n      ${startError}`,
