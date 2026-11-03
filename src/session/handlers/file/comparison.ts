@@ -1,13 +1,13 @@
 import type { Result } from "ts-explicit-errors"
 import { attempt, err, isErr } from "ts-explicit-errors"
 
+import type { Bytes } from "#session/handlers/file/bytes.ts"
+import { toBytes } from "#session/handlers/file/bytes.ts"
+import { formatMode, toModeBits } from "#session/handlers/file/mode.ts"
+import type { HostFile } from "#session/handlers/file/state-command.ts"
+import type { WantedFile } from "#session/handlers/file/wanted-file.ts"
 import type { Shell } from "#session/shell.ts"
 import { quoteShellArg } from "#session/shell.ts"
-import type { Bytes } from "#session/steps/file/bytes.ts"
-import { toBytes } from "#session/steps/file/bytes.ts"
-import { formatMode, toModeBits } from "#session/steps/file/mode.ts"
-import type { HostFile } from "#session/steps/file/state-command.ts"
-import type { WantedFile } from "#session/steps/file/wanted-file.ts"
 
 /** How a file on the host differs from what the script wants: its content, and each managed attribute that differs. */
 export interface FileComparison {

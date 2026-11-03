@@ -2,19 +2,19 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { Comparison } from "#session/converge.ts"
-import { converge } from "#session/converge.ts"
+import type { FileContent } from "#session/handlers/file/comparison.ts"
+import { compareContent, findAttributeChanges } from "#session/handlers/file/comparison.ts"
+import type { FileMode, OctalMode, SymbolicMode } from "#session/handlers/file/mode.ts"
+import { OCTAL_MODE_PATTERN, SYMBOLIC_MODE_PATTERN } from "#session/handlers/file/mode.ts"
+import { toAbsolutePath } from "#session/handlers/file/path.ts"
+import { buildStateCommand, parseStateOutput } from "#session/handlers/file/state-command.ts"
+import type { WantedFile } from "#session/handlers/file/wanted-file.ts"
+import { toWantedFile } from "#session/handlers/file/wanted-file.ts"
+import type { Comparison } from "#session/handlers/shared/converge.ts"
+import { converge } from "#session/handlers/shared/converge.ts"
 import type { Shell } from "#session/shell.ts"
 import type { NeededSteps, StepContext, StepOutcome } from "#session/step.ts"
-import { neededStepsSchema } from "#session/step.ts"
-import type { FileContent } from "#session/steps/file/comparison.ts"
-import { compareContent, findAttributeChanges } from "#session/steps/file/comparison.ts"
-import type { FileMode, OctalMode, SymbolicMode } from "#session/steps/file/mode.ts"
-import { OCTAL_MODE_PATTERN, SYMBOLIC_MODE_PATTERN } from "#session/steps/file/mode.ts"
-import { toAbsolutePath } from "#session/steps/file/path.ts"
-import { buildStateCommand, parseStateOutput } from "#session/steps/file/state-command.ts"
-import type { WantedFile } from "#session/steps/file/wanted-file.ts"
-import { toWantedFile } from "#session/steps/file/wanted-file.ts"
+import { neededStepsSchema, nonEmptyStringSchema } from "#session/step.ts"
 
 export interface FileOptions {
   /** What the file should hold, computed on the control machine. */
@@ -85,12 +85,12 @@ const compareFile = async (input: CompareFileInput): Promise<Result<Comparison>>
   return { inSync, values: { kind: "file", content, attributes } }
 }
 
-export const handleFile = async (
-  ctx: StepContext,
-  path: string,
-  options: FileOptions,
-): Promise<Result<StepOutcome>> => {
+export const handleFile = async (ctx: StepContext, path: unknown, options: unknown): Promise<Result<StepOutcome>> => {
   const { stepName, shell, home } = ctx
+
+  const validPath = nonEmptyStringSchema(path)
+  if (validPath instanceof type.errors)
+    return err("failed to validate the path given to 'file'", err(validPath.summary, undefined))
 
   const validOptions = fileOptionsSchema(options)
   if (validOptions instanceof type.errors)
@@ -98,7 +98,7 @@ export const handleFile = async (
 
   const { secret = false, needs = [] } = validOptions
 
-  const absolutePath = toAbsolutePath(path, home)
+  const absolutePath = toAbsolutePath(validPath, home)
   if (isErr(absolutePath)) return absolutePath
 
   const wantedFile = toWantedFile(validOptions)

@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test"
 
 import { isErr, messageChain } from "ts-explicit-errors"
 
-import { toBytes } from "#session/steps/file/bytes.ts"
-import { parseStateOutput } from "#session/steps/file/state-command.ts"
+import { toBytes } from "#session/handlers/file/bytes.ts"
+import { parseStateOutput } from "#session/handlers/file/state-command.ts"
 
 const HASH = "a".repeat(64)
 

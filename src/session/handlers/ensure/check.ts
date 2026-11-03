@@ -2,9 +2,9 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { attempt, err, isErr } from "ts-explicit-errors"
 
-import type { Comparison } from "#session/converge.ts"
+import type { Comparison } from "#session/handlers/shared/converge.ts"
+import type { CheckTools } from "#session/handlers/tools.ts"
 import { createCommandExitError } from "#session/shell.ts"
-import type { CheckTools } from "#session/step-functions/tools.ts"
 import type { StepContext } from "#session/step.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
 import type { CommandOutput } from "#transport/transport.ts"
@@ -20,6 +20,9 @@ export const checkSchema = type
   .declare<Check<string | boolean>>()
   .type(nonEmptyStringSchema.or(type("Function").as<CheckFunction<string | boolean>>()))
 
+// Require the check's value to have `want`'s type, which `want` alone decides.
+const checkValueSchema = type({ value: "string", want: "string" }).or({ value: "boolean", want: "boolean" })
+
 /** What the check gave and what it wanted, as raw values. `kind` says how the output shows them. */
 export type EnsureComparison =
   | { kind: "string"; got: string; want: string }
@@ -34,16 +37,20 @@ const compareStrings = (value: string, wantedValue: string): Comparison => {
 }
 
 /**
- * Compares a check function's value to `want`. The value is `unknown` because a script can get past the types, like
- * with `as` or `@ts-ignore`, so a check function can return anything.
+ * Validates a check function's value against `want`'s type, then compares the two. The value is `unknown` because a
+ * script can get past the types and return anything.
  */
 const compareFnValue = (value: unknown, want: string | boolean): Result<Comparison> => {
-  if (typeof value === "string" && typeof want === "string") return compareStrings(value, want)
+  const valid = checkValueSchema({ value, want })
+  if (valid instanceof type.errors) {
+    return err(
+      "failed to validate the value the check returned",
+      err(`it's of type ${typeof value}, but want is of type ${typeof want}`, undefined),
+    )
+  }
 
-  if (typeof value === "boolean" && typeof want === "boolean")
-    return { inSync: value === want, values: { kind: "boolean", got: value, want } }
-
-  return err(`the check returned a ${typeof value}, but want is a ${typeof want}`, undefined)
+  if (typeof valid.want === "string") return compareStrings(valid.value, valid.want)
+  return { inSync: valid.value === valid.want, values: { kind: "boolean", got: valid.value, want: valid.want } }
 }
 
 /** Compares a check command's stdout, or its exit code, to `want`. */
@@ -71,8 +78,9 @@ export const compareCheck = async (
   const { shell, checkTools } = ctx
 
   if (typeof check === "function") {
-    const value = await attempt(async () => check(checkTools))
-    return isErr(value) ? value : compareFnValue(value, want)
+    // Wrap the value, because `attempt` would treat a returned `Error` as a thrown one.
+    const returned = await attempt(async () => ({ value: await check(checkTools) }))
+    return isErr(returned) ? returned : compareFnValue(returned.value, want)
   }
 
   const commandOutput = await shell.inspect(check)

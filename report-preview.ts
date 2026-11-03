@@ -16,7 +16,7 @@ import type { HostReport } from "#hosts/run.ts"
 import { hasDrift, runHost } from "#hosts/run.ts"
 import { printTsinfraError } from "#report/errors.ts"
 import { formatHostBlock, formatSummary } from "#report/format.ts"
-import { PUBLIC_FILE_MODE } from "#session/steps/file/mode.ts"
+import { PUBLIC_FILE_MODE } from "#session/handlers/file/mode.ts"
 
 interface Scenario {
   name: string

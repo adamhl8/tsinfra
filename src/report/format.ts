@@ -21,10 +21,10 @@ import {
   styleWantExitCode,
   styleWantString,
 } from "#report/styles.ts"
-import type { EnsureComparison } from "#session/steps/ensure/check.ts"
-import type { Bytes } from "#session/steps/file/bytes.ts"
-import type { FileNote } from "#session/steps/file/comparison.ts"
-import { isFileNote } from "#session/steps/file/comparison.ts"
+import type { EnsureComparison } from "#session/handlers/ensure/check.ts"
+import type { Bytes } from "#session/handlers/file/bytes.ts"
+import type { FileNote } from "#session/handlers/file/comparison.ts"
+import { isFileNote } from "#session/handlers/file/comparison.ts"
 import { getMaxWidth, padToWidth, quoteNames } from "#utils.ts"
 
 const INDENT = "  "

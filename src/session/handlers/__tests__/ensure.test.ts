@@ -96,7 +96,7 @@ describe("h.ensure", () => {
     expect(result).toMatchObject({ changed: false })
   })
 
-  it("should fail when a function check returns a different type than want", async () => {
+  it("should fail validation when a function check returns a different type than want", async () => {
     const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
       check: async ({ read }) => (await read("echo active")) === "active",
@@ -105,7 +105,7 @@ describe("h.ensure", () => {
     })
 
     expect(result).toBe(
-      "failed to compare the host with what step 'Make marker' wants -> the check returned a boolean, but want is a string",
+      "failed to compare the host with what step 'Make marker' wants -> failed to validate the value the check returned -> it's of type boolean, but want is of type string",
     )
   })
 
@@ -114,6 +114,20 @@ describe("h.ensure", () => {
 
     expect(await ensureOrMessage(h, { check: throwBoom, want: true, fix: "true" })).toBe(
       "failed to compare the host with what step 'Make marker' wants -> boom",
+    )
+  })
+
+  it("should validate an Error a function check returns as a value, not a thrown error", async () => {
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, {
+      // @ts-expect-error - an untyped host script can return anything from a check function
+      check: () => new Error("returned"),
+      want: true,
+      fix: "true",
+    })
+
+    expect(result).toBe(
+      "failed to compare the host with what step 'Make marker' wants -> failed to validate the value the check returned -> it's of type object, but want is of type boolean",
     )
   })
 
@@ -382,6 +396,21 @@ describe("h.ensure with a fix function", () => {
     expect(await ensureOrMessage(h, { check: "false", want: true, fix: throwBoom })).toBe(
       "failed to run the fix for step 'Make marker' -> boom",
     )
+  })
+
+  it("should ignore an Error the fix function returns", async () => {
+    const { marker, options } = await createMarkerStep()
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, {
+      ...options,
+      // @ts-expect-error - an untyped host script can return anything from a fix function
+      fix: async ({ exec }) => {
+        await exec(`touch '${marker}'`)
+        return new Error("returned")
+      },
+    })
+
+    expect(result).toMatchObject({ changed: true })
   })
 
   it("should not call the fix function in plan", async () => {

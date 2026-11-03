@@ -2,13 +2,13 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
-import { converge } from "#session/converge.ts"
-import type { Change } from "#session/step-functions/change.ts"
-import { changeSchema, runChange } from "#session/step-functions/change.ts"
+import type { Check } from "#session/handlers/ensure/check.ts"
+import { checkSchema, compareCheck } from "#session/handlers/ensure/check.ts"
+import type { Change } from "#session/handlers/shared/change.ts"
+import { changeSchema, runChange } from "#session/handlers/shared/change.ts"
+import { converge } from "#session/handlers/shared/converge.ts"
 import type { NeededSteps, StepContext, StepOutcome } from "#session/step.ts"
 import { neededStepsSchema } from "#session/step.ts"
-import type { Check } from "#session/steps/ensure/check.ts"
-import { checkSchema, compareCheck } from "#session/steps/ensure/check.ts"
 
 /** `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string. */
 export interface EnsureOptions<T extends string | boolean> {
@@ -45,10 +45,7 @@ const ensureOptionsSchema = type.declare<EnsureOptions<string | boolean>>().type
   "needs?": neededStepsSchema,
 })
 
-export const handleEnsure = async <T extends string | boolean>(
-  ctx: StepContext,
-  options: EnsureOptions<T>,
-): Promise<Result<StepOutcome>> => {
+export const handleEnsure = async (ctx: StepContext, options: unknown): Promise<Result<StepOutcome>> => {
   const { stepName } = ctx
 
   const validOptions = ensureOptionsSchema(options)

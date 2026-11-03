@@ -2,7 +2,7 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { attempt, isErr } from "ts-explicit-errors"
 
-import type { ChangeTools } from "#session/step-functions/tools.ts"
+import type { ChangeTools } from "#session/handlers/tools.ts"
 import type { StepContext } from "#session/step.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
 
@@ -18,7 +18,13 @@ export const changeSchema = type.declare<Change>().type(nonEmptyStringSchema.or(
 export const runChange = async (ctx: StepContext, change: Change): Promise<Result> => {
   const { shell, changeTools } = ctx
 
-  if (typeof change === "function") return attempt(async () => change(changeTools))
+  // Discard what `change` returns, because `attempt` would treat a returned `Error` as a thrown one.
+  // Only a throw fails a change.
+  if (typeof change === "function") {
+    return attempt(async () => {
+      await change(changeTools)
+    })
+  }
 
   const stdout = await shell.run(change)
   if (isErr(stdout)) return stdout

@@ -38,19 +38,16 @@ interface Host {
 }
 
 // Given to a check function. These are the same as `h.read` and `h.inspect`.
-type CheckTools = { read: Read; inspect: Inspect }
+type CheckTools = { read: Exec; inspect: Inspect }
 
 // Given to a fix or run function.
 type ChangeTools = { exec: Exec; inspect: Inspect }
 
-// Runs one command and returns its stdout.
-type Read = (cmd: string, options?: CommandOptions) => Promise<string>
+// Runs one command and returns its stdout. A check gets it as `read`, and a fix or run function as `exec`.
+type Exec = (cmd: string, options?: CommandOptions) => Promise<string>
 
 // Runs one command and returns its output and exit code, without failing on a non-zero exit.
 type Inspect = (cmd: string, options?: CommandOptions) => Promise<CommandResult>
-
-// Runs one command that changes the host, and returns its stdout. It behaves the same as `Read`.
-type Exec = (cmd: string, options?: CommandOptions) => Promise<string>
 
 type CommandOptions = {
   secret?: boolean // keep the command and its output out of the output and errors

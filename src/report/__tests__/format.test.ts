@@ -10,8 +10,8 @@ import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
 import { runHost } from "#hosts/run.ts"
 import { formatHostBlock, formatSummary } from "#report/format.ts"
+import type { EnsureOptions } from "#session/handlers/ensure.ts"
 import type { Host } from "#session/session.ts"
-import type { EnsureOptions } from "#session/steps/ensure.ts"
 
 const runNamedHost = async (name: string, fn: HostFunction, mode: Mode) =>
   runHost({ name, ...host("@local", fn) }, mode)

@@ -1,9 +1,9 @@
 import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
+import type { Bytes } from "#session/handlers/file/bytes.ts"
+import { toBytes } from "#session/handlers/file/bytes.ts"
 import { quoteShellArg } from "#session/shell.ts"
-import type { Bytes } from "#session/steps/file/bytes.ts"
-import { toBytes } from "#session/steps/file/bytes.ts"
 
 const SHA256_LENGTH = 64
 const SHA256_PATTERN = /^[0-9a-f]{64}/v

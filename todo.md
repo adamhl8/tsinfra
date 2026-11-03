@@ -53,9 +53,9 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
 
 - **Fail a tool saved for later.** A script can keep the `read` or `exec` a step function was given and call it after
   that step finished. At the top level its command goes unrecorded, and during a later step it is recorded under the
-  wrong step. Build the tools inside `callStep`, bound to the step's record, and fail the host through `callOrFail` when
-  that step is no longer the running one. Do not throw in `recordCommands`, because only `session.ts` throws, and a
-  throw there would skip `fail()`.
+  wrong step. `callStep` already builds a fresh set of tools for each step. What's left is to bind them to the step's
+  record, and fail the host through `callOrFail` when that step is no longer the running one. Do not throw in
+  `recordCommands`, because only `session.ts` throws, and a throw there would skip `fail()`.
 - **A recipes section in the user docs.** When the full docs get written, add a cookbook of patterns that need no
   tsinfra feature. Start with these:
   - **A template is a function** in its own `.ts` file, which gives typed parameters, plain loops and conditionals, and

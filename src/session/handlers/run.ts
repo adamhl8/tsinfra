@@ -2,8 +2,7 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { Change } from "#session/step-functions/change.ts"
-import { changeSchema, runChange } from "#session/step-functions/change.ts"
+import { changeSchema, runChange } from "#session/handlers/shared/change.ts"
 import type { StepContext, StepOutcome } from "#session/step.ts"
 import { stepResultSchema } from "#session/step.ts"
 
@@ -35,11 +34,7 @@ const evaluateTrigger = (options: RunOptions): boolean => {
   return didAnyStepChange
 }
 
-export const handleRun = async (
-  ctx: StepContext,
-  change: Change,
-  options: RunOptions,
-): Promise<Result<StepOutcome>> => {
+export const handleRun = async (ctx: StepContext, change: unknown, options: unknown): Promise<Result<StepOutcome>> => {
   const { stepName, mode } = ctx
 
   const validChange = changeSchema(change)

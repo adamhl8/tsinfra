@@ -2,12 +2,12 @@ import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import { host } from "#hosts/host.ts"
+import type { EnsureOptions } from "#session/handlers/ensure.ts"
+import type { FileOptions } from "#session/handlers/file.ts"
+import type { RunOptions } from "#session/handlers/run.ts"
+import type { Change } from "#session/handlers/shared/change.ts"
 import type { Host } from "#session/session.ts"
 import { createHostSession } from "#session/session.ts"
-import type { Change } from "#session/step-functions/change.ts"
-import type { EnsureOptions } from "#session/steps/ensure.ts"
-import type { FileOptions } from "#session/steps/file.ts"
-import type { RunOptions } from "#session/steps/run.ts"
 
 const doNothing = async () => {
   /* empty */

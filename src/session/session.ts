@@ -1,28 +1,25 @@
-import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import type { LoadedHost } from "#hosts/load.ts"
+import type { EnsureOptions } from "#session/handlers/ensure.ts"
+import { handleEnsure } from "#session/handlers/ensure.ts"
+import type { FileOptions } from "#session/handlers/file.ts"
+import { handleFile } from "#session/handlers/file.ts"
+import { handleInspect } from "#session/handlers/inspect.ts"
+import { handleRead } from "#session/handlers/read.ts"
+import type { RunOptions } from "#session/handlers/run.ts"
+import { handleRun } from "#session/handlers/run.ts"
+import type { Change } from "#session/handlers/shared/change.ts"
+import { validateStepName } from "#session/handlers/step-name.ts"
+import type { ChangeTools, CheckTools, CommandResult, Exec, Inspect } from "#session/handlers/tools.ts"
+import { execCommand, inspectCommand } from "#session/handlers/tools.ts"
 import type { Shell } from "#session/shell.ts"
 import { createShell } from "#session/shell.ts"
-import type { Change } from "#session/step-functions/change.ts"
-import type { Exec, ChangeTools, CheckTools } from "#session/step-functions/tools.ts"
-import { handleExec } from "#session/step-functions/tools.ts"
 import type { StepRecord } from "#session/step-recorder.ts"
 import { createStepRecorder } from "#session/step-recorder.ts"
 import type { StepContext, StepOutcome, StepResult } from "#session/step.ts"
-import { nonEmptyStringSchema } from "#session/step.ts"
-import type { EnsureOptions } from "#session/steps/ensure.ts"
-import { handleEnsure } from "#session/steps/ensure.ts"
-import type { FileOptions } from "#session/steps/file.ts"
-import { handleFile } from "#session/steps/file.ts"
-import type { CommandResult, Inspect } from "#session/steps/inspect.ts"
-import { handleInspect } from "#session/steps/inspect.ts"
-import type { Read } from "#session/steps/read.ts"
-import { handleRead } from "#session/steps/read.ts"
-import type { RunOptions } from "#session/steps/run.ts"
-import { handleRun } from "#session/steps/run.ts"
 import { getTransport } from "#transport/transport.ts"
 
 /** What a host's function is given. Each method call is one step, and steps run one at a time at the top level. */
@@ -35,7 +32,7 @@ export interface Host {
    * A non-zero exit fails the host and throws. Catching it does not recover the host. Use `inspect` when a non-zero
    * exit is a legitimate answer.
    */
-  read: Read
+  read: Exec
   /**
    * Runs `cmd` on the host and returns its stdout and stderr, both trimmed, and its exit code. It must not change what
    * the script manages, because it also runs during `plan`.
@@ -76,15 +73,6 @@ const READ_HOME_COMMAND = `printf '%s' "$HOME"`
 /** Reads the SSH user's home directory, which comes back empty when `$HOME` isn't set. */
 const readHomeDirectory = async (shell: Shell): Promise<Result<string>> => shell.run(READ_HOME_COMMAND)
 
-// Name what each step takes as its name, so a validation error says which argument is wrong.
-const STEP_NAME_LABELS: Record<StepKind, string> = {
-  read: "command",
-  inspect: "command",
-  file: "path",
-  ensure: "name",
-  run: "name",
-}
-
 type Failure = Error | undefined
 
 // Keep the first failure, because calls made at once with `Promise.all` can each fail.
@@ -104,8 +92,8 @@ export interface HostSession {
  * when it can't read the SSH user's home directory, which means the host can't run commands at all.
  *
  * This is the only code that throws, because throwing is the contract with the script. Every function the script can
- * call, on `h` or as `read` and `exec`, goes through `callOrFail` around an internal function from `steps/` or
- * `tools.ts` that returns errors as values.
+ * call, on `h` or as `read` and `exec`, goes through `callOrFail` around an internal function from `handlers/` that
+ * returns errors as values.
  */
 export const createHostSession = async (loadedHost: LoadedHost, mode: Mode): Promise<Result<HostSession>> => {
   const { name, target } = loadedHost
@@ -138,11 +126,6 @@ export const createHostSession = async (loadedHost: LoadedHost, mode: Mode): Pro
 
   // Record each command under the running step, because every command passes through the transport.
   const shell = createShell(recordCommands(getTransport(target)))
-  const readTool: Read = async (cmd) => callOrFail(async () => handleRead(shell, cmd))
-  const inspectTool: Inspect = async (cmd) => callOrFail(async () => handleInspect(shell, cmd))
-  const execTool: Exec = async (cmd) => callOrFail(async () => handleExec(shell, cmd))
-  const checkTools: CheckTools = { read: readTool, inspect: inspectTool }
-  const changeTools: ChangeTools = { exec: execTool, inspect: inspectTool }
 
   // Read the SSH user's home before the script runs, because a path that starts with `~/` needs it.
   // An unset `$HOME` comes back empty, so this fails only when the host can't run commands at all.
@@ -150,31 +133,34 @@ export const createHostSession = async (loadedHost: LoadedHost, mode: Mode): Pro
   if (isErr(home)) return err("failed to start the session", err("failed to read the SSH user's home directory", home))
 
   const callStep = async <K extends StepKind>(
-    stepName: string,
+    stepName: unknown,
     kind: K,
     handler: (ctx: StepContext) => Promise<Result<StepOutcome>>,
   ): Promise<StepResult<K>> =>
     callOrFail(async () => {
       // Validate the name before recording the step, because the output shows every recorded step by its name.
-      const validName = nonEmptyStringSchema(stepName)
-      if (validName instanceof type.errors) {
-        return err(
-          `failed to validate the ${STEP_NAME_LABELS[kind]} given to '${kind}'`,
-          err(validName.summary, undefined),
-        )
-      }
+      const validName = validateStepName(stepName, kind)
+      if (isErr(validName)) return validName
 
-      const stepRecord = startStep(stepName, kind)
+      const stepRecord = startStep(validName, kind)
       if (isErr(stepRecord)) return stepRecord
 
-      const outcome = await handler({ stepName, mode, shell, home, checkTools, changeTools })
+      const readTool: Exec = async (cmd) => callOrFail(async () => execCommand({ toolName: "read", shell }, cmd))
+      const inspectTool: Inspect = async (cmd) =>
+        callOrFail(async () => inspectCommand({ toolName: "inspect", shell }, cmd))
+      const execTool: Exec = async (cmd) => callOrFail(async () => execCommand({ toolName: "exec", shell }, cmd))
+      const checkTools: CheckTools = { read: readTool, inspect: inspectTool }
+      const changeTools: ChangeTools = { exec: execTool, inspect: inspectTool }
+      const ctx: StepContext = { stepName: validName, mode, shell, home, checkTools, changeTools }
+
+      const outcome = await handler(ctx)
 
       // Record the failure the host ends up with, because a function in the script may have caught an earlier one.
       const stepFailure = isErr(outcome) ? keepFailure(failure, outcome) : failure
       finishStep(stepRecord, stepFailure ?? outcome)
       if (isErr(outcome)) return outcome
 
-      const stepResult: StepResult<K> = { name: stepName, kind, changed: outcome.changed }
+      const stepResult: StepResult<K> = { name: validName, kind, changed: outcome.changed }
       return stepResult
     })
 
@@ -182,8 +168,8 @@ export const createHostSession = async (loadedHost: LoadedHost, mode: Mode): Pro
     // Keep the stdout here, because a step reports only its outcome.
     let stdout = ""
     // Pass `cmd` as the step name, because `h.read` takes no name.
-    await callStep(cmd, "read", async () => {
-      const output = await handleRead(shell, cmd)
+    await callStep(cmd, "read", async (ctx) => {
+      const output = await handleRead(ctx, cmd)
       if (isErr(output)) return output
 
       stdout = output
@@ -197,8 +183,8 @@ export const createHostSession = async (loadedHost: LoadedHost, mode: Mode): Pro
     // Start from an empty result, which is never returned, because `callStep` throws when the inspect fails.
     let commandResult: CommandResult = { stdout: "", stderr: "", exitCode: 0 }
     // Pass `cmd` as the step name, because `h.inspect` takes no name.
-    await callStep(cmd, "inspect", async () => {
-      const result = await handleInspect(shell, cmd)
+    await callStep(cmd, "inspect", async (ctx) => {
+      const result = await handleInspect(ctx, cmd)
       if (isErr(result)) return result
 
       commandResult = result

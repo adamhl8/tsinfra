@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 
-import type { FileMode } from "#session/steps/file/mode.ts"
+import type { FileMode } from "#session/handlers/file/mode.ts"
 import {
   formatMode,
   GROUP_EXECUTABLE_MODE,
@@ -10,7 +10,7 @@ import {
   PUBLIC_EXECUTABLE_MODE,
   PUBLIC_FILE_MODE,
   toModeBits,
-} from "#session/steps/file/mode.ts"
+} from "#session/handlers/file/mode.ts"
 
 describe("toModeBits", () => {
   it("should read an octal mode, with or without a leading digit for the special bits", () => {

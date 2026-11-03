@@ -1,11 +1,11 @@
 import { type } from "arktype"
 
 import type { Mode } from "#cli/program.ts"
+import type { EnsureComparison } from "#session/handlers/ensure/check.ts"
+import type { FileComparison } from "#session/handlers/file/comparison.ts"
+import type { ChangeTools, CheckTools } from "#session/handlers/tools.ts"
 import type { StepKind } from "#session/session.ts"
 import type { Shell } from "#session/shell.ts"
-import type { ChangeTools, CheckTools } from "#session/step-functions/tools.ts"
-import type { EnsureComparison } from "#session/steps/ensure/check.ts"
-import type { FileComparison } from "#session/steps/file/comparison.ts"
 
 /** What a step gives back to the script. `K` is the method on `h` that ran it, so `needs` can refuse a run's result. */
 export interface StepResult<K extends StepKind = StepKind> {

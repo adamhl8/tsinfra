@@ -1,7 +1,7 @@
-import type { FileOptions } from "#session/steps/file.ts"
-import type { Bytes } from "#session/steps/file/bytes.ts"
-import { toBytes } from "#session/steps/file/bytes.ts"
-import type { FileMode } from "#session/steps/file/mode.ts"
+import type { FileOptions } from "#session/handlers/file.ts"
+import type { Bytes } from "#session/handlers/file/bytes.ts"
+import { toBytes } from "#session/handlers/file/bytes.ts"
+import type { FileMode } from "#session/handlers/file/mode.ts"
 
 /** What the script wants the file to be, worked out once before reading the state. */
 export interface WantedFile {

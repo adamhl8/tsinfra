@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test"
 
 import { isErr, messageChain } from "ts-explicit-errors"
 
-import { toAbsolutePath } from "#session/steps/file/path.ts"
+import { toAbsolutePath } from "#session/handlers/file/path.ts"
 
 const toMessage = (path: string, home: string) => {
   const resolved = toAbsolutePath(path, home)

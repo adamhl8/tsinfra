@@ -6,7 +6,7 @@ import path from "node:path"
 import { makeTempDir } from "@adamhl8/configs/test"
 
 import { createSession, fileOrMessage } from "#__tests__/session.ts"
-import { PUBLIC_FILE_MODE } from "#session/steps/file/mode.ts"
+import { PUBLIC_FILE_MODE } from "#session/handlers/file/mode.ts"
 
 const createFilePath = async () => path.join(await makeTempDir("file-"), "app.conf")
 
