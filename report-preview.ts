@@ -242,6 +242,42 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
+      // A step name that fails validation, named after the host's file, because the step was never recorded.
+      name: "invalid-name",
+      target: "@local",
+      fn: async (h) => {
+        await h.ensure("", { check: "true", want: true, fix: "true" })
+      },
+    },
+    {
+      // An option that fails validation, which names the field.
+      name: "invalid-options",
+      target: "@local",
+      fn: async (h) => {
+        await h.ensure("Install Caddy", { check: "true", want: true, fix: "" })
+      },
+    },
+    {
+      // A run's command that fails validation, which has no field to name.
+      name: "invalid-run-command",
+      target: "@local",
+      fn: async (h) => {
+        await h.run("Reload systemd", "", { after: "always" })
+      },
+    },
+    {
+      // A tool's command that fails validation inside a check, under the step that called it.
+      name: "invalid-tool-command",
+      target: "@local",
+      fn: async (h) => {
+        await h.ensure("Enable the app", {
+          check: async ({ read }) => (await read("")) === "true",
+          want: true,
+          fix: "true",
+        })
+      },
+    },
+    {
       // A host whose session couldn't start, named after its target, because its script never ran.
       name: "unreachable",
       target: "web.lan",

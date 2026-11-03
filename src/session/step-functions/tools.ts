@@ -1,7 +1,9 @@
+import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { Shell } from "#session/shell.ts"
+import { nonEmptyStringSchema } from "#session/step.ts"
 import type { Inspect } from "#session/steps/inspect.ts"
 import type { Read } from "#session/steps/read.ts"
 
@@ -10,6 +12,10 @@ export type Exec = (cmd: string) => Promise<string>
 
 /** Runs one command of a fix or run function, and names the command when it fails. */
 export const handleExec = async (shell: Shell, cmd: string): Promise<Result<string>> => {
+  const validCmd = nonEmptyStringSchema(cmd)
+  if (validCmd instanceof type.errors)
+    return err("failed to validate the command given to 'exec'", err(validCmd.summary, undefined))
+
   const stdout = await shell.run(cmd)
   if (isErr(stdout)) return err(`failed to run '${cmd}'`, stdout)
 

@@ -1,7 +1,9 @@
+import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { Shell } from "#session/shell.ts"
+import { nonEmptyStringSchema } from "#session/step.ts"
 
 /** What `inspect` gives a script: a command's stdout and stderr, both trimmed, and its exit code. */
 export interface CommandResult {
@@ -14,6 +16,10 @@ export interface CommandResult {
 export type Inspect = (cmd: string) => Promise<CommandResult>
 
 export const handleInspect = async (shell: Shell, cmd: string): Promise<Result<CommandResult>> => {
+  const validCmd = nonEmptyStringSchema(cmd)
+  if (validCmd instanceof type.errors)
+    return err("failed to validate the command given to 'inspect'", err(validCmd.summary, undefined))
+
   const commandOutput = await shell.inspect(cmd)
   if (isErr(commandOutput)) return err(`failed to inspect '${cmd}'`, commandOutput)
 

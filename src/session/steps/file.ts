@@ -6,10 +6,10 @@ import type { HostState } from "#session/converge.ts"
 import { converge } from "#session/converge.ts"
 import type { Shell } from "#session/shell.ts"
 import type { NeededSteps, StepContext, StepDetails } from "#session/step.ts"
-import { needsSchema } from "#session/step.ts"
+import { neededStepsSchema } from "#session/step.ts"
 import type { FileContent } from "#session/steps/file/comparison.ts"
 import { compareContent, findAttributeChanges } from "#session/steps/file/comparison.ts"
-import type { FileMode } from "#session/steps/file/mode.ts"
+import type { FileMode, OctalMode, SymbolicMode } from "#session/steps/file/mode.ts"
 import { OCTAL_MODE_PATTERN, SYMBOLIC_MODE_PATTERN } from "#session/steps/file/mode.ts"
 import { toAbsolutePath } from "#session/steps/file/path.ts"
 import { buildStateCommand, parseStateOutput } from "#session/steps/file/state-command.ts"
@@ -36,6 +36,18 @@ export interface FileOptions {
    */
   needs?: NeededSteps
 }
+
+// Validate the options at runtime too, because a script can get past the types, like with `as` or `@ts-ignore`.
+// Widen `Uint8Array` with `as`, because ArkType infers `Uint8Array<ArrayBuffer>` and `FileOptions` takes any buffer.
+// Type each mode pattern with `as`, because ArkType infers a regex as a plain `string`.
+const fileOptionsSchema = type.declare<FileOptions>().type({
+  content: type("string").or(type.instanceOf(Uint8Array).as<Uint8Array>()),
+  "mode?": type(OCTAL_MODE_PATTERN).as<OctalMode>().or(type(SYMBOLIC_MODE_PATTERN).as<SymbolicMode>()),
+  "owner?": "string | number",
+  "group?": "string | number",
+  "secret?": "boolean",
+  "needs?": neededStepsSchema,
+})
 
 interface ReadFileStateInput {
   shell: Shell
@@ -73,35 +85,23 @@ const readFileState = async (input: ReadFileStateInput): Promise<Result<HostStat
   return { inSync, comparison: { kind: "file", content, attributes } }
 }
 
-// Validate the options at runtime too, because a script can get past the types, like with `as` or `@ts-ignore`.
-const fileOptionsSchema = type({
-  content: type("string").or(type.instanceOf(Uint8Array)),
-  "mode?": type(OCTAL_MODE_PATTERN).or(SYMBOLIC_MODE_PATTERN),
-  "owner?": "string | number",
-  "group?": "string | number",
-  "secret?": "boolean",
-})
-
 export const handleFile = async (
   ctx: StepContext,
   path: string,
   options: FileOptions,
 ): Promise<Result<StepDetails>> => {
   const { stepName, shell, home } = ctx
-  const { secret = false, needs = [] } = options
 
   const validOptions = fileOptionsSchema(options)
   if (validOptions instanceof type.errors)
-    return err(`failed to validate the options of step '${stepName}'`, err(validOptions.summary, undefined))
+    return err(`failed to validate the options given to step '${stepName}'`, err(validOptions.summary, undefined))
 
-  const validNeeds = needsSchema({ needs })
-  if (validNeeds instanceof type.errors)
-    return err(`failed to validate the needs of step '${stepName}'`, err(validNeeds.summary, undefined))
+  const { secret = false, needs = [] } = validOptions
 
   const absolutePath = toAbsolutePath(path, home)
   if (isErr(absolutePath)) return absolutePath
 
-  const wantedFile = toWantedFile(options)
+  const wantedFile = toWantedFile(validOptions)
   const stepDetails = await converge(ctx, {
     needs,
     readState: async () => readFileState({ shell, path: absolutePath, wantedFile, secret }),

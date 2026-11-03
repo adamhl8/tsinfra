@@ -4,13 +4,17 @@ import type { Host } from "#session/session.ts"
 
 export type HostFunction = (h: Host) => Promise<void>
 
-export const hostDefinitionSchema = type({
+/** What a host file exports: where its commands run, and the function that configures it. */
+export interface HostDefinition {
+  target: string
+  fn: HostFunction
+}
+
+export const hostDefinitionSchema = type.declare<HostDefinition>().type({
   target: "string",
   // Type `fn` as a `HostFunction` because only "is a function" can be validated at runtime.
   fn: type("Function").as<HostFunction>(),
 })
-
-export type HostDefinition = typeof hostDefinitionSchema.infer
 
 /** Defines a host. A host file must `export default` what this function returns. */
 export const host = (target: string, fn: HostFunction): HostDefinition => ({ target, fn })

@@ -72,7 +72,7 @@ describe("tsinfra", () => {
 
     expect(exitCode).toBe(1)
     expect(stdout).toBe(
-      "a\n  ! Bad want\n      failed to read the host's state for step 'Bad want' -> want must be a string or a boolean, but is a number\n\na   failed",
+      "a\n  ! Bad want\n      failed to validate the options given to step 'Bad want' -> want must be a string or boolean (was a number)\n\na   failed",
     )
   })
 
@@ -84,7 +84,7 @@ describe("tsinfra", () => {
 
     expect(exitCode).toBe(1)
     expect(stdout).toBe(
-      "a\n  ! Bad run\n      failed to run step 'Bad run' -> after must be an array or \"always\" (was missing)\n\na   failed",
+      "a\n  ! Bad run\n      failed to validate the options given to step 'Bad run' -> after must be an array or \"always\" (was missing)\n\na   failed",
     )
   })
 
@@ -96,7 +96,7 @@ describe("tsinfra", () => {
 
     expect(exitCode).toBe(1)
     expect(stdout).toBe(
-      "a\n  ! Bad run\n      failed to run step 'Bad run' -> after[0] must be an object (was undefined)\n\na   failed",
+      "a\n  ! Bad run\n      failed to validate the options given to step 'Bad run' -> after[0] must be an object (was undefined)\n\na   failed",
     )
   })
 
@@ -109,7 +109,7 @@ describe("tsinfra", () => {
 
     expect(exitCode).toBe(1)
     expect(stdout).toBe(
-      'a\n  ! Bad run\n      failed to run step \'Bad run\' -> after[0].kind must be "ensure", "file" or "run" (was "read")\n\na   failed',
+      'a\n  ! Bad run\n      failed to validate the options given to step \'Bad run\' -> after[0].kind must be "ensure", "file" or "run" (was "read")\n\na   failed',
     )
   })
 
@@ -125,7 +125,7 @@ describe("tsinfra", () => {
 
     expect(exitCode).toBe(1)
     expect(stdout).toBe(
-      "a\n  ! Bad needs\n      failed to validate the needs of step 'Bad needs' -> needs[0] must be an object (was undefined)\n\na   failed",
+      "a\n  ! Bad needs\n      failed to validate the options given to step 'Bad needs' -> needs[0] must be an object (was undefined)\n\na   failed",
     )
   })
 
@@ -141,8 +141,61 @@ describe("tsinfra", () => {
 
     expect(exitCode).toBe(1)
     expect(stdout).toBe(
-      'a\n  > Prune\n  ! Bad needs\n      failed to validate the needs of step \'Bad needs\' -> needs[0].kind must be "ensure" or "file" (was "run")\n\na   failed',
+      'a\n  > Prune\n  ! Bad needs\n      failed to validate the options given to step \'Bad needs\' -> needs[0].kind must be "ensure" or "file" (was "run")\n\na   failed',
     )
+  })
+
+  it.each([
+    {
+      description: "an ensure whose fix is an empty command",
+      command: "plan",
+      body: `await h.ensure("Bad fix", { check: "true", want: true, fix: "" })`,
+      expected:
+        "a\n  ! Bad fix\n      failed to validate the options given to step 'Bad fix' -> fix must be non-empty\n\na   failed",
+    },
+    {
+      description: "a file whose content is neither a string nor bytes",
+      command: "plan",
+      body: `await h.file("/tmp/x", { content: 1 })`,
+      expected:
+        "a\n  ! /tmp/x\n      failed to validate the options given to step '/tmp/x' -> content must be a string or an object (was a number)\n\na   failed",
+    },
+    {
+      description: "a step with an empty name",
+      command: "plan",
+      body: `await h.ensure("", { check: "true", want: true, fix: "true" })`,
+      expected: "a\n  ! a.ts\n      failed to validate the name given to 'ensure' -> must be non-empty\n\na   failed",
+    },
+    {
+      description: "a read whose command isn't a string",
+      command: "plan",
+      body: `await h.read(1)`,
+      expected:
+        "a\n  ! a.ts\n      failed to validate the command given to 'read' -> must be a string (was a number)\n\na   failed",
+    },
+    {
+      description: "a run whose command is neither a string nor a function",
+      command: "plan",
+      body: `await h.run("Bad run", 1, { after: "always" })`,
+      expected:
+        "a\n  ! Bad run\n      failed to validate the command given to step 'Bad run' -> must be a string or an object (was a number)\n\na   failed",
+    },
+    {
+      description: "a fix that execs an empty command",
+      command: "apply",
+      body: `await h.ensure("Bad exec", { check: "false", want: true, fix: async ({ exec }) => { await exec("") } })`,
+      expected:
+        "a\n  ! Bad exec\n      failed to run the fix for step 'Bad exec' -> failed to validate the command given to 'exec' -> must be non-empty\n\na   failed",
+    },
+  ])("should fail $description", async (testCase) => {
+    const { command, body, expected } = testCase
+    const { dir, run } = await createProject()
+    await writeLocalHost(path.join(dir, "hosts"), "a", body)
+
+    const { stdout, exitCode } = await run`tsinfra ${command}`.nothrow()
+
+    expect(exitCode).toBe(1)
+    expect(stdout).toBe(expected)
   })
 
   it("should run a host that reads from '@local'", async () => {

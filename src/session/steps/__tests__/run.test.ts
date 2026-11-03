@@ -19,7 +19,7 @@ describe("h.run", () => {
   it("should fail the host without running when after is empty", async () => {
     const marker = await createMarker()
     const hostSession = await createSession("apply")
-    const message = "failed to run step 'Make marker' -> after must be non-empty"
+    const message = "failed to validate the options given to step 'Make marker' -> after must be non-empty"
 
     expect(await runOrMessage(hostSession.host, `touch '${marker}'`, { after: [] })).toBe(message)
     expect(getFailureMessage(hostSession)).toBe(message)

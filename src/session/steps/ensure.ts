@@ -6,11 +6,11 @@ import type { HostState } from "#session/converge.ts"
 import { converge } from "#session/converge.ts"
 import { createCommandExitError } from "#session/shell.ts"
 import type { Change } from "#session/step-functions/change.ts"
-import { runChange } from "#session/step-functions/change.ts"
+import { changeSchema, runChange } from "#session/step-functions/change.ts"
 import type { NeededSteps, StepContext, StepDetails } from "#session/step.ts"
-import { needsSchema } from "#session/step.ts"
+import { neededStepsSchema } from "#session/step.ts"
 import type { Check, CheckCompare } from "#session/steps/ensure/check.ts"
-import { runCheck } from "#session/steps/ensure/check.ts"
+import { checkSchema, runCheck } from "#session/steps/ensure/check.ts"
 import type { CommandOutput } from "#transport/transport.ts"
 import { stripTrailingNewlines } from "#utils.ts"
 
@@ -39,6 +39,15 @@ export interface EnsureOptions<T extends string | boolean> {
    */
   needs?: NeededSteps
 }
+
+// Validate the options at runtime too, because a script can get past the types, like with `as` or `@ts-ignore`.
+const ensureOptionsSchema = type.declare<EnsureOptions<string | boolean>>().type({
+  check: checkSchema,
+  want: "string | boolean",
+  fix: changeSchema,
+  "verify?": "boolean",
+  "needs?": neededStepsSchema,
+})
 
 /** What the check gave and what it wanted, as raw values. `kind` says how the output shows them. */
 export type ValueComparison =
@@ -76,10 +85,7 @@ const compareCmdValue = (commandOutput: CommandOutput, want: string | boolean): 
     return { ...hostState, commandOutput }
   }
 
-  if (typeof want === "boolean")
-    return { inSync: (exitCode === 0) === want, comparison: { kind: "exit", got: exitCode, want }, commandOutput }
-
-  return err(`want must be a string or a boolean, but is a ${typeof want}`, undefined)
+  return { inSync: (exitCode === 0) === want, comparison: { kind: "exit", got: exitCode, want }, commandOutput }
 }
 
 export const handleEnsure = async <T extends string | boolean>(
@@ -87,11 +93,12 @@ export const handleEnsure = async <T extends string | boolean>(
   options: EnsureOptions<T>,
 ): Promise<Result<StepDetails>> => {
   const { stepName } = ctx
-  const { check, want, fix, verify = true, needs = [] } = options
 
-  const validNeeds = needsSchema({ needs })
-  if (validNeeds instanceof type.errors)
-    return err(`failed to validate the needs of step '${stepName}'`, err(validNeeds.summary, undefined))
+  const validOptions = ensureOptionsSchema(options)
+  if (validOptions instanceof type.errors)
+    return err(`failed to validate the options given to step '${stepName}'`, err(validOptions.summary, undefined))
+
+  const { check, want, fix, verify = true, needs = [] } = validOptions
 
   const checkCompare: CheckCompare = {
     fnValue: (value) => compareFnValue(value, want),

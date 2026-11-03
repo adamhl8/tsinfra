@@ -46,7 +46,7 @@
   },
   "scripts": {
     "prepare": "bask prepare",
-    "report:preview": "bun preview-report.ts"
+    "report:preview": "bun report-preview.ts"
   },
   "dependencies": {
     "@optique/core": "^1.3.6",

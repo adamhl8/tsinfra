@@ -27,17 +27,13 @@ export const stepResultSchema = type.declare<StepResult>().type({
   changed: "boolean",
 })
 
-/** The step results `after` accepts: steps that can change the host, including another run. */
-export type TriggerSteps = StepResult<"file" | "ensure" | "run">[]
+// Accept only steps that read the host's state in `needs`, so not a run.
+export const neededStepsSchema = stepResultSchema.and({ kind: "'file' | 'ensure'" }).array()
+export type NeededSteps = typeof neededStepsSchema.infer
 
-/** The step results `needs` accepts: steps that read the host's state, so not a run. */
-export type NeededSteps = StepResult<"file" | "ensure">[]
-
-// Validate `needs` at runtime too, because a script can get past the types, like with `as` or `@ts-ignore`.
-// Wrap it in an object, so the error names the field, like `needs[0] must be an object`.
-export const needsSchema = type.declare<{ needs?: NeededSteps }>().type({
-  "needs?": stepResultSchema.and({ kind: "'file' | 'ensure'" }).array(),
-})
+// Refuse an empty name, path, or command.
+// An empty command is a `sh` syntax error, and an empty name leaves a blank in the output.
+export const nonEmptyStringSchema = type("string > 0")
 
 /** What a step's handler is given: the step's name, and the session's mode, shell, home directory, and tools. */
 export interface StepContext {

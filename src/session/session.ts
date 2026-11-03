@@ -1,3 +1,4 @@
+import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
@@ -11,6 +12,7 @@ import { handleExec } from "#session/step-functions/tools.ts"
 import type { StepRecord } from "#session/step-recorder.ts"
 import { createStepRecorder } from "#session/step-recorder.ts"
 import type { StepContext, StepDetails, StepResult } from "#session/step.ts"
+import { nonEmptyStringSchema } from "#session/step.ts"
 import type { EnsureOptions } from "#session/steps/ensure.ts"
 import { handleEnsure } from "#session/steps/ensure.ts"
 import type { FileOptions } from "#session/steps/file.ts"
@@ -73,6 +75,15 @@ const READ_HOME_COMMAND = `printf '%s' "$HOME"`
 
 /** Reads the SSH user's home directory, which comes back empty when `$HOME` isn't set. */
 const readHomeDirectory = async (shell: Shell): Promise<Result<string>> => shell.run(READ_HOME_COMMAND)
+
+// Name what each step takes as its name, so a validation error says which argument is wrong.
+const STEP_NAME_LABELS: Record<StepKind, string> = {
+  read: "command",
+  inspect: "command",
+  file: "path",
+  ensure: "name",
+  run: "name",
+}
 
 type Failure = Error | undefined
 
@@ -144,6 +155,15 @@ export const createHostSession = async (hostEntry: HostEntry, mode: Mode): Promi
     handler: (ctx: StepContext) => Promise<Result<StepDetails>>,
   ): Promise<StepResult<K>> =>
     callOrFail(async () => {
+      // Validate the name before recording the step, because the output shows every recorded step by its name.
+      const validName = nonEmptyStringSchema(stepName)
+      if (validName instanceof type.errors) {
+        return err(
+          `failed to validate the ${STEP_NAME_LABELS[kind]} given to '${kind}'`,
+          err(validName.summary, undefined),
+        )
+      }
+
       const stepRecord = startStep(stepName, kind)
       if (isErr(stepRecord)) return stepRecord
 
