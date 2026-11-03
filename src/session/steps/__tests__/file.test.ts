@@ -17,8 +17,8 @@ describe("h.file in plan", () => {
     const result = await fileOrMessage(hostSession.host, filePath, { content: "a\n" })
 
     expect(result).toStrictEqual({ name: filePath, kind: "file", changed: true })
-    expect(hostSession.stepRecords[0]?.details).toMatchObject({
-      comparison: { kind: "file", content: { kind: "new", wantSize: 2 }, attributes: [] },
+    expect(hostSession.stepRecords[0]?.outcome).toMatchObject({
+      values: { kind: "file", content: { kind: "new", wantSize: 2 }, attributes: [] },
     })
     expect(await Bun.file(filePath).exists()).toBe(false)
   })
@@ -37,8 +37,8 @@ describe("h.file in plan", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, { content: "a\nc\n" })
 
-    expect(hostSession.stepRecords[0]?.details).toMatchObject({
-      comparison: { content: { kind: "text", got: "a\nb\n", want: "a\nc\n" } },
+    expect(hostSession.stepRecords[0]?.outcome).toMatchObject({
+      values: { content: { kind: "text", got: "a\nb\n", want: "a\nc\n" } },
     })
   })
 
@@ -50,9 +50,9 @@ describe("h.file in plan", () => {
     await fileOrMessage(hostSession.host, filePath, { content: "a\n", mode: "644" })
     await fileOrMessage(hostSession.host, filePath, { content: "a\n" })
 
-    expect(hostSession.stepRecords.map(({ details }) => details)).toMatchObject([
+    expect(hostSession.stepRecords.map(({ outcome }) => outcome)).toMatchObject([
       {
-        comparison: {
+        values: {
           content: { kind: "same" },
           attributes: [{ name: "mode", got: "rw------- (600)", want: "rw-r--r-- (644)" }],
         },
@@ -68,8 +68,8 @@ describe("h.file in plan", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, { content: "a\n", mode: PUBLIC_FILE_MODE })
 
-    expect(hostSession.stepRecords[0]?.details).toMatchObject({
-      comparison: { attributes: [{ name: "mode", got: "rw------- (600)", want: "rw-r--r-- (644)" }] },
+    expect(hostSession.stepRecords[0]?.outcome).toMatchObject({
+      values: { attributes: [{ name: "mode", got: "rw------- (600)", want: "rw-r--r-- (644)" }] },
     })
   })
 
@@ -82,10 +82,10 @@ describe("h.file in plan", () => {
     await fileOrMessage(hostSession.host, filePath, { content: "a\n", owner: uid })
     await fileOrMessage(hostSession.host, filePath, { content: "a\n", owner: uid + 1 })
 
-    expect(hostSession.stepRecords.map(({ details }) => details)).toMatchObject([
+    expect(hostSession.stepRecords.map(({ outcome }) => outcome)).toMatchObject([
       { status: "unchanged" },
       { status: "unchanged" },
-      { comparison: { attributes: [{ name: "owner", got: String(uid), want: String(uid + 1) }] } },
+      { values: { attributes: [{ name: "owner", got: String(uid), want: String(uid + 1) }] } },
     ])
   })
 
@@ -95,7 +95,7 @@ describe("h.file in plan", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, { content: "new token\n", secret: true })
 
-    expect(hostSession.stepRecords[0]?.details).toMatchObject({ comparison: { content: { kind: "hidden" } } })
+    expect(hostSession.stepRecords[0]?.outcome).toMatchObject({ values: { content: { kind: "hidden" } } })
     expect(hostSession.stepRecords[0]?.commands.some(({ cmd }) => cmd.startsWith("cat "))).toBe(false)
   })
 
@@ -105,8 +105,8 @@ describe("h.file in plan", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, { content: new Uint8Array([0, 1, 2]) })
 
-    expect(hostSession.stepRecords[0]?.details).toMatchObject({
-      comparison: { content: { kind: "binary", gotSize: 2, wantSize: 3 } },
+    expect(hostSession.stepRecords[0]?.outcome).toMatchObject({
+      values: { content: { kind: "binary", gotSize: 2, wantSize: 3 } },
     })
   })
 
@@ -116,7 +116,7 @@ describe("h.file in plan", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, { content: "b\n" })
 
-    expect(hostSession.stepRecords[0]?.details).toMatchObject({ comparison: { content: { kind: "large" } } })
+    expect(hostSession.stepRecords[0]?.outcome).toMatchObject({ values: { content: { kind: "large" } } })
     expect(hostSession.stepRecords[0]?.commands.some(({ cmd }) => cmd.startsWith("cat "))).toBe(false)
   })
 
@@ -126,7 +126,7 @@ describe("h.file in plan", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, { content: "b".repeat(200 * 1024) })
 
-    expect(hostSession.stepRecords[0]?.details).toMatchObject({ comparison: { content: { kind: "large" } } })
+    expect(hostSession.stepRecords[0]?.outcome).toMatchObject({ values: { content: { kind: "large" } } })
     expect(hostSession.stepRecords[0]?.commands.some(({ cmd }) => cmd.startsWith("cat "))).toBe(false)
   })
 
@@ -155,7 +155,7 @@ describe("h.file refusals", () => {
     const { host: h } = await createSession("plan")
 
     expect(await fileOrMessage(h, filePath, { content: "a\n" })).toBe(
-      `failed to read the host's state for step '${filePath}' -> '${filePath}' is a symlink, so file won't replace it`,
+      `failed to compare the host with what step '${filePath}' wants -> '${filePath}' is a symlink, so file won't replace it`,
     )
   })
 
@@ -165,7 +165,7 @@ describe("h.file refusals", () => {
     const { host: h } = await createSession("plan")
 
     expect(await fileOrMessage(h, filePath, { content: "a\n" })).toBe(
-      `failed to read the host's state for step '${filePath}' -> '${filePath}' isn't a regular file, so file won't replace it`,
+      `failed to compare the host with what step '${filePath}' wants -> '${filePath}' isn't a regular file, so file won't replace it`,
     )
   })
 
@@ -176,7 +176,7 @@ describe("h.file refusals", () => {
     const { host: h } = await createSession("plan")
 
     expect(await fileOrMessage(h, filePath, { content: "a\n" })).toBe(
-      `failed to read the host's state for step '${filePath}' -> can't read '${filePath}' as the SSH user, so it needs sudo: true`,
+      `failed to compare the host with what step '${filePath}' wants -> can't read '${filePath}' as the SSH user, so it needs sudo: true`,
     )
   })
 

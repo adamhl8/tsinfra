@@ -2,7 +2,7 @@ import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
 import type { StepKind } from "#session/session.ts"
-import type { StepDetails } from "#session/step.ts"
+import type { StepOutcome } from "#session/step.ts"
 import type { CommandOutput, Transport } from "#transport/transport.ts"
 
 interface CommandRecord {
@@ -17,7 +17,7 @@ export interface StepRecord {
   kind: StepKind
   commands: CommandRecord[]
   /** Unset until the step finishes. */
-  details?: Result<StepDetails>
+  outcome?: Result<StepOutcome>
 }
 
 interface StepRecorder {
@@ -27,8 +27,8 @@ interface StepRecorder {
   recordCommands: (transport: Transport) => Transport
   /** Records a new step and marks it running, or fails when another step is running. */
   startStep: (stepName: string, kind: StepKind) => Result<StepRecord>
-  /** Records the step's details or error, and marks no step as running. */
-  finishStep: (stepRecord: StepRecord, details: Result<StepDetails>) => void
+  /** Records the step's outcome or error, and marks no step as running. */
+  finishStep: (stepRecord: StepRecord, outcome: Result<StepOutcome>) => void
 }
 
 // Name a read by its command, because `h.read` takes no name.
@@ -64,8 +64,8 @@ export const createStepRecorder = (): StepRecorder => {
     return stepRecord
   }
 
-  const finishStep = (stepRecord: StepRecord, details: Result<StepDetails>) => {
-    stepRecord.details = details
+  const finishStep = (stepRecord: StepRecord, outcome: Result<StepOutcome>) => {
+    stepRecord.outcome = outcome
     currentStep = undefined
   }
 

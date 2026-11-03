@@ -3,7 +3,7 @@ import { argument, command, constant, merge, message, object, option, or, string
 import { defineProgram } from "@optique/core/program"
 import { path } from "@optique/run"
 
-import { HOST_FILE_EXTENSION } from "#hosts/discover.ts"
+import { HOST_SCRIPT_EXTENSION } from "#hosts/discover.ts"
 import packageJson from "#package.json" with { type: "json" }
 
 const MODES = ["plan", "apply"] as const
@@ -13,13 +13,13 @@ const DEFAULT_HOSTS_DIR = "hosts"
 
 const hostOptions = object({
   hostsDir: option("--hosts-dir", path({ metavar: "DIR" }), {
-    description: message`The directory of host files`,
+    description: message`The directory of host scripts`,
   }).withDefault(DEFAULT_HOSTS_DIR),
   verbose: option("-v", "--verbose", {
     description: message`Show every step, even the ones that didn't change anything`,
   }),
   hosts: argument(string({ metavar: "HOST" }), {
-    description: message`A host to run, by its file name without ${text(HOST_FILE_EXTENSION)} (default: every host)`,
+    description: message`A host to run, by its file name without ${text(HOST_SCRIPT_EXTENSION)} (default: every host)`,
   }).multiple(),
 })
 

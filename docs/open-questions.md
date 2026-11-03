@@ -7,18 +7,16 @@ What still needs an answer. Most are best settled by porting real hosts first (s
 - [What `plan` output should look like](#what-plan-output-should-look-like)
 - [JSON output](#json-output)
 - [Live progress details](#live-progress-details)
-- [Showing what commands printed](#showing-what-commands-printed)
-- [Interactive sudo](#interactive-sudo)
 - [Interactive commands](#interactive-commands)
 - [Published, or personal](#published-or-personal)
 - [Helpers worth shipping](#helpers-worth-shipping)
+- [Fact helpers](#fact-helpers)
 - [A directory step](#a-directory-step)
 - [Sending data to a command](#sending-data-to-a-command)
 - [Following symlinks in `file`](#following-symlinks-in-file)
 - [Files over 10 MB](#files-over-10-mb)
 - [`fsync` before the rename](#fsync-before-the-rename)
 - [Backups of replaced files](#backups-of-replaced-files)
-- [Rebooting a host](#rebooting-a-host)
 - [Steps side by side within a host](#steps-side-by-side-within-a-host)
 - [Quoting values in commands](#quoting-values-in-commands)
 - [Ordering between hosts](#ordering-between-hosts)
@@ -37,7 +35,8 @@ it by running `plan` on the ported Mac and reacting to what it shows. How the re
 
 A `--json` flag would write the report as one JSON document on stdout instead of the text blocks, for scripts and CI.
 It would serialize each host's record (see [CLI](./cli.md#what-a-host-records)), with each error as its message chain,
-and a version field so the shape can change later. No library is needed. Diagnostic logs stay on stderr either way, so
+and a version field so the shape can change later. Terraform's rule for that field works: readers ignore fields they
+don't know, and refuse a major version they don't support. No library is needed. Diagnostic logs stay on stderr either way, so
 stdout is only the document. Add it when something needs to read the output.
 
 ## Live progress details
@@ -53,26 +52,6 @@ The design is settled (see [CLI](./cli.md#live-progress)). These details are not
 - **Testing.** `ink-testing-library` renders a component to text frames. The formatting functions keep their own tests
   either way, because they are plain functions.
 
-## Showing what commands printed
-
-Every command is recorded with its stdout, stderr, and exit code, under the step that ran it (see
-[CLI](./cli.md#what-a-host-records)). The default output shows none of it. What is open is how much to show, and when.
-`--verbose` could print each step's commands, and a failure could show the commands of the step that failed.
-
-A `secret` command must leave its command text and output out of the record. `shell.inspect` records every command, so
-it is the one place to enforce that.
-
-## Interactive sudo
-
-`sudo -n` never prompts, so v1 needs passwordless sudo. Two hosts do not have it:
-
-- **The Mac.** Making fish the login shell runs `chsh` as root.
-- **The Incus host on its first run.** The homelab todo says the first run escalates with the password from sops,
-  because passwordless sudo is deliberately not in the preseed.
-
-Options include running `sudo -v` interactively before a host starts (fine for the local host, awkward with hosts in
-parallel), or passing a password on stdin to `sudo -S` from a secret the script decrypted.
-
 ## Interactive commands
 
 Some commands need a person at the keyboard, like an installer that asks questions. Commands normally run with their
@@ -83,8 +62,8 @@ Two ways to allow it:
 - **Inherit the terminal.** Connect the command to the CLI's own terminal (`stdio: "inherit"` locally, `ssh -t`
   remotely). The user answers prompts directly, and tsinfra sees none of the output.
 - **A pseudo-terminal.** `Bun.spawn`'s `terminal` option attaches a PTY, so tsinfra sits between the command and the
-  user. It can show and record the output, or answer a prompt itself, like a sudo password from a decrypted secret (see
-  [Interactive sudo](#interactive-sudo)).
+  user. It can show and record the output, or answer a prompt itself. A sudo password doesn't need this, because
+  askpass covers it (see [Transport](./transport.md#sudo)).
 
 Either way it is a separate mode, not how commands normally run. A PTY merges stdout and stderr and would echo a script
 sent on stdin, so the command would travel as an argument instead. An interactive command also needs the terminal to
@@ -100,6 +79,55 @@ The package is set up for npm (`exports`, `bin`, publint, release-it). If tsinfr
 Candidates from the homelab: an apt package step, brew bundle, a systemd unit with reload, a Docker Compose project, and
 `put_files` (a map of local files to destinations). Start with them as functions in `~/homelab/lib`, and move one into
 tsinfra only once two hosts use it the same way.
+
+Each family of shipped helpers gets its own export path, like `tsinfra/apt` or `tsinfra/systemd`, so a script imports
+only the families it uses. The root, `tsinfra`, stays the core API: `host`, and every type a script annotates with. The
+file mode constants stay in the root too, because they're values for a core step's option, and their types have to be
+there for `FileOptions`. A subpath is an entry file like `src/facts.ts`, an `exports` entry in `package.json` with
+`types` and `import` like the root's, and whatever the build and knip need to treat it as an entry.
+
+## Fact helpers
+
+A fact is something read from the host that no step changes, like the CPU architecture, which is what a script may
+branch on (see [Steps](./steps.md#choosing-a-method)). Today a script reads one with `h.read`. A few helpers would
+normalize the common ones. A fact helper only reads something no step can change:
+
+| Helper         | Reads             | Returns                                                                           |
+| -------------- | ----------------- | --------------------------------------------------------------------------------- |
+| `arch(h)`      | `uname -m`        | Node's `process.arch` names, like `"x64"` and `"arm64"`                           |
+| `platform(h)`  | `uname -s`        | Node's `process.platform` names, like `"linux"` and `"darwin"`                    |
+| `osRelease(h)` | `/etc/os-release` | `{ id, idLike, versionId, versionCodename, prettyName }`, or `undefined` on macOS |
+
+```ts
+import { arch } from "tsinfra/facts"
+
+const cpu = await arch(h)
+await h.ensure("Install the arm build", { check: "...", want: true, fix: `... ${cpu} ...` })
+```
+
+- **Each takes `h` and runs at the top level only.** A helper is an ordinary `h.read` with the
+  normalizing added, so it shows as its own `·` line in `--verbose`, the same as a helper a script writes itself. A step
+  uses the fact through the closure, as above. Calling a helper inside a step's function fails the host with
+  `'read' can't run while step 'X' is running`, like any other call on `h` there.
+- **There's no hidden way to run commands.** A helper that reached the shell around `h` would skip the step recorder
+  and the failed-host check, and would follow rules a script's own helpers can't.
+- **The value is in the normalizing.** `uname -m` prints `x86_64` or `aarch64` on Linux and `arm64` on macOS, and
+  download URLs want `amd64` or `x64`. Node's names give the host the same vocabulary as the control machine. If a step
+  ever needs the normalizing inside its function, the pure part can be exported too, like
+  `toNodeArch(await read("uname -m"))`.
+- **`os-release` covers every current Linux** through one standard file, with no per-distribution cases.
+- **No fact system.** pyinfra has fact classes with a command and a parser, `host.get_fact`, a cache, and defaults for a
+  missing command. tsinfra leaves those out, because a fact read once at the top of a script is just a `const`. A
+  missing command is already an answer through `inspect`.
+- **No facts about state a step manages,** like whether a file exists, a package is installed, or a command is on the
+  `PATH`. Those belong in a step's check, where `plan` reads them at the right time. A `hasCommand` helper would invite
+  the wrong shape from [Steps](./steps.md#choosing-a-method), an `inspect`, an `if`, and a `run`, instead of an
+  `ensure` with `check: "command -v docker"`. A prerequisite nothing in the script installs is checked with
+  `h.inspect` and a `throw` (see [Needs](./needs.md#a-prerequisite-nothing-in-the-script-installs)). pyinfra's docs warn about the same thing: "Only use
+  immutable facts in deploy code (installed OS, Arch, etc)".
+- **Container detection is left out** until a port needs it, because it differs across Docker, LXC, and systemd.
+
+Build them once the Mac and container ports show which facts the scripts actually branch on.
 
 ## A directory step
 
@@ -133,9 +161,9 @@ How the data travels should follow how `file` sends content, base64 in a heredoc
 
 ## Following symlinks in `file`
 
-With `content`, `file` refuses a path that is a symlink, so it never replaces a link with a regular file, or writes
-somewhere the script didn't name (see [Steps](./steps.md#file)). Making a link is the `link` form's job. This question
-is only whether the `content` form should follow an existing link and write to its target instead. The tools split on
+`file` refuses a path that is a symlink, so it never replaces a link with a regular file, or writes somewhere the
+script didn't name (see [Steps](./steps.md#file)). Making a link is [`link`](./steps.md#link)'s job. This question is
+only whether `file` should follow an existing link and write to its target instead. The tools split on
 this. Chef writes through the link to its target, and Ansible makes it an option. Following links would mean the state command
 resolves the real path first and reports it, and the write goes there. Decide when a port needs to manage a file that
 is reached through a symlink.
@@ -144,6 +172,7 @@ is reached through a symlink.
 
 `file` sends content in a base64 heredoc inside the write script, which the shell holds in memory before it runs, and
 base64 adds a third. That is fine for config files, so content over 10 MB is refused (see [Steps](./steps.md#file)).
+A `Blob` from `Bun.file` already offers `stream()`, so a streaming path could read the local file in chunks too.
 Every agentless tool uses SFTP or scp instead, which streams. A streaming path for large files would upload with `scp`
 to a temp file in the destination's directory as the SSH user, which works without `sudo`. With `sudo`, it needs a
 user-writable place and a root `mv`, the two-hop step the heredoc avoids. Add it when a port needs a large file.
@@ -160,13 +189,6 @@ power or crash often enough to matter.
 Chef, Puppet, Ansible, and Salt can each keep a copy of the file they replace. tsinfra doesn't, because the script in
 version control is the record of what a file should be, and `plan` shows the diff before anything changes. Revisit if a
 port manages files that something else on the host also edits.
-
-## Rebooting a host
-
-Some changes need a reboot, like a kernel update. Running `reboot` with `exec` drops the connection, so the command looks
-like it failed, and nothing waits for the host to come back. A reboot needs its own support: run it, wait for the
-transport to reconnect, then carry on with the rest of the script. In `plan` nothing reboots, so later steps are checked
-against the current state, like any step after a would-change step. Add it when a port needs it.
 
 ## Steps side by side within a host
 
@@ -193,8 +215,19 @@ Bun ships `$.escape`, so it would be a thin wrapper. It applies to `check`, `rea
 
 ## Ordering between hosts
 
-Out of scope: the Incus host and its containers are run as separate commands. Revisit if that becomes a real source of
-mistakes.
+Out of scope for now: the Incus host and its containers are run as separate commands. It's worth reconsidering, because
+the Incus host has to create a container before the container's own script can run, and a database host may need to be
+up before an app host. The other tools split three ways:
+
+- **Order of the command line.** `tsinfra apply incus sonarr --parallel 1` could run hosts in the order given. That
+  needs no new concept, and `--fail-fast` (see [Ideas](./ideas.md#maybe-later)) would stop `sonarr` when `incus` fails.
+- **Batches and serial runs,** like Ansible's `serial` and `order` and Salt's batch mode. These are for rolling a change
+  through a fleet, which isn't the homelab's problem.
+- **An orchestration layer,** like Salt's orchestrate runner, which runs states on one group of hosts, then another.
+  That's a second language for the order of hosts.
+
+A host-level `after`, where `sonarr` declares that it runs after `incus`, would be the smallest new concept if the
+command line isn't enough. Decide with the Incus port.
 
 ## No state
 
@@ -210,9 +243,10 @@ What that costs:
   `fix: "sudo rm /etc/sonarr.conf"`.
 - **`plan` cannot say why something differs.** A hand edit on the machine and an edit to the script look the same,
   because there is no record of the last apply.
-- **Run-once work needs a marker.** A one-time migration has no natural check, so it leaves a marker on the target, like
+- **Run-once work needs a marker.** A one-time migration has no natural check, so it leaves a marker on the host, like
   `test -f /var/lib/myapp/migrated`, and checks for that.
 
 If removal becomes a real problem, there is a lighter fix than a state file. `file` records the paths it manages in a
-manifest on the target (`~/.local/state/tsinfra/manifest`), and `plan` warns about paths in the manifest that the script
-no longer manages. The machine stays the only source of truth. Revisit after porting real hosts.
+manifest on the host (`~/.local/state/tsinfra/manifest`), and `plan` warns about paths in the manifest that the script
+no longer manages. The machine stays the only source of truth. Revisit after porting real hosts. Lighter ways other
+tools remove things without a state file are collected in [Ideas](./ideas.md#removed-resources).

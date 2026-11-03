@@ -4,7 +4,7 @@ import { isErr, messageChain } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import type { HostReport } from "#hosts/run.ts"
-import { hasPendingChange } from "#hosts/run.ts"
+import { hasDrift } from "#hosts/run.ts"
 import { formatDiff } from "#report/diff.ts"
 import type { Detail, NameKind, StepEntry } from "#report/entries.ts"
 import { toStepEntries } from "#report/entries.ts"
@@ -21,8 +21,9 @@ import {
   styleWantExitCode,
   styleWantString,
 } from "#report/styles.ts"
-import type { ValueComparison } from "#session/steps/ensure.ts"
-import type { Bytes, FileNote } from "#session/steps/file/comparison.ts"
+import type { EnsureComparison } from "#session/steps/ensure/check.ts"
+import type { Bytes } from "#session/steps/file/bytes.ts"
+import type { FileNote } from "#session/steps/file/comparison.ts"
 import { isFileNote } from "#session/steps/file/comparison.ts"
 import { getMaxWidth, padToWidth, quoteNames } from "#utils.ts"
 
@@ -43,11 +44,11 @@ interface LabelRow {
 }
 
 interface ValueKindRules {
-  formatGot: (got: ValueComparison["got"]) => string
-  formatWant: (want: ValueComparison["want"]) => string
+  formatGot: (got: EnsureComparison["got"]) => string
+  formatWant: (want: EnsureComparison["want"]) => string
 }
 
-const VALUE_KIND_RULES: Record<ValueComparison["kind"], ValueKindRules> = {
+const VALUE_KIND_RULES: Record<EnsureComparison["kind"], ValueKindRules> = {
   string: {
     formatGot: (got) => styleGotString(String(got)),
     formatWant: (want) => styleWantString(String(want)),
@@ -76,11 +77,11 @@ const FILE_NOTE_WORDS: Record<FileNote["kind"], string> = {
   large: "too large to diff",
 }
 
-// Style a value name, because it's a command, a path, or a target, and a script file in italics, because it isn't a step.
+// Style a value name, because it's a command, a path, or a target, and a host script in italics, because it isn't a step.
 const NAME_STYLES: Record<NameKind, Style> = {
   step: (name) => name,
   value: styleValue,
-  scriptFile: pc.italic,
+  hostScript: pc.italic,
 }
 
 /** Formats a note in place of a diff, like `binary, 12 kB -> 14 kB`, or `new file, 2 kB` when there's no file yet. */
@@ -97,7 +98,7 @@ const formatFileNote = (fileNote: FileNote): string => {
 const toLabelRows = (detail: Detail): LabelRow[] => {
   if (detail.kind === "diff") return []
 
-  if (detail.kind === "valueComparison") {
+  if (detail.kind === "ensureComparison") {
     const { comparison } = detail
     const { formatGot, formatWant } = VALUE_KIND_RULES[comparison.kind]
     return [
@@ -198,7 +199,7 @@ const formatHostStatus = (hostReport: HostReport): string => {
 
   const { stepRecords } = hostReport
 
-  const statuses = stepRecords.map(({ details }) => (isErr(details) ? undefined : details?.status))
+  const statuses = stepRecords.map(({ outcome }) => (isErr(outcome) ? undefined : outcome?.status))
   // Count `ran` steps too, so the count matches the `~` and `>` lines in the block.
   const changeCount = statuses.filter((status) => status === "changed" || status === "ran").length
   const waitingCount = statuses.filter((status) => status === "waiting").length
@@ -219,7 +220,7 @@ export const formatSummary = (hostReports: HostReport[], mode: Mode): string => 
     (hostReport) => `${padToWidth(hostReport.name, nameWidth)}${COLUMN_GAP}${formatHostStatus(hostReport)}`,
   )
 
-  const hasChangesPending = mode === "plan" && hostReports.some((hostReport) => hasPendingChange(hostReport))
+  const hasAnyDrift = mode === "plan" && hostReports.some((hostReport) => hasDrift(hostReport))
   // Dim the reminder, so the host lines stay the main thing in the summary.
-  return [...(hasChangesPending ? [pc.dim(PLAN_REMINDER), ""] : []), ...hostLines].join("\n")
+  return [...(hasAnyDrift ? [pc.dim(PLAN_REMINDER), ""] : []), ...hostLines].join("\n")
 }

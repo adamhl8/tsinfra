@@ -10,16 +10,18 @@ const HOSTS_DIR = path.join(FIXTURES, "hosts")
 
 /** Returns the names of the discovered hosts, or the error's message chain. */
 const discoverNames = async (dir: string, names: string[] = []) => {
-  const hostFiles = await discoverHosts(dir, names)
-  if (isErr(hostFiles)) return messageChain(hostFiles)
-  return hostFiles.map(({ name }) => name)
+  const hostScripts = await discoverHosts(dir, names)
+  if (isErr(hostScripts)) return messageChain(hostScripts)
+  return hostScripts.map(({ name }) => name)
 }
 
 describe("discoverHosts", () => {
-  it("should return every host file, sorted, ignoring subdirectories and other files", async () => {
-    const hostFiles = await discoverHosts(HOSTS_DIR, [])
+  it("should return every host script, sorted, ignoring subdirectories and other files", async () => {
+    const hostScripts = await discoverHosts(HOSTS_DIR, [])
 
-    expect(hostFiles).toStrictEqual(["a", "b", "c"].map((name) => ({ name, file: path.join(HOSTS_DIR, `${name}.ts`) })))
+    expect(hostScripts).toStrictEqual(
+      ["a", "b", "c"].map((name) => ({ name, file: path.join(HOSTS_DIR, `${name}.ts`) })),
+    )
   })
 
   it("should return only the named hosts, in file order", async () => {
@@ -38,9 +40,9 @@ describe("discoverHosts", () => {
     expect(await discoverNames(dir)).toStartWith(`failed to read hosts directory '${dir}' -> ENOENT`)
   })
 
-  it("should fail when the directory has no host files", async () => {
+  it("should fail when the directory has no host scripts", async () => {
     const dir = path.join(FIXTURES, "no-hosts")
 
-    expect(await discoverNames(dir)).toBe(`no host files in '${dir}'`)
+    expect(await discoverNames(dir)).toBe(`no host scripts in '${dir}'`)
   })
 })

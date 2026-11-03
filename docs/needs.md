@@ -34,10 +34,10 @@ macbook
 
 ## How it works
 
-`needs` takes step results, the values earlier steps returned. `ensure` and `file` accept it.
+`needs` takes step results, the values earlier steps returned. `ensure`, `file`, and `link` accept it.
 
 ```ts
-needs?: StepResult<"file" | "ensure">[]
+needs?: StepResult<"file" | "link" | "ensure">[]
 ```
 
 - **In `plan`,** when any needed step would change or is waiting, the step reports `waiting` and doesn't read the
@@ -80,4 +80,4 @@ const docker = await h.inspect("command -v docker")
 if (docker.exitCode !== 0) throw new Error("docker is missing: launch the container with the docker profile")
 ```
 
-The host fails in `plan` too, with the message under the host's file name.
+The host fails in `plan` too, with the message under the host script's name.

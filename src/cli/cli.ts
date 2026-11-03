@@ -9,28 +9,28 @@ import { program } from "#cli/program.ts"
 import { discoverHosts } from "#hosts/discover.ts"
 import { loadHosts } from "#hosts/load.ts"
 import type { HostReport } from "#hosts/run.ts"
-import { hasPendingChange, runHost } from "#hosts/run.ts"
+import { hasDrift, runHost } from "#hosts/run.ts"
 import packageJson from "#package.json" with { type: "json" }
 import { ERROR_THEME, printTsinfraError } from "#report/errors.ts"
 import { formatHostBlock, formatSummary } from "#report/format.ts"
 
-const CHANGES_PENDING_EXIT_CODE = 2
+const DRIFT_EXIT_CODE = 2
 
 /** Runs the hosts, prints each one's host block and then the summary, and returns the exit code. */
 const runTsinfra = async (): Promise<Result<number>> => {
   const config = run(program, { help: "option", version: packageJson.version, showDefault: true, theme: ERROR_THEME })
 
-  const hostFiles = await discoverHosts(config.hostsDir, config.hosts)
-  if (isErr(hostFiles)) return err("failed to discover hosts", hostFiles)
+  const hostScripts = await discoverHosts(config.hostsDir, config.hosts)
+  if (isErr(hostScripts)) return err("failed to discover hosts", hostScripts)
 
-  const hostEntries = await loadHosts(hostFiles)
-  if (isErr(hostEntries)) return hostEntries
+  const loadedHosts = await loadHosts(hostScripts)
+  if (isErr(loadedHosts)) return loadedHosts
 
   const hostReports: HostReport[] = []
 
-  for (const hostEntry of hostEntries) {
+  for (const loadedHost of loadedHosts) {
     // oxlint-disable-next-line no-await-in-loop - hosts run one at a time until there's a parallel option
-    const hostReport = await runHost(hostEntry, config.mode)
+    const hostReport = await runHost(loadedHost, config.mode)
     hostReports.push(hostReport)
 
     const hostBlock = formatHostBlock(hostReport, { verbose: config.verbose })
@@ -39,10 +39,10 @@ const runTsinfra = async (): Promise<Result<number>> => {
 
   console.log(formatSummary(hostReports, config.mode))
 
-  // Exit 1 for a failed host even when another has changes pending, because the plan is incomplete.
+  // Exit 1 for a failed host even when another has drift, because the plan is incomplete.
   if (hostReports.some(({ failure }) => failure)) return 1
-  const hasChangesPending = hostReports.some((hostReport) => hasPendingChange(hostReport))
-  return config.mode === "plan" && hasChangesPending ? CHANGES_PENDING_EXIT_CODE : 0
+  const hasAnyDrift = hostReports.some((hostReport) => hasDrift(hostReport))
+  return config.mode === "plan" && hasAnyDrift ? DRIFT_EXIT_CODE : 0
 }
 
 const main = async (): Promise<number> => {

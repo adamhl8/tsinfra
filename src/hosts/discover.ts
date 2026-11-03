@@ -6,30 +6,30 @@ import { attempt, err, isErr } from "ts-explicit-errors"
 
 import { quoteNames } from "#utils.ts"
 
-export const HOST_FILE_EXTENSION = ".ts"
+export const HOST_SCRIPT_EXTENSION = ".ts"
 
-export interface HostFile {
+export interface HostScript {
   name: string
   file: string
 }
 
-/** Lists the host files directly inside `dir`, narrowed to `names` when any are given. */
-export const discoverHosts = async (dir: string, names: readonly string[]): Promise<Result<HostFile[]>> => {
-  const glob = new Glob(`*${HOST_FILE_EXTENSION}`)
+/** Lists the host scripts directly inside `dir`, narrowed to `names` when any are given. */
+export const discoverHosts = async (dir: string, names: readonly string[]): Promise<Result<HostScript[]>> => {
+  const glob = new Glob(`*${HOST_SCRIPT_EXTENSION}`)
   const files = await attempt(async () => Array.fromAsync(glob.scan({ cwd: dir, absolute: true })))
   if (isErr(files)) return err(`failed to read hosts directory '${dir}'`, files)
 
-  const hostFiles: HostFile[] = files
+  const hostScripts: HostScript[] = files
     .toSorted()
-    .map((file) => ({ name: path.basename(file, HOST_FILE_EXTENSION), file }))
-  if (hostFiles.length === 0) return err(`no host files in '${dir}'`, undefined)
-  if (names.length === 0) return hostFiles
+    .map((file) => ({ name: path.basename(file, HOST_SCRIPT_EXTENSION), file }))
+  if (hostScripts.length === 0) return err(`no host scripts in '${dir}'`, undefined)
+  if (names.length === 0) return hostScripts
 
-  const hostNames = new Set(hostFiles.map(({ name }) => name))
+  const hostNames = new Set(hostScripts.map(({ name }) => name))
   const unknownNames = names.filter((name) => !hostNames.has(name))
   if (unknownNames.length > 0)
     return err(`unknown host ${quoteNames(unknownNames)} (hosts: ${quoteNames(hostNames)})`, undefined)
 
   const selectedNames = new Set(names)
-  return hostFiles.filter(({ name }) => selectedNames.has(name))
+  return hostScripts.filter(({ name }) => selectedNames.has(name))
 }

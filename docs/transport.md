@@ -24,14 +24,15 @@ export default host("caddy.lan", { shell: "bash -l" }, async (h) => { ... })
 
 ## Commands travel on stdin
 
-Every command is sent as a script on stdin to a shell on the target. The command that starts that shell is always a
+Every command is sent as a script on stdin to a shell on the host. The command that starts that shell is always a
 fixed string:
 
 ```sh
-ssh <options> sonarr.lan sh -s          # SSH
-sh -s                                   # local
-ssh <options> sonarr.lan sudo -n sh -s  # sudo, either transport
+ssh <options> sonarr.lan sh -s  # SSH
+sh -s                           # local
 ```
+
+A command that escalates says `sudo` inside the script, so the shell itself never starts under sudo (see [sudo](#sudo)).
 
 The remote login shell only ever parses `sh -s`, so the content of a command never needs quoting for it. Whether that
 login shell is bash or fish, nothing changes. This is the fix for the "three shells involved" quoting problem in
@@ -54,7 +55,7 @@ commands (`file`'s state command and write) are POSIX sh, so any `shell` must be
 
 ## File writes
 
-`file` writes with one script, run on the target by `sh -s`, or `sudo -n sh -s` with `sudo: true`. The content travels
+`file` writes with one script, run on the host by `sh -s`, escalating inside the script with `sudo: true`. The content travels
 inside the script, base64-encoded in a quoted heredoc, and lands in a temp file next to the destination:
 
 ```sh
@@ -154,18 +155,87 @@ Every `ssh` call passes:
 The first command to a host, the home read when its session starts, opens the connection. An unreachable host fails
 there, before its script runs, with ssh's error.
 
+**Host keys and timeouts follow `~/.ssh/config`, with defaults where it says nothing.** A command-line `-o` always beats
+the config file, so tsinfra reads the host's effective settings first, with `ssh -G <host>`. That runs locally, with no
+network, once per host in preflight. Then it fills in only what ssh would otherwise leave unworkable:
+
+| `StrictHostKeyChecking` | tsinfra passes | Why                                                                     |
+| ----------------------- | -------------- | ----------------------------------------------------------------------- |
+| `ask`, the default      | `accept-new`   | `ask` can't prompt under `BatchMode`, so every new host would fail      |
+| `yes`                   | nothing        | The user chose strict. An unknown host fails, with a hint to `ssh` once |
+| `accept-new` or `no`    | nothing        | Neither prompts                                                         |
+
+- **What the settings mean.** For an unknown host, `yes` refuses, `ask` prompts and saves the key if you accept, and
+  `accept-new` and `no` save it silently. For a changed key, all but `no` refuse. `-G` can't tell an explicit `ask`
+  from the default, so an explicit `ask` gets upgraded too. It couldn't prompt anyway, and `yes` is the setting that
+  keeps tsinfra strict.
+- **A changed key always fails,** because `accept-new` refuses one too, and a changed key can mean the host isn't the
+  one it was. tsinfra adds `if the host was recreated, remove its old key with ssh-keygen -R <host>`, and offers no way
+  around it. A homelab container recreated under the same name hits this, unless cloud-init gives it a stable key.
+- **`ConnectTimeout=10`** is passed when `-G` shows `connecttimeout none`, ssh's default, which leaves it to the OS and
+  can take about 75 seconds. A timeout the user set is kept.
+- **Connect retries are left to ssh.** `ConnectionAttempts` defaults to 1, and `-G` can't tell that from an explicit 1.
+
 ## sudo
 
-`sudo -n` never prompts, so v1 needs passwordless sudo (or cached credentials) on any host where a step uses
-`sudo: true`. The Incus containers already have it, via cloud-init. The Mac and the first run on the Incus host do not.
-See [Open questions](./open-questions.md).
+Commands say `sudo` themselves, exactly where they need it, like `fix: "sudo systemctl enable --now sonarr"` or
+`curl -fsSL ... | sudo tar -x -C /opt`. Only that command escalates, and the rest of a pipeline runs as the SSH user.
+No command step or tool takes a `sudo` option. `file` and `link` do, because tsinfra writes their commands, so there's
+nowhere else to put it (see [Steps](./steps.md#sudo-and-permissions)).
 
-On `ensure` and `run`, `sudo: true` covers a string fix or command only. Inside a fix or run function, each `exec` takes
-its own `sudo`, and so does each `read` and `inspect` in a check function. A step's string `check` runs as the
-connecting user unless the command itself says `sudo`, because the user writes that command.
+A host whose sudo needs a password declares `sudo` on `host()`. It's off by default, and a passwordless host can leave
+it off, because its `sudo` runs as `sudo -n`, which works there:
 
-On `file`, `sudo: true` covers the whole operation: the state command, the diff, and the write. tsinfra generates all three, so
-there is nowhere for the user to add `sudo`. A root-only file under `/etc` could not be hashed or read otherwise. This
-means `plan` also needs passwordless sudo on a host that manages such a file. Content travels on stdin, inside the
-script, so it never shows up in `ps` or in the sudo log, unless sudoers sets `log_input`, which records stdin. See
-[Steps](./steps.md#sudo-and-permissions) for when to use it.
+```ts
+export default host("macbook", fn, { sudo: true }) // prompts when passwordless sudo isn't set up
+export default host("incus.lan", fn, { sudo: { password: incusSudo } }) // a password the script decrypted, never prompts
+```
+
+One option has both forms, because a password already implies sudo. The Incus containers have passwordless sudo
+through cloud-init. The Mac and the first run on the Incus host need a password.
+
+**Preflight.** Every host's session starts before any script runs: connect, read `$HOME`, and for a host that declares
+`sudo`, probe it. Then the scripts run, one after another or in parallel. Prompts happen in between, one host at a time,
+so they never mix with a running host's output. A host that can't be reached fails here, before any other host changes
+anything. A host has to declare `sudo` because of this: by the time its script runs, it's too late to ask.
+
+- **The probe** runs `sudo -n true`. When it works, the host is passwordless and never prompts.
+- **Otherwise tsinfra needs a password:** the one given in `host()`, or a prompt like
+  `sudo password for adam on macbook:`. It checks the password with `sudo -k -A true`. A wrong one prompts again, up to
+  three tries like sudo itself, then the host fails with `incorrect sudo password`. A wrong password from `host()`
+  fails straight away.
+- **No terminal, no prompt.** When stdin isn't a TTY, like in CI, a host that needs a prompt fails in preflight with
+  `needs a sudo password: set up passwordless sudo, or pass sudo: { password } to host()`.
+
+**How a command's `sudo` gets the password.** On a host that declares `sudo`, every script tsinfra sends starts with a
+short preamble. It writes a temp askpass helper, deleted when the script ends, and defines `sudo` as a shell function:
+
+```sh
+sudo() { SUDO_ASKPASS="$__tsinfra_askpass" command sudo -A "$@"; }
+```
+
+With `-A`, sudo runs the `SUDO_ASKPASS` program when it needs a password and reads the password from what it prints.
+It was made for graphical password dialogs, and here the helper prints the password tsinfra holds. sudo only calls it
+when it wants a password, so on a passwordless host, or with cached credentials, the helper never runs. sudo's own
+cached credentials can't stand in for this, because they belong to one terminal session, and every tsinfra command is a
+new session with no terminal.
+
+- **The password never goes into a command line or the record.** The helper reads it from a variable the function sets
+  for that one `sudo` call, and the script that sets it travels on stdin. Root and the same user can still see it while
+  the command runs, the same as Ansible's become password.
+- **The record shows the command as written,** like `sudo systemctl restart caddy`.
+- **tsinfra's own commands escalate the same way,** through the same function, so the command that starts the shell is
+  always plain `sh -s`.
+- **A `sudo` inside a child process,** like a script file the command runs, or `xargs sudo`, doesn't see the function.
+  Exporting `SUDO_ASKPASS` might cover it, which needs checking against sudo's docs when this is built. Until then those
+  need passwordless sudo.
+
+**A host that doesn't declare `sudo`** gets a preamble that defines `sudo` as `sudo -n`. On a passwordless host that's
+all it needs. Where a password is needed, a plain `sudo` over SSH fails anyway, with no terminal to prompt on, but
+locally it could open the real terminal and prompt in the middle of the report. With `-n` it fails straight away with
+sudo's `a password is required`, and tsinfra adds `host() needs sudo: true`.
+
+On `file`, `sudo: true` covers the whole operation: the state command, the diff, and the write. A root-only file under
+`/etc` could not be hashed or read otherwise, so `plan` needs sudo too, which preflight provides. Content travels on
+stdin, inside the script, so it never shows up in `ps` or in the sudo log, unless sudoers sets `log_input`, which
+records stdin.

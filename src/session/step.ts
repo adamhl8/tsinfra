@@ -4,7 +4,7 @@ import type { Mode } from "#cli/program.ts"
 import type { StepKind } from "#session/session.ts"
 import type { Shell } from "#session/shell.ts"
 import type { ChangeTools, CheckTools } from "#session/step-functions/tools.ts"
-import type { ValueComparison } from "#session/steps/ensure.ts"
+import type { EnsureComparison } from "#session/steps/ensure/check.ts"
 import type { FileComparison } from "#session/steps/file/comparison.ts"
 
 /** What a step gives back to the script. `K` is the method on `h` that ran it, so `needs` can refuse a run's result. */
@@ -54,15 +54,15 @@ export interface StepContext {
  * a run was triggered. A `waiting` status means a step it needs would change, so `plan` skipped reading the host's
  * state. An `observed` status is a read or an inspect.
  */
-export type StepDetails =
+export type StepOutcome =
   | { status: "unchanged"; changed: false }
   // A read or an inspect only looks, so it has a status of its own.
   | { status: "observed"; changed: false }
-  // `comparison` holds the values read from the host before the fix.
-  | { status: "changed"; changed: true; comparison: Comparison }
+  // `values` holds the values compared before the fix.
+  | { status: "changed"; changed: true; values: ComparisonValues }
   | { status: "ran"; changed: true }
   // `needs` holds the names of the needed steps that would change or are waiting.
   | { status: "waiting"; changed: true; needs: string[] }
 
 /** How the host's state compared with what a step wants. */
-export type Comparison = ValueComparison | FileComparison
+export type ComparisonValues = EnsureComparison | FileComparison

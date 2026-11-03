@@ -22,7 +22,7 @@ export const handleExec = async (shell: Shell, cmd: string): Promise<Result<stri
   return stdout.trim()
 }
 
-/** What a check function is given. It also runs during `plan`, so it gets no tool that changes the target. */
+/** What a check function is given. It also runs during `plan`, so it gets no tool that changes the host. */
 export interface CheckTools {
   read: Read
   inspect: Inspect

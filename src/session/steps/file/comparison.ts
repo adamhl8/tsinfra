@@ -3,8 +3,10 @@ import { attempt, err, isErr } from "ts-explicit-errors"
 
 import type { Shell } from "#session/shell.ts"
 import { quoteShellArg } from "#session/shell.ts"
+import type { Bytes } from "#session/steps/file/bytes.ts"
+import { toBytes } from "#session/steps/file/bytes.ts"
 import { formatMode, toModeBits } from "#session/steps/file/mode.ts"
-import type { RemoteFile } from "#session/steps/file/state-command.ts"
+import type { HostFile } from "#session/steps/file/state-command.ts"
 import type { WantedFile } from "#session/steps/file/wanted-file.ts"
 
 /** How a file on the host differs from what the script wants: its content, and each managed attribute that differs. */
@@ -35,13 +37,6 @@ export interface AttributeChange {
   want: string
 }
 
-declare const BYTES_BRAND: unique symbol
-
-/** A size in bytes. Only `toBytes` makes one, so a plain number can't stand in for a size. */
-export type Bytes = number & { readonly [BYTES_BRAND]: true }
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion - a brand exists only in the types, so only `as` can make one
-export const toBytes = (count: number): Bytes => count as Bytes
-
 // Skip the diff when either side is above this size, because fetching and diffing a large file costs more than the diff tells.
 const MAX_DIFF_BYTES = toBytes(100_000) // 100 kB
 
@@ -54,21 +49,21 @@ const decodeText = (bytes: Uint8Array): string | undefined => {
 }
 
 /** Lists the given attributes whose value on the host differs, comparing a name with a name and a number with an id. */
-export const findAttributeChanges = (remoteFile: RemoteFile, wantedFile: WantedFile): AttributeChange[] => {
+export const findAttributeChanges = (hostFile: HostFile, wantedFile: WantedFile): AttributeChange[] => {
   const { mode, owner, group } = wantedFile
   const changes: AttributeChange[] = []
 
   // Compare only the permission bits, because the type bits aren't something a file step sets.
-  const gotMode = remoteFile.mode % 0o1_0000
+  const gotMode = hostFile.mode % 0o1_0000
   const wantMode = mode === undefined ? undefined : toModeBits(mode)
   const isModeChanged = wantMode !== undefined && gotMode !== wantMode
   if (isModeChanged) changes.push({ name: "mode", got: formatMode(gotMode), want: formatMode(wantMode) })
 
-  const gotOwner = typeof owner === "number" ? remoteFile.uid : remoteFile.user
+  const gotOwner = typeof owner === "number" ? hostFile.uid : hostFile.user
   if (owner !== undefined && gotOwner !== owner)
     changes.push({ name: "owner", got: String(gotOwner), want: String(owner) })
 
-  const gotGroup = typeof group === "number" ? remoteFile.gid : remoteFile.group
+  const gotGroup = typeof group === "number" ? hostFile.gid : hostFile.group
   if (group !== undefined && gotGroup !== group)
     changes.push({ name: "group", got: String(gotGroup), want: String(group) })
 
@@ -80,16 +75,16 @@ interface CompareContentInput {
   path: string
   secret: boolean
   wantedFile: WantedFile
-  remoteFile: RemoteFile
+  hostFile: HostFile
 }
 
 /** Works out how the content differs, fetching the old content only when the output can show a diff of it. */
 export const compareContent = async (input: CompareContentInput): Promise<Result<FileContent>> => {
-  const { shell, path, secret, wantedFile, remoteFile } = input
+  const { shell, path, secret, wantedFile, hostFile } = input
   const { bytes, size: wantSize, hash } = wantedFile
-  const { size: gotSize } = remoteFile
+  const { size: gotSize } = hostFile
 
-  if (remoteFile.hash === hash) return { kind: "same" }
+  if (hostFile.hash === hash) return { kind: "same" }
   if (secret) return { kind: "hidden", gotSize, wantSize }
   if (gotSize > MAX_DIFF_BYTES || wantSize > MAX_DIFF_BYTES) return { kind: "large", gotSize, wantSize }
 

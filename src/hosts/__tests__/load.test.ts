@@ -3,7 +3,7 @@ import path from "node:path"
 
 import { isErr, messageChain } from "ts-explicit-errors"
 
-import type { HostFile } from "#hosts/discover.ts"
+import type { HostScript } from "#hosts/discover.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
 import { loadHosts } from "#hosts/load.ts"
@@ -13,31 +13,31 @@ const FIXTURES = path.resolve(import.meta.dir, "fixtures")
 // oxlint-disable-next-line typescript/no-unsafe-assignment - `expect.any()` is typed as `any`
 const ANY_FUNCTION: HostFunction = expect.any(Function)
 
-const toHostFile = (dir: string, name: string) => ({ name, file: path.join(FIXTURES, dir, `${name}.ts`) })
+const toHostScript = (dir: string, name: string) => ({ name, file: path.join(FIXTURES, dir, `${name}.ts`) })
 
-/** Loads the host files and returns their entries, or the error's message chain. */
-const loadOrMessage = async (hostFiles: HostFile[]) => {
-  const hostEntries = await loadHosts(hostFiles)
-  return isErr(hostEntries) ? messageChain(hostEntries) : hostEntries
+/** Loads the host scripts and returns their entries, or the error's message chain. */
+const loadOrMessage = async (hostScripts: HostScript[]) => {
+  const loadedHosts = await loadHosts(hostScripts)
+  return isErr(loadedHosts) ? messageChain(loadedHosts) : loadedHosts
 }
 
 describe("loadHosts", () => {
-  it("should return each host file's entry", async () => {
-    const hostEntries = await loadHosts([toHostFile("hosts", "a"), toHostFile("hosts", "b")])
+  it("should return each host script's entry", async () => {
+    const loadedHosts = await loadHosts([toHostScript("hosts", "a"), toHostScript("hosts", "b")])
 
-    expect(hostEntries).toStrictEqual([
+    expect(loadedHosts).toStrictEqual([
       { name: "a", ...host("a.lan", ANY_FUNCTION) },
       { name: "b", ...host("b.lan", ANY_FUNCTION) },
     ])
   })
 
   it("should list every host that fails to load", async () => {
-    const hostFiles = [
-      toHostFile("hosts", "a"),
-      ...["throws", "no-default", "not-host"].map((name) => toHostFile("broken", name)),
+    const hostScripts = [
+      toHostScript("hosts", "a"),
+      ...["throws", "no-default", "not-host"].map((name) => toHostScript("broken", name)),
     ]
 
-    expect(await loadOrMessage(hostFiles)).toBe(
+    expect(await loadOrMessage(hostScripts)).toBe(
       [
         "failed to load hosts:",
         "failed to load host 'throws' -> boom",

@@ -1,6 +1,6 @@
 import type { FileOptions } from "#session/steps/file.ts"
-import type { Bytes } from "#session/steps/file/comparison.ts"
-import { toBytes } from "#session/steps/file/comparison.ts"
+import type { Bytes } from "#session/steps/file/bytes.ts"
+import { toBytes } from "#session/steps/file/bytes.ts"
 import type { FileMode } from "#session/steps/file/mode.ts"
 
 /** What the script wants the file to be, worked out once before reading the state. */

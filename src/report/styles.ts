@@ -12,7 +12,7 @@ export const STATUS_STYLES: Record<StepStatus, { color: Style; symbol: string }>
   changed: { color: pc.yellow, symbol: "~" },
   ran: { color: pc.yellow, symbol: ">" },
   waiting: { color: pc.blue, symbol: "?" },
-  failed: { color: pc.red, symbol: "!" },
+  failed: { color: pc.redBright, symbol: "!" },
 }
 
 // Color text that came from the script or the host, so it stands apart from tsinfra's own words.

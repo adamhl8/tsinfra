@@ -13,7 +13,7 @@ import type { Mode } from "#cli/program.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
 import type { HostReport } from "#hosts/run.ts"
-import { hasPendingChange, runHost } from "#hosts/run.ts"
+import { hasDrift, runHost } from "#hosts/run.ts"
 import { printTsinfraError } from "#report/errors.ts"
 import { formatHostBlock, formatSummary } from "#report/format.ts"
 import { PUBLIC_FILE_MODE } from "#session/steps/file/mode.ts"
@@ -220,7 +220,7 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      // An error with no facts under it, which is how every failure without a comparison looks.
+      // An error with no details under it, which is how every failure without a comparison looks.
       name: "error",
       target: "@local",
       fn: async (h) => {
@@ -242,7 +242,7 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      // A step name that fails validation, named after the host's file, because the step was never recorded.
+      // A step name that fails validation, named after the host's script, because the step was never recorded.
       name: "invalid-name",
       target: "@local",
       fn: async (h) => {
@@ -286,7 +286,7 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      // A failure no step owns, named after the host's file, after a step that changed.
+      // A failure no step owns, named after the host's script, after a step that changed.
       name: "script-error",
       target: "@local",
       fn: async (h) => {
@@ -299,7 +299,7 @@ const createScenarios = (dir: string): Scenario[] => {
 
 const getExitCode = (hostReports: HostReport[], mode: Mode) => {
   if (hostReports.some(({ failure }) => failure)) return 1
-  return mode === "plan" && hostReports.some((hostReport) => hasPendingChange(hostReport)) ? 2 : 0
+  return mode === "plan" && hostReports.some((hostReport) => hasDrift(hostReport)) ? 2 : 0
 }
 
 /** Runs every scenario in `mode` and prints each block, the summary, and the exit code the CLI would return. */
@@ -349,7 +349,7 @@ const previewOwnErrors = () => {
         undefined,
       ),
     },
-    { label: "no-hosts", error: err("failed to discover hosts", err("no host files in 'hosts'", undefined)) },
+    { label: "no-hosts", error: err("failed to discover hosts", err("no host scripts in 'hosts'", undefined)) },
   ]
   for (const { label, error } of errors) {
     console.log(pc.dim(label))

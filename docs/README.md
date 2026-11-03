@@ -1,6 +1,6 @@
 # tsinfra design
 
-Working design notes. Nothing here is implemented yet.
+Working design notes. Some of what they describe isn't built yet (see the [roadmap](../todo.md)).
 
 tsinfra is a small TypeScript library and CLI for keeping machines configured. You write one script per host. It reads
 top to bottom and is made of idempotent steps. tsinfra reads each step's state on the host, shows what has drifted, and runs a fix
@@ -45,14 +45,14 @@ tsinfra keeps the script shape and adds what scripts lacked:
 
 - **Scripts read like scripts.** Ordinary TypeScript, top to bottom, with ordinary control flow.
 - **Your code runs on the control machine.** `fs`, `fetch`, decryption, and string building all happen locally. Only
-  shell commands and file bytes reach a target.
-- **Nothing on targets** beyond `sh` and `sshd`.
+  shell commands and file bytes reach a host.
+- **Nothing on hosts** beyond `sh` and `sshd`.
 - **`plan` is honest.** It shows what each step sees on the host right now, and marks the places where an earlier change matters.
 - **Small.** Buildable in a few weeks and maintainable alone.
 
 ## Non-goals
 
-- An inventory file, tags, or groups. A folder of host files is the inventory.
+- An inventory file, tags, or groups. A folder of host scripts is the inventory.
 - A dependency graph or any reordering. The order you wrote is the order things run.
 - Ordering between hosts. Run them as separate commands.
 - A state file.
@@ -76,8 +76,6 @@ Host files live in the repo that uses tsinfra (`~/homelab`), not in tsinfra itse
 
 ```ts
 // hosts/sonarr.ts
-import { readFile } from "node:fs/promises"
-
 import { host } from "tsinfra"
 
 import { base } from "../lib/base.ts"
@@ -97,10 +95,11 @@ export default host("sonarr.lan", async (h) => {
     },
   })
 
-  const unit = await h.file("/etc/systemd/system/sonarr.service", {
-    content: await readFile(new URL("../files/sonarr.service", import.meta.url), "utf8"),
-    sudo: true,
-  })
+  const unit = await h.file(
+    "/etc/systemd/system/sonarr.service",
+    Bun.file(new URL("../files/sonarr.service", import.meta.url)),
+    { sudo: true },
+  )
   await h.run("Reload systemd", "sudo systemctl daemon-reload", { after: [unit] })
 
   await h.ensure("Start Sonarr", {
@@ -126,6 +125,7 @@ tsinfra plan            # every host
 | **Need**  | An earlier step whose change a step's state depends on, named in `needs`.               |
 | **Plan**  | Read every step's state, run no fix. Show what would change.                            |
 | **Apply** | Read every step's state, and run the fix wherever it differs.                           |
+| **Task**  | A named function on a host besides its main one, like `update`, run with `--task`.      |
 
 ## Contents
 
@@ -135,6 +135,7 @@ tsinfra plan            # every host
 - **[Transport](./transport.md)**: local and SSH, ControlMaster, sudo, and how commands and files cross
 - **[CLI](./cli.md)**: the `hosts/` folder, `plan` and `apply`, output, and exit codes
 - **[Open questions](./open-questions.md)**: what still needs an answer
+- **[Ideas](./ideas.md)**: features other tools have that could fit, what was decided, and what was rejected
 
 ## Runtime
 

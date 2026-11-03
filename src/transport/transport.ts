@@ -6,8 +6,8 @@ import { runLocal } from "#transport/local.ts"
 const LOCAL_TARGET = "@local"
 
 /**
- * What a command produced on the target, exactly as it printed it. Only failing to run at all is an error, so a
- * non-zero exit is still output.
+ * What a command produced on the host, exactly as it printed it. Only failing to run at all is an error, so a non-zero
+ * exit is still output.
  */
 export interface CommandOutput {
   stdout: string

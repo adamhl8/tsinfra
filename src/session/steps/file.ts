@@ -2,10 +2,10 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { HostState } from "#session/converge.ts"
+import type { Comparison } from "#session/converge.ts"
 import { converge } from "#session/converge.ts"
 import type { Shell } from "#session/shell.ts"
-import type { NeededSteps, StepContext, StepDetails } from "#session/step.ts"
+import type { NeededSteps, StepContext, StepOutcome } from "#session/step.ts"
 import { neededStepsSchema } from "#session/step.ts"
 import type { FileContent } from "#session/steps/file/comparison.ts"
 import { compareContent, findAttributeChanges } from "#session/steps/file/comparison.ts"
@@ -49,7 +49,7 @@ const fileOptionsSchema = type.declare<FileOptions>().type({
   "needs?": neededStepsSchema,
 })
 
-interface ReadFileStateInput {
+interface CompareFileInput {
   shell: Shell
   path: string
   wantedFile: WantedFile
@@ -57,7 +57,7 @@ interface ReadFileStateInput {
 }
 
 /** Reads the file's state on the host and compares it with what the script wants. */
-const readFileState = async (input: ReadFileStateInput): Promise<Result<HostState>> => {
+const compareFile = async (input: CompareFileInput): Promise<Result<Comparison>> => {
   const { shell, path, wantedFile } = input
 
   const commandOutput = await shell.inspect(buildStateCommand(path))
@@ -73,23 +73,23 @@ const readFileState = async (input: ReadFileStateInput): Promise<Result<HostStat
 
   if (findings.kind === "absent") {
     const content: FileContent = { kind: "new", wantSize: wantedFile.size }
-    return { inSync: false, comparison: { kind: "file", content, attributes: [] } }
+    return { inSync: false, values: { kind: "file", content, attributes: [] } }
   }
 
-  const { remoteFile } = findings
-  const content = await compareContent({ ...input, remoteFile })
+  const { hostFile } = findings
+  const content = await compareContent({ ...input, hostFile })
   if (isErr(content)) return content
 
-  const attributes = findAttributeChanges(remoteFile, wantedFile)
+  const attributes = findAttributeChanges(hostFile, wantedFile)
   const inSync = content.kind === "same" && attributes.length === 0
-  return { inSync, comparison: { kind: "file", content, attributes } }
+  return { inSync, values: { kind: "file", content, attributes } }
 }
 
 export const handleFile = async (
   ctx: StepContext,
   path: string,
   options: FileOptions,
-): Promise<Result<StepDetails>> => {
+): Promise<Result<StepOutcome>> => {
   const { stepName, shell, home } = ctx
 
   const validOptions = fileOptionsSchema(options)
@@ -102,13 +102,13 @@ export const handleFile = async (
   if (isErr(absolutePath)) return absolutePath
 
   const wantedFile = toWantedFile(validOptions)
-  const stepDetails = await converge(ctx, {
+  const outcome = await converge(ctx, {
     needs,
-    readState: async () => readFileState({ shell, path: absolutePath, wantedFile, secret }),
+    compare: async () => compareFile({ shell, path: absolutePath, wantedFile, secret }),
     // oxlint-disable-next-line typescript/require-await - the write comes with part 2 of `file`, and this stands in for it
     fix: async () => err("writing files comes with part 2 of file", undefined),
     verify: true,
   })
 
-  return stepDetails
+  return outcome
 }

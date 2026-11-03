@@ -3,7 +3,7 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
-import type { HostEntry } from "#hosts/load.ts"
+import type { LoadedHost } from "#hosts/load.ts"
 import type { Shell } from "#session/shell.ts"
 import { createShell } from "#session/shell.ts"
 import type { Change } from "#session/step-functions/change.ts"
@@ -11,7 +11,7 @@ import type { Exec, ChangeTools, CheckTools } from "#session/step-functions/tool
 import { handleExec } from "#session/step-functions/tools.ts"
 import type { StepRecord } from "#session/step-recorder.ts"
 import { createStepRecorder } from "#session/step-recorder.ts"
-import type { StepContext, StepDetails, StepResult } from "#session/step.ts"
+import type { StepContext, StepOutcome, StepResult } from "#session/step.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
 import type { EnsureOptions } from "#session/steps/ensure.ts"
 import { handleEnsure } from "#session/steps/ensure.ts"
@@ -29,16 +29,16 @@ import { getTransport } from "#transport/transport.ts"
 export interface Host {
   readonly name: string
   /**
-   * Runs `cmd` on the host and returns its stdout, trimmed. It must not change anything, because it also runs during
-   * `plan`.
+   * Runs `cmd` on the host and returns its stdout, trimmed. It must not change what the script manages, because it also
+   * runs during `plan`.
    *
    * A non-zero exit fails the host and throws. Catching it does not recover the host. Use `inspect` when a non-zero
    * exit is a legitimate answer.
    */
   read: Read
   /**
-   * Runs `cmd` on the host and returns its stdout and stderr, both trimmed, and its exit code. It must not change
-   * anything, because it also runs during `plan`.
+   * Runs `cmd` on the host and returns its stdout and stderr, both trimmed, and its exit code. It must not change what
+   * the script manages, because it also runs during `plan`.
    *
    * A non-zero exit is an answer, not a failure. Only a command that can't run at all fails the host and throws.
    */
@@ -107,8 +107,8 @@ export interface HostSession {
  * call, on `h` or as `read` and `exec`, goes through `callOrFail` around an internal function from `steps/` or
  * `tools.ts` that returns errors as values.
  */
-export const createHostSession = async (hostEntry: HostEntry, mode: Mode): Promise<Result<HostSession>> => {
-  const { name, target } = hostEntry
+export const createHostSession = async (loadedHost: LoadedHost, mode: Mode): Promise<Result<HostSession>> => {
+  const { name, target } = loadedHost
   let failure: Failure
 
   // Throw the failure on every later call, so a script that catches it still can't use the host.
@@ -152,7 +152,7 @@ export const createHostSession = async (hostEntry: HostEntry, mode: Mode): Promi
   const callStep = async <K extends StepKind>(
     stepName: string,
     kind: K,
-    handler: (ctx: StepContext) => Promise<Result<StepDetails>>,
+    handler: (ctx: StepContext) => Promise<Result<StepOutcome>>,
   ): Promise<StepResult<K>> =>
     callOrFail(async () => {
       // Validate the name before recording the step, because the output shows every recorded step by its name.
@@ -167,19 +167,19 @@ export const createHostSession = async (hostEntry: HostEntry, mode: Mode): Promi
       const stepRecord = startStep(stepName, kind)
       if (isErr(stepRecord)) return stepRecord
 
-      const stepDetails = await handler({ stepName, mode, shell, home, checkTools, changeTools })
+      const outcome = await handler({ stepName, mode, shell, home, checkTools, changeTools })
 
       // Record the failure the host ends up with, because a function in the script may have caught an earlier one.
-      const stepFailure = isErr(stepDetails) ? keepFailure(failure, stepDetails) : failure
-      finishStep(stepRecord, stepFailure ?? stepDetails)
-      if (isErr(stepDetails)) return stepDetails
+      const stepFailure = isErr(outcome) ? keepFailure(failure, outcome) : failure
+      finishStep(stepRecord, stepFailure ?? outcome)
+      if (isErr(outcome)) return outcome
 
-      const stepResult: StepResult<K> = { name: stepName, kind, changed: stepDetails.changed }
+      const stepResult: StepResult<K> = { name: stepName, kind, changed: outcome.changed }
       return stepResult
     })
 
   const read: Host["read"] = async (cmd) => {
-    // Keep the stdout here, because a step reports only its details.
+    // Keep the stdout here, because a step reports only its outcome.
     let stdout = ""
     // Pass `cmd` as the step name, because `h.read` takes no name.
     await callStep(cmd, "read", async () => {
@@ -193,7 +193,7 @@ export const createHostSession = async (hostEntry: HostEntry, mode: Mode): Promi
   }
 
   const inspect: Host["inspect"] = async (cmd) => {
-    // Keep the result here, because a step reports only its details.
+    // Keep the result here, because a step reports only its outcome.
     // Start from an empty result, which is never returned, because `callStep` throws when the inspect fails.
     let commandResult: CommandResult = { stdout: "", stderr: "", exitCode: 0 }
     // Pass `cmd` as the step name, because `h.inspect` takes no name.

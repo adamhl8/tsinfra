@@ -3,6 +3,7 @@
 <!-- toc -->
 
 - [Hosts](#hosts)
+  - [Tasks](#tasks)
 - [plan and apply](#plan-and-apply)
 - [Output](#output)
   - [How the report is built](#how-the-report-is-built)
@@ -28,6 +29,39 @@ else and is imported like any other module.
 
 With no host names, `plan` and `apply` run every host. An unknown name is an error that lists the names that exist.
 
+### Tasks
+
+A host can have named tasks besides its main function, for work you run on demand, like updates. Configuring a host and
+updating it use the same steps, but an update shouldn't happen every time the configuration changes:
+
+```ts
+const update = task("update", async (h) => {
+  await h.ensure("Upgrade packages", {
+    check: "sudo apt-get update && apt list --upgradable | tail -n +2",
+    want: "",
+    fix: "sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y",
+  })
+})
+
+export default host("sonarr.lan", configure, { sudo: true, tasks: [update] })
+```
+
+```sh
+tsinfra plan sonarr                # the main function
+tsinfra plan sonarr --task update  # only the update task
+tsinfra plan --task update         # every host that has an update task, and no others
+```
+
+- **A task is an ordinary host function,** with the same `h`, steps, `plan`, `apply`, session, and sudo prompt. With
+  an empty `want`, `plan --task update` lists what would upgrade on every host.
+- **`task(name, fn)` mirrors `host(target, fn)`,** and `host()` registers its tasks explicitly with `tasks`, so a task
+  only belongs to the hosts that list it. A task exported from a shared module doesn't register itself anywhere.
+- **Define a task above the `host()` call,** because `host()` reads `tasks` straight away, and a `const` can't be read
+  before its line.
+- **Task names are unique within a host.**
+- **It isn't tags.** Tags pick steps inside one script. A task is a separate function, so each one still reads top to
+  bottom.
+
 ## plan and apply
 
 - **`plan`** reads the host's state for every step and runs no fix. See [Steps](./steps.md).
@@ -46,6 +80,20 @@ By default a block lists only the steps that changed, would change, are waiting,
 rest: steps that were already right as `=` lines, and each read or inspect as a `·` line named by its command. With
 `--verbose`, a host whose script made no steps still gets a block, with "no steps" under its name, so it's clear the
 host ran.
+
+Two more levels show the commands behind each step, following the `-v`, `-vv`, `-vvv` convention of pyinfra, Ansible,
+and ssh. Every command is already recorded with its output (see [What a host records](#what-a-host-records)), so these
+only change what's printed:
+
+- **`-vv`** also lists each command a step ran, dimmed, under the step, like `$ systemctl is-active sonarr`. Commands
+  tsinfra writes itself, like `file`'s multi-line state command, show as a short label, like
+  `$ (file's state command)`. The exact labels get settled when this is built.
+- **`-vvv`** also shows each command's exit code, stdout, and stderr, indented under it and cut off after some number
+  of lines, and tsinfra's own commands in full.
+- **Secrets never show.** A `secret` command keeps its text and output out of the record, and `shell.inspect` records
+  every command, so it's the one place to enforce that. The sudo preamble is added below the recorder, so it's never
+  recorded at all.
+- **A failure doesn't need them.** A failed step's error already names the command that failed and its stderr.
 
 ```
 sonarr
@@ -71,7 +119,7 @@ sonarr    2 changes
 ```
 
 `~` is a change, `>` is a run, `?` is waiting, `!` is a failure, and `=` and `·` (verbose only) are already right and a
-read. A step's symbol is the same in `plan` and `apply`, because `plan` never changes the target, so a line needs no
+read. A step's symbol is the same in `plan` and `apply`, because `plan` never changes anything the script manages, so a line needs no
 "would". The exact format is open: see [Open questions](./open-questions.md).
 
 ### How the report is built
@@ -88,16 +136,16 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   `FORCE_COLOR`, and `--no-color`, and prints plain text when stdout is not a terminal. `util.styleText` from `node:util`
   does the same, but its behavior depends on each runtime's `node:util`, and picocolors' rules are its own. Tests set
   `NO_COLOR` in the test preload, before anything imports picocolors.
-- **Step lines.** The symbol names what kind of step it was. A `changed` step from `ensure` or `file` is `~`,
+- **Step lines.** The symbol names what kind of step it was. A `changed` step from `ensure`, `file`, or `link` is `~`,
   and a `ran` step from `run` is `>`. Any failed step is `!`, because the status matters more than the kind once
   something broke, and the error already says what failed. In `--verbose`, every step that was already right is `=`,
   whatever its kind, so it doesn't rely on color to tell it from a change. A run whose trigger didn't fire is `=` too,
   because nothing needed doing. A read or inspect has its own `observed` status, so it gets a gray `·` rather than `=`.
 - **Failures.** A failed step shows its error's message chain on indented lines under it, in bright red, so it stands
-  apart from a red `got:` value. That includes a
-  failure the script caught inside the step, because the step still fails. The facts a step found, like `got:` and
+  apart from a red `got:` value. Its `!` and the host's `failed` in the summary are bright red too. That includes a
+  failure the script caught inside the step, because the step still fails. The details a step found, like `got:` and
   `want:`, are indented further and are not red, because they are not the error. A failure that is not any step's, like
-  the script throwing, is the block's last `!` line, named after the host's file in italics (like `sonarr.ts`), so it
+  the script throwing, is the block's last `!` line, named after the host's script in italics (like `sonarr.ts`), so it
   doesn't read as a step, with its error under it the same way. The block's header already names the host, so the error
   is not wrapped in "failed to run host". A host whose session couldn't start, like an unreachable one, never ran its
   script, so its block has one `!` line named after its target (like `web.lan`), with an error that starts with
@@ -165,7 +213,7 @@ for progress to matter. Until then the blocks print directly as each host finish
 
 The output is built from a record of each host's run. It is one list of steps, in the order the script called them.
 
-- **A step** records its kind (`read`, `inspect`, `ensure`, `run`, or `file`), its name, its status, and its error if it
+- **A step** records its kind (`read`, `inspect`, `ensure`, `run`, `file`, or `link`), its name, its status, and its error if it
   failed. A read or inspect has no name, so it records its command. An `ensure` with a string `want` that differed also
   records the `got` and `want` values.
 - **A step's commands** are every command that ran while it was running, including those from reading its state and from its fix
@@ -197,16 +245,17 @@ Nothing logs yet. Add LogTape with the SSH transport, which is the first code wo
 
 ## Exit codes
 
-|         | `0`        | `1`             | `2`             |
-| ------- | ---------- | --------------- | --------------- |
-| `plan`  | no changes | any host failed | changes pending |
-| `apply` | success    | any host failed | not used        |
+|         | `0`      | `1`             | `2`      |
+| ------- | -------- | --------------- | -------- |
+| `plan`  | no drift | any host failed | drift    |
+| `apply` | success  | any host failed | not used |
 
 `plan` exiting 2 makes a drift check in CI or a cron job a one-liner. `apply` never exits 2, because a run that changed
 things succeeded.
 
-Only steps that read the host's state decide whether `plan` exits 2, because only a `changed` status counts. A `run` shows up in the
-plan as a `>` line but never counts, because it doesn't read the host's state. See [Steps](./steps.md#run).
+`plan` exits 2 on drift: a step that reads the host's state found it different from the script, which is a `changed`
+status. A `run` shows up in the plan as a `>` line and counts as a change in the summary, but it is never drift, because
+it doesn't read the host's state. See [Steps](./steps.md#run).
 
-A failed host wins. `plan` exits 1 when any host failed, even if another host has changes pending, because the plan for
+A failed host wins. `plan` exits 1 when any host failed, even if another host has drift, because the plan for
 the failed host is incomplete.

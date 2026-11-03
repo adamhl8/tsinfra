@@ -4,7 +4,7 @@ import { err, isErr } from "ts-explicit-errors"
 
 import type { Change } from "#session/step-functions/change.ts"
 import { changeSchema, runChange } from "#session/step-functions/change.ts"
-import type { StepContext, StepDetails } from "#session/step.ts"
+import type { StepContext, StepOutcome } from "#session/step.ts"
 import { stepResultSchema } from "#session/step.ts"
 
 // Accept steps that can change the host in `after`, including another run.
@@ -39,7 +39,7 @@ export const handleRun = async (
   ctx: StepContext,
   change: Change,
   options: RunOptions,
-): Promise<Result<StepDetails>> => {
+): Promise<Result<StepOutcome>> => {
   const { stepName, mode } = ctx
 
   const validChange = changeSchema(change)

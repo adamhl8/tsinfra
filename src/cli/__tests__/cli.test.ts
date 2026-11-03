@@ -59,7 +59,7 @@ describe("tsinfra", () => {
     expect(stderr).toBe("")
   })
 
-  // Write the host file as a string, because Bun runs host files without type-checking them.
+  // Write the host script as a string, because Bun runs host scripts without type-checking them.
   it("should fail a step whose want is neither a string nor a boolean", async () => {
     const { dir, run } = await createProject()
     await writeLocalHost(
@@ -225,14 +225,14 @@ describe("tsinfra", () => {
     expect(await Bun.file(marker).exists()).toBe(true)
   })
 
-  it("should exit 0 from plan when the only thing pending is a run", async () => {
+  it("should exit 0 from plan when the only change is a run", async () => {
     const { dir, run } = await createProject()
     await writeLocalHost(path.join(dir, "hosts"), "a", `await h.run("Prune", "true", { after: "always" })`)
 
     expect((await run`tsinfra plan`.nothrow()).exitCode).toBe(0)
   })
 
-  it("should exit 1 from plan when a host fails, even with changes pending on another", async () => {
+  it("should exit 1 from plan when a host fails, even with drift on another", async () => {
     const { dir, run } = await createProject()
     const hostsDir = path.join(dir, "hosts")
     await writeLocalHost(hostsDir, "a", `await h.ensure("Pending", { check: "false", want: true, fix: "true" })`)

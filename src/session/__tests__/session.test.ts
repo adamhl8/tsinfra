@@ -12,10 +12,10 @@ const toPlainResult = <T>(result: Result<T> | undefined) => (isErr(result) ? mes
 
 /** Turns records into plain values to compare, with each error as its message chain and each command as its text. */
 const toPlainRecords = (stepRecords: StepRecord[]) =>
-  stepRecords.map(({ name, kind, commands, details }) => ({
+  stepRecords.map(({ name, kind, commands, outcome }) => ({
     name,
     kind,
-    details: toPlainResult(details),
+    outcome: toPlainResult(outcome),
     commands: commands.map(({ cmd }) => cmd),
   }))
 
@@ -54,7 +54,7 @@ describe("step results", () => {
       { name: "Change", kind: "ensure", changed: true },
       { name: "Follow up", kind: "run", changed: true },
     ])
-    expect(hostSession.stepRecords[0]?.details).toMatchObject({ status: "changed" })
+    expect(hostSession.stepRecords[0]?.outcome).toMatchObject({ status: "changed" })
   })
 })
 
@@ -68,7 +68,7 @@ describe("h inside a step", () => {
     })
 
     expect(result).toBe(
-      "failed to read the host's state for step 'Make marker' -> 'inspect' can't run while step 'Make marker' is running",
+      "failed to compare the host with what step 'Make marker' wants -> 'inspect' can't run while step 'Make marker' is running",
     )
   })
 
@@ -76,7 +76,7 @@ describe("h inside a step", () => {
     const hostSession = await createSession()
     const { host: h } = hostSession
     const message =
-      "failed to read the host's state for step 'Make marker' -> 'read' can't run while step 'Make marker' is running"
+      "failed to compare the host with what step 'Make marker' wants -> 'read' can't run while step 'Make marker' is running"
     const result = await ensureOrMessage(h, {
       check: async () => (await h.read("true")) === "",
       want: true,
@@ -99,7 +99,7 @@ describe("h inside a step", () => {
     })
 
     expect(result).toBe(
-      "failed to read the host's state for step 'Make marker' -> 'ensure' can't run while step 'Make marker' is running",
+      "failed to compare the host with what step 'Make marker' wants -> 'ensure' can't run while step 'Make marker' is running",
     )
   })
 
@@ -180,10 +180,10 @@ describe("step records", () => {
       {
         name: "Make marker",
         kind: "ensure",
-        details: {
+        outcome: {
           status: "changed",
           changed: true,
-          comparison: { kind: "exit", got: 1, want: true },
+          values: { kind: "exit", got: 1, want: true },
         },
         commands: [`test -f '${marker}'`, `touch '${marker}'`, `test -f '${marker}'`],
       },
@@ -198,7 +198,7 @@ describe("step records", () => {
       {
         name: "Make marker",
         kind: "ensure",
-        details: { status: "changed", changed: true, comparison: { kind: "exit", got: 1, want: true } },
+        outcome: { status: "changed", changed: true, values: { kind: "exit", got: 1, want: true } },
         commands: ["false"],
       },
     ])
@@ -212,7 +212,7 @@ describe("step records", () => {
       {
         name: "Make marker",
         kind: "ensure",
-        details: { status: "changed", changed: true, comparison: { kind: "string", got: "old", want: "new" } },
+        outcome: { status: "changed", changed: true, values: { kind: "string", got: "old", want: "new" } },
         commands: ["echo old"],
       },
     ])
@@ -224,7 +224,7 @@ describe("step records", () => {
     await hostSession.host.inspect(cmd)
 
     expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
-      { name: cmd, kind: "inspect", details: { status: "observed", changed: false }, commands: [cmd] },
+      { name: cmd, kind: "inspect", outcome: { status: "observed", changed: false }, commands: [cmd] },
     ])
   })
 
@@ -234,7 +234,7 @@ describe("step records", () => {
     await readOrMessage(hostSession.host, cmd)
 
     expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
-      { name: cmd, kind: "read", details: { status: "observed", changed: false }, commands: [cmd] },
+      { name: cmd, kind: "read", outcome: { status: "observed", changed: false }, commands: [cmd] },
     ])
     expect(toPlainResult(hostSession.stepRecords[0]?.commands[0]?.output)).toStrictEqual({
       stdout: "out\n",
@@ -248,7 +248,7 @@ describe("step records", () => {
     await runOrMessage(hostSession.host, "true", { after: [{ name: "Stay right", kind: "ensure", changed: false }] })
 
     expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
-      { name: "Make marker", kind: "run", details: { status: "unchanged", changed: false }, commands: [] },
+      { name: "Make marker", kind: "run", outcome: { status: "unchanged", changed: false }, commands: [] },
     ])
   })
 
@@ -257,7 +257,7 @@ describe("step records", () => {
     await runOrMessage(hostSession.host, "true", { after: "always" })
 
     expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
-      { name: "Make marker", kind: "run", details: { status: "ran", changed: true }, commands: [] },
+      { name: "Make marker", kind: "run", outcome: { status: "ran", changed: true }, commands: [] },
     ])
   })
 
@@ -269,7 +269,7 @@ describe("step records", () => {
       {
         name: "Make marker",
         kind: "ensure",
-        details: "failed to run the fix for step 'Make marker' -> exited with code 2: nope",
+        outcome: "failed to run the fix for step 'Make marker' -> exited with code 2: nope",
         commands: ["false", "echo nope >&2; exit 2"],
       },
     ])
@@ -290,7 +290,7 @@ describe("step records", () => {
       },
     })
 
-    expect(toPlainRecords(hostSession.stepRecords)[0]?.details).toBe("failed to run 'exit 1' -> exited with code 1")
+    expect(toPlainRecords(hostSession.stepRecords)[0]?.outcome).toBe("failed to run 'exit 1' -> exited with code 1")
   })
 
   it("should record commands from the given read and exec under their step", async () => {

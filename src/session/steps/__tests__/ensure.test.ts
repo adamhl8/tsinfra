@@ -6,7 +6,7 @@ import { attempt } from "ts-explicit-errors"
 
 import { createSession, ensureOrMessage, getFailureMessage, throwBoom } from "#__tests__/session.ts"
 
-// Widen `want` to the union, which lets a mismatched check through the types, as an untyped host file would.
+// Widen `want` to the union, which lets a mismatched check through the types, as an untyped host script would.
 const toLooseWant = (value: string | boolean) => value
 
 /** Returns a path in a new temp dir, plus a step that creates a file there. */
@@ -105,7 +105,7 @@ describe("h.ensure", () => {
     })
 
     expect(result).toBe(
-      "failed to read the host's state for step 'Make marker' -> the check returned a boolean, but want is a string",
+      "failed to compare the host with what step 'Make marker' wants -> the check returned a boolean, but want is a string",
     )
   })
 
@@ -113,14 +113,14 @@ describe("h.ensure", () => {
     const { host: h } = await createSession()
 
     expect(await ensureOrMessage(h, { check: throwBoom, want: true, fix: "true" })).toBe(
-      "failed to read the host's state for step 'Make marker' -> boom",
+      "failed to compare the host with what step 'Make marker' wants -> boom",
     )
   })
 
   it("should name the step when a read inside a function check fails", async () => {
     const hostSession = await createSession()
     const message =
-      "failed to read the host's state for step 'Make marker' -> failed to read 'exit 1' -> exited with code 1"
+      "failed to compare the host with what step 'Make marker' wants -> failed to read 'exit 1' -> exited with code 1"
     const result = await ensureOrMessage(hostSession.host, {
       check: async ({ read }) => (await read("exit 1")) === "",
       want: true,
@@ -192,7 +192,7 @@ describe("h.ensure with a string want", () => {
     const { host: h } = await createSession()
 
     expect(await ensureOrMessage(h, { check: "echo v2; echo broken >&2; exit 1", want: "v2", fix: "true" })).toBe(
-      "failed to read the host's state for step 'Make marker' -> exited with code 1: broken",
+      "failed to compare the host with what step 'Make marker' wants -> exited with code 1: broken",
     )
   })
 
@@ -243,7 +243,7 @@ describe("h.ensure with needs", () => {
 
     expect(result).toStrictEqual({ name: "Install fish plugins", kind: "ensure", changed: true })
     expect(hostSession.stepRecords[1]).toMatchObject({
-      details: { status: "waiting", changed: true, needs: ["Install brew packages"] },
+      outcome: { status: "waiting", changed: true, needs: ["Install brew packages"] },
       commands: [],
     })
   })
@@ -254,7 +254,7 @@ describe("h.ensure with needs", () => {
     const brew = await h.ensure("Install brew packages", { check: "true", want: true, fix: "true" })
     await h.ensure("Install fish plugins", { needs: [brew], check: "false", want: true, fix: "true" })
 
-    expect(hostSession.stepRecords[1]?.details).toMatchObject({ status: "changed" })
+    expect(hostSession.stepRecords[1]?.outcome).toMatchObject({ status: "changed" })
   })
 
   it("should wait on a needed step that is itself waiting, and name it", async () => {
@@ -264,7 +264,7 @@ describe("h.ensure with needs", () => {
     const fish = await h.ensure("Install fish", { needs: [brew], check: "true", want: true, fix: "true" })
     await h.ensure("Install fish plugins", { needs: [fish], check: "true", want: true, fix: "true" })
 
-    expect(hostSession.stepRecords[2]?.details).toStrictEqual({
+    expect(hostSession.stepRecords[2]?.outcome).toStrictEqual({
       status: "waiting",
       changed: true,
       needs: ["Install fish"],
@@ -277,7 +277,7 @@ describe("h.ensure with needs", () => {
     const brew = await h.ensure("Install brew packages", { check: "false", want: true, fix: "true", verify: false })
     await h.ensure("Install fish plugins", { needs: [brew], check: "true", want: true, fix: "true" })
 
-    expect(hostSession.stepRecords[1]).toMatchObject({ details: { status: "unchanged" }, commands: [{ cmd: "true" }] })
+    expect(hostSession.stepRecords[1]).toMatchObject({ outcome: { status: "unchanged" }, commands: [{ cmd: "true" }] })
   })
 })
 

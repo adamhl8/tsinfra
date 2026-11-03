@@ -2,15 +2,15 @@ import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
 import { quoteShellArg } from "#session/shell.ts"
-import type { Bytes } from "#session/steps/file/comparison.ts"
-import { toBytes } from "#session/steps/file/comparison.ts"
+import type { Bytes } from "#session/steps/file/bytes.ts"
+import { toBytes } from "#session/steps/file/bytes.ts"
 
 const SHA256_LENGTH = 64
 const SHA256_PATTERN = /^[0-9a-f]{64}/v
 const WHITESPACE = /\s+/v
 
 /** What the state command found at a path that is a regular file. */
-export interface RemoteFile {
+export interface HostFile {
   hash: string
   mode: number
   uid: number
@@ -25,7 +25,7 @@ export type PathFindings =
   | { kind: "link" }
   | { kind: "other" }
   | { kind: "unreadable" }
-  | { kind: "file"; remoteFile: RemoteFile }
+  | { kind: "file"; hostFile: HostFile }
 
 /**
  * Returns one command that says what is at `path`, and for a regular file, its sha256, mode, owner, and size. It tries
@@ -63,7 +63,7 @@ export const parseStateOutput = (stdout: string): Result<PathFindings> => {
 
   const [mode = "", uid = "", gid = "", user = "", group = "", size = ""] = statLine.trim().split(WHITESPACE)
   // Parse the mode as octal, because GNU prints `644` and BSD prints `0644`.
-  const remoteFile = {
+  const hostFile = {
     hash,
     mode: Number.parseInt(mode, 8),
     uid: Number(uid),
@@ -72,8 +72,8 @@ export const parseStateOutput = (stdout: string): Result<PathFindings> => {
     group,
     size: toBytes(Number(size)),
   }
-  if ([remoteFile.mode, remoteFile.uid, remoteFile.gid, remoteFile.size].some((value) => Number.isNaN(value)))
+  if ([hostFile.mode, hostFile.uid, hostFile.gid, hostFile.size].some((value) => Number.isNaN(value)))
     return err(`the file's state command printed '${statLine}' instead of the file's mode, owner, and size`, undefined)
 
-  return { kind: "file", remoteFile }
+  return { kind: "file", hostFile }
 }

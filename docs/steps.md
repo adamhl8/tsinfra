@@ -1,23 +1,25 @@
 # Steps
 
-Everything a host script does to a target goes through `h`, the context passed to the host function.
+Everything a host script does to its host goes through `h`, the context passed to the host function.
 
 <!-- toc -->
 
 - [Choosing a method](#choosing-a-method)
 - [Commands](#commands)
 - [Steps](#steps)
-  - [`ensure`](#ensure)
-  - [`fix`](#fix)
+- [`read`](#read)
+- [`inspect`](#inspect)
 - [`file`](#file)
   - [Reading the state](#reading-the-state)
   - [The diff](#the-diff)
   - [The write](#the-write)
   - [`sudo` and permissions](#sudo-and-permissions)
-  - [Links](#links)
+- [`link`](#link)
+- [`ensure`](#ensure)
+  - [What a check may change](#what-a-check-may-change)
+  - [`fix`](#fix)
 - [`run`](#run)
-- [`read`](#read)
-- [`inspect`](#inspect)
+- [`reboot`](#reboot)
 - [Failure](#failure)
 - [What `plan` can and cannot show](#what-plan-can-and-cannot-show)
 
@@ -25,12 +27,14 @@ Everything a host script does to a target goes through `h`, the context passed t
 
 ```ts
 interface Host {
-  readonly name: string // the host file's name, e.g. "sonarr"
-  ensure<T extends string | boolean>(name: string, options: EnsureOptions<T>): Promise<StepResult>
-  file(path: string, options: FileOptions): Promise<StepResult>
-  run(name: string, cmd: string | ((tools: ChangeTools) => Promise<void>), options: RunOptions): Promise<StepResult>
+  readonly name: string // the host script's name, e.g. "sonarr"
   read(cmd: string, options?: CommandOptions): Promise<string>
   inspect(cmd: string, options?: CommandOptions): Promise<CommandResult>
+  file(path: string, content: string | Uint8Array | Blob, options?: FileOptions): Promise<StepResult>
+  link(path: string, target: string, options?: LinkOptions): Promise<StepResult>
+  ensure<T extends string | boolean>(name: string, options: EnsureOptions<T>): Promise<StepResult>
+  run(name: string, cmd: string | ((tools: ChangeTools) => Promise<void>), options: RunOptions): Promise<StepResult>
+  reboot(options: RebootOptions): Promise<StepResult>
 }
 
 // Given to a check function. These are the same as `h.read` and `h.inspect`.
@@ -45,11 +49,10 @@ type Read = (cmd: string, options?: CommandOptions) => Promise<string>
 // Runs one command and returns its output and exit code, without failing on a non-zero exit.
 type Inspect = (cmd: string, options?: CommandOptions) => Promise<CommandResult>
 
-// Runs one command that changes the target, and returns its stdout. It behaves the same as `Read`.
+// Runs one command that changes the host, and returns its stdout. It behaves the same as `Read`.
 type Exec = (cmd: string, options?: CommandOptions) => Promise<string>
 
 type CommandOptions = {
-  sudo?: boolean // run as root through `sudo -n`
   secret?: boolean // keep the command and its output out of the output and errors
 }
 
@@ -82,20 +85,20 @@ The difference is that tsinfra gets the condition and the body separately. That 
 So plain TypeScript control flow is fine in a host script, except for one decision: whether a change is needed. That
 decision belongs in how a step reads the host's state, where tsinfra can see it.
 
-| When the code...                       | Use                                                    |
-| -------------------------------------- | ------------------------------------------------------ |
-| changes state that can be checked      | [`ensure`](#ensure), or [`file`](#file) for a file     |
-| follows up on a change, or always runs | [`run`](#run) with `after`                             |
-| picks which steps apply                | [`read`](#read) or [`inspect`](#inspect), plus an `if` |
+| When the code...                       | Use                                                                                |
+| -------------------------------------- | ---------------------------------------------------------------------------------- |
+| changes state that can be checked      | [`ensure`](#ensure), or [`file`](#file) or [`link`](#link) for a file or a symlink |
+| follows up on a change, or always runs | [`run`](#run) with `after`                                                         |
+| picks which steps apply                | [`read`](#read) or [`inspect`](#inspect), plus an `if`                             |
 
 A fact that picks steps is one that no step on the host changes, like the CPU architecture or whether the host is a
 container. Branching on state that an earlier step changes runs into
 [what `plan` cannot show](#what-plan-can-and-cannot-show).
 
-A fact that only shapes one step is read inside that step's function, not at the top level. When a download URL
-depends on the CPU architecture, the fix that downloads it reads the architecture. That read only runs when the fix
-does, and it is recorded under that step. `h.read` and `h.inspect` are for facts that decide which steps exist, because
-a step's function cannot call `h`.
+Read a fact at the top level, and use it inside a step through the closure. A fact doesn't change during the run, so
+reading it once is enough, even when it only shapes one step, like the CPU architecture in a download URL. A step's
+function can't call `h`, so a one-off command that only a fix needs goes through the fix's own tools instead, and is
+recorded under that step.
 
 The wrong shape for a change is a read, an `if`, and a `run`:
 
@@ -114,17 +117,22 @@ await h.ensure("Install docker", { check: "command -v docker", want: true, fix: 
 
 ## Commands
 
-Everything that runs on the target takes one command at a time, so you never have to write a multi-line shell script.
+Everything that runs on the host takes one command at a time, so you never have to write a multi-line shell script.
 Shell is for basic commands like `systemctl` or `docker compose`. Work out values in TypeScript, not with pipes and
 `cut`.
 
 Two shapes follow from that:
 
 - **Computing a value** (a step's `check`) takes a command, or a function given `read` and `inspect` that returns the
-  value. The function calls them as many times as it needs. It also runs during `plan`, so it must not change
-  anything.
-- **Changing the target** (a step's `fix`, and `run`) takes a command, or a function given `exec` and `inspect`. The
-  function calls `exec` once per command that changes the target. It only runs in `apply`.
+  value. The function calls them as many times as it needs. It also runs during `plan`, so it must not change what the
+  script manages.
+- **Changing the host** (a step's `fix`, and `run`) takes a command, or a function given `exec` and `inspect`. The
+  function calls `exec` once per command that changes the host. It only runs in `apply`.
+
+**Let commands print.** Don't add `-q`, `--quiet`, or `>/dev/null` just because nothing reads a command's output.
+tsinfra records every command's output under its step, and the report shows none of it by default, so quieting a
+command only hides it from `-vvv` and from a failure's error, which is when you'd want it. Keep a quiet flag only where
+it changes the output a script uses, like `docker compose ps -q` printing only container IDs.
 
 `read`, `inspect`, and `exec` are the tools. Each runs one command and takes `CommandOptions`. `read` and `exec` return
 stdout and fail on a non-zero exit. `inspect` never fails on a non-zero exit, for a command whose exit code or stderr is
@@ -145,7 +153,7 @@ covers.
 **An option takes a function when tsinfra decides when, or whether, it runs.** `check` runs in both modes and again
 after the fix. `fix` and a run's command run only in `apply`, and only when needed. Every other option is a plain value
 that your script computes before the call: `want`, `needs`, `after`, and `file`'s `content`. A `want` that depends on
-the target belongs in the check, which reads both values and returns the comparison. `h.read` and `h.inspect` run
+the host belongs in the check, which reads both values and returns the comparison. `h.read` and `h.inspect` run
 straight away, so they take a command, not a function. Combining several reads is ordinary code at the top level.
 
 **A function holds commands, not decisions.** A fix or run function that tests the machine before acting is an
@@ -170,11 +178,347 @@ runs in `apply`, so a mistake there shows up in `apply`.
 ## Steps
 
 A step is one call on `h`. A host function is a series of steps, run one at a time at the top level of the script.
-[`read`](#read) is a step that only observes. The others can change the target, and each returns a `StepResult`.
+[`read`](#read) and [`inspect`](#inspect) only observe. The others can change the host, and each returns a
+`StepResult`.
 
-Most steps that can change the target read one piece of the host's state, and in `apply` run a fix when it differs.
-`ensure` is the step where you write how to read it, as its `check`. [`file`](#file) is a step that reads the state
-itself. [`run`](#run) is a step that reads no state.
+Most steps that can change the host read one piece of the host's state, and in `apply` run a fix when it differs.
+`ensure` is the step where you write how to read it, as its `check`. [`file`](#file) and [`link`](#link) are steps that
+read the state themselves. [`run`](#run) is a step that reads no state.
+
+Name a step like a function, starting with a verb ("Install Caddy"), or as the state it ensures ("Caddy is installed").
+Both read well after `ensure`.
+
+## `read`
+
+Runs a command on the host in both modes and returns its output, trimmed. Each `h.read` is a step of its own. It has
+no name, so errors and verbose output show its command. It is for observations a script branches on:
+
+```ts
+const arch = await h.read("uname -m")
+const firewall = await h.read("sudo ufw status")
+```
+
+A non-zero exit fails the host, with the command's stderr. When the exit code or stderr is the answer, use
+[`inspect`](#inspect). A `read` must not change what the script manages, because it also runs during `plan` (see
+[what a check may change](#what-a-check-may-change)). Nothing can enforce that.
+
+`secret: true` keeps the command out of errors and output, for a command that carries a token. The output itself is
+only ever returned to the script.
+
+## `inspect`
+
+Runs a command on the host in both modes and returns its stdout, stderr, and exit code. It never fails on a non-zero
+exit, so it suits a command whose exit code is the answer, and one that prints the answer on stderr, like
+`java -version`. Like `read`, it is a step of its own with no name, and it must not change what the script manages.
+
+```ts
+const container = await h.inspect("systemd-detect-virt --container")
+if (container.exitCode !== 0) await tuneKernel(h)
+```
+
+Check, fix, and run functions get an `inspect` tool too. A command that could not run at all, like one on an unreachable
+host, still fails the host.
+
+`read` stays the default and keeps returning a string, because most reads only want stdout, and a failed `read` means
+something is broken. An option on `read` that changed its return type would need overloads.
+
+## `file`
+
+```ts
+type FileOptions = {
+  mode?: FileMode // "644", "rw-r--r--", or a constant like PUBLIC_FILE_MODE. Managed only when given
+  owner?: string | number // a name is compared with the owner's name, a number with its uid
+  group?: string | number // a name is compared with the group's name, a number with its gid
+  sudo?: boolean // run the state command, the diff, and the write as root
+  secret?: boolean // never fetch or show the old content
+  overwrite?: boolean // default true. false writes the content only when the file is missing
+  validate?: (tempPath: string) => string // a command that checks the new content before it replaces the file
+  needs?: StepResult<"file" | "link" | "ensure">[]
+}
+```
+
+```ts
+const unit = await h.file("/etc/systemd/system/sonarr.service", sonarrUnit, { sudo: true })
+await h.file("/etc/caddy/Caddyfile", Bun.file(path.join(FILES, "Caddyfile")), { sudo: true })
+await h.file("/etc/motd", "Welcome to sonarr\n")
+```
+
+Writes `content` to `path` on the host, and reports whether it changed. `content` is a string or bytes computed on the
+control machine, or a `Blob` like `Bun.file(...)` for a file there. Every option is optional, so the simplest call is a
+path and its content. The step is named by its
+path, and returns a `StepResult<"file">`, so a run can follow it and a later step can need it. A symlink is a step of
+its own, [`link`](#link).
+
+**Content from a file on the control machine.** Pass `Bun.file(path)`, which is a `Blob`, not a string. A string is
+always the content itself, so it can't be mistaken for a path. tsinfra reads the `Blob` inside the step:
+
+- **A missing file fails the step,** like `failed to read local file '/repo/files/Caddyfile'`, not the script.
+- **Its size is known before reading,** from `blob.size`, so the [size limit](#the-write) fails before anything is read.
+- **It leaves room for streaming.** `blob.stream()` is how large files could be sent without holding them in memory
+  (see [Open questions](./open-questions.md#files-over-10-mb)).
+
+A file that needs values filled in is read and edited in the script, then passed as a string, like any template.
+
+`Bun.file("files/x")` resolves a relative path against the directory tsinfra runs from. Build paths from the script's own
+location instead, so they work from anywhere. One file in the repo can hold them:
+
+```ts
+// lib/paths.ts
+import path from "node:path"
+
+export const ROOT = path.resolve(import.meta.dir, "..")
+export const FILES = path.join(ROOT, "files")
+```
+
+tsinfra doesn't provide these, because only the repo knows its own layout, and `import.meta.dir` already resolves from
+the file itself.
+
+**Modes.** `mode` takes octal, like `"644"` or `"4755"`, or the symbolic form `ls -l` prints, like `"rw-r--r--"`,
+with `s`/`S` and `t`/`T` for setuid, setgid, and the sticky bit. Both are template literal types, so a typo like `"648"`
+or `"rw-r--r-"` fails to type-check. chmod's `u=rw,g=r` form isn't supported, because its `+` and `-` are relative to the
+current mode, and a step states the mode it wants. A changed mode shows both notations, whichever one the script wrote, like
+`rw------- (600) -> rw-r--r-- (644)`. tsinfra exports named modes, each a symbolic string, so hovering one shows its permissions:
+
+| Constant                  | Mode        | Octal | For                                        |
+| ------------------------- | ----------- | ----- | ------------------------------------------ |
+| `PUBLIC_FILE_MODE`        | `rw-r--r--` | `644` | Most config files                          |
+| `GROUP_FILE_MODE`         | `rw-r-----` | `640` | A secret a service reads through its group |
+| `PRIVATE_FILE_MODE`       | `rw-------` | `600` | Keys, tokens, and other secrets            |
+| `PUBLIC_EXECUTABLE_MODE`  | `rwxr-xr-x` | `755` | Scripts and binaries                       |
+| `GROUP_EXECUTABLE_MODE`   | `rwxr-x---` | `750` | A script only a group may run              |
+| `PRIVATE_EXECUTABLE_MODE` | `rwx------` | `700` | A script only its owner may run            |
+
+**Defaults.** `mode`, `owner`, and `group` are managed only when given. An existing file keeps its own otherwise, the
+way Ansible, Salt, Chef, and Puppet all do, so a `file` step never loosens a `0600` file or takes ownership away from an
+app. A new file gets mode `644`, or `600` with `secret`, and is owned by whichever user ran the write: the SSH user, or
+root under `sudo`.
+
+**Paths.** A path must be absolute, starting with `/` or `~/`. A relative path fails, like `'app.conf' isn't an
+absolute path, so start it with / or ~/`, because it would land wherever the shell starts. A leading `~/` means the
+connecting user's home on the host, even under `sudo`. A path goes into every
+command fully single-quoted, with each `'` written as `'\''`, so a space or a quote can't break the command. Quoting
+also stops the shell from expanding `~`, which only happens when `~` is unquoted at the start of a word. So tsinfra
+resolves `~/` itself:
+
+- **It reads the home directory when the host's session starts,** before the script runs, as the SSH user, with
+  `printf '%s' "$HOME"`. That's one command per host, and it doubles as the first contact with the host, so a host that
+  can't run commands fails before its script starts. It runs without `sudo`, because under `sudo` the shell's `$HOME` is
+  usually root's. `printf '%s'` prints the value exactly, and avoids the way some shells treat backslashes or `-n` in
+  `echo`.
+- **It replaces the leading `~/` with that path,** then quotes the whole path. Every command `file` builds uses a plain
+  absolute path, the same with or without `sudo`. A bare `~` means the home directory itself. [`link`](#link) gets
+  the same treatment, for its path and its target.
+- **An empty or relative `HOME` is an error,** like `can't resolve ~/ in '~/.config/fish/config.fish', because $HOME
+  isn't set on the host`. `printf` prints nothing whether `HOME` is unset or empty, so one check covers both. The check runs only for a path that
+  uses `~`, so a host without `HOME` still runs a script that doesn't. Over
+  SSH, sshd sets `HOME` from the user's account, so this only happens when tsinfra itself runs without one. A `HOME` of
+  `/` is odd but valid, so it's allowed.
+- **`~otheruser/` is an error,** because it isn't an absolute path. Resolving another user's home would need an
+  account lookup that nothing needs yet.
+
+The shell's own `~` is just `$HOME` too. POSIX leaves the result unspecified when `HOME` is unset, and shells differ:
+bash, zsh, and macOS `/bin/sh` fall back to the account database, while dash and busybox sh leave `~` in place, which
+would quietly make a directory named `~`. Reading `$HOME` ourselves turns that into an error. pyinfra leaves a leading
+`~/` unquoted so the shell expands it, and runs `sudo -H`, so under sudo its `~` means root's home. That suits pyinfra,
+which can sudo to any user. tsinfra only escalates to root, where `~` as `/root` is rarely what a script means.
+
+**Symlinks and other non-files are refused.** If `path` is a symlink, a directory, or anything but a regular file, the
+step fails, like `'/etc/x' is a symlink, so file won't replace it`. Managing a link is what [`link`](#link) is for.
+Whether `file` should follow a link and write to its target is open (see
+[Open questions](./open-questions.md#following-symlinks-in-file)).
+
+### Reading the state
+
+One command prints what tsinfra needs, or a marker for a path that isn't a regular file:
+
+```sh
+if [ -L "$p" ]; then echo kind=link
+elif [ ! -e "$p" ]; then echo kind=absent
+elif [ ! -f "$p" ]; then echo kind=other
+else
+  echo kind=file
+  { sha256sum < "$p" || shasum -a 256 < "$p" || sha256 < "$p"; } 2>/dev/null
+  stat -c '%a %u %g %U %G %s' "$p" 2>/dev/null || stat -f '%Mp%Lp %u %g %Su %Sg %z' "$p"
+fi
+```
+
+- **The hash is sha256,** the default in Salt, Chef, and Puppet. POSIX has no sha256 command, so the state command tries each
+  common one: `sha256sum` (GNU coreutils, busybox, current macOS), `shasum -a 256` (older macOS), and `sha256` (FreeBSD,
+  OpenBSD). This is the same chain pyinfra uses. The file goes in on stdin, because GNU `sha256sum` escapes odd
+  filenames in its output and prefixes the line with `\`. tsinfra reads the first 64 hex characters, because GNU,
+  busybox, and `shasum` print `<hash>  -` and BSD `sha256` prints the bare hash. Empty output is an error.
+- **`stat -c` goes first,** because GNU's `stat -f fmt file` doesn't fail. It prints filesystem information instead.
+  BSD needs `%Mp%Lp`, because `%Lp` alone drops setuid and setgid.
+- **The local hash** comes from `Bun.CryptoHasher("sha256")`. No file is transferred just to learn it is unchanged.
+- **The file is in sync** when the hash matches, and so does each attribute that was given. Modes are compared as octal
+  numbers, because GNU prints `644` and BSD prints `0644`. An owner or group given as a name is compared with the name
+  `stat` prints, and one given as a number with the uid or gid. There's no portable command to turn a group name into
+  its id, because `getent` is Linux-only and macOS uses `dscl`, so names stay names. GNU and busybox print `UNKNOWN` for
+  an id with no name, which only matters for an id, and those are compared as numbers.
+- **Verification** reads the state again after the write, through `converge`. A file still out of sync fails with
+  "the host's state still differs after the fix", with the details under it.
+
+### The diff
+
+When the hashes differ, a second command fetches the old content with `cat`, so the step's line can show a diff (see
+[CLI](./cli.md#how-the-report-is-built)). It skips that fetch, and shows a `content:` line instead, in these cases:
+
+| Case                                                | Line                                           |
+| --------------------------------------------------- | ---------------------------------------------- |
+| The file doesn't exist yet                          | `content: new file, 2.05 kB`                   |
+| `secret: true`                                      | `content: hidden, 1.2 kB -> 1.3 kB`            |
+| Either side is binary: a NUL byte, or invalid UTF-8 | `content: binary, 12 kB -> 14 kB`              |
+| Either side is over 100 kB                          | `content: too large to diff, 300 kB -> 310 kB` |
+
+Sizes use SI units, 1 kB = 1000 bytes, the way npm and most file managers show them. A size under 1 kB is spelled
+out, like `15 bytes`, because a lone `B` reads like "billion". The words are italic, and the sizes are colored like
+`got` and `want`, old in red and new in green. Every `content:` line ends with
+the sizes, old to new, or just the new size for a new file. The sizes come from `stat`, so a `secret` file shows them
+without its content being fetched.
+
+With `secret`, tsinfra never runs `cat` and never prints a full hash. The 100 kB limit follows Ansible, which caps its
+diff at about 100 kB. A changed attribute shows on a line of its own, old value to new, lined up with any `content:`
+line:
+
+```
+  ~ /etc/app/app.conf
+       3  port = 8080
+         -workers = 4
+       4 +workers = 8
+       5  log = info
+      mode:  rw-r--r-- (644) -> rw------- (600)
+      owner: root -> sonarr
+```
+
+### The write
+
+The write is one script, run on the host. Content travels inside it, base64-encoded in a heredoc, and lands in a temp
+file next to the destination, which one rename puts in place. See [Transport](./transport.md#file-writes) for the
+script and why each step comes in its order. The destination is only ever the old file or the complete new one, already
+with its owner and mode.
+
+**Size limit.** Content over 10 MB fails before anything is sent, like `content is 14 MB, above file's 10 MB limit`. The
+shell holds the whole script in memory, and base64 adds a third, so the heredoc suits config files, not large binaries.
+A streaming path for large files is open (see [Open questions](./open-questions.md#files-over-10-mb)).
+
+**Content written only once.** `overwrite: false` creates a missing file, and never rewrites its content after that.
+It's for a file an app rewrites itself, like Sonarr's `config.xml`, which changes whenever a setting changes in its web
+UI. Managed normally, every `plan` would show that as drift, and every `apply` would undo the UI's changes:
+
+```ts
+await h.file("/var/lib/sonarr/config.xml", sonarrConfig, { owner: "sonarr", mode: "600", overwrite: false })
+```
+
+- **An existing file's content is never read or compared,** so it shows no diff and never counts as drift.
+- **A missing file** shows as `content: new file` in `plan`, and gets written in `apply`, as usual.
+- **`mode`, `owner`, and `group` are still managed** every run, like Puppet's and Salt's `replace: false`.
+- **The name** is fs-extra's `overwrite`, the usual JavaScript word for it. "Replace" already means swapping one kind
+  of thing for another in `file`'s refusals.
+
+**Validation.** `validate` runs a command against the temp file before the rename, so a broken config never replaces a
+working one. A bad `sshd_config` or sudoers file can lock tsinfra out of the host for good:
+
+```ts
+await h.file("/etc/ssh/sshd_config", sshdConfig, { sudo: true, validate: (tempPath) => `sshd -t -f ${tempPath}` })
+await h.file("/etc/sudoers.d/adam", sudoers, {
+  sudo: true,
+  mode: "440",
+  validate: (tempPath) => `visudo -cf ${tempPath}`,
+})
+```
+
+- **It takes a function,** given the temp file's path already shell-quoted, so there's no placeholder like Ansible's
+  `%s` to learn or forget.
+- **It runs as the write does,** under `sudo` with `sudo: true`.
+- **A non-zero exit fails the step.** The temp file is deleted and the old file stays as it was, like
+  `the new content of '/etc/ssh/sshd_config' isn't valid -> exited with code 255: line 3: Bad configuration option: Foo`.
+- **The temp file keeps the destination's extension,** like `.app.a1b2c3.json` for `app.json`, because some validators
+  pick a parser by extension.
+- **It only runs in `apply`.** `plan` never writes the temp file, so invalid content shows up on the first `apply`.
+- **It checks the file on its own.** A fragment that only makes sense with the rest of a config, like an nginx site,
+  is checked by a `run` after the file instead, like `nginx -t && systemctl reload nginx`.
+
+### `sudo` and permissions
+
+`file` runs as one user from start to finish, with no upload-then-move hop:
+
+| Option       | Runs as                   | For                                                             |
+| ------------ | ------------------------- | --------------------------------------------------------------- |
+| no `sudo`    | the SSH user, via `sh -s` | files the SSH user can write, like anything under `~`           |
+| `sudo: true` | root, via `sudo`          | files under `/etc`, root-only files, or another user as `owner` |
+
+Under `sudo: true`, every part runs as root: the state command, the `cat` for the diff, and the write. tsinfra writes all of
+those commands, so there is nowhere for a script to add `sudo` itself. This means `plan` also needs sudo on a host that
+manages such a file, and a host whose sudo needs a password declares it on `host()` (see
+[Transport](./transport.md#sudo)).
+
+`sudo` isn't the default, because a file written as root under `~` would end up owned by root, and because a host that
+never escalates shouldn't need sudo set up. A `file` step only escalates when it asks to.
+
+Two mistakes get errors of their own instead of a raw shell error:
+
+- **`owner` names another user without `sudo`,** like `owner 'sonarr' needs sudo: true, because only root can give a
+  file away`. Only root can `chown` a file to someone else.
+- **The state command can't read the file without `sudo`,** like `can't read '/etc/shadow' as the SSH user, so it needs sudo:
+  true`. That way an unreadable file doesn't look missing.
+
+## `link`
+
+```ts
+type LinkOptions = {
+  force?: boolean // replace a regular file at the path, like `ln -f`
+  sudo?: boolean // read and make the link as root
+  needs?: StepResult<"file" | "link" | "ensure">[]
+}
+```
+
+```ts
+// The file at ~/.config/fish/config.fish links to the repo's copy.
+const fishConfig = new URL("../dotfiles/fish/config.fish", import.meta.url).pathname
+await h.link("~/.config/fish/config.fish", fishConfig)
+```
+
+Makes `path` a symlink to `target`, and reports whether it changed. This is how dotfiles in a repo can be linked into
+place on the control machine, so an edit in the repo shows up straight away. The step is named by its path, and its path
+follows the same rules as `file`'s (see [`file`](#file)).
+
+`link` is a step of its own, not a form of `file`, because the two share only the path. A link has no content, mode,
+owner, or `secret`, and `force` means nothing for a regular file. Their state commands, output, and writes differ too.
+
+The words are easy to mix up. In `ln -s TARGET LINK`, the target is the original file the link points to, and the link
+is the new path. `h.link` takes them the other way around, `path` then `target`, because every step names the path it
+manages first.
+
+- **The target is a path on the same host as the link.** A symlink stores a path, and the system looks it up wherever
+  the link lives. For `@local`, that is the control machine, so a link into the repo works. On a remote host, a link
+  points at that host's own files, like `/etc/nginx/sites-enabled/app` to `/etc/nginx/sites-available/app`.
+- **The target must be absolute,** starting with `/` or `~/`. A relative target is resolved from the link's own
+  directory, every time the link is followed, not from where the script runs. That is the classic mistake: a link to
+  `dotfiles/config.fish` made from the repo looks for `~/.config/fish/dotfiles/config.fish`. A relative target fails
+  with `target must be an absolute path, like /etc/... or ~/..., because a relative target is resolved from the link's
+  directory`. `~/` means the SSH user's home, as it does for `path`.
+- **The target may not exist yet,** because a later step might create it, or a mounted drive might not be there. The
+  link is still made, and its line shows `points to a missing path`, so a typo in the repo path stands out.
+- **The state command** reads the existing link's target with `readlink` and compares it with `target`. It is in sync
+  when `path` is a symlink that points there.
+- **An existing symlink is always updated** to point at `target`, because managing it is the point.
+- **A regular file at `path` is an error** unless `force: true`, like `'~/.config/fish/config.fish' is a regular file,
+  so link won't replace it`. This is the first run for dotfiles, where the real file still sits where the link will go.
+  Move it into the repo, or set `force` to replace it. That is the same as `ln -f`.
+- **A directory at `path` is always an error,** even with `force`, because replacing it would throw away everything in
+  it. `ln -f` won't replace a directory either.
+- **`sudo` works as it does for `file`.** The state command and the write both run as root.
+- **The output** shows `new link` for a new link, and a changed target as an attribute line, like
+  `target: ~/old/config.fish -> ~/dotfiles/fish/config.fish`. Forcing out a regular file shows `replaces a file`.
+- **The write** makes the link under a temp name next to `path`, then renames it into place, so there is never a moment
+  with nothing at `path`. Renaming over an existing link to a directory follows that link with a plain `mv`, so the
+  write has to avoid that. GNU has `mv -T`, and BSD differs, which gets settled when this is built.
+- **There's no `mode`, `owner`, or `group`.** A symlink's mode doesn't apply to it. `owner` would need `chown -h`, and
+  is left out until a port needs a link owned by someone else.
+- **It returns a `StepResult<"link">`,** so `needs` and `after` accept it the same as a file's. A run can follow a link
+  that changed.
+
+## `ensure`
 
 ```ts
 // `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string.
@@ -184,19 +528,13 @@ type EnsureOptions<T extends string | boolean> = {
   // A string is compared to the command's stdout, or the function's value.
   want: T
   fix: string | ((tools: ChangeTools) => Promise<void>)
-  sudo?: boolean // run a string fix under sudo
   verify?: boolean // default true
   secret?: boolean // hide the diff
-  needs?: StepResult<"file" | "ensure">[] // earlier steps this step's check depends on
+  needs?: StepResult<"file" | "link" | "ensure">[] // earlier steps this step's check depends on
 }
 ```
 
-Name a step like a function, starting with a verb ("Install Caddy"), or as the state it ensures ("Caddy is installed").
-Both read well after `ensure`.
-
-### `ensure`
-
-`check` runs on the target, and `want` is the answer it gives when the state is already right. When they match, nothing
+`check` runs on the host, and `want` is the answer it gives when the state is already right. When they match, nothing
 happens. Otherwise the fix runs. `want` is always written out, so the rule a check follows is visible at the call site.
 The field is `check`, not `read`, because `h.read` fails on a non-zero exit and a check never does.
 
@@ -270,12 +608,27 @@ await h.ensure("Install Caddy 2.8 or newer", {
 `inspect` makes a missing `caddy` mean the fix is needed. With `read`, the same check would fail as broken.
 
 Parse output in TypeScript, not in shell. Avoid `read("caddy version | cut -d' ' -f1")`. It hides the parsing on the
-target, and a `cut` that finds nothing still exits 0. Read the whole output and split it in the function, where the
+host, and a `cut` that finds nothing still exits 0. Read the whole output and split it in the function, where the
 parsing runs on the control machine and can be tested.
 
 A check function gets the broken-check rule for free, because the `read` it is given throws on a non-zero exit. Like
-any check, it also runs during `plan`, so it must not change anything. If it throws, the step fails with the step's
-name in the error.
+any check, it also runs during `plan`, so it must not change what the script manages. If it throws, the step fails
+with the step's name in the error.
+
+### What a check may change
+
+A check runs in `plan`, so it must not change anything the script manages, or `plan` would make the changes it's meant
+to preview.
+
+- **Refreshing metadata the check needs is fine.** `apt-get update` before listing upgrades only refreshes the list of
+  what's available, and nothing installed or running changes. Without fresh lists, there's no way to answer the check.
+- **Fetching or changing something a later step acts on breaks the rule.** `docker compose pull` moves the image tag
+  on the host, so the next `docker compose up -d` from anywhere starts the new image, whether that's another step's fix,
+  a manual command, or a restart after a reboot. `plan` would quietly stage an upgrade nobody applied. It also downloads
+  on every `plan`, and each pull counts against Docker Hub's pull limit. Reading the registry's digest answers the
+  same question without any of that.
+
+Nothing enforces this, so a script can still choose to break it, knowing the cost (see the recipes).
 
 Read inside the function, not before the step. The check runs again after the fix (see [Verification](#fix)). A value
 read before the step would still hold the state from before the fix, so the step would fail even when the fix worked.
@@ -348,7 +701,8 @@ await h.ensure("Start Sonarr", {
 There is no list form of `fix`. A multi-line string runs like any shell script, so it carries on past a failed line
 unless it starts with `set -e`. Use the function form for anything past one command.
 
-**`sudo: true`** runs a string fix under `sudo`. In a fix function, pass `{ sudo: true }` to each `exec` that needs it.
+**`sudo`** goes in the command itself, only where it's needed, like `fix: "sudo apt-get install -y caddy"`. On a host
+that needs a sudo password, tsinfra supplies it (see [Transport](./transport.md#sudo)).
 
 **Verification.** After a fix runs, the check runs again. If it still does not pass, the step fails with "the host's
 state still differs after the fix for step '...'", followed by a `got:` and a `want:` line, or a line diff for a
@@ -387,7 +741,7 @@ run's check confirms it. Before reaching for it, try these:
   reloads even when the service is already running:
 
   ```ts
-  const unit = await h.file("/etc/systemd/system/sonarr.service", { content: sonarrUnit, sudo: true })
+  const unit = await h.file("/etc/systemd/system/sonarr.service", sonarrUnit, { sudo: true })
   await h.run("Reload systemd", "sudo systemctl daemon-reload", { after: [unit] })
   await h.ensure("Start Sonarr", {
     check: "systemctl is-active sonarr",
@@ -402,242 +756,16 @@ run's check confirms it. Before reaching for it, try these:
 
 **Plan mode** runs the check and never the fix. A step that would change reports `changed`.
 
-## `file`
-
-```ts
-// Either a regular file with `content`, or a symlink with `link`. The two forms can't be mixed.
-type FileOptions = ContentFileOptions | LinkFileOptions
-
-type ContentFileOptions = {
-  content: string | Uint8Array // computed on the control machine
-  mode?: FileMode // "644", "rw-r--r--", or a constant like PUBLIC_FILE_MODE. Managed only when given
-  owner?: string | number // a name is compared with the owner's name, a number with its uid
-  group?: string | number // a name is compared with the group's name, a number with its gid
-  sudo?: boolean // run the state command, the diff, and the write as root
-  secret?: boolean // never fetch or show the old content
-  needs?: StepResult<"file" | "ensure">[]
-}
-
-type LinkFileOptions = {
-  link: string // the absolute path the link points to, on the same host
-  force?: boolean // replace a regular file at the path, like `ln -f`
-  sudo?: boolean
-  needs?: StepResult<"file" | "ensure">[]
-}
-```
-
-```ts
-const unit = await h.file("/etc/systemd/system/sonarr.service", { content: sonarrUnit, sudo: true })
-const fishConfig = new URL("../dotfiles/fish/config.fish", import.meta.url).pathname
-await h.file("~/.config/fish/config.fish", { link: fishConfig })
-```
-
-Writes `content` to `path` on the target, or makes `path` a symlink to `link`, and reports whether it changed. The step
-is named by its path, and returns a `StepResult<"file">`, so a run can follow it and a later step can need it.
-
-**Modes.** `mode` takes octal, like `"644"` or `"4755"`, or the symbolic form `ls -l` prints, like `"rw-r--r--"`,
-with `s`/`S` and `t`/`T` for setuid, setgid, and the sticky bit. Both are template literal types, so a typo like `"648"`
-or `"rw-r--r-"` fails to type-check. chmod's `u=rw,g=r` form isn't supported, because its `+` and `-` are relative to the
-current mode, and a step states the mode it wants. A changed mode shows both notations, whichever one the script wrote, like
-`rw------- (600) -> rw-r--r-- (644)`. tsinfra exports named modes, each a symbolic string, so hovering one shows its permissions:
-
-| Constant                  | Mode        | Octal | For                                        |
-| ------------------------- | ----------- | ----- | ------------------------------------------ |
-| `PUBLIC_FILE_MODE`        | `rw-r--r--` | `644` | Most config files                          |
-| `GROUP_FILE_MODE`         | `rw-r-----` | `640` | A secret a service reads through its group |
-| `PRIVATE_FILE_MODE`       | `rw-------` | `600` | Keys, tokens, and other secrets            |
-| `PUBLIC_EXECUTABLE_MODE`  | `rwxr-xr-x` | `755` | Scripts and binaries                       |
-| `GROUP_EXECUTABLE_MODE`   | `rwxr-x---` | `750` | A script only a group may run              |
-| `PRIVATE_EXECUTABLE_MODE` | `rwx------` | `700` | A script only its owner may run            |
-
-**Defaults.** `mode`, `owner`, and `group` are managed only when given. An existing file keeps its own otherwise, the
-way Ansible, Salt, Chef, and Puppet all do, so a `file` step never loosens a `0600` file or takes ownership away from an
-app. A new file gets mode `644`, or `600` with `secret`, and is owned by whichever user ran the write: the SSH user, or
-root under `sudo`.
-
-**Paths.** A path must be absolute, starting with `/` or `~/`. A relative path fails, like `'app.conf' isn't an
-absolute path, so start it with / or ~/`, because it would land wherever the shell starts. A leading `~/` means the
-connecting user's home on the target, even under `sudo`. A path goes into every
-command fully single-quoted, with each `'` written as `'\''`, so a space or a quote can't break the command. Quoting
-also stops the shell from expanding `~`, which only happens when `~` is unquoted at the start of a word. So tsinfra
-resolves `~/` itself:
-
-- **It reads the home directory when the host's session starts,** before the script runs, as the SSH user, with
-  `printf '%s' "$HOME"`. That's one command per host, and it doubles as the first contact with the host, so a host that
-  can't run commands fails before its script starts. It runs without `sudo`, because under `sudo` the shell's `$HOME` is
-  usually root's. `printf '%s'` prints the value exactly, and avoids the way some shells treat backslashes or `-n` in
-  `echo`.
-- **It replaces the leading `~/` with that path,** then quotes the whole path. Every command `file` builds uses a plain
-  absolute path, the same with or without `sudo`. A bare `~` means the home directory itself. `link` targets get the
-  same treatment.
-- **An empty or relative `HOME` is an error,** like `can't resolve ~/ in '~/.config/fish/config.fish', because $HOME
-  isn't set on the host`. `printf` prints nothing whether `HOME` is unset or empty, so one check covers both. The check runs only for a path that
-  uses `~`, so a host without `HOME` still runs a script that doesn't. Over
-  SSH, sshd sets `HOME` from the user's account, so this only happens when tsinfra itself runs without one. A `HOME` of
-  `/` is odd but valid, so it's allowed.
-- **`~otheruser/` is an error,** because it isn't an absolute path. Resolving another user's home would need an
-  account lookup that nothing needs yet.
-
-The shell's own `~` is just `$HOME` too. POSIX leaves the result unspecified when `HOME` is unset, and shells differ:
-bash, zsh, and macOS `/bin/sh` fall back to the account database, while dash and busybox sh leave `~` in place, which
-would quietly make a directory named `~`. Reading `$HOME` ourselves turns that into an error. pyinfra leaves a leading
-`~/` unquoted so the shell expands it, and runs `sudo -H`, so under sudo its `~` means root's home. That suits pyinfra,
-which can sudo to any user. tsinfra only escalates to root, where `~` as `/root` is rarely what a script means.
-
-**With `content`, symlinks and other non-files are refused.** If `path` is a symlink, a directory, or anything but a
-regular file, the step fails, like `'/etc/x' is a symlink, so file won't replace it`. Managing a link is what the `link`
-form is for (see [Links](#links)). Whether the `content` form should follow a link and write to its target is open (see
-[Open questions](./open-questions.md#following-symlinks-in-file)).
-
-### Reading the state
-
-One command prints what tsinfra needs, or a marker for a path that isn't a regular file:
-
-```sh
-if [ -L "$p" ]; then echo kind=link
-elif [ ! -e "$p" ]; then echo kind=absent
-elif [ ! -f "$p" ]; then echo kind=other
-else
-  echo kind=file
-  { sha256sum < "$p" || shasum -a 256 < "$p" || sha256 < "$p"; } 2>/dev/null
-  stat -c '%a %u %g %U %G %s' "$p" 2>/dev/null || stat -f '%Mp%Lp %u %g %Su %Sg %z' "$p"
-fi
-```
-
-- **The hash is sha256,** the default in Salt, Chef, and Puppet. POSIX has no sha256 command, so the state command tries each
-  common one: `sha256sum` (GNU coreutils, busybox, current macOS), `shasum -a 256` (older macOS), and `sha256` (FreeBSD,
-  OpenBSD). This is the same chain pyinfra uses. The file goes in on stdin, because GNU `sha256sum` escapes odd
-  filenames in its output and prefixes the line with `\`. tsinfra reads the first 64 hex characters, because GNU,
-  busybox, and `shasum` print `<hash>  -` and BSD `sha256` prints the bare hash. Empty output is an error.
-- **`stat -c` goes first,** because GNU's `stat -f fmt file` doesn't fail. It prints filesystem information instead.
-  BSD needs `%Mp%Lp`, because `%Lp` alone drops setuid and setgid.
-- **The local hash** comes from `Bun.CryptoHasher("sha256")`. No file is transferred just to learn it is unchanged.
-- **The file is in sync** when the hash matches, and so does each attribute that was given. Modes are compared as octal
-  numbers, because GNU prints `644` and BSD prints `0644`. An owner or group given as a name is compared with the name
-  `stat` prints, and one given as a number with the uid or gid. There's no portable command to turn a group name into
-  its id, because `getent` is Linux-only and macOS uses `dscl`, so names stay names. GNU and busybox print `UNKNOWN` for
-  an id with no name, which only matters for an id, and those are compared as numbers.
-- **Verification** reads the state again after the write, through `converge`. A file still out of sync fails with
-  "the host's state still differs after the fix", with the facts under it.
-
-### The diff
-
-When the hashes differ, a second command fetches the old content with `cat`, so the step's line can show a diff (see
-[CLI](./cli.md#how-the-report-is-built)). It skips that fetch, and shows a `content:` line instead, in these cases:
-
-| Case                                                | Line                                           |
-| --------------------------------------------------- | ---------------------------------------------- |
-| The file doesn't exist yet                          | `content: new file, 2.05 kB`                   |
-| `secret: true`                                      | `content: hidden, 1.2 kB -> 1.3 kB`            |
-| Either side is binary: a NUL byte, or invalid UTF-8 | `content: binary, 12 kB -> 14 kB`              |
-| Either side is over 100 kB                          | `content: too large to diff, 300 kB -> 310 kB` |
-
-Sizes use SI units, 1 kB = 1000 bytes, the way npm and most file managers show them. A size under 1 kB is spelled
-out, like `15 bytes`, because a lone `B` reads like "billion". The words are italic, and the sizes are colored like
-`got` and `want`, old in red and new in green. Every `content:` line ends with
-the sizes, old to new, or just the new size for a new file. The sizes come from `stat`, so a `secret` file shows them
-without its content being fetched.
-
-With `secret`, tsinfra never runs `cat` and never prints a full hash. The 100 kB limit follows Ansible, which caps its
-diff at about 100 kB. A changed attribute shows on a line of its own, old value to new, lined up with any `content:`
-line:
-
-```
-  ~ /etc/app/app.conf
-       3  port = 8080
-         -workers = 4
-       4 +workers = 8
-       5  log = info
-      mode:  rw-r--r-- (644) -> rw------- (600)
-      owner: root -> sonarr
-```
-
-### The write
-
-The write is one script, run on the target. Content travels inside it, base64-encoded in a heredoc, and lands in a temp
-file next to the destination, which one rename puts in place. See [Transport](./transport.md#file-writes) for the
-script and why each step comes in its order. The destination is only ever the old file or the complete new one, already
-with its owner and mode.
-
-**Size limit.** Content over 10 MB fails before anything is sent, like `content is 14 MB, above file's 10 MB limit`. The
-shell holds the whole script in memory, and base64 adds a third, so the heredoc suits config files, not large binaries.
-A streaming path for large files is open (see [Open questions](./open-questions.md#files-over-10-mb)).
-
-### `sudo` and permissions
-
-`file` runs as one user from start to finish, with no upload-then-move hop:
-
-| Option       | Runs as                   | For                                                             |
-| ------------ | ------------------------- | --------------------------------------------------------------- |
-| no `sudo`    | the SSH user, via `sh -s` | files the SSH user can write, like anything under `~`           |
-| `sudo: true` | root, via `sudo -n sh -s` | files under `/etc`, root-only files, or another user as `owner` |
-
-Under `sudo: true`, every part runs as root: the state command, the `cat` for the diff, and the write. tsinfra writes all of
-those commands, so there is nowhere for a script to add `sudo` itself. This means `plan` also needs passwordless sudo on
-a host that manages such a file (see [Transport](./transport.md#sudo)).
-
-`sudo` isn't the default, because a file written as root under `~` would end up owned by root, and because some hosts,
-like the Mac, have no passwordless sudo. A `file` step only escalates when it asks to.
-
-Two mistakes get errors of their own instead of a raw shell error:
-
-- **`owner` names another user without `sudo`,** like `owner 'sonarr' needs sudo: true, because only root can give a
-  file away`. Only root can `chown` a file to someone else.
-- **The state command can't read the file without `sudo`,** like `can't read '/etc/shadow' as the SSH user, so it needs sudo:
-  true`. That way an unreadable file doesn't look missing.
-
-### Links
-
-`link` makes `path` a symlink, which is how dotfiles in a repo can be linked into place on the control machine, so an
-edit in the repo shows up straight away:
-
-```ts
-// The file at ~/.config/fish/config.fish links to the repo's copy.
-const fishConfig = new URL("../dotfiles/fish/config.fish", import.meta.url).pathname
-await h.file("~/.config/fish/config.fish", { link: fishConfig })
-```
-
-The words are easy to mix up. In `ln -s TARGET LINK`, the target is the original file the link points to, and the link
-is the new path. `file`'s `path` is the link, because that is the path the step manages. `link` holds the target.
-
-- **The target is a path on the same host as the link.** A symlink stores a path, and the system looks it up wherever
-  the link lives. For `@local`, that is the control machine, so a link into the repo works. On a remote host, a link
-  points at that host's own files, like `/etc/nginx/sites-enabled/app` to `/etc/nginx/sites-available/app`.
-- **The target must be absolute,** starting with `/` or `~/`. A relative target is resolved from the link's own
-  directory, every time the link is followed, not from where the script runs. That is the classic mistake: a link to
-  `dotfiles/config.fish` made from the repo looks for `~/.config/fish/dotfiles/config.fish`. A relative target fails
-  with `link must be an absolute path, like /etc/... or ~/..., because a relative target is resolved from the link's
-  directory`. `~/` means the SSH user's home, as it does for `path`.
-- **The target may not exist yet,** because a later step might create it, or a mounted drive might not be there. The
-  link is still made, and its line shows `points to a missing path`, so a typo in the repo path stands out.
-- **The state command** reads the existing link's target with `readlink` and compares it with `link`. It is in sync when `path`
-  is a symlink that points there.
-- **An existing symlink is always updated** to point at `link`, because managing it is the point.
-- **A regular file at `path` is an error** unless `force: true`, like `'~/.config/fish/config.fish' is a regular file,
-  so file won't replace it with a link`. This is the first run for dotfiles, where the real file still sits where the
-  link will go. Move it into the repo, or set `force` to replace it. That is the same as `ln -f`.
-- **A directory at `path` is always an error,** even with `force`, because replacing it would throw away everything in
-  it. `ln -f` won't replace a directory either.
-- **The output** shows `new link` for a new link, and a changed target as an attribute line, like
-  `link: ~/old/config.fish -> ~/dotfiles/fish/config.fish`. Forcing out a regular file shows `replaces a file`.
-- **The write** makes the link under a temp name next to `path`, then renames it into place, so there is never a moment
-  with nothing at `path`. Renaming over an existing link to a directory follows that link with a plain `mv`, so the
-  write has to avoid that. GNU has `mv -T`, and BSD differs, which gets settled when this is built.
-- **`mode` doesn't apply** to a symlink. `owner` would need `chown -h`, and is left out until a port needs a link owned
-  by someone else.
-- **It returns a `StepResult<"file">`,** so `needs` and `after` work the same as for a regular file. A run can follow a
-  link that changed.
-
 ## `run`
 
 ```ts
 type RunOptions = CommandOptions & {
-  after: StepResult<"file" | "ensure" | "run">[] | "always" // run when any of these changed, or "always" on every pass
+  after: StepResult<"file" | "link" | "ensure" | "run" | "reboot">[] | "always" // run when any of these changed, or "always" on every pass
 }
 ```
 
-A step with no check: one command, or a function given `exec` for one action that takes several commands. `sudo` and
-`secret` apply to a string command. A function passes them to each `exec`.
+A step with no check: one command, or a function given `exec` for one action that takes several commands. `secret`
+applies to a string command, and a function passes it to each `exec`. Write `sudo` inside the command where it's needed.
 
 A run is for work that something in this run triggers, not the host's state. There are two kinds, and both go in
 `after`, which is required, so a forgotten trigger is a type error:
@@ -649,8 +777,8 @@ A run is for work that something in this run triggers, not the host's state. The
   would cost as much as pruning.
 
 ```ts
-const unit = await h.file("/etc/systemd/system/sonarr.service", { content: sonarrUnit, sudo: true })
-const timer = await h.file("/etc/systemd/system/sonarr-backup.timer", { content: backupTimer, sudo: true })
+const unit = await h.file("/etc/systemd/system/sonarr.service", sonarrUnit, { sudo: true })
+const timer = await h.file("/etc/systemd/system/sonarr-backup.timer", backupTimer, { sudo: true })
 
 await h.run("Reload systemd", "sudo systemctl daemon-reload", { after: [unit, timer] })
 await h.run("Prune docker", "docker system prune -f", { after: "always" })
@@ -659,6 +787,12 @@ await h.run("Prune docker", "docker system prune -f", { after: "always" })
 `after` only takes results from steps that can change the host, so a value from `h.read` cannot be a trigger. A step
 that only runs on some code paths goes in the same `if` as the run that follows it, so the run never refers to a step
 that didn't happen.
+
+**Put a run right after the steps it follows.** tsinfra keeps no state, so a trigger that didn't get its run is lost. If
+a unit file changes and the host fails before its reload runs, the next `apply` finds the file already right and
+reports it unchanged, so the reload never fires on its own. With the run right after its steps, the only gap left is the
+run itself failing. When a run with `after` fails, its error ends with a hint, like
+`the steps it follows won't show as changed on the next apply, so run this by hand once it's fixed`.
 
 |                       | `apply`                           | `plan`                                   |
 | --------------------- | --------------------------------- | ---------------------------------------- |
@@ -724,38 +858,39 @@ await h.run(
 It works, but it never counts as drift, and `plan` shows it whether or not anything would change. Nothing can stop it,
 because a function can run any code.
 
-## `read`
-
-Runs a command on the target in both modes and returns its output, trimmed. Each `h.read` is a step of its own. It has
-no name, so errors and verbose output show its command. It is for observations a script branches on:
+## `reboot`
 
 ```ts
-const arch = await h.read("uname -m")
-const firewall = await h.read("ufw status", { sudo: true })
+type RebootOptions = {
+  after: StepResult<"file" | "link" | "ensure" | "run" | "reboot">[] | "always" // the same as a run's
+  timeout?: number // milliseconds to go down and come back, default 10 minutes
+}
 ```
-
-A non-zero exit fails the host, with the command's stderr. When the exit code or stderr is the answer, use
-[`inspect`](#inspect). A `read` must not change anything, because it also runs during `plan`. Nothing can enforce that.
-
-`secret: true` keeps the command out of errors and output, for a command that carries a token. The output itself is
-only ever returned to the script.
-
-## `inspect`
-
-Runs a command on the target in both modes and returns its stdout, stderr, and exit code. It never fails on a non-zero
-exit, so it suits a command whose exit code is the answer, and one that prints the answer on stderr, like
-`java -version`. Like `read`, it is a step of its own with no name, and it must not change anything.
 
 ```ts
-const container = await h.inspect("systemd-detect-virt --container")
-if (container.exitCode !== 0) await tuneKernel(h)
+const kernel = await h.ensure("Install the HWE kernel", { ... })
+await h.reboot({ after: [kernel] })
 ```
 
-Check, fix, and run functions get an `inspect` tool too. A command that could not run at all, like one on an unreachable
-host, still fails the host.
+Reboots the host, waits for it to come back, and carries on with the script. Running `reboot` with `exec` would drop the
+connection, so the command would look failed, and nothing would wait for the host. A reboot is a follow-up to a change,
+not state a check can read, so it works like a [`run`](#run):
 
-`read` stays the default and keeps returning a string, because most reads only want stdout, and a failed `read` means
-something is broken. An option on `read` that changed its return type would need overloads.
+- **`after` decides when.** It reboots when a step it follows changed, or on every pass with `"always"`. In `plan` it
+  never reboots, and shows as a `>` line, so later steps are checked against the host as it is, like any step after a
+  change.
+- **How it works.** It reads the boot id (`/proc/sys/kernel/random/boot_id` on Linux, `sysctl -n kern.boottime` on
+  macOS), starts `sudo reboot` in the background so the command returns cleanly, drops the ControlMaster socket, and
+  polls until the host answers. Then it reads the boot id again. An unchanged boot id fails the step with
+  `the host didn't reboot`, so a host that never went down doesn't count, the same check Ansible's `reboot` makes.
+- **One `timeout`** covers going down and coming back. Ansible splits it in two, which mostly helps it word its errors.
+- **It escalates like any command,** through the `sudo` function, so a host whose sudo needs a password declares it on
+  `host()` (see [Transport](./transport.md#sudo)).
+- **`@local` refuses it,** with `can't reboot @local, because it's the machine tsinfra runs on`.
+- **It's a top-level step.** A fix that installs a kernel doesn't reboot by itself, and the script follows that step
+  with `h.reboot`.
+- **It returns a `StepResult<"reboot">`,** so a run can follow it. Like a run's, it can't be needed, because nothing
+  about the host's state says a reboot happened.
 
 ## Failure
 
@@ -763,7 +898,7 @@ Scripts never check results for errors. When a call on `h` fails, the host is ma
 stops the script at that point. The CLI reports the host as failed, with the call that failed and its output.
 
 Catching the error does not recover the host. It stays failed, and every later call on `h` throws the same error
-straight away without touching the target. Code between the catch and the next call on `h` still runs, so do not catch
+straight away without touching the host. Code between the catch and the next call on `h` still runs, so do not catch
 around calls on `h`. The same holds inside a check, fix, or run function. A step or run whose function catches a failed
 `read` or `exec` still fails. A command whose non-zero exit is a legitimate answer goes through `inspect`.
 
