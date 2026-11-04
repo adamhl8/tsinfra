@@ -4,11 +4,12 @@ import { err } from "ts-explicit-errors"
 
 import type { Check } from "#session/handlers/ensure/check.ts"
 import { checkSchema, compareCheck } from "#session/handlers/ensure/check.ts"
+import type { NeededSteps, ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
+import { neededStepsSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
 import { changeSchema, runChange } from "#session/handlers/shared/change.ts"
 import { converge } from "#session/handlers/shared/converge.ts"
-import type { NeededSteps, StepContext, StepOutcome } from "#session/step.ts"
-import { neededStepsSchema } from "#session/step.ts"
+import type { StepContext, HandlerReturn } from "#session/step.ts"
 
 /** `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string. */
 export interface EnsureOptions<T extends string | boolean> {
@@ -45,7 +46,10 @@ const ensureOptionsSchema = type.declare<EnsureOptions<string | boolean>>().type
   "needs?": neededStepsSchema,
 })
 
-export const handleEnsure = async (ctx: StepContext, options: unknown): Promise<Result<StepOutcome>> => {
+export const handleEnsure = async (
+  ctx: StepContext,
+  options: unknown,
+): Promise<Result<HandlerReturn<ChangeStepResult<"ensure">>>> => {
   const { stepName } = ctx
 
   const validOptions = ensureOptionsSchema(options)
@@ -61,5 +65,5 @@ export const handleEnsure = async (ctx: StepContext, options: unknown): Promise<
     verify,
   })
 
-  return outcome
+  return withChangeStepResult(ctx, "ensure", outcome)
 }

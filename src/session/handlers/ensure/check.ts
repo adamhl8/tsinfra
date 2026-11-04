@@ -3,16 +3,16 @@ import type { Result } from "ts-explicit-errors"
 import { attempt, err, isErr } from "ts-explicit-errors"
 
 import type { Comparison } from "#session/handlers/shared/converge.ts"
-import type { CheckTools } from "#session/handlers/tools.ts"
+import type { ReadTools } from "#session/handlers/tools.ts"
 import { createCommandExitError } from "#session/shell.ts"
 import type { StepContext } from "#session/step.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
 import type { CommandOutput } from "#transport/transport.ts"
 import { stripTrailingNewlines } from "#utils.ts"
 
-type CheckFunction<T> = (tools: CheckTools) => Promise<T>
+type CheckFunction<T> = (tools: ReadTools) => Promise<T>
 
-/** A step's check: a command, or a function given `CheckTools` that returns the value to compare. */
+/** A step's check: a command, or a function given `ReadTools` that returns the value to compare. */
 export type Check<T> = string | CheckFunction<T>
 
 // Type the function as a `CheckFunction`, because only "is a function" can be validated at runtime.
@@ -75,11 +75,11 @@ export const compareCheck = async (
   check: Check<unknown>,
   want: string | boolean,
 ): Promise<Result<Comparison>> => {
-  const { shell, checkTools } = ctx
+  const { shell, readTools } = ctx
 
   if (typeof check === "function") {
     // Wrap the value, because `attempt` would treat a returned `Error` as a thrown one.
-    const returned = await attempt(async () => ({ value: await check(checkTools) }))
+    const returned = await attempt(async () => ({ value: await check(readTools) }))
     return isErr(returned) ? returned : compareFnValue(returned.value, want)
   }
 

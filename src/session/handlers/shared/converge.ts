@@ -1,7 +1,8 @@
 import type { Result } from "ts-explicit-errors"
 import { err, getContext, isErr } from "ts-explicit-errors"
 
-import type { ComparisonValues, NeededSteps, StepContext, StepOutcome } from "#session/step.ts"
+import type { NeededSteps } from "#session/handlers/shared/change-step-result.ts"
+import type { ComparisonValues, StepContext, StepOutcome } from "#session/step.ts"
 import type { CommandOutput } from "#transport/transport.ts"
 
 /** How the part of the host one step manages compared with what the step wants, and the values it compared. */

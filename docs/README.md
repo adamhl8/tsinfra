@@ -53,8 +53,8 @@ tsinfra keeps the script shape and adds what scripts lacked:
 ## Non-goals
 
 - An inventory file, tags, or groups. A folder of host scripts is the inventory.
-- A dependency graph or any reordering. The order you wrote is the order things run.
-- Ordering between hosts. Run them as separate commands.
+- A dependency graph or any reordering of steps. The order you wrote is the order things run.
+- Ordering between hosts, for now. Run them as separate commands. A [tentative design](./open-questions.md#ordering-between-hosts) comes late.
 - A state file.
 - A template engine. Template literals cover it.
 - A library of built-in operations (apt, brew, systemd). Write helper functions. Some may move into tsinfra later.

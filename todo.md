@@ -42,7 +42,7 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
    The tests run on the platform they run on, so macOS covers the BSD paths. The GNU and busybox paths wait for the
    Docker containers in step 1. The `sudo` path can't run in tests, so its command line gets a unit test.
 
-4. **Needs.** `needs` on `ensure` and `file`, `name` and `kind` on `StepResult`, and waiting in plan.
+4. **Needs.** `needs` on `ensure` and `file`, `name` and `kind` on `ChangeStepResult`, and waiting in plan.
 5. **CLI.** Discover `hosts/`, run hosts in parallel, hold output per host, the summary, and exit codes.
 6. **Reboot.** `h.reboot({ after, timeout })`: the boot id read before and after, `sudo reboot` started in the background,
    the ControlMaster socket dropped, polling until the host answers, and `@local` refused (see
@@ -79,9 +79,42 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
   - **Paths on the control machine** with `import.meta.dir` in a `lib/paths.ts` (see
     [Steps](./docs/steps.md#file)).
   - **An idempotence check:** in a container, `apply`, then `plan` expecting exit 0 (see
-    [Ideas](./docs/ideas.md#docs-only-lessons)).
+    [Ideas](./docs/ideas.md#decided)).
   - **Removing a path with `ensure`:** check `test -e path || test -L path` with `want: false`, because `test -e` is
     false for a dead link, so a check with `-e` alone never removes one.
+  - **A directory with `ensure`.** When only its existence matters, check `test -d path` with `want: true`, and fix with
+    `mkdir -p path`. When its mode or owner matters too, compare them as a string:
+
+    ```ts
+    await h.ensure("Create /srv/sonarr", {
+      check: "test -d /srv/sonarr && stat -c '%a %U %G' /srv/sonarr",
+      want: "750 sonarr sonarr",
+      fix: "sudo install -d -m 750 -o sonarr -g sonarr /srv/sonarr",
+    })
+    ```
+
+    A missing directory gives empty output, which doesn't match `want`, so the fix runs. The `test -d` stops a regular
+    file with the same mode and owner from looking correct. `stat -c` is GNU only, and macOS needs `stat -f`, so a
+    helper is worth writing for a script that manages many directories or runs on both.
+
+  - **Turn a step into its removal instead of deleting it.** A deleted step leaves what it made on the host, and tsinfra
+    can't know how to undo it (see [Ideas](./docs/ideas.md#removed-resources)). Edit the step, and delete it once every
+    host has applied it. Name each direction, because a boolean check shows no values under its `~` line. A function
+    keeps both directions side by side:
+
+    ```ts
+    // lib/docker.ts
+    export const docker = async (h: Host, { present }: { present: boolean }) =>
+      h.ensure(present ? "Install Docker" : "Remove Docker", {
+        check: "command -v docker",
+        want: present,
+        fix: present ? INSTALL_DOCKER : REMOVE_DOCKER,
+      })
+
+    // hosts/sonarr.ts
+    await docker(h, { present: false })
+    ```
+
   - **An empty `want` for "nothing left to do".** When the fix should run only while there's something to act on, like
     images with a newer version, packages to upgrade, or files out of place, the check returns the list of those things
     as lines, and `want` is `""`. The fix runs only when the list isn't empty, `plan` shows exactly which ones as a
@@ -165,3 +198,6 @@ Decided, and wanted eventually, with no place in the order yet.
   `apply`, running only hosts that have it (see [CLI](./docs/cli.md#tasks)).
 - **Verbosity levels.** `-vv` lists each step's commands, with labels for tsinfra's own, and `-vvv` adds their output
   (see [CLI](./docs/cli.md#output)).
+- **Ordering between hosts.** `needs` on `host()`, taking imported host scripts. The design is tentative, and it comes
+  after `--parallel` and most of the rest of this file (see
+  [Open questions](./docs/open-questions.md#ordering-between-hosts)).

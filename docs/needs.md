@@ -37,7 +37,7 @@ macbook
 `needs` takes step results, the values earlier steps returned. `ensure`, `file`, and `link` accept it.
 
 ```ts
-needs?: StepResult<"file" | "link" | "ensure">[]
+needs?: ChangeStepResult<"file" | "link" | "ensure">[]
 ```
 
 - **In `plan`,** when any needed step would change or is waiting, the step reports `waiting` and doesn't read the
@@ -45,10 +45,10 @@ needs?: StepResult<"file" | "link" | "ensure">[]
 - **In `apply`,** `needs` does nothing. The needed steps already ran, and a failed one stopped the host.
 - **A waiting step counts as changed,** so a step that needs it waits too, and a follow-up like `after: [x]` shows up
   in the plan. `plan` errs toward showing too much rather than too little.
-- **`StepResult` carries the step's name,** so `plan` can say what a step needs.
+- **`ChangeStepResult` carries the step's name,** so `plan` can say what a step needs.
 - **A run's result can't be needed.** A triggered run is `changed` exactly when the step that triggered it is, so need
   that step instead, because it is what this step's state depends on. A run with `after: "always"` would make every step that
-  needs it wait on every plan. `StepResult` carries its step's `kind`, so passing a run's result is a type error, and
+  needs it wait on every plan. `ChangeStepResult` carries its step's `kind`, so passing a run's result is a type error, and
   an error at runtime for a script that gets past the types.
 - **`run` does not take it.** A run never runs in `plan`, so there is no read to hold back.
 

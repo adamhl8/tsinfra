@@ -62,14 +62,14 @@ export const inspectCommand = async (ctx: ToolContext, cmd: unknown): Promise<Re
   return { stdout: stdout.trim(), stderr: stderr.trim(), exitCode }
 }
 
-/** What a check function is given. It also runs during `plan`, so it gets no tool that changes the host. */
-export interface CheckTools {
+/** Tools that only read the host. A check function gets these, because it also runs during `plan`. */
+export interface ReadTools {
   /** Reads from the host. Its command must not change what the script manages, because it also runs during `plan`. */
   read: Exec
   inspect: Inspect
 }
 
-/** What a fix or run function is given. */
+/** Tools that can change the host. A fix or run function gets these. */
 export interface ChangeTools {
   /** Runs a command that changes the host. */
   exec: Exec

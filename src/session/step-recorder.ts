@@ -1,8 +1,7 @@
 import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
-import type { StepKind } from "#session/session.ts"
-import type { StepOutcome } from "#session/step.ts"
+import type { StepKind, StepOutcome } from "#session/step.ts"
 import type { CommandOutput, Transport } from "#transport/transport.ts"
 
 interface CommandRecord {

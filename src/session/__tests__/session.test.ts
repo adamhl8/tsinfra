@@ -45,7 +45,7 @@ describe("createHostSession", () => {
 })
 
 describe("step results", () => {
-  it("should give the script only what StepResult declares", async () => {
+  it("should give the script only what ChangeStepResult declares", async () => {
     const hostSession = await createSession("plan")
     const ensureResult = await hostSession.host.ensure("Change", { check: "false", want: true, fix: "true" })
     const runResult = await hostSession.host.run("Follow up", "true", { after: [ensureResult] })

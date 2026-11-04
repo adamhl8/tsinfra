@@ -11,7 +11,6 @@ What still needs an answer. Most are best settled by porting real hosts first (s
 - [Published, or personal](#published-or-personal)
 - [Helpers worth shipping](#helpers-worth-shipping)
 - [Fact helpers](#fact-helpers)
-- [A directory step](#a-directory-step)
 - [Sending data to a command](#sending-data-to-a-command)
 - [Following symlinks in `file`](#following-symlinks-in-file)
 - [Files over 10 MB](#files-over-10-mb)
@@ -129,11 +128,6 @@ await h.ensure("Install the arm build", { check: "...", want: true, fix: `... ${
 
 Build them once the Mac and container ports show which facts the scripts actually branch on.
 
-## A directory step
-
-`file` creates missing parent directories with default permissions. pyinfra's `put_files` also manages directory modes.
-Add `h.dir(path, { mode })` if a port needs it.
-
 ## Sending data to a command
 
 A command's stdin is `/dev/null`, because the script itself travels on stdin (see
@@ -215,19 +209,48 @@ Bun ships `$.escape`, so it would be a thin wrapper. It applies to `check`, `rea
 
 ## Ordering between hosts
 
-Out of scope for now: the Incus host and its containers are run as separate commands. It's worth reconsidering, because
-the Incus host has to create a container before the container's own script can run, and a database host may need to be
-up before an app host. The other tools split three ways:
+A tentative design, to build late (see [`todo.md`](../todo.md#later)). Until then, the Incus host and its containers run
+as separate commands.
 
-- **Order of the command line.** `tsinfra apply incus sonarr --parallel 1` could run hosts in the order given. That
-  needs no new concept, and `--fail-fast` (see [Ideas](./ideas.md#maybe-later)) would stop `sonarr` when `incus` fails.
+One host can rely on another. The Incus host has to create a container before the container's own script can run, and a
+database host may need to be up before an app host. A host declares this with `needs`, which takes the host scripts it
+imports:
+
+```ts
+import incus from "./incus.ts"
+
+export default host("sonarr.lan", configure, { needs: [incus] })
+```
+
+- **It's named `needs`, not `after`.** On a `run`, `after` means "only if those changed", but `sonarr` runs whether or
+  not Incus changed. A step's [`needs`](./needs.md) already means "depends on this, and waits in `plan`".
+- **It takes imports, not names,** because a step's `needs` takes values too, and an editor catches typos and follows
+  renames. An import cycle fails when the scripts load, with a confusing error.
+- **Hosts run after what they need.** Each host starts once the hosts it needs have finished, which also works with
+  `--parallel`.
+- **Preparing has to change.** Today every host is prepared before any script runs, and a container that doesn't exist
+  yet would fail there. A host with `needs` that can't be prepared gets one more try after the hosts it needs finish,
+  and only then fails. A sudo prompt for that host moves to that point too.
+- **A new container may not be ready straight away,** so the Incus script should wait for it as its last step.
+- **In `plan`, a host that can't be prepared shows as waiting** when a host it needs has changes, like `? needs 'incus'`.
+- **A host whose needed host failed is skipped,** and the run exits 1.
+- **Picking hosts doesn't add any.** `tsinfra apply sonarr` runs only `sonarr`, because you named it. Order only applies
+  among the hosts being run.
+
+Still undecided: whether a host that can be prepared plans normally while a host it needs has changes. The leaning is
+yes, because otherwise every container's plan disappears whenever Incus has any change. The stricter rule matches a
+step's `needs`, and waits whenever a needed host has changes.
+
+Other approaches, and why they lost:
+
+- **Order of the command line,** like `tsinfra apply incus sonarr --parallel 1`. It needs no new concept, but you'd have
+  to remember it every time, and a plain `tsinfra apply` would have no order.
+- **Stages or numbered folders.** The whole order is in one place, but a stage also waits on hosts it doesn't depend on.
+- **The Incus host declaring its containers.** Adding a container would mean editing the Incus file.
 - **Batches and serial runs,** like Ansible's `serial` and `order` and Salt's batch mode. These are for rolling a change
   through a fleet, which isn't the homelab's problem.
 - **An orchestration layer,** like Salt's orchestrate runner, which runs states on one group of hosts, then another.
   That's a second language for the order of hosts.
-
-A host-level `after`, where `sonarr` declares that it runs after `incus`, would be the smallest new concept if the
-command line isn't enough. Decide with the Incus port.
 
 ## No state
 
@@ -246,7 +269,7 @@ What that costs:
 - **Run-once work needs a marker.** A one-time migration has no natural check, so it leaves a marker on the host, like
   `test -f /var/lib/myapp/migrated`, and checks for that.
 
-If removal becomes a real problem, there is a lighter fix than a state file. `file` records the paths it manages in a
-manifest on the host (`~/.local/state/tsinfra/manifest`), and `plan` warns about paths in the manifest that the script
-no longer manages. The machine stays the only source of truth. Revisit after porting real hosts. Lighter ways other
-tools remove things without a state file are collected in [Ideas](./ideas.md#removed-resources).
+If forgotten files become a real problem, there is a lighter fix than a state file. `file` records the paths it manages
+in a manifest on the host (`~/.local/state/tsinfra/manifest`), and `plan` warns about paths in the manifest that the
+script no longer manages. The machine stays the only source of truth. This is low priority, and [Ideas](./ideas.md#removed-resources) has
+what was decided about removal.

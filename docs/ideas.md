@@ -17,30 +17,19 @@ holds candidate features. What got decided moved into the design, and Decided sa
 
 ## Removed resources
 
-To come back to. A step the script stops managing leaves its file, link, or package on the host, because there is no
-state file (see [No state](./open-questions.md#no-state)). The tools that remove safely without one learn what they own
-from the host itself or from the current run:
+The lowest priority here, and probably never built. A step the script stops managing leaves its file, link, or package
+on the host, because there is no state file (see [No state](./open-questions.md#no-state)). tsinfra doesn't track this,
+and the automatic approaches are in [Rejected](#rejected). What's left:
 
-- **Explicit removal stays an `ensure`,** like `check: "test -e /etc/x || test -L /etc/x"`, `want: false`. An absent
-  form was rejected (see [Rejected](#rejected)).
-- **Links prove their owner.** A symlink into the repo is tsinfra's, so orphans can be found and removed. This came up
-  as a `pruneLinks(dir, repo)` step and was deferred to be decided with the rest of removal, so it might just happen
-  automatically. The rule it would follow:
-  - The session records each `link` step's path during the run, in memory only.
-  - A symlink under the folder whose target is in the repo, and whose path no `link` step declared, is an orphan. It
-    doesn't matter whether its target exists. Renaming a repo file and its `link` step leaves the old link dead and
-    undeclared, so it goes.
-  - A declared link with a missing target stays, because its `link` step owns it and shows `points to a missing path`.
-  - Links that point outside the repo are never touched.
-  - A `link` inside the folder that runs after the prune fails the host, because the prune would have deleted it.
-  - home-manager deletes only links into its own generations, and dotbot's `clean` removes dead links into the
-    dotfiles folder.
-- **Fully managed folders.** Salt's `file.directory` with `clean: True` and chezmoi's `exact_` folders delete every
-  entry the run didn't declare. That suits a folder like fish's `functions/`, but `plan` must list every file it would
-  delete. It overlaps the [directory step](./open-questions.md#a-directory-step).
-- **A declared full list.** When the script declares everything, like a Brewfile, the extras are what's installed minus
-  what's declared. nix-darwin's Homebrew `cleanup` is `none`, `check`, `uninstall`, or `zap`.
-- **A manifest on the host,** from [No state](./open-questions.md#no-state), as the heavier fallback.
+- **Turn a step into its removal instead of deleting it.** This is the recommended pattern, and it needs no new feature
+  (see the recipes in `todo.md`). A step deleted without this leaves what it made on the host.
+- **A manifest of `file` and `link` paths on the host,** from [No state](./open-questions.md#no-state), which only
+  warns. A path is the one thing that identifies a step across edits, so this list can be accurate. It wouldn't cover
+  anything done through `ensure`. Add it only if a port shows that forgotten files are a real problem.
+- **A full set whose contents can be listed.** A helper can find the extras in a set the script declares completely.
+  nix-darwin's Homebrew `cleanup` is `none`, `check`, `uninstall`, or `zap`, and Salt's `file.directory` with
+  `clean: True` and chezmoi's `exact_` folders delete every entry the run didn't declare. A managed folder's `plan` must
+  list every file it would delete.
 
 ## Helper families
 
@@ -128,6 +117,29 @@ Recorded so the survey doesn't need redoing:
 - **An absent form,** like Terraform's `removed`, chezmoi's `remove_`, and mgmt's `state: absent`, as an `h.remove(path)`
   step. Deleting a specific path is rare, and an `ensure` that the path is gone already says it and reads well. A new
   step kind would be a concept with no real case.
+
+- **Removing what a deleted step did, automatically.** Terraform can because each resource's delete logic lives in its
+  provider, which outlives the resource block. `ensure` and `run` run arbitrary commands, so tsinfra can't know how to
+  undo them. Deleting a step is also ambiguous, because it can mean "undo this" or "stop managing this". Stopping
+  managing `/etc/ssh/sshd_config` must not delete it, because tsinfra configures machines that already exist.
+
+- **A saved record of steps, reporting the ones no longer in the script.** Nothing identifies a step across edits. A
+  renamed step looks removed, and a step repurposed under the same name never reports what its old version did. A hash
+  of its commands fails the same way, because a harmless typo fix changes the hash. Whether an edit keeps the step's
+  purpose is known only to its author, and a declared ID would only fix renames. A list that misses things can't show a
+  host is clean.
+
+- **An `undo` attached to a step, run by a flag.** The step stays in the script, so the next `apply` puts the thing back.
+  `plan` never shows the removal, a host that was down misses it, and the undo goes stale because nothing runs it. Saving
+  it on the host, like the removal scripts `dpkg` keeps, can't save a function.
+
+- **Pruning symlinks that point into the repo,** like a `pruneLinks(dir, repo)` step, dotbot's `clean`, and
+  home-manager's generations. A symlink into the repo is a hint, not proof, because anything can create one.
+
+- **A directory step,** like `h.dir(path, { mode })` and the directory modes in pyinfra's `put_files`. `file` exists
+  because of its data: sending the content, hashing it, diffing it, and swapping it in atomically. A directory has no
+  data, so an `ensure` covers it, including its mode and owner (see the recipes in `todo.md`). A helper can handle what
+  differs on macOS and quote the path.
 
 - **Tags, targeting, and `--start-at-task`.** Tags are a non-goal, and idempotent steps make starting partway pointless.
 - **`block`/`rescue`, `ignore_errors`, and continuing past a failure.** A failed host stays failed, and `inspect`

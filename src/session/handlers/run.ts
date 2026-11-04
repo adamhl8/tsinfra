@@ -2,13 +2,14 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
+import type { ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
+import { changeStepResultSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import { changeSchema, runChange } from "#session/handlers/shared/change.ts"
-import type { StepContext, StepOutcome } from "#session/step.ts"
-import { stepResultSchema } from "#session/step.ts"
+import type { StepContext, HandlerReturn } from "#session/step.ts"
 
 // Accept steps that can change the host in `after`, including another run.
 // Reject an empty array, because a run that follows nothing never runs, which is a mistake.
-const triggerStepsSchema = stepResultSchema.and({ kind: "'file' | 'ensure' | 'run'" }).array().atLeastLength(1)
+const triggerStepsSchema = changeStepResultSchema.array().atLeastLength(1)
 type TriggerSteps = typeof triggerStepsSchema.infer
 
 export interface RunOptions {
@@ -30,11 +31,15 @@ const evaluateTrigger = (options: RunOptions): boolean => {
   const { after } = options
   if (after === "always") return true
 
-  const didAnyStepChange = after.some((stepResult) => stepResult.changed)
+  const didAnyStepChange = after.some(({ changed }) => changed)
   return didAnyStepChange
 }
 
-export const handleRun = async (ctx: StepContext, change: unknown, options: unknown): Promise<Result<StepOutcome>> => {
+export const handleRun = async (
+  ctx: StepContext,
+  change: unknown,
+  options: unknown,
+): Promise<Result<HandlerReturn<ChangeStepResult<"run">>>> => {
   const { stepName, mode } = ctx
 
   const validChange = changeSchema(change)
@@ -46,11 +51,11 @@ export const handleRun = async (ctx: StepContext, change: unknown, options: unkn
     return err(`failed to validate the options given to step '${stepName}'`, err(validOptions.summary, undefined))
 
   const shouldRun = evaluateTrigger(validOptions)
-  if (!shouldRun) return { status: "unchanged", changed: false }
-  if (mode === "plan") return { status: "ran", changed: true }
+  if (!shouldRun) return withChangeStepResult(ctx, "run", { status: "unchanged", changed: false })
+  if (mode === "plan") return withChangeStepResult(ctx, "run", { status: "ran", changed: true })
 
   const changeResult = await runChange(ctx, validChange)
   if (isErr(changeResult)) return err(`failed to run step '${stepName}'`, changeResult)
 
-  return { status: "ran", changed: true }
+  return withChangeStepResult(ctx, "run", { status: "ran", changed: true })
 }

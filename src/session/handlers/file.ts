@@ -10,11 +10,13 @@ import { toAbsolutePath } from "#session/handlers/file/path.ts"
 import { buildStateCommand, parseStateOutput } from "#session/handlers/file/state-command.ts"
 import type { WantedFile } from "#session/handlers/file/wanted-file.ts"
 import { toWantedFile } from "#session/handlers/file/wanted-file.ts"
+import type { NeededSteps, ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
+import { neededStepsSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import type { Comparison } from "#session/handlers/shared/converge.ts"
 import { converge } from "#session/handlers/shared/converge.ts"
 import type { Shell } from "#session/shell.ts"
-import type { NeededSteps, StepContext, StepOutcome } from "#session/step.ts"
-import { neededStepsSchema, nonEmptyStringSchema } from "#session/step.ts"
+import type { StepContext, HandlerReturn } from "#session/step.ts"
+import { nonEmptyStringSchema } from "#session/step.ts"
 
 export interface FileOptions {
   /** What the file should hold, computed on the control machine. */
@@ -85,7 +87,11 @@ const compareFile = async (input: CompareFileInput): Promise<Result<Comparison>>
   return { inSync, values: { kind: "file", content, attributes } }
 }
 
-export const handleFile = async (ctx: StepContext, path: unknown, options: unknown): Promise<Result<StepOutcome>> => {
+export const handleFile = async (
+  ctx: StepContext,
+  path: unknown,
+  options: unknown,
+): Promise<Result<HandlerReturn<ChangeStepResult<"file">>>> => {
   const { stepName, shell, home } = ctx
 
   const validPath = nonEmptyStringSchema(path)
@@ -110,5 +116,5 @@ export const handleFile = async (ctx: StepContext, path: unknown, options: unkno
     verify: true,
   })
 
-  return outcome
+  return withChangeStepResult(ctx, "file", outcome)
 }

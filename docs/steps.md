@@ -30,17 +30,21 @@ interface Host {
   readonly name: string // the host script's name, e.g. "sonarr"
   read(cmd: string, options?: CommandOptions): Promise<string>
   inspect(cmd: string, options?: CommandOptions): Promise<CommandResult>
-  file(path: string, content: string | Uint8Array | Blob, options?: FileOptions): Promise<StepResult>
-  link(path: string, target: string, options?: LinkOptions): Promise<StepResult>
-  ensure<T extends string | boolean>(name: string, options: EnsureOptions<T>): Promise<StepResult>
-  run(name: string, cmd: string | ((tools: ChangeTools) => Promise<void>), options: RunOptions): Promise<StepResult>
-  reboot(options: RebootOptions): Promise<StepResult>
+  file(path: string, content: string | Uint8Array | Blob, options?: FileOptions): Promise<ChangeStepResult>
+  link(path: string, target: string, options?: LinkOptions): Promise<ChangeStepResult>
+  ensure<T extends string | boolean>(name: string, options: EnsureOptions<T>): Promise<ChangeStepResult>
+  run(
+    name: string,
+    cmd: string | ((tools: ChangeTools) => Promise<void>),
+    options: RunOptions,
+  ): Promise<ChangeStepResult>
+  reboot(options: RebootOptions): Promise<ChangeStepResult>
 }
 
-// Given to a check function. These are the same as `h.read` and `h.inspect`.
-type CheckTools = { read: Exec; inspect: Inspect }
+// Tools that only read the host, given to a check function. These are the same as `h.read` and `h.inspect`.
+type ReadTools = { read: Exec; inspect: Inspect }
 
-// Given to a fix or run function.
+// Tools that can change the host, given to a fix or run function.
 type ChangeTools = { exec: Exec; inspect: Inspect }
 
 // Runs one command and returns its stdout. A check gets it as `read`, and a fix or run function as `exec`.
@@ -59,7 +63,10 @@ type CommandResult = {
   exitCode: number
 }
 
-type StepResult<K extends StepKind = StepKind> = {
+type ChangeStepKind = "file" | "link" | "ensure" | "run" | "reboot"
+
+// What a change step returns.
+type ChangeStepResult<K extends ChangeStepKind = ChangeStepKind> = {
   name: string // shown when another step needs this one
   kind: K // the method on `h` that ran it, like "ensure" or "run", so `needs` can refuse a run's result
   changed: boolean // the step changed something, would change it in plan, or waits on a step it needs
@@ -175,10 +182,14 @@ runs in `apply`, so a mistake there shows up in `apply`.
 ## Steps
 
 A step is one call on `h`. A host function is a series of steps, run one at a time at the top level of the script.
-[`read`](#read) and [`inspect`](#inspect) only observe. The others can change the host, and each returns a
-`StepResult`.
+There are two kinds:
 
-Most steps that can change the host read one piece of the host's state, and in `apply` run a fix when it differs.
+- **Read steps** tell the script about the host, and return what they found. They're [`read`](#read) and
+  [`inspect`](#inspect).
+- **Change steps** can change the host, whether or not they do, and each returns a `ChangeStepResult`. They're all the
+  others.
+
+Most change steps read one piece of the host's state, and in `apply` run a fix when it differs.
 `ensure` is the step where you write how to read it, as its `check`. [`file`](#file) and [`link`](#link) are steps that
 read the state themselves. [`run`](#run) is a step that reads no state.
 
@@ -230,7 +241,7 @@ type FileOptions = {
   secret?: boolean // never fetch or show the old content
   overwrite?: boolean // default true. false writes the content only when the file is missing
   validate?: (tempPath: string) => string // a command that checks the new content before it replaces the file
-  needs?: StepResult<"file" | "link" | "ensure">[]
+  needs?: ChangeStepResult<"file" | "link" | "ensure">[]
 }
 ```
 
@@ -243,7 +254,7 @@ await h.file("/etc/motd", "Welcome to sonarr\n")
 Writes `content` to `path` on the host, and reports whether it changed. `content` is a string or bytes computed on the
 control machine, or a `Blob` like `Bun.file(...)` for a file there. Every option is optional, so the simplest call is a
 path and its content. The step is named by its
-path, and returns a `StepResult<"file">`, so a run can follow it and a later step can need it. A symlink is a step of
+path, and returns a `ChangeStepResult<"file">`, so a run can follow it and a later step can need it. A symlink is a step of
 its own, [`link`](#link).
 
 **Content from a file on the control machine.** Pass `Bun.file(path)`, which is a `Blob`, not a string. A string is
@@ -465,7 +476,7 @@ Two mistakes get errors of their own instead of a raw shell error:
 type LinkOptions = {
   force?: boolean // replace a regular file at the path, like `ln -f`
   sudo?: boolean // read and make the link as root
-  needs?: StepResult<"file" | "link" | "ensure">[]
+  needs?: ChangeStepResult<"file" | "link" | "ensure">[]
 }
 ```
 
@@ -512,7 +523,7 @@ manages first.
   write has to avoid that. GNU has `mv -T`, and BSD differs, which gets settled when this is built.
 - **There's no `mode`, `owner`, or `group`.** A symlink's mode doesn't apply to it. `owner` would need `chown -h`, and
   is left out until a port needs a link owned by someone else.
-- **It returns a `StepResult<"link">`,** so `needs` and `after` accept it the same as a file's. A run can follow a link
+- **It returns a `ChangeStepResult<"link">`,** so `needs` and `after` accept it the same as a file's. A run can follow a link
   that changed.
 
 ## `ensure`
@@ -520,14 +531,14 @@ manages first.
 ```ts
 // `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string.
 type EnsureOptions<T extends string | boolean> = {
-  check: string | ((tools: CheckTools) => Promise<T>)
+  check: string | ((tools: ReadTools) => Promise<T>)
   // `true` means exit 0, or a function returning true, is already right. `false` means the opposite.
   // A string is compared to the command's stdout, or the function's value.
   want: T
   fix: string | ((tools: ChangeTools) => Promise<void>)
   verify?: boolean // default true
   secret?: boolean // hide the diff
-  needs?: StepResult<"file" | "link" | "ensure">[] // earlier steps this step's check depends on
+  needs?: ChangeStepResult<"file" | "link" | "ensure">[] // earlier steps this step's check depends on
 }
 ```
 
@@ -757,7 +768,7 @@ run's check confirms it. Before reaching for it, try these:
 
 ```ts
 type RunOptions = CommandOptions & {
-  after: StepResult<"file" | "link" | "ensure" | "run" | "reboot">[] | "always" // run when any of these changed, or "always" on every pass
+  after: ChangeStepResult<"file" | "link" | "ensure" | "run" | "reboot">[] | "always" // run when any of these changed, or "always" on every pass
 }
 ```
 
@@ -828,7 +839,7 @@ await h.run(
 A function that takes `h` shares steps between hosts:
 
 ```ts
-const updateComposeStack = async (h: Host, after: StepResult[]) => {
+const updateComposeStack = async (h: Host, after: ChangeStepResult[]) => {
   await h.run("Pull images", "docker compose pull", { after })
   await h.run("Start the stack", "docker compose up -d", { after })
 }
@@ -859,7 +870,7 @@ because a function can run any code.
 
 ```ts
 type RebootOptions = {
-  after: StepResult<"file" | "link" | "ensure" | "run" | "reboot">[] | "always" // the same as a run's
+  after: ChangeStepResult<"file" | "link" | "ensure" | "run" | "reboot">[] | "always" // the same as a run's
   timeout?: number // milliseconds to go down and come back, default 10 minutes
 }
 ```
@@ -886,7 +897,7 @@ not state a check can read, so it works like a [`run`](#run):
 - **`@local` refuses it,** with `can't reboot @local, because it's the machine tsinfra runs on`.
 - **It's a top-level step.** A fix that installs a kernel doesn't reboot by itself, and the script follows that step
   with `h.reboot`.
-- **It returns a `StepResult<"reboot">`,** so a run can follow it. Like a run's, it can't be needed, because nothing
+- **It returns a `ChangeStepResult<"reboot">`,** so a run can follow it. Like a run's, it can't be needed, because nothing
   about the host's state says a reboot happened.
 
 ## Failure

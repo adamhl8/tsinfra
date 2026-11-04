@@ -2,7 +2,7 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
-import type { StepKind } from "#session/session.ts"
+import type { StepKind } from "#session/step.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
 
 // Name what each step takes as its name, so a validation error says which argument is wrong.
