@@ -7,7 +7,7 @@ export interface Shell {
   /** Runs `cmd` and returns its output untouched. Only failing to run at all is an error. */
   inspect: (cmd: string) => Promise<Result<CommandOutput>>
   /** Runs `cmd` and returns its stdout. Failing to run and a non-zero exit are both errors. */
-  run: (cmd: string) => Promise<Result<string>>
+  exec: (cmd: string) => Promise<Result<string>>
 }
 
 /** Quotes `text` for a POSIX shell, so a space or a quote in it can't break the command. */
@@ -25,7 +25,7 @@ export const createCommandExitError = (commandOutput: CommandOutput) => {
 export const createShell = (transport: Transport): Shell => {
   const inspect = transport
 
-  const run = async (cmd: string): Promise<Result<string>> => {
+  const exec = async (cmd: string): Promise<Result<string>> => {
     const output = await inspect(cmd)
     if (isErr(output)) return output
     if (output.exitCode !== 0) return createCommandExitError(output)
@@ -33,5 +33,5 @@ export const createShell = (transport: Transport): Shell => {
     return output.stdout
   }
 
-  return { inspect, run }
+  return { inspect, exec }
 }

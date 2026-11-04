@@ -29,7 +29,7 @@ Everything a host script does to its host goes through `h`, the context passed t
 interface Host {
   readonly name: string // the host script's name, e.g. "sonarr"
   read(cmd: string, options?: CommandOptions): Promise<string>
-  inspect(cmd: string, options?: CommandOptions): Promise<CommandResult>
+  inspect(cmd: string, options?: CommandOptions): Promise<InspectResult>
   file(path: string, content: string | Uint8Array | Blob, options?: FileOptions): Promise<ChangeStepResult>
   link(path: string, target: string, options?: LinkOptions): Promise<ChangeStepResult>
   ensure<T extends string | boolean>(name: string, options: EnsureOptions<T>): Promise<ChangeStepResult>
@@ -51,13 +51,13 @@ type ChangeTools = { exec: Exec; inspect: Inspect }
 type Exec = (cmd: string, options?: CommandOptions) => Promise<string>
 
 // Runs one command and returns its output and exit code, without failing on a non-zero exit.
-type Inspect = (cmd: string, options?: CommandOptions) => Promise<CommandResult>
+type Inspect = (cmd: string, options?: CommandOptions) => Promise<InspectResult>
 
 type CommandOptions = {
   secret?: boolean // keep the command and its output out of the output and errors
 }
 
-type CommandResult = {
+type InspectResult = {
   stdout: string // trimmed
   stderr: string // trimmed
   exitCode: number

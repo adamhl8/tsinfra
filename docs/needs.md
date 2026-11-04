@@ -43,6 +43,8 @@ needs?: ChangeStepResult<"file" | "link" | "ensure">[]
 - **In `plan`,** when any needed step would change or is waiting, the step reports `waiting` and doesn't read the
   host's state. Otherwise the step runs as usual.
 - **In `apply`,** `needs` does nothing. The needed steps already ran, and a failed one stopped the host.
+- **An empty `needs` is the same as leaving it out,** so a list the script computes can come out empty. An empty `after`
+  is an error, because that run could never fire.
 - **A waiting step counts as changed,** so a step that needs it waits too, and a follow-up like `after: [x]` shows up
   in the plan. `plan` errs toward showing too much rather than too little.
 - **`ChangeStepResult` carries the step's name,** so `plan` can say what a step needs.

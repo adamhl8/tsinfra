@@ -21,10 +21,9 @@ import {
   styleWantExitCode,
   styleWantString,
 } from "#report/styles.ts"
-import type { EnsureComparison } from "#session/handlers/ensure/check.ts"
+import type { EnsureComparisonValues } from "#session/handlers/ensure/check.ts"
 import type { Bytes } from "#session/handlers/file/bytes.ts"
-import type { FileNote } from "#session/handlers/file/comparison.ts"
-import { isFileNote } from "#session/handlers/file/comparison.ts"
+import type { ContentComparison, SizeComparison } from "#session/handlers/file/comparison.ts"
 import { getMaxWidth, padToWidth, quoteNames } from "#utils.ts"
 
 const INDENT = "  "
@@ -44,11 +43,11 @@ interface LabelRow {
 }
 
 interface ValueKindRules {
-  formatGot: (got: EnsureComparison["got"]) => string
-  formatWant: (want: EnsureComparison["want"]) => string
+  formatGot: (got: EnsureComparisonValues["got"]) => string
+  formatWant: (want: EnsureComparisonValues["want"]) => string
 }
 
-const VALUE_KIND_RULES: Record<EnsureComparison["kind"], ValueKindRules> = {
+const VALUE_KIND_RULES: Record<EnsureComparisonValues["kind"], ValueKindRules> = {
   string: {
     formatGot: (got) => styleGotString(String(got)),
     formatWant: (want) => styleWantString(String(want)),
@@ -70,7 +69,7 @@ const BYTE_UNIT = / B$/v
 const formatSize = (size: Bytes): string => prettyBytes(size).replace(BYTE_UNIT, size === 1 ? " byte" : " bytes")
 
 // Give each note its words. The sizes follow every note, so they all read the same way.
-const FILE_NOTE_WORDS: Record<FileNote["kind"], string> = {
+const FILE_NOTE_WORDS: Record<SizeComparison["kind"], string> = {
   new: "new file",
   hidden: "hidden",
   binary: "binary",
@@ -84,9 +83,13 @@ const NAME_STYLES: Record<NameKind, Style> = {
   hostScript: pc.italic,
 }
 
+/** Reports whether a file's content compared only by size, which shows as a note in place of a diff. */
+const isSizeComparison = (content: ContentComparison): content is SizeComparison =>
+  content.kind !== "same" && content.kind !== "text"
+
 /** Formats a note in place of a diff, like `binary, 12 kB -> 14 kB`, or `new file, 2 kB` when there's no file yet. */
-const formatFileNote = (fileNote: FileNote): string => {
-  const { kind, gotSize, wantSize } = fileNote
+const formatFileNote = (sizeComparison: SizeComparison): string => {
+  const { kind, gotSize, wantSize } = sizeComparison
   // Color the sizes like `got` and `want`, because they're the change, like an attribute's values.
   const wantText = styleWant(formatSize(wantSize))
   const sizes = gotSize === undefined ? wantText : `${styleGot(formatSize(gotSize))} -> ${wantText}`
@@ -98,19 +101,19 @@ const formatFileNote = (fileNote: FileNote): string => {
 const toLabelRows = (detail: Detail): LabelRow[] => {
   if (detail.kind === "diff") return []
 
-  if (detail.kind === "ensureComparison") {
-    const { comparison } = detail
-    const { formatGot, formatWant } = VALUE_KIND_RULES[comparison.kind]
+  if (detail.kind === "ensureComparisonValues") {
+    const { values } = detail
+    const { formatGot, formatWant } = VALUE_KIND_RULES[values.kind]
     return [
-      { label: "got", valueLines: [formatGot(comparison.got)] },
-      { label: "want", valueLines: [formatWant(comparison.want)] },
+      { label: "got", valueLines: [formatGot(values.got)] },
+      { label: "want", valueLines: [formatWant(values.want)] },
     ]
   }
 
-  if (detail.kind === "fileComparison") {
-    const { content, attributes } = detail.comparison
+  if (detail.kind === "fileComparisonValues") {
+    const { content, attributes } = detail.values
     // Show a note for content the output can't diff, because a text diff prints as its own detail.
-    const contentRows = isFileNote(content) ? [{ label: "content", valueLines: [formatFileNote(content)] }] : []
+    const contentRows = isSizeComparison(content) ? [{ label: "content", valueLines: [formatFileNote(content)] }] : []
     const attributeRows = attributes.map(({ name, got, want }) => ({
       label: name,
       valueLines: [`${styleGot(got)} -> ${styleWant(want)}`],

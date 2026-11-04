@@ -13,7 +13,7 @@ import { handleRun } from "#session/handlers/run.ts"
 import type { ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
 import { validateStepName } from "#session/handlers/step-name.ts"
-import type { ChangeTools, CommandResult, ReadTools, Exec, Inspect } from "#session/handlers/tools.ts"
+import type { ChangeTools, InspectResult, ReadTools, Exec, Inspect } from "#session/handlers/tools.ts"
 import { execCommand, inspectCommand } from "#session/handlers/tools.ts"
 import type { HostContext } from "#session/host-context.ts"
 import { createShell } from "#session/shell.ts"
@@ -39,7 +39,7 @@ export interface Host extends Record<StepKind, unknown> {
    *
    * A non-zero exit is an answer, not a failure. Only a command that can't run at all fails the host and throws.
    */
-  inspect: (cmd: string) => Promise<CommandResult>
+  inspect: (cmd: string) => Promise<InspectResult>
   /**
    * Writes `content` to `path`, and manages the file's mode, owner, and group when they are given. A leading `~/` means
    * the SSH user's home. In `plan` it only reads the file's state, and shows a diff of what would change.

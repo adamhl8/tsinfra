@@ -24,7 +24,7 @@ export const checkSchema = type
 const checkValueSchema = type({ value: "string", want: "string" }).or({ value: "boolean", want: "boolean" })
 
 /** What the check gave and what it wanted, as raw values. `kind` says how the output shows them. */
-export type EnsureComparison =
+export type EnsureComparisonValues =
   | { kind: "string"; got: string; want: string }
   | { kind: "boolean"; got: boolean; want: boolean }
   // `got` is the exit code, and `want: true` means exit 0.

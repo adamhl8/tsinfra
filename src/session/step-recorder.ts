@@ -11,7 +11,7 @@ interface CommandRecord {
 }
 
 export interface StepRecord {
-  /** The name the script gave the step, or a read's command. */
+  /** The name the script gave the step, or a read step's command. */
   name: string
   kind: StepKind
   commands: CommandRecord[]
@@ -30,10 +30,18 @@ interface StepRecorder {
   finishStep: (stepRecord: StepRecord, outcome: Result<StepOutcome>) => void
 }
 
-// Name a read by its command, because `h.read` takes no name.
+// Call a read step by its kind, because its name is its command.
+const STEP_LABELS: Record<StepKind, string> = {
+  read: "read",
+  inspect: "inspect",
+  file: "step",
+  ensure: "step",
+  run: "step",
+}
+
 const describeStep = (stepRecord: StepRecord) => {
   const { name, kind } = stepRecord
-  return kind === "read" ? `read '${name}'` : `step '${name}'`
+  return `${STEP_LABELS[kind]} '${name}'`
 }
 
 /** Tracks the running step for one host, and records each step and the commands it runs. */

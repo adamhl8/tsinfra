@@ -26,6 +26,6 @@ export const runChange = async (ctx: StepContext, change: Change): Promise<Resul
     })
   }
 
-  const stdout = await shell.run(change)
+  const stdout = await shell.exec(change)
   if (isErr(stdout)) return stdout
 }

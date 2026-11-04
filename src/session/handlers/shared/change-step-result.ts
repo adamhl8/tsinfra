@@ -3,6 +3,7 @@ import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
 import type { ChangeStepKind, StepContext, StepOutcome, HandlerReturn } from "#session/step.ts"
+import { CHANGE_STEP_KINDS } from "#session/step.ts"
 
 /**
  * What a change step gives back to the script, which may say that nothing changed. `K` is the method on `h` that ran
@@ -23,13 +24,28 @@ export interface ChangeStepResult<K extends ChangeStepKind = ChangeStepKind> {
 // Declare it against `ChangeStepResult`, so the schema and the interface can't drift apart.
 export const changeStepResultSchema = type.declare<ChangeStepResult>().type({
   name: "string",
-  kind: "'file' | 'ensure' | 'run'",
+  kind: type.enumerated(...CHANGE_STEP_KINDS),
   changed: "boolean",
 })
 
 // Accept only steps that read the host's state in `needs`, so not a run.
-export const neededStepsSchema = changeStepResultSchema.and({ kind: "'file' | 'ensure'" }).array()
-export type NeededSteps = typeof neededStepsSchema.infer
+const NEEDABLE_STEP_KINDS = ["file", "ensure"] as const satisfies ChangeStepKind[]
+type NeedableStepKind = (typeof NEEDABLE_STEP_KINDS)[number]
+/** The earlier steps a step depends on. */
+export type StepNeeds = ChangeStepResult<NeedableStepKind>[]
+
+export const stepNeedsSchema = type
+  .declare<StepNeeds>()
+  .type(changeStepResultSchema.and({ kind: type.enumerated(...NEEDABLE_STEP_KINDS) }).array())
+
+// Count a waiting step as changed, so a step that needs it waits too, and a run that follows it shows up in the plan.
+const COUNTS_AS_CHANGED: Record<StepOutcome["status"], boolean> = {
+  unchanged: false,
+  observed: false,
+  changed: true,
+  ran: true,
+  waiting: true,
+}
 
 /** Returns `outcome` with the `ChangeStepResult` the script gets as its value. */
 export const withChangeStepResult = <K extends ChangeStepKind>(
@@ -40,5 +56,5 @@ export const withChangeStepResult = <K extends ChangeStepKind>(
   const { stepName } = ctx
   if (isErr(outcome)) return outcome
 
-  return { outcome, value: { name: stepName, kind, changed: outcome.changed } }
+  return { outcome, value: { name: stepName, kind, changed: COUNTS_AS_CHANGED[outcome.status] } }
 }

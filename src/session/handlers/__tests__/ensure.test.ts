@@ -5,6 +5,9 @@ import { makeTempDir } from "@adamhl8/configs/test"
 import { attempt } from "ts-explicit-errors"
 
 import { createSession, ensureOrMessage, getFailureMessage, throwBoom } from "#__tests__/session.ts"
+import type { Check } from "#session/handlers/ensure/check.ts"
+import type { Change } from "#session/handlers/shared/change.ts"
+import type { ChangeTools } from "#session/handlers/tools.ts"
 
 // Widen `want` to the union, which lets a mismatched check through the types, as an untyped host script would.
 const toLooseWant = (value: string | boolean) => value
@@ -120,8 +123,8 @@ describe("h.ensure", () => {
   it("should validate an Error a function check returns as a value, not a thrown error", async () => {
     const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
-      // @ts-expect-error - an untyped host script can return anything from a check function
-      check: () => new Error("returned"),
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion - an untyped host script can return anything from a check function
+      check: (() => new Error("returned")) as unknown as Check<boolean>,
       want: true,
       fix: "true",
     })
@@ -257,7 +260,7 @@ describe("h.ensure with needs", () => {
 
     expect(result).toStrictEqual({ name: "Install fish plugins", kind: "ensure", changed: true })
     expect(hostSession.stepRecords[1]).toMatchObject({
-      outcome: { status: "waiting", changed: true, needs: ["Install brew packages"] },
+      outcome: { status: "waiting", needs: ["Install brew packages"] },
       commands: [],
     })
   })
@@ -271,6 +274,14 @@ describe("h.ensure with needs", () => {
     expect(hostSession.stepRecords[1]?.outcome).toMatchObject({ status: "changed" })
   })
 
+  it("should check as usual in plan when needs is empty", async () => {
+    const hostSession = await createSession("plan")
+    const { host: h } = hostSession
+    await h.ensure("Install fish plugins", { needs: [], check: "false", want: true, fix: "true" })
+
+    expect(hostSession.stepRecords[0]?.outcome).toMatchObject({ status: "changed" })
+  })
+
   it("should wait on a needed step that is itself waiting, and name it", async () => {
     const hostSession = await createSession("plan")
     const { host: h } = hostSession
@@ -280,7 +291,6 @@ describe("h.ensure with needs", () => {
 
     expect(hostSession.stepRecords[2]?.outcome).toStrictEqual({
       status: "waiting",
-      changed: true,
       needs: ["Install fish"],
     })
   })
@@ -403,11 +413,11 @@ describe("h.ensure with a fix function", () => {
     const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
       ...options,
-      // @ts-expect-error - an untyped host script can return anything from a fix function
-      fix: async ({ exec }) => {
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion - an untyped host script can return anything from a fix function
+      fix: (async ({ exec }: ChangeTools) => {
         await exec(`touch '${marker}'`)
         return new Error("returned")
-      },
+      }) as unknown as Change,
     })
 
     expect(result).toMatchObject({ changed: true })

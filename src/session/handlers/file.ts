@@ -2,7 +2,7 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { FileContent } from "#session/handlers/file/comparison.ts"
+import type { ContentComparison } from "#session/handlers/file/comparison.ts"
 import { compareContent, findAttributeChanges } from "#session/handlers/file/comparison.ts"
 import type { FileMode, OctalMode, SymbolicMode } from "#session/handlers/file/mode.ts"
 import { OCTAL_MODE_PATTERN, SYMBOLIC_MODE_PATTERN } from "#session/handlers/file/mode.ts"
@@ -10,8 +10,8 @@ import { toAbsolutePath } from "#session/handlers/file/path.ts"
 import { buildStateCommand, parseStateOutput } from "#session/handlers/file/state-command.ts"
 import type { WantedFile } from "#session/handlers/file/wanted-file.ts"
 import { toWantedFile } from "#session/handlers/file/wanted-file.ts"
-import type { NeededSteps, ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
-import { neededStepsSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
+import type { StepNeeds, ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
+import { stepNeedsSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import type { Comparison } from "#session/handlers/shared/converge.ts"
 import { converge } from "#session/handlers/shared/converge.ts"
 import type { Shell } from "#session/shell.ts"
@@ -36,7 +36,7 @@ export interface FileOptions {
    * Earlier steps this step depends on. In `plan`, the step waits instead of reading the file when one of them would
    * change or is waiting.
    */
-  needs?: NeededSteps
+  needs?: StepNeeds
 }
 
 // Validate the options at runtime too, because a script can get past the types, like with `as` or `@ts-ignore`.
@@ -48,7 +48,7 @@ const fileOptionsSchema = type.declare<FileOptions>().type({
   "owner?": "string | number",
   "group?": "string | number",
   "secret?": "boolean",
-  "needs?": neededStepsSchema,
+  "needs?": stepNeedsSchema,
 })
 
 interface CompareFileInput {
@@ -74,7 +74,7 @@ const compareFile = async (input: CompareFileInput): Promise<Result<Comparison>>
     return err(`can't read '${path}' as the SSH user, so it needs sudo: true`, undefined)
 
   if (findings.kind === "absent") {
-    const content: FileContent = { kind: "new", wantSize: wantedFile.size }
+    const content: ContentComparison = { kind: "new", wantSize: wantedFile.size }
     return { inSync: false, values: { kind: "file", content, attributes: [] } }
   }
 

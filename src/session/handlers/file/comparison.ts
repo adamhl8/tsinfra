@@ -10,25 +10,21 @@ import type { Shell } from "#session/shell.ts"
 import { quoteShellArg } from "#session/shell.ts"
 
 /** How a file on the host differs from what the script wants: its content, and each managed attribute that differs. */
-export interface FileComparison {
+export interface FileComparisonValues {
   kind: "file"
-  content: FileContent
+  content: ContentComparison
   attributes: AttributeChange[]
 }
 
-/** How a managed file's content differs. `text` holds both sides for a diff, and a `FileNote` stands in for one. */
-export type FileContent = { kind: "same" } | { kind: "text"; got: string; want: string } | FileNote
+/** How a managed file's content differs. `text` holds both sides for a diff. */
+export type ContentComparison = { kind: "same" } | { kind: "text"; got: string; want: string } | SizeComparison
 
-/** Why the output shows a note in place of a diff, with the sizes. `gotSize` is unset for a new file. */
-export interface FileNote {
+/** Compares only the sizes, because the text can't be shown. `kind` says why, and `gotSize` is unset for a new file. */
+export interface SizeComparison {
   kind: "new" | "hidden" | "binary" | "large"
   gotSize?: Bytes
   wantSize: Bytes
 }
-
-/** Reports whether a file's content is a note in place of a diff. */
-export const isFileNote = (content: FileContent): content is FileNote =>
-  content.kind !== "same" && content.kind !== "text"
 
 /** A managed attribute of a file whose value differs, as the output shows it. */
 export interface AttributeChange {
@@ -79,7 +75,7 @@ interface CompareContentInput {
 }
 
 /** Works out how the content differs, fetching the old content only when the output can show a diff of it. */
-export const compareContent = async (input: CompareContentInput): Promise<Result<FileContent>> => {
+export const compareContent = async (input: CompareContentInput): Promise<Result<ContentComparison>> => {
   const { shell, path, secret, wantedFile, hostFile } = input
   const { bytes, size: wantSize, hash } = wantedFile
   const { size: gotSize } = hostFile
@@ -91,7 +87,7 @@ export const compareContent = async (input: CompareContentInput): Promise<Result
   const want = decodeText(bytes)
   if (want === undefined) return { kind: "binary", gotSize, wantSize }
 
-  const got = await shell.run(`cat -- ${quoteShellArg(path)}`)
+  const got = await shell.exec(`cat -- ${quoteShellArg(path)}`)
   if (isErr(got)) return err(`failed to read '${path}' for its diff`, got)
   if (got.includes("\0") || got.includes("�")) return { kind: "binary", gotSize, wantSize }
 

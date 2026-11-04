@@ -3,8 +3,8 @@ import { isErr } from "ts-explicit-errors"
 import { HOST_SCRIPT_EXTENSION } from "#hosts/discover.ts"
 import type { HostReport } from "#hosts/run.ts"
 import type { FormatOptions } from "#report/format.ts"
-import type { EnsureComparison } from "#session/handlers/ensure/check.ts"
-import type { FileComparison } from "#session/handlers/file/comparison.ts"
+import type { EnsureComparisonValues } from "#session/handlers/ensure/check.ts"
+import type { FileComparisonValues } from "#session/handlers/file/comparison.ts"
 import { getFailedComparison } from "#session/handlers/shared/converge.ts"
 import type { StepRecord } from "#session/step-recorder.ts"
 import type { ComparisonValues, StepKind, StepOutcome } from "#session/step.ts"
@@ -41,9 +41,9 @@ export interface StepEntry {
 /** What a step entry shows under its head line. */
 export type Detail =
   | { kind: "diff"; got: string; want: string }
-  | { kind: "ensureComparison"; comparison: EnsureComparison }
+  | { kind: "ensureComparisonValues"; values: EnsureComparisonValues }
   // Holds everything about a file but a text diff, which is a detail of its own.
-  | { kind: "fileComparison"; comparison: FileComparison }
+  | { kind: "fileComparisonValues"; values: FileComparisonValues }
   // The stderr of the command that read the host's state, for a failure that still differs after its fix.
   | { kind: "stderr"; stderr: string }
 
@@ -74,19 +74,18 @@ const SHOWS_CHANGE_DETAILS: Record<ComparisonValues["kind"], boolean> = {
   file: true,
 }
 
-/** Returns how a file differs: a diff when its content is text, then the file comparison. */
-const toFileComparisonDetails = (fileComparison: FileComparison): Detail[] => {
-  const { content } = fileComparison
+/** Returns how a file differs: a diff when its content is text, then its comparison values. */
+const toFileComparisonDetails = (values: FileComparisonValues): Detail[] => {
+  const { content } = values
   const diffDetails: Detail[] = content.kind === "text" ? [{ kind: "diff", got: content.got, want: content.want }] : []
-  return [...diffDetails, { kind: "fileComparison", comparison: fileComparison }]
+  return [...diffDetails, { kind: "fileComparisonValues", values }]
 }
 
-/** Returns how a check's answer differs: a diff for a multi-line string, or the ensure comparison otherwise. */
-const toEnsureComparisonDetails = (ensureComparison: EnsureComparison): Detail[] => {
-  const isMultiLineString =
-    ensureComparison.kind === "string" && (isMultiLine(ensureComparison.got) || isMultiLine(ensureComparison.want))
-  if (isMultiLineString) return [{ kind: "diff", got: ensureComparison.got, want: ensureComparison.want }]
-  return [{ kind: "ensureComparison", comparison: ensureComparison }]
+/** Returns how a check's answer differs: a diff for a multi-line string, or its comparison values otherwise. */
+const toEnsureComparisonDetails = (values: EnsureComparisonValues): Detail[] => {
+  const isMultiLineString = values.kind === "string" && (isMultiLine(values.got) || isMultiLine(values.want))
+  if (isMultiLineString) return [{ kind: "diff", got: values.got, want: values.want }]
+  return [{ kind: "ensureComparisonValues", values }]
 }
 
 const toComparisonValuesDetails = (values: ComparisonValues): Detail[] =>

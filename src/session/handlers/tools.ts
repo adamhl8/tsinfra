@@ -6,7 +6,7 @@ import type { Shell } from "#session/shell.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
 
 /** What `inspect` gives a script: a command's stdout and stderr, both trimmed, and its exit code. */
-export interface CommandResult {
+export interface InspectResult {
   stdout: string
   stderr: string
   exitCode: number
@@ -16,11 +16,11 @@ export interface CommandResult {
 export type Exec = (cmd: string) => Promise<string>
 
 /** Runs one command on the host and returns its output and exit code. A non-zero exit is an answer, not a failure. */
-export type Inspect = (cmd: string) => Promise<CommandResult>
+export type Inspect = (cmd: string) => Promise<InspectResult>
 
 type ToolName = "read" | "inspect" | "exec"
 
-/** What a command function is given: the name the script called it by, and the session's shell. */
+/** What a tool is given: the name the script called it by, and the session's shell. */
 export interface ToolContext {
   toolName: ToolName
   shell: Shell
@@ -41,14 +41,14 @@ export const execCommand = async (ctx: ToolContext, cmd: unknown): Promise<Resul
   if (validCmd instanceof type.errors)
     return err(`failed to validate the command given to '${toolName}'`, err(validCmd.summary, undefined))
 
-  const stdout = await shell.run(validCmd)
+  const stdout = await shell.exec(validCmd)
   if (isErr(stdout)) return err(`failed to ${TOOL_VERBS[toolName]} '${validCmd}'`, stdout)
 
   return stdout.trim()
 }
 
 /** Runs one command for `inspect` and returns its output and exit code. A non-zero exit is an answer, not an error. */
-export const inspectCommand = async (ctx: ToolContext, cmd: unknown): Promise<Result<CommandResult>> => {
+export const inspectCommand = async (ctx: ToolContext, cmd: unknown): Promise<Result<InspectResult>> => {
   const { toolName, shell } = ctx
 
   const validCmd = nonEmptyStringSchema(cmd)

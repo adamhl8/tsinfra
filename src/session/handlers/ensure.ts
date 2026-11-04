@@ -4,8 +4,8 @@ import { err } from "ts-explicit-errors"
 
 import type { Check } from "#session/handlers/ensure/check.ts"
 import { checkSchema, compareCheck } from "#session/handlers/ensure/check.ts"
-import type { NeededSteps, ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
-import { neededStepsSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
+import type { StepNeeds, ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
+import { stepNeedsSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
 import { changeSchema, runChange } from "#session/handlers/shared/change.ts"
 import { converge } from "#session/handlers/shared/converge.ts"
@@ -34,7 +34,7 @@ export interface EnsureOptions<T extends string | boolean> {
    * Earlier steps this step's check depends on. In `plan`, the step waits instead of checking when one of them would
    * change or is waiting. A run's result can't be needed, so need the step that triggered the run instead.
    */
-  needs?: NeededSteps
+  needs?: StepNeeds
 }
 
 // Validate the options at runtime too, because a script can get past the types, like with `as` or `@ts-ignore`.
@@ -43,7 +43,7 @@ const ensureOptionsSchema = type.declare<EnsureOptions<string | boolean>>().type
   want: "string | boolean",
   fix: changeSchema,
   "verify?": "boolean",
-  "needs?": neededStepsSchema,
+  "needs?": stepNeedsSchema,
 })
 
 export const handleEnsure = async (

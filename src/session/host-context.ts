@@ -25,7 +25,7 @@ export const buildHostContext = async (loadedHost: LoadedHost): Promise<Result<H
 
   // Read the SSH user's home before the script runs, because a path that starts with `~/` needs it.
   // An unset `$HOME` comes back empty, so this fails only when the host can't run commands at all.
-  const home = await createShell(transport).run(READ_HOME_COMMAND)
+  const home = await createShell(transport).exec(READ_HOME_COMMAND)
   if (isErr(home)) return err("failed to read the SSH user's home directory", home)
 
   return { name, transport, home }
