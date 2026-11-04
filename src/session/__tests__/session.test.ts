@@ -40,7 +40,7 @@ describe("createHostSession", () => {
       h.ensure("Second", { check: "true", want: true, fix: "true" }),
     ])
 
-    expect(getFailureMessage(hostSession)).toBe("'ensure' can't run while step 'First' is running")
+    expect(getFailureMessage(hostSession)).toBe("'ensure' can't run while ensure step 'First' is running")
   })
 })
 
@@ -68,7 +68,7 @@ describe("h inside a step", () => {
     })
 
     expect(result).toBe(
-      "failed to compare the host with what step 'Make marker' wants -> 'inspect' can't run while step 'Make marker' is running",
+      "failed to compare the host with what step 'Make marker' wants -> 'inspect' can't run while ensure step 'Make marker' is running",
     )
   })
 
@@ -76,7 +76,7 @@ describe("h inside a step", () => {
     const hostSession = await createSession()
     const { host: h } = hostSession
     const message =
-      "failed to compare the host with what step 'Make marker' wants -> 'read' can't run while step 'Make marker' is running"
+      "failed to compare the host with what step 'Make marker' wants -> 'read' can't run while ensure step 'Make marker' is running"
     const result = await ensureOrMessage(h, {
       check: async () => (await h.read("true")) === "",
       want: true,
@@ -99,7 +99,7 @@ describe("h inside a step", () => {
     })
 
     expect(result).toBe(
-      "failed to compare the host with what step 'Make marker' wants -> 'ensure' can't run while step 'Make marker' is running",
+      "failed to compare the host with what step 'Make marker' wants -> 'ensure' can't run while ensure step 'Make marker' is running",
     )
   })
 
@@ -114,7 +114,7 @@ describe("h inside a step", () => {
     })
 
     expect(result).toBe(
-      "failed to run the fix for step 'Make marker' -> 'ensure' can't run while step 'Make marker' is running",
+      "failed to run the fix for step 'Make marker' -> 'ensure' can't run while ensure step 'Make marker' is running",
     )
   })
 
@@ -128,7 +128,7 @@ describe("h inside a step", () => {
       { after: "always" },
     )
 
-    expect(result).toBe("failed to run step 'Make marker' -> 'run' can't run while step 'Make marker' is running")
+    expect(result).toBe("failed to run step 'Make marker' -> 'run' can't run while run step 'Make marker' is running")
   })
 
   it("should fail the host when steps run at once with Promise.all", async () => {
@@ -140,7 +140,7 @@ describe("h inside a step", () => {
       h.ensure("Second", { check: "true", want: true, fix: "true" }),
     ])
 
-    expect(getFailureMessage(hostSession)).toBe("'ensure' can't run while step 'First' is running")
+    expect(getFailureMessage(hostSession)).toBe("'ensure' can't run while ensure step 'First' is running")
   })
 
   it("should name a running read by its command", async () => {
@@ -149,7 +149,7 @@ describe("h inside a step", () => {
 
     await Promise.allSettled([h.read("sleep 0.1"), h.ensure("Second", { check: "true", want: true, fix: "true" })])
 
-    expect(getFailureMessage(hostSession)).toBe("'ensure' can't run while read 'sleep 0.1' is running")
+    expect(getFailureMessage(hostSession)).toBe("'ensure' can't run while read step 'sleep 0.1' is running")
   })
 
   it("should name a running inspect by its command", async () => {
@@ -158,7 +158,7 @@ describe("h inside a step", () => {
 
     await Promise.allSettled([h.inspect("sleep 0.1"), h.ensure("Second", { check: "true", want: true, fix: "true" })])
 
-    expect(getFailureMessage(hostSession)).toBe("'ensure' can't run while inspect 'sleep 0.1' is running")
+    expect(getFailureMessage(hostSession)).toBe("'ensure' can't run while inspect step 'sleep 0.1' is running")
   })
 
   it("should fail the host when h.read runs alongside a step", async () => {
@@ -167,7 +167,7 @@ describe("h inside a step", () => {
 
     await Promise.allSettled([h.ensure("First", { check: "sleep 0.1", want: true, fix: "true" }), h.read("true")])
 
-    expect(getFailureMessage(hostSession)).toBe("'read' can't run while step 'First' is running")
+    expect(getFailureMessage(hostSession)).toBe("'read' can't run while ensure step 'First' is running")
   })
 
   it("should allow calls on h again once a step finishes", async () => {

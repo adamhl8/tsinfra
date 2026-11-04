@@ -4,12 +4,12 @@ import { err } from "ts-explicit-errors"
 
 import type { Check } from "#session/handlers/ensure/check.ts"
 import { checkSchema, compareCheck } from "#session/handlers/ensure/check.ts"
-import type { StepNeeds, ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
+import type { ChangeStepResult, StepNeeds } from "#session/handlers/shared/change-step-result.ts"
 import { stepNeedsSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
 import { changeSchema, runChange } from "#session/handlers/shared/change.ts"
 import { converge } from "#session/handlers/shared/converge.ts"
-import type { StepContext, HandlerReturn } from "#session/step.ts"
+import type { HandlerReturn, StepContext } from "#session/step.ts"
 
 /** `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string. */
 export interface EnsureOptions<T extends string | boolean> {

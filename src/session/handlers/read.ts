@@ -2,7 +2,7 @@ import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
 import { execCommand } from "#session/handlers/tools.ts"
-import type { StepContext, HandlerReturn } from "#session/step.ts"
+import type { HandlerReturn, StepContext } from "#session/step.ts"
 
 /** Runs the `read` step, which runs the same command as the `read` tool and gives the script its stdout. */
 export const handleRead = async (ctx: StepContext, cmd: unknown): Promise<Result<HandlerReturn<string>>> => {

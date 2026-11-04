@@ -107,7 +107,7 @@ await h.ensure("Install the arm build", { check: "...", want: true, fix: `... ${
 - **Each takes `h` and runs at the top level only.** A helper is an ordinary `h.read` with the
   normalizing added, so it shows as its own `·` line in `--verbose`, the same as a helper a script writes itself. A step
   uses the fact through the closure, as above. Calling a helper inside a step's function fails the host with
-  `'read' can't run while step 'X' is running`, like any other call on `h` there.
+  `'read' can't run while ensure step 'X' is running`, like any other call on `h` there.
 - **There's no hidden way to run commands.** A helper that reached the shell around `h` would skip the step recorder
   and the failed-host check, and would follow rules a script's own helpers can't.
 - **The value is in the normalizing.** `uname -m` prints `x86_64` or `aarch64` on Linux and `arm64` on macOS, and

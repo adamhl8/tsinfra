@@ -30,20 +30,6 @@ interface StepRecorder {
   finishStep: (stepRecord: StepRecord, outcome: Result<StepOutcome>) => void
 }
 
-// Call a read step by its kind, because its name is its command.
-const STEP_LABELS: Record<StepKind, string> = {
-  read: "read",
-  inspect: "inspect",
-  file: "step",
-  ensure: "step",
-  run: "step",
-}
-
-const describeStep = (stepRecord: StepRecord) => {
-  const { name, kind } = stepRecord
-  return `${STEP_LABELS[kind]} '${name}'`
-}
-
 /** Tracks the running step for one host, and records each step and the commands it runs. */
 export const createStepRecorder = (): StepRecorder => {
   const stepRecords: StepRecord[] = []
@@ -63,7 +49,10 @@ export const createStepRecorder = (): StepRecorder => {
   // Fail a step that starts while another is running, because a step's functions use the tools they are given.
   // This also catches steps run at once with `Promise.all`.
   const startStep = (stepName: string, kind: StepKind): Result<StepRecord> => {
-    if (currentStep) return err(`'${kind}' can't run while ${describeStep(currentStep)} is running`, undefined)
+    if (currentStep) {
+      const { name, kind: runningKind } = currentStep
+      return err(`'${kind}' can't run while ${runningKind} step '${name}' is running`, undefined)
+    }
 
     const stepRecord: StepRecord = { name: stepName, kind, commands: [] }
     stepRecords.push(stepRecord)

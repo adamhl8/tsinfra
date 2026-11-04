@@ -3,7 +3,7 @@ import { isErr } from "ts-explicit-errors"
 
 import type { InspectResult } from "#session/handlers/tools.ts"
 import { inspectCommand } from "#session/handlers/tools.ts"
-import type { StepContext, HandlerReturn } from "#session/step.ts"
+import type { HandlerReturn, StepContext } from "#session/step.ts"
 
 /** Runs the `inspect` step, which runs the same command as the `inspect` tool and gives the script its result. */
 export const handleInspect = async (ctx: StepContext, cmd: unknown): Promise<Result<HandlerReturn<InspectResult>>> => {

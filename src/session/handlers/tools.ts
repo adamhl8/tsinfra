@@ -5,11 +5,18 @@ import { err, isErr } from "ts-explicit-errors"
 import type { Shell } from "#session/shell.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
 
-/** What `inspect` gives a script: a command's stdout and stderr, both trimmed, and its exit code. */
-export interface InspectResult {
-  stdout: string
-  stderr: string
-  exitCode: number
+/** Tools that only read the host. A check function gets these, because it also runs during `plan`. */
+export interface ReadTools {
+  /** Reads from the host. Its command must not change what the script manages, because it also runs during `plan`. */
+  read: Exec
+  inspect: Inspect
+}
+
+/** Tools that can change the host. A fix or run function gets these. */
+export interface ChangeTools {
+  /** Runs a command that changes the host. */
+  exec: Exec
+  inspect: Inspect
 }
 
 /** Runs one command on the host and returns its stdout, trimmed. A non-zero exit throws. */
@@ -18,7 +25,14 @@ export type Exec = (cmd: string) => Promise<string>
 /** Runs one command on the host and returns its output and exit code. A non-zero exit is an answer, not a failure. */
 export type Inspect = (cmd: string) => Promise<InspectResult>
 
-type ToolName = "read" | "inspect" | "exec"
+/** What `inspect` gives a script: a command's stdout and stderr, both trimmed, and its exit code. */
+export interface InspectResult {
+  stdout: string
+  stderr: string
+  exitCode: number
+}
+
+type ToolName = keyof ReadTools | keyof ChangeTools
 
 /** What a tool is given: the name the script called it by, and the session's shell. */
 export interface ToolContext {
@@ -60,18 +74,4 @@ export const inspectCommand = async (ctx: ToolContext, cmd: unknown): Promise<Re
 
   const { stdout, stderr, exitCode } = commandOutput
   return { stdout: stdout.trim(), stderr: stderr.trim(), exitCode }
-}
-
-/** Tools that only read the host. A check function gets these, because it also runs during `plan`. */
-export interface ReadTools {
-  /** Reads from the host. Its command must not change what the script manages, because it also runs during `plan`. */
-  read: Exec
-  inspect: Inspect
-}
-
-/** Tools that can change the host. A fix or run function gets these. */
-export interface ChangeTools {
-  /** Runs a command that changes the host. */
-  exec: Exec
-  inspect: Inspect
 }

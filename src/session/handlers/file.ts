@@ -10,12 +10,12 @@ import { toAbsolutePath } from "#session/handlers/file/path.ts"
 import { buildStateCommand, parseStateOutput } from "#session/handlers/file/state-command.ts"
 import type { WantedFile } from "#session/handlers/file/wanted-file.ts"
 import { toWantedFile } from "#session/handlers/file/wanted-file.ts"
-import type { StepNeeds, ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
+import type { ChangeStepResult, StepNeeds } from "#session/handlers/shared/change-step-result.ts"
 import { stepNeedsSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import type { Comparison } from "#session/handlers/shared/converge.ts"
 import { converge } from "#session/handlers/shared/converge.ts"
 import type { Shell } from "#session/shell.ts"
-import type { StepContext, HandlerReturn } from "#session/step.ts"
+import type { HandlerReturn, StepContext } from "#session/step.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
 
 export interface FileOptions {
@@ -73,7 +73,8 @@ const compareFile = async (input: CompareFileInput): Promise<Result<Comparison>>
   if (findings.kind === "unreadable")
     return err(`can't read '${path}' as the SSH user, so it needs sudo: true`, undefined)
 
-  if (findings.kind === "absent") {
+  // Check for `file`, because `absent` is the only kind left, and checking for it wouldn't narrow `findings`.
+  if (findings.kind !== "file") {
     const content: ContentComparison = { kind: "new", wantSize: wantedFile.size }
     return { inSync: false, values: { kind: "file", content, attributes: [] } }
   }

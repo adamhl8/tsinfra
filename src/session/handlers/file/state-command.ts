@@ -1,3 +1,4 @@
+import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
@@ -20,12 +21,11 @@ export interface HostFile {
   size: Bytes
 }
 
-export type PathFindings =
-  | { kind: "absent" }
-  | { kind: "link" }
-  | { kind: "other" }
-  | { kind: "unreadable" }
-  | { kind: "file"; hostFile: HostFile }
+const NON_FILE_KINDS = ["absent", "link", "other", "unreadable"] as const
+type NonFileKind = (typeof NON_FILE_KINDS)[number]
+const nonFileKindSchema = type.enumerated(...NON_FILE_KINDS)
+
+export type PathFindings = { kind: NonFileKind } | { kind: "file"; hostFile: HostFile }
 
 /**
  * Returns one command that says what is at `path`, and for a regular file, its sha256, mode, owner, and size. It tries
@@ -52,7 +52,9 @@ export const parseStateOutput = (stdout: string): Result<PathFindings> => {
   const [kindLine = "", hashLine = "", statLine = ""] = stdout.split("\n")
   const kind = kindLine.replace("kind=", "")
 
-  if (kind === "absent" || kind === "link" || kind === "other" || kind === "unreadable") return { kind }
+  const nonFileKind = nonFileKindSchema(kind)
+  if (!(nonFileKind instanceof type.errors)) return { kind: nonFileKind }
+
   if (kind !== "file")
     return err(`the file's state command printed '${kindLine}' instead of what is at the path`, undefined)
 

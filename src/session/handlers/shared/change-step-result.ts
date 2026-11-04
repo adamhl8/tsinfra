@@ -2,7 +2,7 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
-import type { ChangeStepKind, StepContext, StepOutcome, HandlerReturn } from "#session/step.ts"
+import type { ChangeStepKind, HandlerReturn, StepContext, StepOutcome } from "#session/step.ts"
 import { CHANGE_STEP_KINDS } from "#session/step.ts"
 
 /**
@@ -21,7 +21,6 @@ export interface ChangeStepResult<K extends ChangeStepKind = ChangeStepKind> {
 }
 
 // Validate the results a script passes in, because a script can get past the types, like with `as` or `@ts-ignore`.
-// Declare it against `ChangeStepResult`, so the schema and the interface can't drift apart.
 export const changeStepResultSchema = type.declare<ChangeStepResult>().type({
   name: "string",
   kind: type.enumerated(...CHANGE_STEP_KINDS),

@@ -23,10 +23,10 @@ const hostOptions = object({
   }).multiple(),
 })
 
-const MODE_BRIEFS = {
+const MODE_BRIEFS: Record<Mode, Message> = {
   plan: message`Show what would change on each host`,
   apply: message`Make the changes on each host`,
-} as const satisfies Record<Mode, Message>
+}
 
 // Merge `hostOptions` into each command so hosts and options can only come after the command name.
 const buildCommandOptions = (mode: Mode) => merge(object({ mode: constant(mode) }), hostOptions)

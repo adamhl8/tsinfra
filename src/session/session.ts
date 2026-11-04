@@ -13,13 +13,13 @@ import { handleRun } from "#session/handlers/run.ts"
 import type { ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
 import { validateStepName } from "#session/handlers/step-name.ts"
-import type { ChangeTools, InspectResult, ReadTools, Exec, Inspect } from "#session/handlers/tools.ts"
+import type { ChangeTools, Exec, Inspect, InspectResult, ReadTools } from "#session/handlers/tools.ts"
 import { execCommand, inspectCommand } from "#session/handlers/tools.ts"
 import type { HostContext } from "#session/host-context.ts"
 import { createShell } from "#session/shell.ts"
 import type { StepRecord } from "#session/step-recorder.ts"
 import { createStepRecorder } from "#session/step-recorder.ts"
-import type { StepContext, StepKind, HandlerReturn } from "#session/step.ts"
+import type { HandlerReturn, StepContext, StepKind } from "#session/step.ts"
 
 // Extend `Record<StepKind, unknown>` so a step kind with no method fails to compile.
 /** What a host's function is given. Each method call is one step, and steps run one at a time at the top level. */
@@ -82,8 +82,8 @@ export interface HostSession {
  * Builds the `Host` passed to a host's function, and tracks the run's failure where the script can't see it.
  *
  * This is the only code that throws, because throwing is the contract with the script. Every function the script can
- * call, on `h` or as `read` and `exec`, goes through `callOrFail` around an internal function from `handlers/` that
- * returns errors as values.
+ * call, on `h` or as a tool, goes through `callOrFail` around an internal function from `handlers/` that returns errors
+ * as values.
  */
 export const createHostSession = (hostContext: HostContext, mode: Mode): HostSession => {
   const { name, transport, home } = hostContext

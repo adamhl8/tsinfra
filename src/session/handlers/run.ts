@@ -5,10 +5,10 @@ import { err, isErr } from "ts-explicit-errors"
 import type { ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import { changeStepResultSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import { changeSchema, runChange } from "#session/handlers/shared/change.ts"
-import type { StepContext, HandlerReturn } from "#session/step.ts"
+import type { HandlerReturn, StepContext } from "#session/step.ts"
 
 /** What makes a run run: the steps it follows, or `"always"`. */
-type RunTrigger = ChangeStepResult[] | "always"
+export type RunTrigger = ChangeStepResult[] | "always"
 
 // Accept steps that can change the host in `after`, including another run.
 // Reject an empty array, because a run that follows nothing never runs, which is a mistake.
@@ -25,7 +25,6 @@ export interface RunOptions {
 }
 
 // Validate the options at runtime too, because a script can get past the types, like with `as` or `@ts-ignore`.
-// Declare it against `RunOptions`, so the schema and the interface can't drift apart.
 const runOptionsSchema = type.declare<RunOptions>().type({
   after: runTriggerSchema,
 })

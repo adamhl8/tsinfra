@@ -164,8 +164,8 @@ straight away, so they take a command, not a function. Combining several reads i
 `ensure` step in disguise (see [`run`](#run)).
 
 **`h` is for the top level.** Inside a check, fix, or run function, use only the tools the function is given.
-Every method on `h` fails the host while another step is running, with an error like `'read' can't run while step
-'A' is running`. When the running step is a read, the error names its command instead, as in `read 'uname -m'`. That
+Every method on `h` fails the host while another step is running, with an error like `'read' can't run while ensure step
+'A' is running`. A read's name is its command, as in `read step 'uname -m'`. That
 rules out these mistakes:
 
 - **A step inside a step.** A step inside a fix never shows in `plan`, because `plan` never runs the fix. A step inside

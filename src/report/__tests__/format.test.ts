@@ -172,7 +172,7 @@ describe("formatHostBlock", () => {
 
   it("should show the error from steps run at once under the step that was running", async () => {
     expect(await formatBlock(runStepsAtOnce, "plan")).toBe(
-      "a\n  ! First\n      'ensure' can't run while step 'First' is running",
+      "a\n  ! First\n      'ensure' can't run while ensure step 'First' is running",
     )
   })
 
@@ -184,7 +184,7 @@ describe("formatHostBlock", () => {
 
   it("should show a nested step's failure once, under the outer step", async () => {
     expect(await formatBlock(nestStep, "apply")).toBe(
-      "a\n  ! Outer\n      failed to run the fix for step 'Outer' -> 'ensure' can't run while step 'Outer' is running",
+      "a\n  ! Outer\n      failed to run the fix for step 'Outer' -> 'ensure' can't run while ensure step 'Outer' is running",
     )
   })
 })
