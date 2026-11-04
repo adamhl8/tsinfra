@@ -1,14 +1,16 @@
 import { describe, expect, it } from "bun:test"
-import { chmod, mkdir, symlink } from "node:fs/promises"
+import { chmod, mkdir, stat, symlink } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
+import { messageChain } from "ts-explicit-errors"
 
-import { createSession, fileOrMessage } from "#__tests__/session.ts"
+import { castInvalid, createSession, fileOrMessage } from "#__tests__/session.ts"
+import { handleFile } from "#session/handlers/file.ts"
 import { PUBLIC_FILE_MODE } from "#session/handlers/file/mode.ts"
 
-const createFilePath = async () => path.join(await makeTempDir("file-"), "app.conf")
+const createFilePath = async () => path.join(await makeTempDir(), "app.conf")
 
 describe("h.file in plan", () => {
   it("should report a new file without writing it", async () => {
@@ -87,6 +89,18 @@ describe("h.file in plan", () => {
       { status: "unchanged" },
       { values: { attributes: [{ name: "owner", got: String(uid), want: String(uid + 1) }] } },
     ])
+  })
+
+  it("should report a group that differs", async () => {
+    const filePath = await createFilePath()
+    await Bun.write(filePath, "a\n")
+    const { gid } = await stat(filePath)
+    const hostSession = await createSession("plan")
+    await fileOrMessage(hostSession.host, filePath, { content: "a\n", group: gid + 1 })
+
+    expect(hostSession.stepRecords[0]?.outcome).toMatchObject({
+      values: { attributes: [{ name: "group", got: String(gid), want: String(gid + 1) }] },
+    })
   })
 
   it("should never fetch the old content of a secret file", async () => {
@@ -186,6 +200,28 @@ describe("h.file refusals", () => {
 
     expect(await fileOrMessage(h, filePath, { content: "a\n" })).toBe(
       `failed to run the fix for step '${filePath}' -> writing files comes with part 2 of file`,
+    )
+  })
+})
+
+describe("h.file with invalid input", () => {
+  it("should fail a file whose content is neither a string nor bytes", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(await fileOrMessage(h, "/tmp/x", { content: castInvalid(1) })).toBe(
+      "failed to validate the options given to step '/tmp/x' -> content must be a string or an object (was a number)",
+    )
+  })
+})
+
+describe("handleFile", () => {
+  // Call the handler directly, because `h.file` rejects this path first, when it validates the step's name.
+  it("should fail a path that isn't a string", async () => {
+    const result = await handleFile(castInvalid({ stepName: "x" }), 1, {})
+
+    expect(result).toBeInstanceOf(Error)
+    expect(messageChain(castInvalid(result))).toBe(
+      "failed to validate the path given to 'file' -> must be a string (was a number)",
     )
   })
 })

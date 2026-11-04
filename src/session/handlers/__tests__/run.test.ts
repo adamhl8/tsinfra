@@ -3,9 +3,9 @@ import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
 
-import { createSession, getFailureMessage, runOrMessage, throwBoom } from "#__tests__/session.ts"
+import { castInvalid, createSession, getFailureMessage, runOrMessage, throwBoom } from "#__tests__/session.ts"
 
-const createMarker = async () => path.join(await makeTempDir("run-"), "marker")
+const createMarker = async () => path.join(await makeTempDir(), "marker")
 
 describe("h.run", () => {
   it("should run an always run in apply and return changed", async () => {
@@ -64,7 +64,7 @@ describe("h.run", () => {
 
 describe("h.run with a function", () => {
   it("should run the commands in order", async () => {
-    const file = path.join(await makeTempDir("run-"), "lines")
+    const file = path.join(await makeTempDir(), "lines")
     const { host: h } = await createSession()
     const result = await runOrMessage(
       h,
@@ -116,5 +116,40 @@ describe("h.run with a function", () => {
 
     expect(result).toMatchObject({ changed: true })
     expect(await Bun.file(marker).exists()).toBe(false)
+  })
+})
+
+describe("h.run with invalid input", () => {
+  it.each([
+    {
+      description: "has no after",
+      options: {},
+      message: 'after must be an array or "always" (was missing)',
+    },
+    {
+      description: "has an after that holds something other than step results",
+      options: { after: [undefined] },
+      message: "after[0] must be an object (was undefined)",
+    },
+    {
+      description: "follows a step that can't change the host",
+      options: { after: [{ name: "uname -m", kind: "read", changed: false }] },
+      message: 'after[0].kind must be "ensure", "file" or "run" (was "read")',
+    },
+  ])("should fail a run that $description", async (testCase) => {
+    const { options, message } = testCase
+    const { host: h } = await createSession("plan")
+
+    expect(await runOrMessage(h, "true", castInvalid(options))).toBe(
+      `failed to validate the options given to step 'Make marker' -> ${message}`,
+    )
+  })
+
+  it("should fail a run whose command is neither a string nor a function", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(await runOrMessage(h, castInvalid(1), { after: "always" })).toBe(
+      "failed to validate the command given to step 'Make marker' -> must be a string or an object (was a number)",
+    )
   })
 })

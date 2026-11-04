@@ -7,7 +7,7 @@ import { attempt, isErr, messageChain } from "ts-explicit-errors"
 import { prepareAndRunHost } from "#__tests__/session.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
-import { hasDrift, prepareHosts } from "#hosts/run.ts"
+import { getExitCode, hasDrift, prepareHosts } from "#hosts/run.ts"
 import type { Host } from "#session/session.ts"
 
 const throwBoom = () => {
@@ -33,6 +33,8 @@ const runHostA = async (fn: HostFunction) => prepareAndRunHost({ name: "a", ...h
 const planHasDrift = async (fn: HostFunction) =>
   hasDrift(await prepareAndRunHost({ name: "a", ...host("@local", fn) }, "plan"))
 
+const planReport = async (name: string, fn: HostFunction) => prepareAndRunHost({ name, ...host("@local", fn) }, "plan")
+
 const ensurePending = async (h: Host) => {
   await h.ensure("Pending", { check: "false", want: true, fix: "true" })
 }
@@ -53,7 +55,7 @@ const runAndGetMessage = async (fn: HostFunction) => getMessage((await runHostA(
 
 describe("prepareHosts", () => {
   it("should prepare every host in order without running a script", async () => {
-    const marker = path.join(await makeTempDir("prepare-"), "ran")
+    const marker = path.join(await makeTempDir(), "ran")
     const touchMarker = async (h: Host) => {
       await h.read(`touch '${marker}'`)
     }
@@ -137,5 +139,25 @@ describe("hasDrift", () => {
 
   it("should be false when the only step failed", async () => {
     expect(await planHasDrift(failCheck)).toBe(false)
+  })
+})
+
+describe("getExitCode", () => {
+  it("should be 0 from plan when the only change is a run", async () => {
+    expect(getExitCode([await planReport("a", runOnly)], "plan")).toBe(0)
+  })
+
+  it("should be 2 from plan when a host has drift", async () => {
+    expect(getExitCode([await planReport("a", ensurePending)], "plan")).toBe(2)
+  })
+
+  it("should be 0 from apply when a host has drift", async () => {
+    expect(getExitCode([await planReport("a", ensurePending)], "apply")).toBe(0)
+  })
+
+  it("should be 1 when a host fails, even with drift on another", async () => {
+    const hostReports = [await planReport("a", ensurePending), await planReport("b", failCheck)]
+
+    expect(getExitCode(hostReports, "plan")).toBe(1)
   })
 })

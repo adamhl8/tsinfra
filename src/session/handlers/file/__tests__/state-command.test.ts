@@ -27,6 +27,18 @@ describe("parseStateOutput", () => {
     })
   })
 
+  it("should fail on a kind it doesn't know", () => {
+    expect(toFindings("kind=socket\n")).toBe(
+      "the file's state command printed 'kind=socket' instead of what is at the path",
+    )
+  })
+
+  it("should fail on a stat line it can't read", () => {
+    expect(toFindings(`kind=file\n${HASH}\nnot a stat line\n`)).toBe(
+      "the file's state command printed 'not a stat line' instead of the file's mode, owner, and size",
+    )
+  })
+
   it("should fail when no sha256 command printed a hash", () => {
     expect(toFindings("kind=file\n\n644 0 0 root root 3\n")).toBe(
       "the file's state command found no sha256 command (sha256sum, shasum, or sha256) on the host",

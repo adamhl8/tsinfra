@@ -257,7 +257,7 @@ describe("formatHostBlock for a step that would change a string", () => {
 
 describe("formatHostBlock for a file step", () => {
   it("should show a file's diff and each attribute that changes, old value to new", async () => {
-    const filePath = path.join(await makeTempDir("format-"), "app.conf")
+    const filePath = path.join(await makeTempDir(), "app.conf")
     await Bun.write(filePath, "port = 8080\nworkers = 4\n")
     await chmod(filePath, 0o600)
     const hostBlock = await formatBlock(async (h) => {
@@ -279,7 +279,7 @@ describe("formatHostBlock for a file step", () => {
   })
 
   it("should show a note for a new file", async () => {
-    const filePath = path.join(await makeTempDir("format-"), "app.conf")
+    const filePath = path.join(await makeTempDir(), "app.conf")
     const hostBlock = await formatBlock(async (h) => {
       await h.file(filePath, { content: "a".repeat(2048) })
     }, "plan")
@@ -288,7 +288,7 @@ describe("formatHostBlock for a file step", () => {
   })
 
   it("should spell out a size under 1 kB in bytes", async () => {
-    const filePath = path.join(await makeTempDir("format-"), "app.conf")
+    const filePath = path.join(await makeTempDir(), "app.conf")
     const hostBlock = await formatBlock(async (h) => {
       await h.file(filePath, { content: "a" })
       await h.file(`${filePath}.new`, { content: "abc" })

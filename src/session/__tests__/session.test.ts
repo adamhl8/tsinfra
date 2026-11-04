@@ -21,7 +21,7 @@ const toPlainRecords = (stepRecords: StepRecord[]) =>
 
 describe("createHostSession", () => {
   it("should throw the first failure again without running anything once the host has failed", async () => {
-    const file = path.join(await makeTempDir("read-"), "ran")
+    const file = path.join(await makeTempDir(), "ran")
     const hostSession = await createSession()
     await readOrMessage(hostSession.host, "exit 1")
 
@@ -181,7 +181,7 @@ describe("h inside a step", () => {
 
 describe("step records", () => {
   it("should record an ensure's check, fix, and second check in apply", async () => {
-    const marker = path.join(await makeTempDir("record-"), "marker")
+    const marker = path.join(await makeTempDir(), "marker")
     const hostSession = await createSession("apply")
     await ensureOrMessage(hostSession.host, { check: `test -f '${marker}'`, want: true, fix: `touch '${marker}'` })
 
@@ -302,7 +302,7 @@ describe("step records", () => {
   })
 
   it("should record commands from the given read and exec under their step", async () => {
-    const file = path.join(await makeTempDir("record-"), "file")
+    const file = path.join(await makeTempDir(), "file")
     const hostSession = await createSession()
     await ensureOrMessage(hostSession.host, {
       check: async ({ read }) => (await read(`cat '${file}' 2>/dev/null || true`)) === "done",

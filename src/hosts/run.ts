@@ -32,6 +32,17 @@ export type HostReport = StartedHostReport | UnstartedHostReport
 export const hasDrift = (hostReport: HostReport) =>
   hostReport.started && hostReport.stepRecords.some(({ outcome }) => !isErr(outcome) && outcome?.status === "changed")
 
+const DRIFT_EXIT_CODE = 2
+
+/** Returns the run's exit code: 1 for a failed host, 2 for drift in `plan`, and 0 otherwise. */
+export const getExitCode = (hostReports: HostReport[], mode: Mode): number => {
+  // Exit 1 for a failed host even when another has drift, because the plan is incomplete.
+  if (hostReports.some(({ failure }) => failure)) return 1
+
+  const hasAnyDrift = hostReports.some((hostReport) => hasDrift(hostReport))
+  return mode === "plan" && hasAnyDrift ? DRIFT_EXIT_CODE : 0
+}
+
 /** A loaded host and what preparing it gave, which `runHost` reports when it's an error. */
 export interface PreparedHost {
   loadedHost: LoadedHost

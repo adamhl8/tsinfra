@@ -4,9 +4,7 @@ import path from "node:path"
 import { makeTempDir } from "@adamhl8/configs/test"
 import { attempt } from "ts-explicit-errors"
 
-import { createSession, ensureOrMessage, getFailureMessage, throwBoom } from "#__tests__/session.ts"
-import type { Check } from "#session/handlers/ensure/check.ts"
-import type { Change } from "#session/handlers/shared/change.ts"
+import { castInvalid, createSession, ensureOrMessage, getFailureMessage, throwBoom } from "#__tests__/session.ts"
 import type { ChangeTools } from "#session/handlers/tools.ts"
 
 // Widen `want` to the union, which lets a mismatched check through the types, as an untyped host script would.
@@ -14,7 +12,7 @@ const toLooseWant = (value: string | boolean) => value
 
 /** Returns a path in a new temp dir, plus a step that creates a file there. */
 const createMarkerStep = async () => {
-  const marker = path.join(await makeTempDir("step-"), "marker")
+  const marker = path.join(await makeTempDir(), "marker")
   return { marker, options: { check: `test -f '${marker}'`, want: true, fix: `touch '${marker}'` } }
 }
 
@@ -123,8 +121,7 @@ describe("h.ensure", () => {
   it("should validate an Error a function check returns as a value, not a thrown error", async () => {
     const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion - an untyped host script can return anything from a check function
-      check: (() => new Error("returned")) as unknown as Check<boolean>,
+      check: castInvalid(() => new Error("returned")),
       want: true,
       fix: "true",
     })
@@ -165,7 +162,7 @@ describe("h.ensure", () => {
 
 /** Returns a path in a new temp dir, plus a step that writes `value` there. */
 const createValueStep = async (value: string) => {
-  const file = path.join(await makeTempDir("step-"), "value")
+  const file = path.join(await makeTempDir(), "value")
   return {
     file,
     options: { check: `cat '${file}' 2>/dev/null`, want: value, fix: `printf '%s\\n' '${value}' > '${file}'` },
@@ -337,7 +334,7 @@ describe("h.ensure with the inspect tool", () => {
 
 describe("h.ensure with a fix function", () => {
   it("should run the commands in order and return changed", async () => {
-    const file = path.join(await makeTempDir("step-"), "lines")
+    const file = path.join(await makeTempDir(), "lines")
     const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
       check: `test -s '${file}'`,
@@ -353,7 +350,7 @@ describe("h.ensure with a fix function", () => {
   })
 
   it("should return each command's stdout trimmed", async () => {
-    const file = path.join(await makeTempDir("step-"), "value")
+    const file = path.join(await makeTempDir(), "value")
     const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
       check: `test -f '${file}'`,
@@ -413,11 +410,10 @@ describe("h.ensure with a fix function", () => {
     const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
       ...options,
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion - an untyped host script can return anything from a fix function
-      fix: (async ({ exec }: ChangeTools) => {
+      fix: castInvalid(async ({ exec }: ChangeTools) => {
         await exec(`touch '${marker}'`)
         return new Error("returned")
-      }) as unknown as Change,
+      }),
     })
 
     expect(result).toMatchObject({ changed: true })
@@ -435,5 +431,77 @@ describe("h.ensure with a fix function", () => {
 
     expect(result).toMatchObject({ changed: true })
     expect(await Bun.file(marker).exists()).toBe(false)
+  })
+})
+
+describe("h.ensure with invalid input", () => {
+  it.each([
+    {
+      description: "whose want is neither a string nor a boolean",
+      options: { check: "true", want: 1, fix: "true" },
+      message: "want must be a string or boolean (was a number)",
+    },
+    {
+      description: "whose fix is an empty command",
+      options: { check: "true", want: true, fix: "" },
+      message: "fix must be non-empty",
+    },
+    {
+      description: "whose needs holds something other than step results",
+      options: { needs: [undefined], check: "true", want: true, fix: "true" },
+      message: "needs[0] must be an object (was undefined)",
+    },
+  ])("should fail a step $description", async (testCase) => {
+    const { options, message } = testCase
+    const { host: h } = await createSession("plan")
+
+    expect(await ensureOrMessage(h, castInvalid(options))).toBe(
+      `failed to validate the options given to step 'Make marker' -> ${message}`,
+    )
+  })
+
+  it("should fail a step that needs a run", async () => {
+    const { host: h } = await createSession("plan")
+    const prune = await h.run("Prune", "true", { after: "always" })
+
+    expect(await ensureOrMessage(h, { needs: castInvalid([prune]), check: "true", want: true, fix: "true" })).toBe(
+      `failed to validate the options given to step 'Make marker' -> needs[0].kind must be "ensure" or "file" (was "run")`,
+    )
+  })
+
+  it("should fail a step with an empty name", async () => {
+    const hostSession = await createSession("plan")
+
+    await attempt(async () => hostSession.host.ensure("", { check: "true", want: true, fix: "true" }))
+
+    expect(getFailureMessage(hostSession)).toBe("failed to validate the name given to 'ensure' -> must be non-empty")
+  })
+
+  it("should fail a fix that execs an empty command", async () => {
+    const { host: h } = await createSession("apply")
+    const result = await ensureOrMessage(h, {
+      check: "false",
+      want: true,
+      fix: async ({ exec }) => {
+        await exec("")
+      },
+    })
+
+    expect(result).toBe(
+      "failed to run the fix for step 'Make marker' -> failed to validate the command given to 'exec' -> must be non-empty",
+    )
+  })
+
+  it("should fail a check that inspects an empty command", async () => {
+    const { host: h } = await createSession("plan")
+    const result = await ensureOrMessage(h, {
+      check: async ({ inspect }) => (await inspect("")).exitCode === 0,
+      want: true,
+      fix: "true",
+    })
+
+    expect(result).toBe(
+      "failed to compare the host with what step 'Make marker' wants -> failed to validate the command given to 'inspect' -> must be non-empty",
+    )
   })
 })

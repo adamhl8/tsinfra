@@ -16,6 +16,10 @@ const doNothing = async () => {
   /* empty */
 }
 
+/** Gets an invalid value past the types, as a host script can, because Bun runs it without type-checking. */
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion - a test passes invalid input on purpose, to reach the runtime check
+export const castInvalid = (value: unknown) => value as never
+
 export const throwBoom = () => {
   throw new Error("boom")
 }

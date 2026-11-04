@@ -23,13 +23,13 @@ export const toErrorMessage = (error: Error): Message =>
 
 // Follow the color rules Optique's `run()` follows, because `printError` checks only whether stderr is a terminal.
 // Leave `colors` out otherwise, so `printError` still colors a terminal.
-const getErrorColors = (): { colors?: boolean } => {
-  if (process.env["FORCE_COLOR"]) return { colors: true }
-  if (process.env["NO_COLOR"]) return { colors: false }
+export const getErrorColors = (env: NodeJS.ProcessEnv): { colors?: boolean } => {
+  if (env["FORCE_COLOR"]) return { colors: true }
+  if (env["NO_COLOR"]) return { colors: false }
   return {}
 }
 
 /** Prints one of tsinfra's own errors to stderr, styled like the errors Optique prints while parsing. */
 export const printTsinfraError = (error: Error): void => {
-  printError(toErrorMessage(error), { theme: ERROR_THEME, ...getErrorColors() })
+  printError(toErrorMessage(error), { theme: ERROR_THEME, ...getErrorColors(process.env) })
 }

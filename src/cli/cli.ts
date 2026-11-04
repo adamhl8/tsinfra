@@ -9,12 +9,10 @@ import { program } from "#cli/program.ts"
 import { discoverHosts } from "#hosts/discover.ts"
 import { loadHosts } from "#hosts/load.ts"
 import type { HostReport } from "#hosts/run.ts"
-import { hasDrift, prepareHosts, runHost } from "#hosts/run.ts"
+import { getExitCode, prepareHosts, runHost } from "#hosts/run.ts"
 import packageJson from "#package.json" with { type: "json" }
 import { ERROR_THEME, printTsinfraError } from "#report/errors.ts"
 import { formatHostBlock, formatSummary } from "#report/format.ts"
-
-const DRIFT_EXIT_CODE = 2
 
 /** Runs the hosts, prints each one's host block and then the summary, and returns the exit code. */
 const runTsinfra = async (): Promise<Result<number>> => {
@@ -41,10 +39,7 @@ const runTsinfra = async (): Promise<Result<number>> => {
 
   console.log(formatSummary(hostReports, config.mode))
 
-  // Exit 1 for a failed host even when another has drift, because the plan is incomplete.
-  if (hostReports.some(({ failure }) => failure)) return 1
-  const hasAnyDrift = hostReports.some((hostReport) => hasDrift(hostReport))
-  return config.mode === "plan" && hasAnyDrift ? DRIFT_EXIT_CODE : 0
+  return getExitCode(hostReports, config.mode)
 }
 
 const main = async (): Promise<number> => {
