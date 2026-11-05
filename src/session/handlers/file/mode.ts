@@ -1,3 +1,5 @@
+import { regex } from "arkregex"
+
 type OctalDigit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7"
 
 /** A mode in octal, like `"644"`, or `"4755"` with setuid. */
@@ -5,19 +7,18 @@ export type OctalMode =
   | `${OctalDigit}${OctalDigit}${OctalDigit}`
   | `${OctalDigit}${OctalDigit}${OctalDigit}${OctalDigit}`
 
-type Permission<C extends string> = C | "-"
+// Give `OCTAL_MODE_PATTERN` its type, because `regex` infers `[0-7]{3,4}` as any number.
+export const OCTAL_MODE_PATTERN = regex.as<OctalMode>("^[0-7]{3,4}$", "v")
+
 // Allow `s` and `S` in an `x` slot for setuid and setgid, and `t` and `T` for the sticky bit, like `ls -l` prints them.
-type UserTriple = `${Permission<"r">}${Permission<"w">}${Permission<"x" | "s" | "S">}`
-type OtherTriple = `${Permission<"r">}${Permission<"w">}${Permission<"x" | "t" | "T">}`
+// Leave off the `v` flag, because it requires escaping `-`, and `regex` can't infer a type from `String.raw`.
+export const SYMBOLIC_MODE_PATTERN = regex("^[r-][w-][xsS-][r-][w-][xsS-][r-][w-][xtT-]$")
 
 /** A mode the way `ls -l` prints it, like `"rw-r--r--"`: read, write, and execute for the owner, the group, and others. */
-export type SymbolicMode = `${UserTriple}${UserTriple}${OtherTriple}`
+export type SymbolicMode = typeof SYMBOLIC_MODE_PATTERN.infer
 
 /** A file's mode, in octal like `"644"`, or symbolic like `"rw-r--r--"`. */
 export type FileMode = OctalMode | SymbolicMode
-
-export const OCTAL_MODE_PATTERN = /^[0-7]{3,4}$/v
-export const SYMBOLIC_MODE_PATTERN = /^[\-r][\-w][\-Ssx][\-r][\-w][\-Ssx][\-r][\-w][\-Ttx]$/v
 
 /** Owner reads and writes, everyone else reads. The usual mode for a config file. Octal `644`. */
 export const PUBLIC_FILE_MODE = "rw-r--r--" satisfies SymbolicMode
@@ -45,11 +46,12 @@ const SPECIAL_WITHOUT_EXECUTE = "ST"
 const TRIPLE_LENGTH = 3
 const SYMBOLIC_LENGTH = 9
 
-const isSymbolicMode = (mode: FileMode) => SYMBOLIC_MODE_PATTERN.test(mode)
-
 // Use arithmetic, because the lint config bans bitwise operators.
 // Each bit is a distinct power of 2, so adding bits never carries.
 const hasBit = (bits: number, bit: number) => Math.floor(bits / bit) % 2 === 1
+
+// Return a plain `boolean`, because narrowing `FileMode` by every symbolic mode slows the whole type check.
+const isSymbolicMode = (mode: FileMode): boolean => SYMBOLIC_MODE_PATTERN.test(mode)
 
 /** Converts `mode` to its permission bits. */
 export const toModeBits = (mode: FileMode) => {

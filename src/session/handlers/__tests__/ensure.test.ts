@@ -5,10 +5,11 @@ import { makeTempDir } from "@adamhl8/configs/test"
 import { attempt } from "ts-explicit-errors"
 
 import { castInvalid, createSession, ensureOrMessage, getFailureMessage, throwBoom } from "#__tests__/session.ts"
+import type { Want } from "#session/handlers/ensure/check.ts"
 import type { ChangeTools } from "#session/handlers/tools.ts"
 
 // Widen `want` to the union, which lets a mismatched check through the types, as an untyped host script would.
-const toLooseWant = (value: string | boolean) => value
+const toLooseWant = (value: Want) => value
 
 /** Returns a path in a new temp dir, plus a step that creates a file there. */
 const createMarkerStep = async () => {
@@ -41,7 +42,7 @@ describe("h.ensure", () => {
 
   it("should fail the host when the fix fails", async () => {
     const hostSession = await createSession()
-    const message = "failed to run the fix for step 'Make marker' -> exited with code 2: nope"
+    const message = "failed to run the fix -> exited with code 2: nope"
 
     expect(await ensureOrMessage(hostSession.host, { check: "false", want: true, fix: "echo nope >&2; exit 2" })).toBe(
       message,
@@ -53,7 +54,7 @@ describe("h.ensure", () => {
     const { host: h } = await createSession()
 
     expect(await ensureOrMessage(h, { check: "false", want: true, fix: "true" })).toBe(
-      "the host's state still differs after the fix for step 'Make marker'",
+      "the host's state still differs after the fix",
     )
   })
 
@@ -106,7 +107,7 @@ describe("h.ensure", () => {
     })
 
     expect(result).toBe(
-      "failed to compare the host with what step 'Make marker' wants -> failed to validate the value the check returned -> it's of type boolean, but want is of type string",
+      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> it's of type boolean, but want is of type string",
     )
   })
 
@@ -114,7 +115,7 @@ describe("h.ensure", () => {
     const { host: h } = await createSession()
 
     expect(await ensureOrMessage(h, { check: throwBoom, want: true, fix: "true" })).toBe(
-      "failed to compare the host with what step 'Make marker' wants -> boom",
+      "failed to compare the host with what the step wants -> boom",
     )
   })
 
@@ -127,14 +128,14 @@ describe("h.ensure", () => {
     })
 
     expect(result).toBe(
-      "failed to compare the host with what step 'Make marker' wants -> failed to validate the value the check returned -> it's of type object, but want is of type boolean",
+      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> it's of type object, but want is of type boolean",
     )
   })
 
   it("should name the step when a read inside a function check fails", async () => {
     const hostSession = await createSession()
     const message =
-      "failed to compare the host with what step 'Make marker' wants -> failed to read 'exit 1' -> exited with code 1"
+      "failed to compare the host with what the step wants -> failed to read 'exit 1' -> exited with code 1"
     const result = await ensureOrMessage(hostSession.host, {
       check: async ({ read }) => (await read("exit 1")) === "",
       want: true,
@@ -206,7 +207,7 @@ describe("h.ensure with a string want", () => {
     const { host: h } = await createSession()
 
     expect(await ensureOrMessage(h, { check: "echo v2; echo broken >&2; exit 1", want: "v2", fix: "true" })).toBe(
-      "failed to compare the host with what step 'Make marker' wants -> exited with code 1: broken",
+      "failed to compare the host with what the step wants -> exited with code 1: broken",
     )
   })
 
@@ -243,7 +244,7 @@ describe("h.ensure with verify: false", () => {
     const { host: h } = await createSession()
 
     expect(await ensureOrMessage(h, { check: "false", want: true, fix: "exit 2", verify: false })).toBe(
-      "failed to run the fix for step 'Make marker' -> exited with code 2",
+      "failed to run the fix -> exited with code 2",
     )
   })
 })
@@ -368,8 +369,7 @@ describe("h.ensure with a fix function", () => {
   it("should stop at the first failed command and fail the host with the step's name", async () => {
     const { marker, options } = await createMarkerStep()
     const hostSession = await createSession()
-    const message =
-      "failed to run the fix for step 'Make marker' -> failed to run 'echo nope >&2; exit 2' -> exited with code 2: nope"
+    const message = "failed to run the fix -> failed to run 'echo nope >&2; exit 2' -> exited with code 2: nope"
     const result = await ensureOrMessage(hostSession.host, {
       ...options,
       fix: async ({ exec }) => {
@@ -401,7 +401,7 @@ describe("h.ensure with a fix function", () => {
     const { host: h } = await createSession()
 
     expect(await ensureOrMessage(h, { check: "false", want: true, fix: throwBoom })).toBe(
-      "failed to run the fix for step 'Make marker' -> boom",
+      "failed to run the fix -> boom",
     )
   })
 
@@ -456,7 +456,7 @@ describe("h.ensure with invalid input", () => {
     const { host: h } = await createSession("plan")
 
     expect(await ensureOrMessage(h, castInvalid(options))).toBe(
-      `failed to validate the options given to step 'Make marker' -> ${message}`,
+      `failed to validate the options given to 'ensure' -> ${message}`,
     )
   })
 
@@ -465,7 +465,7 @@ describe("h.ensure with invalid input", () => {
     const prune = await h.run("Prune", "true", { after: "always" })
 
     expect(await ensureOrMessage(h, { needs: castInvalid([prune]), check: "true", want: true, fix: "true" })).toBe(
-      `failed to validate the options given to step 'Make marker' -> needs[0].kind must be "ensure" or "file" (was "run")`,
+      `failed to validate the options given to 'ensure' -> needs[0].kind must be "ensure" or "file" (was "run")`,
     )
   })
 
@@ -487,9 +487,7 @@ describe("h.ensure with invalid input", () => {
       },
     })
 
-    expect(result).toBe(
-      "failed to run the fix for step 'Make marker' -> failed to validate the command given to 'exec' -> must be non-empty",
-    )
+    expect(result).toBe("failed to run the fix -> failed to validate the command given to 'exec' -> must be non-empty")
   })
 
   it("should fail a check that inspects an empty command", async () => {
@@ -501,7 +499,7 @@ describe("h.ensure with invalid input", () => {
     })
 
     expect(result).toBe(
-      "failed to compare the host with what step 'Make marker' wants -> failed to validate the command given to 'inspect' -> must be non-empty",
+      "failed to compare the host with what the step wants -> failed to validate the command given to 'inspect' -> must be non-empty",
     )
   })
 })

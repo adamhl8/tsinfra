@@ -33,6 +33,9 @@ type NeedableStepKind = (typeof NEEDABLE_STEP_KINDS)[number]
 /** The earlier steps a step depends on. */
 export type StepNeeds = ChangeStepResult<NeedableStepKind>[]
 
+/** The `needs` of a step that gives none. */
+export const NO_NEEDS: StepNeeds = []
+
 export const stepNeedsSchema = type
   .declare<StepNeeds>()
   .type(changeStepResultSchema.and({ kind: type.enumerated(...NEEDABLE_STEP_KINDS) }).array())
@@ -48,11 +51,10 @@ const COUNTS_AS_CHANGED: Record<StepOutcome["status"], boolean> = {
 
 /** Returns `outcome` with the `ChangeStepResult` the script gets as its value. */
 export const withChangeStepResult = <K extends ChangeStepKind>(
-  ctx: StepContext,
-  kind: K,
+  ctx: StepContext<K>,
   outcome: Result<StepOutcome>,
 ): Result<HandlerReturn<ChangeStepResult<K>>> => {
-  const { stepName } = ctx
+  const { stepName, kind } = ctx
   if (isErr(outcome)) return outcome
 
   return { outcome, value: { name: stepName, kind, changed: COUNTS_AS_CHANGED[outcome.status] } }

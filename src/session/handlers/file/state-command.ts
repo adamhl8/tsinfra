@@ -5,8 +5,8 @@ import { err } from "ts-explicit-errors"
 import type { Bytes } from "#session/handlers/file/bytes.ts"
 import { toBytes } from "#session/handlers/file/bytes.ts"
 import { quoteShellArg } from "#session/shell.ts"
+import { nonEmptyStringSchema } from "#session/step.ts"
 
-const SHA256_LENGTH = 64
 const SHA256_PATTERN = /^[0-9a-f]{64}/v
 const WHITESPACE = /\s+/v
 
@@ -24,6 +24,16 @@ export interface HostFile {
 const NON_FILE_KINDS = ["absent", "link", "other", "unreadable"] as const
 type NonFileKind = (typeof NON_FILE_KINDS)[number]
 const nonFileKindSchema = type.enumerated(...NON_FILE_KINDS)
+
+// Parse the mode as octal, because GNU prints `644` and BSD prints `0644`.
+const statLineSchema = type([
+  type(/^[0-7]+$/v).pipe((mode) => Number.parseInt(mode, 8)),
+  "string.integer.parse",
+  "string.integer.parse",
+  nonEmptyStringSchema,
+  nonEmptyStringSchema,
+  type("string.integer.parse").pipe(toBytes),
+])
 
 export type PathFindings = { kind: NonFileKind } | { kind: "file"; hostFile: HostFile }
 
@@ -60,22 +70,13 @@ export const parseStateOutput = (stdout: string): Result<PathFindings> => {
 
   // Read the first 64 hex characters, because GNU, busybox, and `shasum` print `<hash>  -`, and BSD prints the hash.
   const hash = SHA256_PATTERN.exec(hashLine)?.[0]
-  if (hash?.length !== SHA256_LENGTH)
+  if (hash === undefined)
     return err("the file's state command found no sha256 command (sha256sum, shasum, or sha256) on the host", undefined)
 
-  const [mode = "", uid = "", gid = "", user = "", group = "", size = ""] = statLine.trim().split(WHITESPACE)
-  // Parse the mode as octal, because GNU prints `644` and BSD prints `0644`.
-  const hostFile = {
-    hash,
-    mode: Number.parseInt(mode, 8),
-    uid: Number(uid),
-    gid: Number(gid),
-    user,
-    group,
-    size: toBytes(Number(size)),
-  }
-  if ([hostFile.mode, hostFile.uid, hostFile.gid, hostFile.size].some((value) => Number.isNaN(value)))
+  const validStatLine = statLineSchema(statLine.trim().split(WHITESPACE))
+  if (validStatLine instanceof type.errors)
     return err(`the file's state command printed '${statLine}' instead of the file's mode, owner, and size`, undefined)
 
-  return { kind: "file", hostFile }
+  const [mode, uid, gid, user, group, size] = validStatLine
+  return { kind: "file", hostFile: { hash, mode, uid, gid, user, group, size } }
 }

@@ -21,7 +21,7 @@ import {
   styleWantExitCode,
   styleWantString,
 } from "#report/styles.ts"
-import type { EnsureComparisonValues } from "#session/handlers/ensure/check.ts"
+import type { EnsureComparisonValues, Want } from "#session/handlers/ensure/check.ts"
 import type { Bytes } from "#session/handlers/file/bytes.ts"
 import type { ContentComparison, SizeComparison } from "#session/handlers/file/comparison.ts"
 import { getMaxWidth, padToWidth, quoteNames } from "#utils.ts"
@@ -44,7 +44,7 @@ interface LabelRow {
 
 interface ValueKindRules {
   formatGot: (got: EnsureComparisonValues["got"]) => string
-  formatWant: (want: EnsureComparisonValues["want"]) => string
+  formatWant: (want: Want) => string
 }
 
 const VALUE_KIND_RULES: Record<EnsureComparisonValues["kind"], ValueKindRules> = {

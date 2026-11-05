@@ -235,7 +235,7 @@ something is broken. An option on `read` that changed its return type would need
 ```ts
 type FileOptions = {
   mode?: FileMode // "644", "rw-r--r--", or a constant like PUBLIC_FILE_MODE. Managed only when given
-  owner?: string | number // a name is compared with the owner's name, a number with its uid
+  user?: string | number // a name is compared with the user's name, a number with its uid
   group?: string | number // a name is compared with the group's name, a number with its gid
   sudo?: boolean // run the state command, the diff, and the write as root
   secret?: boolean // never fetch or show the old content
@@ -296,7 +296,7 @@ current mode, and a step states the mode it wants. A changed mode shows both not
 | `GROUP_EXECUTABLE_MODE`   | `rwxr-x---` | `750` | A script only a group may run              |
 | `PRIVATE_EXECUTABLE_MODE` | `rwx------` | `700` | A script only its owner may run            |
 
-**Defaults.** `mode`, `owner`, and `group` are managed only when given. An existing file keeps its own otherwise, the
+**Defaults.** `mode`, `user`, and `group` are managed only when given. An existing file keeps its own otherwise, the
 way Ansible, Salt, Chef, and Puppet all do, so a `file` step never loosens a `0600` file or takes ownership away from an
 app. A new file gets mode `644`, or `600` with `secret`, and is owned by whichever user ran the write: the SSH user, or
 root under `sudo`.
@@ -359,7 +359,7 @@ fi
   BSD needs `%Mp%Lp`, because `%Lp` alone drops setuid and setgid.
 - **The local hash** comes from `Bun.CryptoHasher("sha256")`. No file is transferred just to learn it is unchanged.
 - **The file is in sync** when the hash matches, and so does each attribute that was given. Modes are compared as octal
-  numbers, because GNU prints `644` and BSD prints `0644`. An owner or group given as a name is compared with the name
+  numbers, because GNU prints `644` and BSD prints `0644`. A user or group given as a name is compared with the name
   `stat` prints, and one given as a number with the uid or gid. There's no portable command to turn a group name into
   its id, because `getent` is Linux-only and macOS uses `dscl`, so names stay names. GNU and busybox print `UNKNOWN` for
   an id with no name, which only matters for an id, and those are compared as numbers.
@@ -394,8 +394,8 @@ line:
          -workers = 4
        4 +workers = 8
        5  log = info
-      mode:  rw-r--r-- (644) -> rw------- (600)
-      owner: root -> sonarr
+      mode: rw-r--r-- (644) -> rw------- (600)
+      user: root -> sonarr
 ```
 
 ### The write
@@ -414,12 +414,12 @@ It's for a file an app rewrites itself, like Sonarr's `config.xml`, which change
 UI. Managed normally, every `plan` would show that as drift, and every `apply` would undo the UI's changes:
 
 ```ts
-await h.file("/var/lib/sonarr/config.xml", sonarrConfig, { owner: "sonarr", mode: "600", overwrite: false })
+await h.file("/var/lib/sonarr/config.xml", sonarrConfig, { user: "sonarr", mode: "600", overwrite: false })
 ```
 
 - **An existing file's content is never read or compared,** so it shows no diff and never counts as drift.
 - **A missing file** shows as `content: new file` in `plan`, and gets written in `apply`, as usual.
-- **`mode`, `owner`, and `group` are still managed** every run, like Puppet's and Salt's `replace: false`.
+- **`mode`, `user`, and `group` are still managed** every run, like Puppet's and Salt's `replace: false`.
 - **The name** is fs-extra's `overwrite`, the usual JavaScript word for it. "Replace" already means swapping one kind
   of thing for another in `file`'s refusals.
 
@@ -450,10 +450,10 @@ await h.file("/etc/sudoers.d/adam", sudoers, {
 
 `file` runs as one user from start to finish, with no upload-then-move hop:
 
-| Option       | Runs as                   | For                                                             |
-| ------------ | ------------------------- | --------------------------------------------------------------- |
-| no `sudo`    | the SSH user, via `sh -s` | files the SSH user can write, like anything under `~`           |
-| `sudo: true` | root, via `sudo`          | files under `/etc`, root-only files, or another user as `owner` |
+| Option       | Runs as                   | For                                                            |
+| ------------ | ------------------------- | -------------------------------------------------------------- |
+| no `sudo`    | the SSH user, via `sh -s` | files the SSH user can write, like anything under `~`          |
+| `sudo: true` | root, via `sudo`          | files under `/etc`, root-only files, or another user as `user` |
 
 Under `sudo: true`, every part runs as root: the state command, the `cat` for the diff, and the write. tsinfra writes all of
 those commands, so there is nowhere for a script to add `sudo` itself. This means `plan` also needs sudo on a host that
@@ -465,7 +465,7 @@ never escalates shouldn't need sudo set up. A `file` step only escalates when it
 
 Two mistakes get errors of their own instead of a raw shell error:
 
-- **`owner` names another user without `sudo`,** like `owner 'sonarr' needs sudo: true, because only root can give a
+- **`user` names another user without `sudo`,** like `user 'sonarr' needs sudo: true, because only root can give a
   file away`. Only root can `chown` a file to someone else.
 - **The state command can't read the file without `sudo`,** like `can't read '/etc/shadow' as the SSH user, so it needs sudo:
   true`. That way an unreadable file doesn't look missing.
@@ -521,7 +521,7 @@ manages first.
 - **The write** makes the link under a temp name next to `path`, then renames it into place, so there is never a moment
   with nothing at `path`. Renaming over an existing link to a directory follows that link with a plain `mv`, so the
   write has to avoid that. GNU has `mv -T`, and BSD differs, which gets settled when this is built.
-- **There's no `mode`, `owner`, or `group`.** A symlink's mode doesn't apply to it. `owner` would need `chown -h`, and
+- **There's no `mode`, `user`, or `group`.** A symlink's mode doesn't apply to it. `user` would need `chown -h`, and
   is left out until a port needs a link owned by someone else.
 - **It returns a `ChangeStepResult<"link">`,** so `needs` and `after` accept it the same as a file's. A run can follow a link
   that changed.
@@ -713,13 +713,13 @@ unless it starts with `set -e`. Use the function form for anything past one comm
 that needs a sudo password, tsinfra supplies it (see [Transport](./transport.md#sudo)).
 
 **Verification.** After a fix runs, the check runs again. If it still does not pass, the step fails with "the host's
-state still differs after the fix for step '...'", followed by a `got:` and a `want:` line, or a line diff for a
+state still differs after the fix", followed by a `got:` and a `want:` line, or a line diff for a
 multi-line string. A string is quoted, so an empty value shows as `''`. A boolean shows as `true` or `false`. An exit
 status shows as `exit code 1`, against `exit code 0` or `a non-zero exit code`. A `stderr:` line follows when the check
 command printed any. A step that reports a change on every run is a bug, and this is what surfaces it the first time.
 
 ```
-the host's state still differs after the fix for step 'Remove the old user'
+the host's state still differs after the fix
   got:  exit code 0
   want: a non-zero exit code
 ```

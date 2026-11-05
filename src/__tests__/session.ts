@@ -5,7 +5,7 @@ import { host } from "#hosts/host.ts"
 import type { LoadedHost } from "#hosts/load.ts"
 import { prepareHost, runHost } from "#hosts/run.ts"
 import type { EnsureOptions } from "#session/handlers/ensure.ts"
-import type { FileOptions } from "#session/handlers/file.ts"
+import type { Want } from "#session/handlers/ensure/check.ts"
 import type { RunOptions } from "#session/handlers/run.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
 import { buildHostContext } from "#session/host-context.ts"
@@ -43,14 +43,14 @@ export const readOrMessage = async (h: Host, cmd: string) => {
 }
 
 /** Runs `h.ensure` and returns its result, or the thrown error's message chain. */
-export const ensureOrMessage = async <T extends string | boolean>(h: Host, options: EnsureOptions<T>) => {
+export const ensureOrMessage = async <T extends Want>(h: Host, options: EnsureOptions<T>) => {
   const result = await attempt(async () => h.ensure("Make marker", options))
   return isErr(result) ? messageChain(result) : result
 }
 
 /** Runs `h.file` on `path` and returns its result, or the thrown error's message chain. */
-export const fileOrMessage = async (h: Host, path: string, options: FileOptions) => {
-  const result = await attempt(async () => h.file(path, options))
+export const fileOrMessage = async (h: Host, ...fileArgs: Parameters<Host["file"]>) => {
+  const result = await attempt(async () => h.file(...fileArgs))
   return isErr(result) ? messageChain(result) : result
 }
 

@@ -22,10 +22,16 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
    1. **Reading the state and the plan output.** The GNU and BSD state command, the local hash, the `file` comparison, the
       content diff and its notes (new, secret, binary, large), the `mode: 644 -> 600` attribute lines, path quoting, and
       `~/` resolved as the SSH user.
-   2. **The write.** `content` as `file`'s second argument, with every option optional, and a `Blob` like `Bun.file(...)`
-      accepted as content, read inside the step. The write script in its tested order, verification, `sudo` in the shell and transport for tsinfra's
-      own commands, the 10 MB limit, the symlink refusal, and the errors for `owner` or an unreadable file without
-      `sudo`.
+   2. **The write.** In six pieces, each reviewed before the next:
+      1. **The signature.** `content` as `file`'s second argument, with every option optional, and a `Blob` like
+         `Bun.file(...)` accepted as content, read inside the step.
+      2. **The write script and verification.** The write script in its tested order, and verification after it.
+      3. **Sudo.** `sudo` in the shell and transport for tsinfra's own commands.
+      4. **The size limit.** Content over 10 MB fails before anything is sent.
+      5. **The symlink refusal.** The state command already refuses a symlink in `plan` and `apply`. What's left is a
+         test that `apply` refuses one without writing.
+      6. **The errors without `sudo`.** An error for `user` naming another user. The error for an unreadable file is
+         already built.
    3. **Links.** The `link` step: reading the target with `readlink`, absolute targets only, `force` for a regular file, an error for
       a directory, the `points to a missing path` note, and a write that never follows an existing link to a directory.
    4. **Docs and preview.** Preview hosts for a content diff, a new file, attribute changes, a secret file, a binary

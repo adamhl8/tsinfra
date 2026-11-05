@@ -6,7 +6,10 @@ import { inspectCommand } from "#session/handlers/tools.ts"
 import type { HandlerReturn, StepContext } from "#session/step.ts"
 
 /** Runs the `inspect` step, which runs the same command as the `inspect` tool and gives the script its result. */
-export const handleInspect = async (ctx: StepContext, cmd: unknown): Promise<Result<HandlerReturn<InspectResult>>> => {
+export const handleInspect = async (
+  ctx: StepContext<"inspect">,
+  cmd: unknown,
+): Promise<Result<HandlerReturn<InspectResult>>> => {
   const { shell } = ctx
 
   const inspectResult = await inspectCommand({ toolName: "inspect", shell }, cmd)

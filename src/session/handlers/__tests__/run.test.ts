@@ -19,7 +19,7 @@ describe("h.run", () => {
   it("should fail the host without running when after is empty", async () => {
     const marker = await createMarker()
     const hostSession = await createSession("apply")
-    const message = "failed to validate the options given to step 'Make marker' -> after must be non-empty"
+    const message = "failed to validate the options given to 'run' -> after must be non-empty"
 
     expect(await runOrMessage(hostSession.host, `touch '${marker}'`, { after: [] })).toBe(message)
     expect(getFailureMessage(hostSession)).toBe(message)
@@ -55,7 +55,7 @@ describe("h.run", () => {
 
   it("should fail the host with the run's name when the command fails", async () => {
     const hostSession = await createSession()
-    const message = "failed to run step 'Make marker' -> exited with code 2: nope"
+    const message = "failed to run the step -> exited with code 2: nope"
 
     expect(await runOrMessage(hostSession.host, "echo nope >&2; exit 2", { after: "always" })).toBe(message)
     expect(getFailureMessage(hostSession)).toBe(message)
@@ -82,7 +82,7 @@ describe("h.run with a function", () => {
   it("should stop at the first failed command and fail the host with the run's name", async () => {
     const marker = await createMarker()
     const hostSession = await createSession()
-    const message = "failed to run step 'Make marker' -> failed to run 'exit 2' -> exited with code 2"
+    const message = "failed to run the step -> failed to run 'exit 2' -> exited with code 2"
     const result = await runOrMessage(
       hostSession.host,
       async ({ exec }) => {
@@ -100,7 +100,7 @@ describe("h.run with a function", () => {
   it("should fail the host with the run's name when the function throws", async () => {
     const { host: h } = await createSession()
 
-    expect(await runOrMessage(h, throwBoom, { after: "always" })).toBe("failed to run step 'Make marker' -> boom")
+    expect(await runOrMessage(h, throwBoom, { after: "always" })).toBe("failed to run the step -> boom")
   })
 
   it("should not call the function in plan", async () => {
@@ -141,7 +141,7 @@ describe("h.run with invalid input", () => {
     const { host: h } = await createSession("plan")
 
     expect(await runOrMessage(h, "true", castInvalid(options))).toBe(
-      `failed to validate the options given to step 'Make marker' -> ${message}`,
+      `failed to validate the options given to 'run' -> ${message}`,
     )
   })
 
@@ -149,7 +149,7 @@ describe("h.run with invalid input", () => {
     const { host: h } = await createSession("plan")
 
     expect(await runOrMessage(h, castInvalid(1), { after: "always" })).toBe(
-      "failed to validate the command given to step 'Make marker' -> must be a string or an object (was a number)",
+      "failed to validate the command given to 'run' -> must be a string or an object (was a number)",
     )
   })
 })

@@ -5,7 +5,7 @@ import { execCommand } from "#session/handlers/tools.ts"
 import type { HandlerReturn, StepContext } from "#session/step.ts"
 
 /** Runs the `read` step, which runs the same command as the `read` tool and gives the script its stdout. */
-export const handleRead = async (ctx: StepContext, cmd: unknown): Promise<Result<HandlerReturn<string>>> => {
+export const handleRead = async (ctx: StepContext<"read">, cmd: unknown): Promise<Result<HandlerReturn<string>>> => {
   const { shell } = ctx
 
   const stdout = await execCommand({ toolName: "read", shell }, cmd)

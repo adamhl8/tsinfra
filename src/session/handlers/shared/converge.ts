@@ -27,13 +27,14 @@ export interface ConvergeSpec {
 }
 
 const FAILED_COMPARISON_KEY = "failedComparison"
+const FAILED_COMPARE_MESSAGE = "failed to compare the host with what the step wants"
 
 /** Returns the comparison that a "still differs after the fix" error carries, so the output can show what it found. */
 export const getFailedComparison = (error: Error) => getContext<Comparison>(error, FAILED_COMPARISON_KEY)
 
 /** Compares the host's state with what the step wants, then in `apply` runs the fix when it differs, and compares again. */
 export const converge = async (ctx: StepContext, spec: ConvergeSpec): Promise<Result<StepOutcome>> => {
-  const { stepName, mode } = ctx
+  const { mode } = ctx
   const { needs, compare, fix, verify } = spec
 
   // Skip reading the state in `plan` when a needed step would change, because the read would miss that change.
@@ -41,20 +42,20 @@ export const converge = async (ctx: StepContext, spec: ConvergeSpec): Promise<Re
   if (mode === "plan" && pendingNeeds.length > 0) return { status: "waiting", needs: pendingNeeds }
 
   const before = await compare()
-  if (isErr(before)) return err(`failed to compare the host with what step '${stepName}' wants`, before)
+  if (isErr(before)) return err(FAILED_COMPARE_MESSAGE, before)
   if (before.inSync) return { status: "unchanged" }
 
   const changedOutcome: StepOutcome = { status: "changed", values: before.values }
   if (mode === "plan") return changedOutcome
 
   const fixResult = await fix()
-  if (isErr(fixResult)) return err(`failed to run the fix for step '${stepName}'`, fixResult)
+  if (isErr(fixResult)) return err("failed to run the fix", fixResult)
   if (!verify) return changedOutcome
 
   const after = await compare()
-  if (isErr(after)) return err(`failed to compare the host with what step '${stepName}' wants`, after)
+  if (isErr(after)) return err(FAILED_COMPARE_MESSAGE, after)
   if (!after.inSync) {
-    return err(`the host's state still differs after the fix for step '${stepName}'`, undefined, {
+    return err("the host's state still differs after the fix", undefined, {
       [FAILED_COMPARISON_KEY]: after,
     })
   }

@@ -33,9 +33,18 @@ describe("parseStateOutput", () => {
     )
   })
 
-  it("should fail on a stat line it can't read", () => {
-    expect(toFindings(`kind=file\n${HASH}\nnot a stat line\n`)).toBe(
-      "the file's state command printed 'not a stat line' instead of the file's mode, owner, and size",
+  it.each([
+    "not a stat line",
+    "644",
+    "644 1000",
+    "644 1000 1000 adam",
+    "644 1000 1000 adam staff",
+    "644 1000 1000 first last staff 15",
+    "644 1000 1000 adam staff 0x10",
+    "999 1000 1000 adam staff 15",
+  ])("should fail on the stat line '%s'", (statLine) => {
+    expect(toFindings(`kind=file\n${HASH}\n${statLine}\n`)).toBe(
+      `the file's state command printed '${statLine}' instead of the file's mode, owner, and size`,
     )
   })
 

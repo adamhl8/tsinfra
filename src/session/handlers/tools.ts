@@ -1,7 +1,7 @@
-import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
+import { validateInput } from "#session/handlers/validate-input.ts"
 import type { Shell } from "#session/shell.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
 
@@ -32,7 +32,7 @@ export interface InspectResult {
   exitCode: number
 }
 
-type ToolName = keyof ReadTools | keyof ChangeTools
+export type ToolName = keyof ReadTools | keyof ChangeTools
 
 /** What a tool is given: the name the script called it by, and the session's shell. */
 export interface ToolContext {
@@ -51,9 +51,8 @@ const TOOL_VERBS: Record<ToolName, string> = {
 export const execCommand = async (ctx: ToolContext, cmd: unknown): Promise<Result<string>> => {
   const { toolName, shell } = ctx
 
-  const validCmd = nonEmptyStringSchema(cmd)
-  if (validCmd instanceof type.errors)
-    return err(`failed to validate the command given to '${toolName}'`, err(validCmd.summary, undefined))
+  const validCmd = validateInput(cmd, nonEmptyStringSchema, { inputLabel: "command", givenTo: toolName })
+  if (isErr(validCmd)) return validCmd
 
   const stdout = await shell.exec(validCmd)
   if (isErr(stdout)) return err(`failed to ${TOOL_VERBS[toolName]} '${validCmd}'`, stdout)
@@ -65,9 +64,8 @@ export const execCommand = async (ctx: ToolContext, cmd: unknown): Promise<Resul
 export const inspectCommand = async (ctx: ToolContext, cmd: unknown): Promise<Result<InspectResult>> => {
   const { toolName, shell } = ctx
 
-  const validCmd = nonEmptyStringSchema(cmd)
-  if (validCmd instanceof type.errors)
-    return err(`failed to validate the command given to '${toolName}'`, err(validCmd.summary, undefined))
+  const validCmd = validateInput(cmd, nonEmptyStringSchema, { inputLabel: "command", givenTo: toolName })
+  if (isErr(validCmd)) return validCmd
 
   const commandOutput = await shell.inspect(validCmd)
   if (isErr(commandOutput)) return err(`failed to ${TOOL_VERBS[toolName]} '${validCmd}'`, commandOutput)

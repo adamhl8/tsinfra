@@ -67,7 +67,7 @@ trap 'rm -f -- "$tmp"' EXIT                         #    removed if anything bel
 base64 -d > "$tmp" <<'__TSINFRA_EOF__'              # 4. the content, decoded into the temp file
 <content as base64, wrapped at 76 columns>
 __TSINFRA_EOF__
-chown -- '1000:1000' "$tmp"                         # 5. owner and group first
+chown -- '1000:1000' "$tmp"                         # 5. user and group first
 chmod -- 0644 "$tmp"                                #    then the mode
 chcon --reference='/etc/app/app.conf' "$tmp"        # 6. an existing file's SELinux label, when chcon exists
 mv -f -- "$tmp" '/etc/app/app.conf'                 # 7. one rename puts it in place
@@ -87,7 +87,7 @@ Each step's place in the order matters:
    intact whatever the shell's buffering. The delimiter has underscores, which base64 never contains, so no line of the
    content can end it early.
 5. **`chown` comes before `chmod`,** because `chown` clears setuid and setgid, even when root runs it. Chef and cdist
-   both have comments about this. Each runs only when the value changes. With no `owner`, `group`, or `mode` given, the
+   both have comments about this. Each runs only when the value changes. With no `user`, `group`, or `mode` given, the
    values come from the existing file, as the state command found them, or the defaults for a new file.
 6. **SELinux.** `mv` keeps the temp file's label, so the replacement takes the old file's label first. Both SELinux
    steps run only when the command exists, and skip quietly otherwise.

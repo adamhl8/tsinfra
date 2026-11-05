@@ -11,6 +11,7 @@ import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
 import { formatHostBlock, formatSummary } from "#report/format.ts"
 import type { EnsureOptions } from "#session/handlers/ensure.ts"
+import type { Want } from "#session/handlers/ensure/check.ts"
 import type { Host } from "#session/session.ts"
 
 const runNamedHost = async (name: string, fn: HostFunction, mode: Mode) =>
@@ -141,7 +142,7 @@ describe("formatHostBlock", () => {
       [
         "a",
         "  ! Make it",
-        "      the host's state still differs after the fix for step 'Make it'",
+        "      the host's state still differs after the fix",
         "        got:    exit code 1",
         "        want:   exit code 0",
         "        stderr: missing",
@@ -184,13 +185,13 @@ describe("formatHostBlock", () => {
 
   it("should show a nested step's failure once, under the outer step", async () => {
     expect(await formatBlock(nestStep, "apply")).toBe(
-      "a\n  ! Outer\n      failed to run the fix for step 'Outer' -> 'ensure' can't run while ensure step 'Outer' is running",
+      "a\n  ! Outer\n      failed to run the fix -> 'ensure' can't run while ensure step 'Outer' is running",
     )
   })
 })
 
 /** Formats the block of an apply whose step still differs after its fix, as the lines under the error. */
-const formatFailedCheck = async <T extends string | boolean>(options: EnsureOptions<T>) => {
+const formatFailedCheck = async <T extends Want>(options: EnsureOptions<T>) => {
   const hostBlock = await formatBlock(async (h) => {
     await h.ensure("Make it", options)
   }, "apply")
@@ -261,7 +262,7 @@ describe("formatHostBlock for a file step", () => {
     await Bun.write(filePath, "port = 8080\nworkers = 4\n")
     await chmod(filePath, 0o600)
     const hostBlock = await formatBlock(async (h) => {
-      await h.file(filePath, { content: "port = 8080\nworkers = 8\n", mode: "644" })
+      await h.file(filePath, "port = 8080\nworkers = 8\n", { mode: "644" })
     }, "plan")
 
     expect(hostBlock).toBe(
@@ -281,7 +282,7 @@ describe("formatHostBlock for a file step", () => {
   it("should show a note for a new file", async () => {
     const filePath = path.join(await makeTempDir(), "app.conf")
     const hostBlock = await formatBlock(async (h) => {
-      await h.file(filePath, { content: "a".repeat(2048) })
+      await h.file(filePath, "a".repeat(2048))
     }, "plan")
 
     expect(hostBlock).toBe(["a", `  ~ ${filePath}`, "      content: new file, 2.05 kB"].join("\n"))
@@ -290,8 +291,8 @@ describe("formatHostBlock for a file step", () => {
   it("should spell out a size under 1 kB in bytes", async () => {
     const filePath = path.join(await makeTempDir(), "app.conf")
     const hostBlock = await formatBlock(async (h) => {
-      await h.file(filePath, { content: "a" })
-      await h.file(`${filePath}.new`, { content: "abc" })
+      await h.file(filePath, "a")
+      await h.file(`${filePath}.new`, "abc")
     }, "plan")
 
     expect(hostBlock).toBe(

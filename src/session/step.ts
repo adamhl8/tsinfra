@@ -21,9 +21,13 @@ type ReadStepKind = (typeof READ_STEP_KINDS)[number]
 /** The steps that can change the host, whether or not they do. */
 export type ChangeStepKind = (typeof CHANGE_STEP_KINDS)[number]
 
-/** What a step's handler is given: the step's name, and the session's mode, shell, home directory, and tools. */
-export interface StepContext {
+/**
+ * What a step's handler is given: the step's name and kind, and the session's mode, shell, home directory, and tools.
+ * `K` keeps a step's kind in its type, so a script can't give a run's result to `needs`.
+ */
+export interface StepContext<K extends StepKind = StepKind> {
   stepName: string
+  kind: K
   mode: Mode
   shell: Shell
   /** The SSH user's home directory, read when the host is prepared. It's empty when `$HOME` isn't set. */

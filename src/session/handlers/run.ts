@@ -5,6 +5,7 @@ import { err, isErr } from "ts-explicit-errors"
 import type { ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import { changeStepResultSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import { changeSchema, runChange } from "#session/handlers/shared/change.ts"
+import { validateInput } from "#session/handlers/validate-input.ts"
 import type { HandlerReturn, StepContext } from "#session/step.ts"
 
 /** What makes a run run: the steps it follows, or `"always"`. */
@@ -39,26 +40,24 @@ const evaluateTrigger = (options: RunOptions): boolean => {
 }
 
 export const handleRun = async (
-  ctx: StepContext,
+  ctx: StepContext<"run">,
   change: unknown,
   options: unknown,
 ): Promise<Result<HandlerReturn<ChangeStepResult<"run">>>> => {
-  const { stepName, mode } = ctx
+  const { kind, mode } = ctx
 
-  const validChange = changeSchema(change)
-  if (validChange instanceof type.errors)
-    return err(`failed to validate the command given to step '${stepName}'`, err(validChange.summary, undefined))
+  const validChange = validateInput(change, changeSchema, { inputLabel: "command", givenTo: kind })
+  if (isErr(validChange)) return validChange
 
-  const validOptions = runOptionsSchema(options)
-  if (validOptions instanceof type.errors)
-    return err(`failed to validate the options given to step '${stepName}'`, err(validOptions.summary, undefined))
+  const validOptions = validateInput(options, runOptionsSchema, { inputLabel: "options", givenTo: kind })
+  if (isErr(validOptions)) return validOptions
 
   const shouldRun = evaluateTrigger(validOptions)
-  if (!shouldRun) return withChangeStepResult(ctx, "run", { status: "unchanged" })
-  if (mode === "plan") return withChangeStepResult(ctx, "run", { status: "ran" })
+  if (!shouldRun) return withChangeStepResult(ctx, { status: "unchanged" })
+  if (mode === "plan") return withChangeStepResult(ctx, { status: "ran" })
 
   const changeResult = await runChange(ctx, validChange)
-  if (isErr(changeResult)) return err(`failed to run step '${stepName}'`, changeResult)
+  if (isErr(changeResult)) return err("failed to run the step", changeResult)
 
-  return withChangeStepResult(ctx, "run", { status: "ran" })
+  return withChangeStepResult(ctx, { status: "ran" })
 }

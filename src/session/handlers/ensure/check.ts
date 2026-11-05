@@ -17,11 +17,14 @@ export type Check<T> = string | CheckFunction<T>
 
 // Type the function as a `CheckFunction`, because only "is a function" can be validated at runtime.
 export const checkSchema = type
-  .declare<Check<string | boolean>>()
-  .type(nonEmptyStringSchema.or(type("Function").as<CheckFunction<string | boolean>>()))
+  .declare<Check<Want>>()
+  .type(nonEmptyStringSchema.or(type("Function").as<CheckFunction<Want>>()))
+
+export const wantSchema = type("string | boolean")
+export type Want = typeof wantSchema.infer
 
 // Require the check's value to have `want`'s type, which `want` alone decides.
-const checkValueSchema = type({ value: "string", want: "string" }).or({ value: "boolean", want: "boolean" })
+const checkFnValueSchema = type({ value: "string", want: "string" }).or({ value: "boolean", want: "boolean" })
 
 /** What the check gave and what it wanted, as raw values. `kind` says how the output shows them. */
 export type EnsureComparisonValues =
@@ -40,8 +43,8 @@ const compareStrings = (value: string, wantedValue: string): Comparison => {
  * Validates a check function's value against `want`'s type, then compares the two. The value is `unknown` because a
  * script can get past the types and return anything.
  */
-const compareFnValue = (value: unknown, want: string | boolean): Result<Comparison> => {
-  const valid = checkValueSchema({ value, want })
+const compareFnValue = (value: unknown, want: Want): Result<Comparison> => {
+  const valid = checkFnValueSchema({ value, want })
   if (valid instanceof type.errors) {
     return err(
       "failed to validate the value the check returned",
@@ -54,7 +57,7 @@ const compareFnValue = (value: unknown, want: string | boolean): Result<Comparis
 }
 
 /** Compares a check command's stdout, or its exit code, to `want`. */
-const compareCommandOutput = (commandOutput: CommandOutput, want: string | boolean): Result<Comparison> => {
+const compareCommandOutput = (commandOutput: CommandOutput, want: Want): Result<Comparison> => {
   const { stdout, exitCode } = commandOutput
 
   if (typeof want === "string") {
@@ -73,7 +76,7 @@ const compareCommandOutput = (commandOutput: CommandOutput, want: string | boole
 export const compareCheck = async (
   ctx: StepContext,
   check: Check<unknown>,
-  want: string | boolean,
+  want: Want,
 ): Promise<Result<Comparison>> => {
   const { shell, readTools } = ctx
 

@@ -68,7 +68,7 @@ describe("h inside a step", () => {
     })
 
     expect(result).toBe(
-      "failed to compare the host with what step 'Make marker' wants -> 'inspect' can't run while ensure step 'Make marker' is running",
+      "failed to compare the host with what the step wants -> 'inspect' can't run while ensure step 'Make marker' is running",
     )
   })
 
@@ -76,7 +76,7 @@ describe("h inside a step", () => {
     const hostSession = await createSession()
     const { host: h } = hostSession
     const message =
-      "failed to compare the host with what step 'Make marker' wants -> 'read' can't run while ensure step 'Make marker' is running"
+      "failed to compare the host with what the step wants -> 'read' can't run while ensure step 'Make marker' is running"
     const result = await ensureOrMessage(h, {
       check: async () => (await h.read("true")) === "",
       want: true,
@@ -99,7 +99,7 @@ describe("h inside a step", () => {
     })
 
     expect(result).toBe(
-      "failed to compare the host with what step 'Make marker' wants -> 'ensure' can't run while ensure step 'Make marker' is running",
+      "failed to compare the host with what the step wants -> 'ensure' can't run while ensure step 'Make marker' is running",
     )
   })
 
@@ -113,9 +113,7 @@ describe("h inside a step", () => {
       },
     })
 
-    expect(result).toBe(
-      "failed to run the fix for step 'Make marker' -> 'ensure' can't run while ensure step 'Make marker' is running",
-    )
+    expect(result).toBe("failed to run the fix -> 'ensure' can't run while ensure step 'Make marker' is running")
   })
 
   it("should fail the host when a run function calls h.run", async () => {
@@ -128,7 +126,7 @@ describe("h inside a step", () => {
       { after: "always" },
     )
 
-    expect(result).toBe("failed to run step 'Make marker' -> 'run' can't run while run step 'Make marker' is running")
+    expect(result).toBe("failed to run the step -> 'run' can't run while run step 'Make marker' is running")
   })
 
   it("should fail the host when steps run at once with Promise.all", async () => {
@@ -277,7 +275,7 @@ describe("step records", () => {
       {
         name: "Make marker",
         kind: "ensure",
-        outcome: "failed to run the fix for step 'Make marker' -> exited with code 2: nope",
+        outcome: "failed to run the fix -> exited with code 2: nope",
         commands: ["false", "echo nope >&2; exit 2"],
       },
     ])
