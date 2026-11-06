@@ -58,7 +58,7 @@
     "ts-explicit-errors": "^5.0.1"
   },
   "devDependencies": {
-    "@adamhl8/bask": "^0.6.0",
+    "@adamhl8/bask": "^0.6.1",
     "@adamhl8/configs": "^4.0.0",
     "@arethetypeswrong/core": "^0.18.5",
     "@commitlint/cli": "^21.2.4",
@@ -66,13 +66,13 @@
     "@types/bun": "^1.4.4",
     "knip": "^6.44.1",
     "markdown-toc": "^1.2.0",
-    "oxfmt": "^0.76.0",
-    "oxlint": "^1.91.0",
-    "oxlint-tsgolint": "^7.0.2005",
+    "oxfmt": "^0.77.0",
+    "oxlint": "^1.92.0",
+    "oxlint-tsgolint": "^7.0.2006",
     "publint": "^0.3.25",
     "release-it": "^21.1.2",
     "release-it-git-cliff": "^0.2.1",
-    "tsdown": "^0.23.5",
+    "tsdown": "^0.23.7",
     "typescript": "7.1.0-beta"
   },
   "engines": {
