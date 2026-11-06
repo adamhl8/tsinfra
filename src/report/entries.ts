@@ -5,12 +5,11 @@ import type { HostReport } from "#hosts/run.ts"
 import type { FormatOptions } from "#report/format.ts"
 import type { EnsureComparisonValues } from "#session/handlers/ensure/check.ts"
 import type { FileComparisonValues } from "#session/handlers/file/comparison.ts"
-import { getFailedComparison } from "#session/handlers/shared/converge.ts"
-import type { StepRecord } from "#session/step-recorder.ts"
-import type { ComparisonValues, StepKind, StepOutcome } from "#session/step.ts"
+import type { CommandRecord, ConvergePhase, StepRecord } from "#session/step-recorder.ts"
+import type { ComparisonValues, StepKind, StepStatus } from "#session/step.ts"
 import { isMultiLine } from "#utils.ts"
 
-export type StepStatus = StepOutcome["status"] | "failed"
+export type EntryStatus = StepStatus | "failed"
 
 /** An entry's name, and what kind of name it is, which decides how it's styled. */
 interface EntryName {
@@ -28,13 +27,13 @@ export type NameKind =
 
 /** One step's part of a host block, as data. */
 export interface StepEntry {
-  status: StepStatus
+  status: EntryStatus
   name: EntryName
   /** The names of the steps a waiting step needs. */
   needs?: string[]
   /** Why a failed entry failed. */
   error?: Error
-  /** How a value would change, or for a failure that still differs after its fix, the host's state. */
+  /** How a value would change, or for a failure, what the step last found on the host. */
   details?: Detail[]
 }
 
@@ -44,8 +43,10 @@ export type Detail =
   | { kind: "ensureComparisonValues"; values: EnsureComparisonValues }
   // Holds everything about a file but a text diff, which is a detail of its own.
   | { kind: "fileComparisonValues"; values: FileComparisonValues }
-  // The stderr of the command that read the host's state, for a failure that still differs after its fix.
-  | { kind: "stderr"; stderr: string }
+  // The stderr of a command that can explain a failure that still differs after its fix.
+  | { kind: "stderr"; command: string; stderr: string }
+  // tsinfra's own aside about the details around it.
+  | { kind: "note"; text: string }
 
 // Treat a read's or an inspect's name as a value, because it's the command itself, and a file's, because it's a path.
 const STEP_NAME_KINDS: Record<StepKind, NameKind> = {
@@ -57,12 +58,25 @@ const STEP_NAME_KINDS: Record<StepKind, NameKind> = {
 }
 
 // Hide a step that was already right, or only looked, unless `verbose` is on.
-const SHOWN_BY_DEFAULT: Record<StepOutcome["status"], boolean> = {
+const SHOWN_BY_DEFAULT: Record<StepStatus, boolean> = {
   unchanged: false,
   observed: false,
   changed: true,
   ran: true,
   waiting: true,
+}
+
+const BEFORE_FIX_NOTE = "values before the fix"
+
+// Look at what the fix did and what the last compare saw, because the failure is about the state after the fix.
+// Leave out `before`, because it ran earlier, so it can't explain that state.
+const STILL_DIFFERS_PHASES = ["fix", "after"] as const satisfies ConvergePhase[]
+type StillDiffersPhase = (typeof STILL_DIFFERS_PHASES)[number]
+
+// Say when the commands ran, because the phases' names are internal.
+const PHASE_DESCRIPTIONS: Record<StillDiffersPhase, string> = {
+  fix: "during the fix",
+  after: "after the fix",
 }
 
 // Show how a string value or a file would change, because the step's name doesn't say.
@@ -91,37 +105,74 @@ const toEnsureComparisonDetails = (values: EnsureComparisonValues): Detail[] => 
 const toComparisonValuesDetails = (values: ComparisonValues): Detail[] =>
   values.kind === "file" ? toFileComparisonDetails(values) : toEnsureComparisonDetails(values)
 
-/** Returns a failed entry, with the host's state as its details when it still differed after the fix. */
-const toFailureEntry = (name: EntryName, error: Error): StepEntry => {
-  const failedComparison = getFailedComparison(error)
-  if (!failedComparison) return { status: "failed", name, error }
+const getCommandStderr = (commandRecord: CommandRecord): string | undefined => {
+  const { output } = commandRecord
+  if (output === undefined || isErr(output)) return undefined
 
-  const { values, commandOutput } = failedComparison
-  // Leave out empty stderr, so a quiet command shows only how the value differs.
-  const stderr = commandOutput?.stderr.trim()
-  const stderrDetails: Detail[] = stderr ? [{ kind: "stderr", stderr }] : []
+  return output.stderr.trim() || undefined
+}
 
-  return { status: "failed", name, error, details: [...toComparisonValuesDetails(values), ...stderrDetails] }
+/**
+ * Returns the stderr that can explain a step that still differs, from one phase. A phase with one command shows that
+ * command's stderr, because it's clear what it relates to. A phase with several can't say which one matters, so it only
+ * gets a note. A command tsinfra wrote itself never counts, because its code already handled what it printed.
+ */
+const toPhaseStderrDetails = (commandRecords: CommandRecord[], phase: StillDiffersPhase): Detail[] => {
+  const phaseCommandRecords = commandRecords.filter(
+    (commandRecord) => commandRecord.phase === phase && commandRecord.label === undefined,
+  )
+
+  if (phaseCommandRecords.length > 1) {
+    const hasStderr = phaseCommandRecords.some((commandRecord) => getCommandStderr(commandRecord) !== undefined)
+    const text = `some commands ${PHASE_DESCRIPTIONS[phase]} wrote to stderr, run with -vvv to see them`
+    return hasStderr ? [{ kind: "note", text }] : []
+  }
+
+  const [onlyCommandRecord] = phaseCommandRecords
+  const stderr = onlyCommandRecord && getCommandStderr(onlyCommandRecord)
+  return onlyCommandRecord && stderr ? [{ kind: "stderr", command: onlyCommandRecord.cmd, stderr }] : []
+}
+
+/** Returns what a failed step shows under its error. */
+const toFailureDetails = (stepRecord: StepRecord, formatOptions: FormatOptions): Detail[] => {
+  const { commands, comparisons } = stepRecord
+  const { before, after } = comparisons
+  const { verbose = false } = formatOptions
+
+  // Show nothing for a compare that came back in sync, because a failure the script caught is what failed the step.
+  if (after) {
+    if (after.inSync) return []
+
+    const stderrDetails = STILL_DIFFERS_PHASES.flatMap((phase) => toPhaseStderrDetails(commands, phase))
+    return [...toComparisonValuesDetails(after.values), ...stderrDetails]
+  }
+
+  // Hide the state from before the fix unless asked, because the error says what went wrong.
+  // Label it, because it may no longer be true.
+  if (verbose && before && !before.inSync)
+    return [{ kind: "note", text: BEFORE_FIX_NOTE }, ...toComparisonValuesDetails(before.values)]
+
+  return []
 }
 
 /** Returns the entry a host block shows for a step, or nothing for a step that's hidden or never finished. */
 const toStepEntry = (stepRecord: StepRecord, formatOptions: FormatOptions): StepEntry | undefined => {
-  const { name: stepName, kind, outcome } = stepRecord
+  const { name: stepName, kind, status, comparisons, waitingOn } = stepRecord
   const { verbose = false } = formatOptions
   const name: EntryName = { text: stepName, kind: STEP_NAME_KINDS[kind] }
 
-  if (isErr(outcome)) return toFailureEntry(name, outcome)
-  if (outcome === undefined) return
+  if (isErr(status))
+    return { status: "failed", name, error: status, details: toFailureDetails(stepRecord, formatOptions) }
+  if (status === undefined) return
 
-  const { status } = outcome
   const isShown = SHOWN_BY_DEFAULT[status] || verbose
   if (!isShown) return
 
-  if (outcome.status === "waiting") return { status, name, needs: outcome.needs }
+  if (status === "waiting") return { status, name, needs: waitingOn }
 
-  if (outcome.status === "changed") {
-    const { values } = outcome
-    const hasDetails = SHOWS_CHANGE_DETAILS[values.kind]
+  if (status === "changed") {
+    const values = comparisons.before?.values
+    const hasDetails = values && SHOWS_CHANGE_DETAILS[values.kind]
     return { status, name, details: hasDetails ? toComparisonValuesDetails(values) : [] }
   }
 
@@ -131,7 +182,8 @@ const toStepEntry = (stepRecord: StepRecord, formatOptions: FormatOptions): Step
 /** Returns the entries a host block shows: one per step that shows, then a failure no step owns. */
 export const toStepEntries = (hostReport: HostReport, formatOptions: FormatOptions): StepEntry[] => {
   // Name a host that couldn't be prepared after its target, because that's what failed, and the script never ran.
-  if (!hostReport.started) return [toFailureEntry({ text: hostReport.target, kind: "value" }, hostReport.failure)]
+  if (!hostReport.started)
+    return [{ status: "failed", name: { text: hostReport.target, kind: "value" }, error: hostReport.failure }]
 
   const { name, stepRecords, failure } = hostReport
   const stepEntries = stepRecords
@@ -140,9 +192,14 @@ export const toStepEntries = (hostReport: HostReport, formatOptions: FormatOptio
 
   // Show a failure that no step owns, like the script throwing, after the steps.
   // Name it after the host's script, because it comes from the script, not a step.
-  const isStepFailure = stepRecords.some(({ outcome }) => outcome === failure)
-  if (failure && !isStepFailure)
-    stepEntries.push(toFailureEntry({ text: `${name}${HOST_SCRIPT_EXTENSION}`, kind: "hostScript" }, failure))
+  const isStepFailure = stepRecords.some(({ status }) => status === failure)
+  if (failure && !isStepFailure) {
+    stepEntries.push({
+      status: "failed",
+      name: { text: `${name}${HOST_SCRIPT_EXTENSION}`, kind: "hostScript" },
+      error: failure,
+    })
+  }
 
   return stepEntries
 }

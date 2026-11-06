@@ -53,11 +53,11 @@ export const handleRun = async (
   if (isErr(validOptions)) return validOptions
 
   const shouldRun = evaluateTrigger(validOptions)
-  if (!shouldRun) return withChangeStepResult(ctx, { status: "unchanged" })
-  if (mode === "plan") return withChangeStepResult(ctx, { status: "ran" })
+  if (!shouldRun) return withChangeStepResult(ctx, "unchanged")
+  if (mode === "plan") return withChangeStepResult(ctx, "ran")
 
   const changeResult = await runChange(ctx, validChange)
   if (isErr(changeResult)) return err("failed to run the step", changeResult)
 
-  return withChangeStepResult(ctx, { status: "ran" })
+  return withChangeStepResult(ctx, "ran")
 }

@@ -15,5 +15,5 @@ export const handleInspect = async (
   const inspectResult = await inspectCommand({ toolName: "inspect", shell }, cmd)
   if (isErr(inspectResult)) return inspectResult
 
-  return { outcome: { status: "observed" }, value: inspectResult }
+  return { status: "observed", value: inspectResult }
 }

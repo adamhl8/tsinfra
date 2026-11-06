@@ -345,16 +345,20 @@ elif [ ! -e "$p" ]; then echo kind=absent
 elif [ ! -f "$p" ]; then echo kind=other
 else
   echo kind=file
-  { sha256sum < "$p" || shasum -a 256 < "$p" || sha256 < "$p"; } 2>/dev/null
+  { command -v sha256sum >/dev/null 2>&1 && sha256sum < "$p"; } ||
+  { command -v shasum >/dev/null 2>&1 && shasum -a 256 < "$p"; } ||
+  { command -v sha256 >/dev/null 2>&1 && sha256 < "$p"; }
   stat -c '%a %u %g %U %G %s' "$p" 2>/dev/null || stat -f '%Mp%Lp %u %g %Su %Sg %z' "$p"
 fi
 ```
 
 - **The hash is sha256,** the default in Salt, Chef, and Puppet. POSIX has no sha256 command, so the file details command tries each
   common one: `sha256sum` (GNU coreutils, busybox, current macOS), `shasum -a 256` (older macOS), and `sha256` (FreeBSD,
-  OpenBSD). This is the same chain pyinfra uses. The file goes in on stdin, because GNU `sha256sum` escapes odd
+  OpenBSD). This is the same chain pyinfra uses. It checks that each one exists first, so a missing one writes nothing
+  to stderr. One that exists and fails keeps its stderr, and the next one still runs. The file goes in on stdin, because GNU `sha256sum` escapes odd
   filenames in its output and prefixes the line with `\`. tsinfra reads the first 64 hex characters, because GNU,
-  busybox, and `shasum` print `<hash>  -` and BSD `sha256` prints the bare hash. Empty output is an error.
+  busybox, and `shasum` print `<hash>  -` and BSD `sha256` prints the bare hash. A missing hash is an error, like
+  `failed to get the sha256 hash of the file on the host`, followed by the stderr of any command that exists and failed.
 - **`stat -c` goes first,** because GNU's `stat -f fmt file` doesn't fail. It prints filesystem information instead.
   BSD needs `%Mp%Lp`, because `%Lp` alone drops setuid and setgid.
 - **The local hash** comes from `Bun.CryptoHasher("sha256")`. No file is transferred just to learn it is unchanged.
@@ -569,6 +573,9 @@ await h.ensure("Start Sonarr", {
 })
 ```
 
+A command check is shorthand for calling `inspect` in a check function, so a non-zero exit is an answer, not a failure.
+`read` is the one that fails on a non-zero exit.
+
 A broken check must not look converged. If the command exits non-zero and its output still equals `want`, the step fails
 instead of reporting `unchanged`. A check whose non-zero exit is legitimate (`systemctl is-active` exits 3 for inactive)
 already produces output that differs from `want`, so this only catches the broken case.
@@ -715,8 +722,9 @@ that needs a sudo password, tsinfra supplies it (see [Transport](./transport.md#
 **Verification.** After a fix runs, the check runs again. If it still does not pass, the step fails with "the host's
 state still differs after the fix", followed by a `got:` and a `want:` line, or a line diff for a
 multi-line string. A string is quoted, so an empty value shows as `''`. A boolean shows as `true` or `false`. An exit
-status shows as `exit code 1`, against `exit code 0` or `a non-zero exit code`. A `stderr:` line follows when the check
-command printed any. A step that reports a change on every run is a bug, and this is what surfaces it the first time.
+status shows as `exit code 1`, against `exit code 0` or `a non-zero exit code`. A `stderr:` row follows for the fix and
+the check when each ran one command that printed some, and names that command (see
+[CLI](./cli.md#output)). A step that reports a change on every run is a bug, and this is what surfaces it the first time.
 
 ```
 the host's state still differs after the fix
@@ -909,6 +917,24 @@ Catching the error does not recover the host. It stays failed, and every later c
 straight away without touching the host. Code between the catch and the next call on `h` still runs, so do not catch
 around calls on `h`. The same holds inside a check, fix, or run function. A step or run whose function catches a failed
 `read` or `exec` still fails. A command whose non-zero exit is a legitimate answer goes through `inspect`.
+
+So a fallback that depends on a command checks an `inspect` result instead of catching:
+
+```ts
+// The second `read` throws the first one's error without running, because the host has already failed.
+try {
+  await h.read("curl -f https://example.com/a")
+} catch {
+  await h.read("curl -f https://example.com/b")
+}
+
+// The first command's non-zero exit is only an answer, so the host hasn't failed.
+const { exitCode } = await h.inspect("curl -f https://example.com/a")
+if (exitCode !== 0) await h.read("curl -f https://example.com/b")
+```
+
+Catching anything that doesn't come from `h` or a tool works as usual, like a `fetch` in the script that falls back to
+another URL. tsinfra never sees that error.
 
 If the host function throws for any other reason (a bug in the script), the CLI catches it and reports the host as
 failed in the same way.

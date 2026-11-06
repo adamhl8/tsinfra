@@ -11,5 +11,5 @@ export const handleRead = async (ctx: StepContext<"read">, cmd: unknown): Promis
   const stdout = await execCommand({ toolName: "read", shell }, cmd)
   if (isErr(stdout)) return stdout
 
-  return { outcome: { status: "observed" }, value: stdout }
+  return { status: "observed", value: stdout }
 }

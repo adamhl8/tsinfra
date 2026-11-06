@@ -1,12 +1,12 @@
 import pc from "picocolors"
 
-import type { StepStatus } from "#report/entries.ts"
+import type { EntryStatus } from "#report/entries.ts"
 
 /** Styles a piece of text, like `styleGot` or a color from picocolors. */
 export type Style = (text: string) => string
 
 // Give each status one color, so a step's symbol and its count in the summary always match.
-export const STATUS_STYLES: Record<StepStatus, { color: Style; symbol: string }> = {
+export const STATUS_STYLES: Record<EntryStatus, { color: Style; symbol: string }> = {
   unchanged: { color: pc.green, symbol: "=" },
   observed: { color: pc.gray, symbol: "·" },
   changed: { color: pc.yellow, symbol: "~" },

@@ -93,6 +93,19 @@ const changeOnce = async (h: Host) => {
   await h.ensure("Pending", { check: "false", want: true, fix: "true" })
 }
 
+const failFix = async (h: Host) => {
+  await h.ensure("Make it", { check: "echo early >&2; echo old", want: "new", fix: "exit 1" })
+}
+
+const failSecondCompare = async (h: Host) => {
+  const marker = path.join(await makeTempDir(), "marker")
+  await h.ensure("Make it", {
+    check: async ({ read }) => read(`test ! -f '${marker}' && echo old`),
+    want: "new",
+    fix: `touch '${marker}'`,
+  })
+}
+
 describe("formatHostBlock", () => {
   it("should mark a changed step with '~' and a ran step with '>' in plan", async () => {
     expect(await formatBlock(changeAndRun, "plan")).toBe("a\n  ~ Write the unit\n  > Reload systemd\n  > Prune")
@@ -145,7 +158,7 @@ describe("formatHostBlock", () => {
         "      the host's state still differs after the fix",
         "        got:    exit code 1",
         "        want:   exit code 0",
-        "        stderr: missing",
+        "        stderr: echo missing >&2; false -> missing",
       ].join("\n"),
     )
   })
@@ -179,7 +192,13 @@ describe("formatHostBlock", () => {
 
   it("should show a failure the script caught under the step it happened in", async () => {
     expect(await formatBlock(catchFailedExec, "apply")).toBe(
-      "a\n  ! Make marker\n      failed to run 'exit 1' -> exited with code 1",
+      [
+        "a",
+        "  ! Make marker",
+        "      failed to run 'exit 1' -> exited with code 1",
+        "        got:  exit code 1",
+        "        want: exit code 0",
+      ].join("\n"),
     )
   })
 
@@ -342,7 +361,11 @@ describe("formatHostBlock for a host state that still differs after the fix", ()
   it("should show stderr when a string check exits non-zero", async () => {
     const lines = await formatFailedCheck({ check: "echo v1; echo oops >&2; exit 3", want: "v2", fix: "true" })
 
-    expect(lines).toStrictEqual(["        got:    'v1'", "        want:   'v2'", "        stderr: oops"])
+    expect(lines).toStrictEqual([
+      "        got:    'v1'",
+      "        want:   'v2'",
+      "        stderr: echo v1; echo oops >&2; exit 3 -> oops",
+    ])
   })
 
   it("should line up a multi-line stderr under its first line", async () => {
@@ -351,7 +374,7 @@ describe("formatHostBlock for a host state that still differs after the fix", ()
     expect(lines).toStrictEqual([
       "        got:    exit code 1",
       "        want:   exit code 0",
-      "        stderr: one",
+      "        stderr: echo one >&2; echo two >&2; false -> one",
       "                two",
     ])
   })
@@ -366,8 +389,181 @@ describe("formatHostBlock for a host state that still differs after the fix", ()
       "          -b",
       "        2 +c",
       `        ${"─".repeat(4)}`,
-      "        stderr: warn",
+      `        stderr: ${check} -> warn`,
     ])
+  })
+})
+
+describe("formatHostBlock for the stderr of a step that still differs", () => {
+  const AFTER_FIX_NOTE = "        some commands after the fix wrote to stderr, run with -vvv to see them"
+  const DURING_FIX_NOTE = "        some commands during the fix wrote to stderr, run with -vvv to see them"
+
+  it("should show nothing extra when no command wrote to stderr", async () => {
+    const lines = await formatFailedCheck({ check: "false", want: true, fix: "true" })
+
+    expect(lines).toStrictEqual(["        got:  exit code 1", "        want: exit code 0"])
+  })
+
+  it("should show the stderr of a check that exits 0", async () => {
+    const check = "echo warn >&2"
+    const lines = await formatFailedCheck({ check, want: "x", fix: "true" })
+
+    expect(lines).toContain(`        stderr: ${check} -> warn`)
+  })
+
+  it("should show a fix's stderr, then the check's, each with its command", async () => {
+    const fix = "echo ignored >&2"
+    const check = "echo warn >&2; false"
+    const lines = await formatFailedCheck({ check, want: true, fix })
+
+    expect(lines?.slice(2)).toStrictEqual([`        stderr: ${fix} -> ignored`, `        stderr: ${check} -> warn`])
+  })
+
+  it("should show the stderr of a check function that runs one command", async () => {
+    const cmd = "echo refused >&2; exit 7"
+    const lines = await formatFailedCheck({
+      check: async ({ inspect }) => (await inspect(cmd)).exitCode === 0,
+      want: true,
+      fix: "true",
+    })
+
+    expect(lines).toStrictEqual(["        got:    false", "        want:   true", `        stderr: ${cmd} -> refused`])
+  })
+
+  it("should show the note for a check function that runs several commands", async () => {
+    const lines = await formatFailedCheck({
+      check: async ({ inspect }) => {
+        await inspect("echo warn >&2")
+        await inspect("true")
+        return false
+      },
+      want: true,
+      fix: "true",
+    })
+
+    expect(lines).toStrictEqual(["        got:  false", "        want: true", AFTER_FIX_NOTE])
+  })
+
+  it("should show nothing extra when several commands wrote no stderr", async () => {
+    const lines = await formatFailedCheck({
+      check: async ({ inspect }) => {
+        await inspect("true")
+        await inspect("true")
+        return false
+      },
+      want: true,
+      fix: "true",
+    })
+
+    expect(lines).toStrictEqual(["        got:  false", "        want: true"])
+  })
+
+  it("should show a note for each phase that ran several commands", async () => {
+    const lines = await formatFailedCheck({
+      check: async ({ inspect }) => {
+        await inspect("echo warn >&2")
+        await inspect("true")
+        return false
+      },
+      want: true,
+      fix: async ({ exec }) => {
+        await exec("echo warn >&2")
+        await exec("true")
+      },
+    })
+
+    expect(lines).toStrictEqual(["        got:  false", "        want: true", DURING_FIX_NOTE, AFTER_FIX_NOTE])
+  })
+
+  it("should show a phase's stderr next to a note for the phase it can't explain", async () => {
+    const fix = "echo ignored >&2"
+    const lines = await formatFailedCheck({
+      check: async ({ inspect }) => {
+        await inspect("echo warn >&2")
+        await inspect("true")
+        return false
+      },
+      want: true,
+      fix,
+    })
+
+    expect(lines?.slice(2)).toStrictEqual([`        stderr: ${fix} -> ignored`, AFTER_FIX_NOTE])
+  })
+
+  it("should leave out the stderr from before the fix", async () => {
+    const marker = path.join(await makeTempDir(), "marker")
+    const lines = await formatFailedCheck({
+      check: `test -f '${marker}' || echo early >&2; echo old`,
+      want: "new",
+      fix: `touch '${marker}'`,
+    })
+
+    expect(lines).toStrictEqual(["        got:  'old'", "        want: 'new'"])
+  })
+
+  it("should leave out a command tsinfra wrote itself", () => {
+    const failure = new Error("the host's state still differs after the fix")
+    const hostBlock = formatHostBlock({
+      name: "a",
+      started: true,
+      failure,
+      stepRecords: [
+        {
+          name: "/tmp/x",
+          kind: "file",
+          commands: [
+            {
+              cmd: "tsinfra's script",
+              label: "file details command",
+              phase: "after",
+              output: { stdout: "", stderr: "noise", exitCode: 0 },
+            },
+          ],
+          comparisons: { after: { inSync: false, values: { kind: "boolean", got: false, want: true } } },
+          waitingOn: [],
+          status: failure,
+        },
+      ],
+    })
+
+    expect(hostBlock).not.toContain("noise")
+  })
+})
+
+describe("formatHostBlock for a step that failed before it could compare again", () => {
+  it.each([
+    ["the fix failed", failFix],
+    ["the compare after the fix failed", failSecondCompare],
+  ])("should only show the error when %s", async (_, fn) => {
+    const hostBlock = await formatBlock(fn, "apply")
+
+    expect(hostBlock?.split("\n")).toHaveLength(3)
+  })
+
+  it.each([
+    ["the fix failed", failFix],
+    ["the compare after the fix failed", failSecondCompare],
+  ])("should show the labelled values from before the fix with verbose when %s", async (_, fn) => {
+    const hostReport = await runNamedHost("a", fn, "apply")
+    const lines = formatHostBlock(hostReport, { verbose: true })?.split("\n").slice(3)
+
+    expect(lines).toStrictEqual(["        values before the fix", "        got:  'old'", "        want: 'new'"])
+  })
+
+  it("should show no details when the last compare was in sync, because a caught failure failed the step", async () => {
+    const marker = path.join(await makeTempDir(), "marker")
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Make it", {
+        check: `test -f '${marker}'`,
+        want: true,
+        fix: async ({ exec }) => {
+          await exec(`touch '${marker}'`)
+          await attempt(async () => exec("exit 1"))
+        },
+      })
+    }, "apply")
+
+    expect(hostBlock).toBe(["a", "  ! Make it", "      failed to run 'exit 1' -> exited with code 1"].join("\n"))
   })
 })
 

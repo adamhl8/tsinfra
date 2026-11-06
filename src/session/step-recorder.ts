@@ -1,13 +1,37 @@
 import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
-import type { StepKind, StepOutcome } from "#session/step.ts"
+import type { Comparison } from "#session/handlers/shared/converge.ts"
+import type { StepKind, StepStatus } from "#session/step.ts"
 import type { CommandOutput, Transport } from "#transport/transport.ts"
 
-interface CommandRecord {
+/** The parts of `converge` that run commands, in order. */
+export type ConvergePhase = "before" | "fix" | "after"
+
+/** The phases of `converge` that compare the host with what the step wants. */
+export type ComparePhase = Exclude<ConvergePhase, "fix">
+
+export interface CommandOptions {
+  /** A short name for a command tsinfra wrote itself. */
+  label?: string
+}
+
+/** Runs a command like a `Transport`, and also takes what the recorder needs to know about it. */
+export type RecordingTransport = (cmd: string, options?: CommandOptions) => Promise<Result<CommandOutput>>
+
+export interface CommandRecord {
   cmd: string
+  /** A short name for a command tsinfra wrote itself. Unset for a script's command. */
+  label?: string
+  /** The part of `converge` that ran the command. Unset for a step that doesn't converge. */
+  phase?: ConvergePhase
   /** Unset until the command finishes. */
   output?: Result<CommandOutput>
+}
+
+interface StepComparisons {
+  before?: Comparison
+  after?: Comparison
 }
 
 export interface StepRecord {
@@ -15,31 +39,47 @@ export interface StepRecord {
   name: string
   kind: StepKind
   commands: CommandRecord[]
-  /** Unset until the step finishes. */
-  outcome?: Result<StepOutcome>
+  comparisons: StepComparisons
+  /** The names of the needed steps this step waited on. */
+  waitingOn: string[]
+  /** Unset until the step finishes, and an error if it failed. */
+  status?: Result<StepStatus>
+}
+
+/** What `converge` uses to record what it does, so a step's handler never records anything itself. */
+export interface ConvergeRecorder {
+  /** Marks the part of `converge` that commands run under from now on. */
+  startPhase: (phase: ConvergePhase) => void
+  /** Records what a compare found on the running step. */
+  recordComparison: (phase: ComparePhase, comparison: Comparison) => void
+  /** Records the names of the needed steps the running step waited on. */
+  recordWaitingOn: (stepNames: string[]) => void
 }
 
 interface StepRecorder {
   /** Every step that started, in the order the script called them. */
   stepRecords: StepRecord[]
   /** Wraps `transport` so each command is recorded under the running step. */
-  recordCommands: (transport: Transport) => Transport
+  recordCommands: (transport: Transport) => RecordingTransport
   /** Records a new step and marks it running, or fails when another step is running. */
   startStep: (stepName: string, kind: StepKind) => Result<StepRecord>
-  /** Records the step's outcome or error, and marks no step as running. */
-  finishStep: (stepRecord: StepRecord, outcome: Result<StepOutcome>) => void
+  /** Records the step's status or error, and marks no step as running. */
+  finishStep: (stepRecord: StepRecord, status: Result<StepStatus>) => void
+  convergeRecorder: ConvergeRecorder
 }
 
-/** Tracks the running step for one host, and records each step and the commands it runs. */
+/** Tracks the running step for one host, and records each step and what happens during it. */
 export const createStepRecorder = (): StepRecorder => {
   const stepRecords: StepRecord[] = []
   let currentStep: StepRecord | undefined
+  let currentPhase: ConvergePhase | undefined
 
   // Push the record before the command runs, so commands run at once keep the order they were called in.
+  // Stamp the phase now too, because a reader wants to know when a command started.
   const recordCommands =
-    (transport: Transport): Transport =>
-    async (cmd) => {
-      const commandRecord: CommandRecord = { cmd }
+    (transport: Transport): RecordingTransport =>
+    async (cmd, options = {}) => {
+      const commandRecord: CommandRecord = { cmd, ...options, ...(currentPhase && { phase: currentPhase }) }
       currentStep?.commands.push(commandRecord)
       const output = await transport(cmd)
       commandRecord.output = output
@@ -54,16 +94,31 @@ export const createStepRecorder = (): StepRecorder => {
       return err(`'${kind}' can't run while ${runningKind} step '${name}' is running`, undefined)
     }
 
-    const stepRecord: StepRecord = { name: stepName, kind, commands: [] }
+    const stepRecord: StepRecord = { name: stepName, kind, commands: [], comparisons: {}, waitingOn: [] }
     stepRecords.push(stepRecord)
     currentStep = stepRecord
     return stepRecord
   }
 
-  const finishStep = (stepRecord: StepRecord, outcome: Result<StepOutcome>) => {
-    stepRecord.outcome = outcome
+  const finishStep = (stepRecord: StepRecord, status: Result<StepStatus>) => {
+    stepRecord.status = status
     currentStep = undefined
+    currentPhase = undefined
   }
 
-  return { stepRecords, recordCommands, startStep, finishStep }
+  const startPhase = (phase: ConvergePhase) => {
+    currentPhase = phase
+  }
+
+  const recordComparison = (phase: ComparePhase, comparison: Comparison) => {
+    if (currentStep) currentStep.comparisons[phase] = comparison
+  }
+
+  const recordWaitingOn = (stepNames: string[]) => {
+    if (currentStep) currentStep.waitingOn = stepNames
+  }
+
+  const convergeRecorder: ConvergeRecorder = { startPhase, recordComparison, recordWaitingOn }
+
+  return { stepRecords, recordCommands, startStep, finishStep, convergeRecorder }
 }

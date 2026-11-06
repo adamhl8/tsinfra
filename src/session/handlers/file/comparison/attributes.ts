@@ -17,8 +17,7 @@ export const findAttributeChanges = (
   const { mode, user, group } = attributes
   const changes: AttributeChange[] = []
 
-  // Compare only the permission bits, because the type bits aren't something a file step sets.
-  const gotMode = hostFileDetails.mode % 0o1_0000
+  const { mode: gotMode } = hostFileDetails
   const wantMode = mode === undefined ? undefined : toModeBits(mode)
   const isModeChanged = wantMode !== undefined && gotMode !== wantMode
   if (isModeChanged) changes.push({ name: "mode", got: formatMode(gotMode), want: formatMode(wantMode) })

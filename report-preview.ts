@@ -1,5 +1,5 @@
 // Prints the report for one example host per way a block can look, to inspect the output by eye.
-// It runs `plan`, `apply`, and then `plan --verbose`.
+// It runs `plan`, `apply`, `plan --verbose`, and then `apply --verbose`.
 // Run it with `bun run report:preview`, and with `NO_COLOR=1` to see it without colors.
 import { chmod, mkdtemp, rm } from "node:fs/promises"
 import os from "node:os"
@@ -197,6 +197,128 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
+      // The stderr of a fix that exits 0 and of the check after it, each with its command.
+      name: "fix-and-check-stderr",
+      target: "@local",
+      modes: ["apply"],
+      fn: async (h) => {
+        await h.ensure("Set the app's mode", {
+          check: "echo staging; echo 'appctl: warning: config format is deprecated' >&2",
+          want: "production",
+          fix: "echo 'appctl: warning: config is read-only, ignoring the new value' >&2",
+        })
+      },
+    },
+    {
+      // A check function with one command, which shows its stderr like a command check.
+      name: "one-command-check-function",
+      target: "@local",
+      modes: ["apply"],
+      fn: async (h) => {
+        await h.ensure("App is healthy", {
+          check: async ({ inspect }) => {
+            const { exitCode } = await inspect("echo 'curl: (7) Failed to connect to localhost port 8080' >&2; exit 7")
+            return exitCode === 0
+          },
+          want: true,
+          fix: "true",
+        })
+      },
+    },
+    {
+      // A check function with several commands, which can't say which stderr matters, so it shows a note.
+      name: "several-commands-check-function",
+      target: "@local",
+      modes: ["apply"],
+      fn: async (h) => {
+        await h.ensure("App is healthy", {
+          check: async ({ inspect }) => {
+            await inspect("echo 'ls: /opt/old: No such file or directory' >&2; exit 2")
+            await inspect("true")
+            return false
+          },
+          want: true,
+          fix: "true",
+        })
+      },
+    },
+    {
+      // A note for each phase that ran several commands, one during the fix and one after it.
+      name: "several-commands-in-both-phases",
+      target: "@local",
+      modes: ["apply"],
+      fn: async (h) => {
+        await h.ensure("App is healthy", {
+          check: async ({ inspect }) => {
+            await inspect("echo 'ls: /opt/old: No such file or directory' >&2; exit 2")
+            await inspect("true")
+            return false
+          },
+          want: true,
+          fix: async ({ exec }) => {
+            await exec("echo 'appctl: warning: config is read-only' >&2")
+            await exec("true")
+          },
+        })
+      },
+    },
+    {
+      // A fix's stderr next to a note for the check after it, which ran several commands.
+      name: "stderr-and-note",
+      target: "@local",
+      modes: ["apply"],
+      fn: async (h) => {
+        await h.ensure("App is healthy", {
+          check: async ({ inspect }) => {
+            await inspect("echo 'ls: /opt/old: No such file or directory' >&2; exit 2")
+            await inspect("true")
+            return false
+          },
+          want: true,
+          fix: "echo 'appctl: warning: config is read-only' >&2",
+        })
+      },
+    },
+    {
+      // A multi-line command, whose stderr follows the arrow on its last line.
+      name: "multi-line-command",
+      target: "@local",
+      modes: ["apply"],
+      fn: async (h) => {
+        await h.ensure("Enable the app", {
+          check: "echo 'checking the app'\necho 'the app is disabled' >&2\nexit 1",
+          want: true,
+          fix: "true",
+        })
+      },
+    },
+    {
+      // A failed fix, which only shows the values from before the fix with `--verbose`.
+      name: "failed-fix",
+      target: "@local",
+      modes: ["apply"],
+      fn: async (h) => {
+        await h.ensure("Set the timezone", {
+          check: "echo America/New_York",
+          want: "UTC",
+          fix: "echo 'sudo: a password is required' >&2; exit 1",
+        })
+      },
+    },
+    {
+      // A failed fix on a multi-line value, whose diff follows the note with `--verbose`.
+      name: "failed-fix-multi-line-value",
+      target: "@local",
+      modes: ["apply"],
+      fn: async (h) => {
+        await h.ensure("Set the allowed hosts", {
+          check: String.raw`printf 'sonarr.lan\nradarr.lan\n'`,
+          want: "sonarr.lan\nprowlarr.lan",
+          fix: "echo 'sudo: a password is required' >&2; exit 1",
+        })
+      },
+    },
+    {
       // An exit code, which is italic because it isn't quoted.
       name: "exit-code-value",
       target: "@local",
@@ -362,6 +484,7 @@ const main = async (): Promise<number> => {
   await previewMode({ mode: "plan" })
   await previewMode({ mode: "apply" })
   await previewMode({ mode: "plan", verbose: true })
+  await previewMode({ mode: "apply", verbose: true })
   previewOwnErrors()
   return 0
 }

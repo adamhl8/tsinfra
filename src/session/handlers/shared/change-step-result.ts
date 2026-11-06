@@ -2,7 +2,7 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
-import type { ChangeStepKind, HandlerReturn, StepContext, StepOutcome } from "#session/step.ts"
+import type { ChangeStepKind, HandlerReturn, StepContext, StepStatus } from "#session/step.ts"
 import { CHANGE_STEP_KINDS } from "#session/step.ts"
 
 /**
@@ -41,7 +41,7 @@ export const stepNeedsSchema = type
   .type(changeStepResultSchema.and({ kind: type.enumerated(...NEEDABLE_STEP_KINDS) }).array())
 
 // Count a waiting step as changed, so a step that needs it waits too, and a run that follows it shows up in the plan.
-const COUNTS_AS_CHANGED: Record<StepOutcome["status"], boolean> = {
+const COUNTS_AS_CHANGED: Record<StepStatus, boolean> = {
   unchanged: false,
   observed: false,
   changed: true,
@@ -49,13 +49,13 @@ const COUNTS_AS_CHANGED: Record<StepOutcome["status"], boolean> = {
   waiting: true,
 }
 
-/** Returns `outcome` with the `ChangeStepResult` the script gets as its value. */
+/** Returns `status` with the `ChangeStepResult` the script gets as its value. */
 export const withChangeStepResult = <K extends ChangeStepKind>(
   ctx: StepContext<K>,
-  outcome: Result<StepOutcome>,
+  status: Result<StepStatus>,
 ): Result<HandlerReturn<ChangeStepResult<K>>> => {
   const { stepName, kind } = ctx
-  if (isErr(outcome)) return outcome
+  if (isErr(status)) return status
 
-  return { outcome, value: { name: stepName, kind, changed: COUNTS_AS_CHANGED[outcome.status] } }
+  return { status, value: { name: stepName, kind, changed: COUNTS_AS_CHANGED[status] } }
 }

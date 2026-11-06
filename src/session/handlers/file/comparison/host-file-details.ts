@@ -4,9 +4,11 @@ import { err, isErr } from "ts-explicit-errors"
 
 import type { Bytes } from "#session/handlers/file/bytes.ts"
 import { toBytes } from "#session/handlers/file/bytes.ts"
+import { OCTAL_MODE_PATTERN, toModeBits } from "#session/handlers/file/mode.ts"
 import type { Shell } from "#session/shell.ts"
 import { quoteShellArg } from "#session/shell.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
+import type { CommandOutput } from "#transport/transport.ts"
 
 const SHA256_PATTERN = /^[0-9a-f]{64}/v
 const WHITESPACE = /\s+/v
@@ -23,9 +25,8 @@ export interface HostFileDetails {
   size: Bytes
 }
 
-// Parse the mode as octal, because GNU prints `644` and BSD prints `0644`.
 const statLineSchema = type([
-  type(/^[0-7]+$/v).pipe((mode) => Number.parseInt(mode, 8)),
+  type(OCTAL_MODE_PATTERN).pipe(toModeBits),
   "string.integer.parse",
   "string.integer.parse",
   nonEmptyStringSchema,
@@ -37,7 +38,9 @@ const statLineSchema = type([
  * Returns one command that says what is at `path`, and for a regular file, its sha256, mode, owner, and size. It tries
  * each common sha256 command, because POSIX has none, and feeds the file on stdin, because GNU `sha256sum` escapes odd
  * file names in its output. `stat -c` goes first, because GNU's `stat -f` prints filesystem information instead of
- * failing. BSD needs `%Mp%Lp` to keep setuid and setgid.
+ * failing. BSD needs `%Mp%Lp` to keep setuid and setgid. Check that each sha256 command exists before running it, so a
+ * missing one writes nothing to stderr. One that exists and fails keeps its stderr, because it says why a hash is
+ * missing.
  */
 const buildFileDetailsCommand = (path: string): string =>
   [
@@ -48,7 +51,9 @@ const buildFileDetailsCommand = (path: string): string =>
     `elif [ ! -r "$p" ]; then echo kind=unreadable`,
     "else",
     "  echo kind=file",
-    `  { sha256sum < "$p" || shasum -a 256 < "$p" || sha256 < "$p"; } 2>/dev/null`,
+    `  { command -v sha256sum >/dev/null 2>&1 && sha256sum < "$p"; } ||`,
+    `  { command -v shasum >/dev/null 2>&1 && shasum -a 256 < "$p"; } ||`,
+    `  { command -v sha256 >/dev/null 2>&1 && sha256 < "$p"; }`,
     `  stat -c '%a %u %g %U %G %s' "$p" 2>/dev/null || stat -f '%Mp%Lp %u %g %Su %Sg %z' "$p"`,
     "fi",
   ].join("\n")
@@ -57,7 +62,11 @@ const buildFileDetailsCommand = (path: string): string =>
  * Parses the file details command's output, which differs between GNU, busybox, and BSD only in ways this allows for.
  * Returns undefined when nothing is at `path`, and an error when something there isn't a file the step can read.
  */
-export const parseFileDetailsOutput = (stdout: string, path: string): Result<HostFileDetails | undefined> => {
+export const parseFileDetailsOutput = (
+  commandOutput: CommandOutput,
+  path: string,
+): Result<HostFileDetails | undefined> => {
+  const { stdout, stderr } = commandOutput
   const [kindLine = "", hashLine = "", statLine = ""] = stdout.split("\n")
   const kind = kindLine.replace("kind=", "")
 
@@ -70,8 +79,11 @@ export const parseFileDetailsOutput = (stdout: string, path: string): Result<Hos
 
   // Read the first 64 hex characters, because GNU, busybox, and `shasum` print `<hash>  -`, and BSD prints the hash.
   const hash = SHA256_PATTERN.exec(hashLine)?.[0]
-  if (hash === undefined)
-    return err("the file details command found no sha256 command (sha256sum, shasum, or sha256) on the host", undefined)
+  if (hash === undefined) {
+    const trimmedStderr = stderr.trim()
+    const cause = trimmedStderr === "" ? undefined : err(trimmedStderr, undefined)
+    return err("failed to get the sha256 hash of the file on the host", cause)
+  }
 
   const validStatLine = statLineSchema(statLine.trim().split(WHITESPACE))
   if (validStatLine instanceof type.errors)
@@ -83,8 +95,8 @@ export const parseFileDetailsOutput = (stdout: string, path: string): Result<Hos
 
 /** Reads the details of the file at `path` on the host, or undefined when nothing is there. */
 export const getHostFileDetails = async (shell: Shell, path: string): Promise<Result<HostFileDetails | undefined>> => {
-  const commandOutput = await shell.inspect(buildFileDetailsCommand(path))
+  const commandOutput = await shell.inspect(buildFileDetailsCommand(path), { label: "file details command" })
   if (isErr(commandOutput)) return commandOutput
 
-  return parseFileDetailsOutput(commandOutput.stdout, path)
+  return parseFileDetailsOutput(commandOutput, path)
 }

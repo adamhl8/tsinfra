@@ -13,6 +13,7 @@ import type { RunOptions } from "#session/handlers/run.ts"
 import { handleRun } from "#session/handlers/run.ts"
 import type { ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
+import { createConverge } from "#session/handlers/shared/converge.ts"
 import type { ChangeTools, Exec, Inspect, InspectResult, ReadTools } from "#session/handlers/tools.ts"
 import { execCommand, inspectCommand } from "#session/handlers/tools.ts"
 import { validateInput } from "#session/handlers/validate-input.ts"
@@ -124,10 +125,12 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
     return value
   }
 
-  const { stepRecords, recordCommands, startStep, finishStep } = createStepRecorder()
+  const { stepRecords, recordCommands, startStep, finishStep, convergeRecorder } = createStepRecorder()
 
   // Record each command under the running step, because every command passes through the transport.
   const shell = createShell(recordCommands(transport))
+  // Record what `converge` finds as it goes, so a failure can't lose it and a handler never records anything itself.
+  const converge = createConverge(mode, convergeRecorder)
 
   const callStep = async <K extends StepKind, T>(
     stepName: unknown,
@@ -151,7 +154,7 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
       const execTool: Exec = async (cmd) => callOrFail(async () => execCommand({ toolName: "exec", shell }, cmd))
       const readTools: ReadTools = { read: readTool, inspect: inspectTool }
       const changeTools: ChangeTools = { exec: execTool, inspect: inspectTool }
-      const ctx: StepContext<K> = { stepName: validName, kind, mode, shell, home, readTools, changeTools }
+      const ctx: StepContext<K> = { stepName: validName, kind, mode, shell, home, readTools, changeTools, converge }
 
       const handlerReturn = await handler(ctx)
 
@@ -161,7 +164,7 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
         return handlerReturn
       }
 
-      finishStep(stepRecord, failure ?? handlerReturn.outcome)
+      finishStep(stepRecord, failure ?? handlerReturn.status)
       return handlerReturn.value
     })
 

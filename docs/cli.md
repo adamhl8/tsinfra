@@ -150,8 +150,17 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   is not wrapped in "failed to run host". A host that couldn't be prepared, like an unreachable one, never ran its
   script, so its block has one `!` line named after its target (like `web.lan`), with an error that starts with
   "failed to prepare the host".
-- **Values** are cyan when they came from the script or the host, like `stderr:` and the command a read or inspect is
-  named by. That sets them apart from tsinfra's own words. A `got:` value is red and a `want:` value is green, like a
+- **Failure details.** A failure that still differs after its fix shows its `after` values, then any stderr that can
+  explain it, from its `fix` and `after` phases. A phase that ran one command, which wrote to stderr, gets a
+  `stderr: <command> -> <stderr>` row. It's clear what that stderr relates to, because that command is all the phase ran.
+  A phase that ran several commands, any of which wrote to stderr, can't say which one matters, so it gets a note
+  instead: "some commands during the fix wrote to stderr, run with -vvv to see them", or "after the fix" for the `after`
+  phase. Commands tsinfra wrote itself never count. The `before` phase never shows here, because it ran before the fix,
+  so it can't explain the state after it. A failed fix, or a compare after the fix that failed, shows only its error,
+  which already holds its stderr. `--verbose` adds the values from before the fix under a "values before the fix" note,
+  which is there because they may no longer be true.
+- **Values** are cyan when they came from the script or the host, like the command in a `stderr:` row and the command a
+  read or inspect is named by. The stderr in that row is bright red like an error, so it stands apart from its command. That sets them apart from tsinfra's own words. A `got:` value is red and a `want:` value is green, like a
   diff's `-` and `+` lines. A string value keeps its quotes, so an empty one still shows without color, but the quotes
   stay uncolored, so they don't read as part of the value. An exit code is also italic, because it isn't quoted. A
   multi-line value's later lines line up under its first line's text. The labels, like `got:`, are dim, so the values
@@ -214,17 +223,25 @@ for progress to matter. Until then the blocks print directly as each host finish
 The output is built from a record of each host's run. It is one list of steps, in the order the script called them.
 
 - **A step** records its kind (`read`, `inspect`, `ensure`, `run`, `file`, or `link`), its name, its status, and its error if it
-  failed. A read or inspect has no name, so it records its command. An `ensure` with a string `want` that differed also
-  records the `got` and `want` values.
+  failed. A read or inspect has no name, so it records its command.
 - **A step's commands** are every command that ran while it was running, including those from reading its state and from its fix
   functions. A read or inspect has exactly one.
 - **A command** records the command, its stdout and stderr, and its exit code. A command that could not run at all
-  records the error instead.
+  records the error instead. A command tsinfra wrote itself also records a short label, like `file details command`.
+  A command in a step that compares the host's state records its phase: `before`, `fix`, or `after`.
+- **A step's comparisons** are what it found each time it compared the host with what it wants: a `before` comparison,
+  and an `after` comparison when it compared again after the fix. Each holds the values it compared and whether they
+  matched.
+- **A waiting step** records the names of the needed steps it waited on.
+
+A step never records anything itself. It returns its one status, or an error, and the record gets everything else from
+the wrappers the step runs through: the shell's transport records commands, and `converge` records comparisons. So a
+failure keeps what the step found before it.
 
 A step's status is `unchanged`, `changed`, `ran`, `waiting`, or `observed`. `changed` means the host's state differed.
 `ran` means a run's trigger fired, or its `after` was `"always"`. `waiting` means a step it needs would change. A read
-or inspect is always `observed`. The record is the same in `plan` and `apply`, and so is each step's line. The output
-and `want` come from reading the host's state before the fix, so `apply` can show what a step changed too.
+or inspect is always `observed`. The record is the same in `plan` and `apply`, and so is each step's line. A changed
+step's details come from its `before` comparison, so `apply` can show what a step changed too.
 
 A failed step records its error. Steps called after the host failed throw without running, so they are not recorded. A
 failure that is not a step's, like a bug in the script, is the host's own failure.

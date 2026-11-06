@@ -1,6 +1,6 @@
 import pc from "picocolors"
 import prettyBytes from "pretty-bytes"
-import { isErr, messageChain } from "ts-explicit-errors"
+import { messageChain } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import type { HostReport } from "#hosts/run.ts"
@@ -97,9 +97,16 @@ const formatFileNote = (sizeComparison: SizeComparison): string => {
   return `${pc.italic(FILE_NOTE_WORDS[kind])}, ${sizes}`
 }
 
-/** Returns the `label: value` rows a detail prints as. A diff has none, because it prints as lines of its own. */
+/** Styles each line of `text` on its own, so a continuation line starts in the color too. */
+const styleLines = (text: string, style: Style): string =>
+  text
+    .split("\n")
+    .map((textLine) => style(textLine))
+    .join("\n")
+
+/** Returns the `label: value` rows a detail prints as. A diff or a note has none, because it prints as lines of its own. */
 const toLabelRows = (detail: Detail): LabelRow[] => {
-  if (detail.kind === "diff") return []
+  if (detail.kind === "diff" || detail.kind === "note") return []
 
   if (detail.kind === "ensureComparisonValues") {
     const { values } = detail
@@ -121,8 +128,10 @@ const toLabelRows = (detail: Detail): LabelRow[] => {
     return [...contentRows, ...attributeRows]
   }
 
-  // Style each line of stderr, so a continuation line starts in the value's color too.
-  return [{ label: "stderr", valueLines: detail.stderr.split("\n").map((stderrLine) => styleValue(stderrLine)) }]
+  // Color stderr like an error, so it stands apart from its command, and leave the arrow between them uncolored.
+  const { command, stderr } = detail
+  const valueText = `${styleLines(command, styleValue)} -> ${styleLines(stderr, styleError)}`
+  return [{ label: "stderr", valueLines: valueText.split("\n") }]
 }
 
 /** Formats rows as `label: value` lines, with each value starting at `valueColumn`. */
@@ -146,11 +155,11 @@ const formatEntryBody = (stepEntry: StepEntry, formatOptions: FormatOptions): st
   const labels = details.flatMap((detail) => toLabelRows(detail)).map(({ label }) => `${label}: `)
   const valueColumn = getMaxWidth(labels)
 
-  const detailLines = details.flatMap((detail) =>
-    detail.kind === "diff"
-      ? formatDiff(detail.got, detail.want, formatOptions)
-      : formatLabelRows(toLabelRows(detail), valueColumn),
-  )
+  const detailLines = details.flatMap((detail) => {
+    if (detail.kind === "diff") return formatDiff(detail.got, detail.want, formatOptions)
+    if (detail.kind === "note") return [styleNote(detail.text)]
+    return formatLabelRows(toLabelRows(detail), valueColumn)
+  })
   if (!error) return detailLines
 
   const errorLines = messageChain(error)
@@ -202,7 +211,7 @@ const formatHostStatus = (hostReport: HostReport): string => {
 
   const { stepRecords } = hostReport
 
-  const statuses = stepRecords.map(({ outcome }) => (isErr(outcome) ? undefined : outcome?.status))
+  const statuses = stepRecords.map(({ status }) => status)
   // Count `ran` steps too, so the count matches the `~` and `>` lines in the block.
   const changeCount = statuses.filter((status) => status === "changed" || status === "ran").length
   const waitingCount = statuses.filter((status) => status === "waiting").length

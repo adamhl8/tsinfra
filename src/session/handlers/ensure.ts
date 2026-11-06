@@ -8,7 +8,6 @@ import type { ChangeStepResult, StepNeeds } from "#session/handlers/shared/chang
 import { NO_NEEDS, stepNeedsSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
 import { changeSchema, runChange } from "#session/handlers/shared/change.ts"
-import { converge } from "#session/handlers/shared/converge.ts"
 import { validateInput } from "#session/handlers/validate-input.ts"
 import type { HandlerReturn, StepContext } from "#session/step.ts"
 
@@ -55,19 +54,19 @@ export const handleEnsure = async (
   ctx: StepContext<"ensure">,
   options: unknown,
 ): Promise<Result<HandlerReturn<ChangeStepResult<"ensure">>>> => {
-  const { kind } = ctx
+  const { kind, converge } = ctx
 
   const validOptions = validateInput(options, ensureOptionsSchema, { inputLabel: "options", givenTo: kind })
   if (isErr(validOptions)) return validOptions
 
   const { check, want, fix, verify, needs } = validOptions
 
-  const outcome = await converge(ctx, {
+  const status = await converge({
     needs,
     compare: async () => compareCheck(ctx, check, want),
     fix: async () => runChange(ctx, fix),
     verify,
   })
 
-  return withChangeStepResult(ctx, outcome)
+  return withChangeStepResult(ctx, status)
 }

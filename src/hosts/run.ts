@@ -30,7 +30,7 @@ export type HostReport = StartedHostReport | UnstartedHostReport
 
 /** Reports whether a step found the host different from the script, which is drift, and makes `plan` exit 2. */
 export const hasDrift = (hostReport: HostReport) =>
-  hostReport.started && hostReport.stepRecords.some(({ outcome }) => !isErr(outcome) && outcome?.status === "changed")
+  hostReport.started && hostReport.stepRecords.some(({ status }) => status === "changed")
 
 const DRIFT_EXIT_CODE = 2
 

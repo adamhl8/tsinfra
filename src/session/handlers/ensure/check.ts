@@ -66,10 +66,10 @@ const compareCommandOutput = (commandOutput: CommandOutput, want: Want): Result<
     // Fail a broken check whose output happens to match, so it can't look converged.
     if (exitCode !== 0 && comparison.inSync) return createCommandExitError(commandOutput)
 
-    return { ...comparison, commandOutput }
+    return comparison
   }
 
-  return { inSync: (exitCode === 0) === want, values: { kind: "exit", got: exitCode, want }, commandOutput }
+  return { inSync: (exitCode === 0) === want, values: { kind: "exit", got: exitCode, want } }
 }
 
 /** Runs `check` as a command, or calls the script's function with its tools, and compares the answer to `want`. */

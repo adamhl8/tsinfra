@@ -49,7 +49,7 @@ export const compareContent = async (
   const want = decodeText(bytes)
   if (want === undefined) return { kind: "binary", gotSize, wantSize }
 
-  const got = await shell.exec(`cat -- ${quoteShellArg(path)}`)
+  const got = await shell.exec(`cat -- ${quoteShellArg(path)}`, { label: "file content" })
   if (isErr(got)) return err(`failed to read '${path}' for its diff`, got)
   if (got.includes("\0") || got.includes("�")) return { kind: "binary", gotSize, wantSize }
 

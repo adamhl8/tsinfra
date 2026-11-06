@@ -8,7 +8,6 @@ import type { FileMode } from "#session/handlers/file/mode.ts"
 import { OCTAL_MODE_PATTERN, SYMBOLIC_MODE_PATTERN } from "#session/handlers/file/mode.ts"
 import type { ChangeStepResult, StepNeeds } from "#session/handlers/shared/change-step-result.ts"
 import { NO_NEEDS, stepNeedsSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
-import { converge } from "#session/handlers/shared/converge.ts"
 import { hostPathSchema, resolveHome } from "#session/handlers/shared/path.ts"
 import { validateInput } from "#session/handlers/validate-input.ts"
 import type { HandlerReturn, StepContext } from "#session/step.ts"
@@ -76,7 +75,7 @@ export const handleFile = async (
   content: unknown,
   options: unknown = {},
 ): Promise<Result<HandlerReturn<ChangeStepResult<"file">>>> => {
-  const { kind, home } = ctx
+  const { kind, home, converge } = ctx
 
   const validPath = validateInput(path, hostPathSchema, { inputLabel: "path", givenTo: kind })
   if (isErr(validPath)) return validPath
@@ -99,7 +98,7 @@ export const handleFile = async (
 
   const { needs } = validOptions
 
-  const outcome = await converge(ctx, {
+  const status = await converge({
     needs,
     compare: async () => compareFile(ctx, absolutePath, contentDetails, validOptions),
     // oxlint-disable-next-line typescript/require-await - the write comes with part 2 of `file`, and this stands in for it
@@ -107,5 +106,5 @@ export const handleFile = async (
     verify: true,
   })
 
-  return withChangeStepResult(ctx, outcome)
+  return withChangeStepResult(ctx, status)
 }

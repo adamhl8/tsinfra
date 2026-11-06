@@ -3,6 +3,7 @@ import { type } from "arktype"
 import type { Mode } from "#cli/program.ts"
 import type { EnsureComparisonValues } from "#session/handlers/ensure/check.ts"
 import type { FileComparisonValues } from "#session/handlers/file/comparison.ts"
+import type { Converge } from "#session/handlers/shared/converge.ts"
 import type { ChangeTools, ReadTools } from "#session/handlers/tools.ts"
 import type { Shell } from "#session/shell.ts"
 
@@ -22,8 +23,8 @@ type ReadStepKind = (typeof READ_STEP_KINDS)[number]
 export type ChangeStepKind = (typeof CHANGE_STEP_KINDS)[number]
 
 /**
- * What a step's handler is given: the step's name and kind, and the session's mode, shell, home directory, and tools.
- * `K` keeps a step's kind in its type, so a script can't give a run's result to `needs`.
+ * What a step's handler is given: the step's name and kind, and the session's mode, shell, home directory, tools, and
+ * `converge`. `K` keeps a step's kind in its type, so a script can't give a run's result to `needs`.
  */
 export interface StepContext<K extends StepKind = StepKind> {
   stepName: string
@@ -36,11 +37,12 @@ export interface StepContext<K extends StepKind = StepKind> {
   readTools: ReadTools
   /** Given to a fix or run function. */
   changeTools: ChangeTools
+  converge: Converge
 }
 
-/** What a step's handler gives: the outcome to record, and the value to give the script. */
+/** What a step's handler gives: the status to record, and the value to give the script. */
 export interface HandlerReturn<T> {
-  outcome: StepOutcome
+  status: StepStatus
   value: T
 }
 
@@ -48,17 +50,9 @@ export interface HandlerReturn<T> {
  * How a step turned out, which the session records for the output. A `changed` status means the host's state differed,
  * so it is the only status that counts as drift in `plan`. A `ran` status means a run was triggered. A `waiting` status
  * means a step it needs would change, so `plan` skipped reading the host's state. An `observed` status is a read or an
- * inspect.
+ * inspect, which only looks.
  */
-export type StepOutcome =
-  | { status: "unchanged" }
-  // A read or an inspect only looks, so it has a status of its own.
-  | { status: "observed" }
-  // `values` holds the values compared before the fix.
-  | { status: "changed"; values: ComparisonValues }
-  | { status: "ran" }
-  // `needs` holds the names of the needed steps that would change or are waiting.
-  | { status: "waiting"; needs: string[] }
+export type StepStatus = "unchanged" | "observed" | "changed" | "ran" | "waiting"
 
 /** How the host's state compared with what a step wants. */
 export type ComparisonValues = EnsureComparisonValues | FileComparisonValues

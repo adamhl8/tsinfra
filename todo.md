@@ -25,7 +25,9 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
    2. **The write.** In six pieces, each reviewed before the next:
       1. **The signature.** `content` as `file`'s second argument, with every option optional, and a `Blob` like
          `Bun.file(...)` accepted as content, read inside the step.
-      2. **The write script and verification.** The write script in its tested order, and verification after it.
+      2. **The write script and verification.** The write script in its tested order, and verification after it. Now that
+         `file` can fail with "still differs", replace the hand-built record in `format.test.ts` that checks labelled
+         commands stay out of the stderr rule with a real run.
       3. **Sudo.** `sudo` in the shell and transport for tsinfra's own commands.
       4. **The size limit.** Content over 10 MB fails before anything is sent.
       5. **The symlink refusal.** The file details parser already refuses a symlink in `plan` and `apply`. What's left is a
@@ -205,7 +207,8 @@ Decided, and wanted eventually, with no place in the order yet.
 - **Tasks.** `task(name, fn)`, registered with `host(target, fn, { tasks: [...] })`, and `--task <name>` on `plan` and
   `apply`, running only hosts that have it (see [CLI](./docs/cli.md#tasks)).
 - **Verbosity levels.** `-vv` lists each step's commands, with labels for tsinfra's own, and `-vvv` adds their output
-  (see [CLI](./docs/cli.md#output)).
+  (see [CLI](./docs/cli.md#output)). A failure's note already tells people to run with `-vvv`, so `-vvv` has to show the
+  stderr that note promises.
 - **Ordering between hosts.** `needs` on `host()`, taking imported host scripts. The design is tentative, and it comes
   after `--parallel` and most of the rest of this file (see
   [Open questions](./docs/open-questions.md#ordering-between-hosts)).
