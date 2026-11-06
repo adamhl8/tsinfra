@@ -51,7 +51,7 @@ always gets the connection error from ssh's stderr rather than being treated as 
 `bash -li` for exactly that (Go's path lives in `.bashrc` on the caddy container).
 
 The host option `shell` replaces `sh` in the starting command, so `{ shell: "bash -l" }` runs `bash -l -s`. Generated
-commands (`file`'s state command and write) are POSIX sh, so any `shell` must be POSIX compatible. fish is not.
+commands (`file`'s details command and write) are POSIX sh, so any `shell` must be POSIX compatible. fish is not.
 
 ## File writes
 
@@ -88,7 +88,7 @@ Each step's place in the order matters:
    content can end it early.
 5. **`chown` comes before `chmod`,** because `chown` clears setuid and setgid, even when root runs it. Chef and cdist
    both have comments about this. Each runs only when the value changes. With no `user`, `group`, or `mode` given, the
-   values come from the existing file, as the state command found them, or the defaults for a new file.
+   values come from the existing file, as the file details command found them, or the defaults for a new file.
 6. **SELinux.** `mv` keeps the temp file's label, so the replacement takes the old file's label first. Both SELinux
    steps run only when the command exists, and skip quietly otherwise.
 7. **`mv -f`** is the only moment the destination changes, so it is always either the old file or the complete new one,
@@ -235,7 +235,7 @@ all it needs. Where a password is needed, a plain `sudo` over SSH fails anyway, 
 locally it could open the real terminal and prompt in the middle of the report. With `-n` it fails straight away with
 sudo's `a password is required`, and tsinfra adds `host() needs sudo: true`.
 
-On `file`, `sudo: true` covers the whole operation: the state command, the diff, and the write. A root-only file under
+On `file`, `sudo: true` covers the whole operation: the file details command, the diff, and the write. A root-only file under
 `/etc` could not be hashed or read otherwise, so `plan` needs sudo too, which preflight provides. Content travels on
 stdin, inside the script, so it never shows up in `ps` or in the sudo log, unless sudoers sets `log_input`, which
 records stdin.

@@ -237,7 +237,7 @@ type FileOptions = {
   mode?: FileMode // "644", "rw-r--r--", or a constant like PUBLIC_FILE_MODE. Managed only when given
   user?: string | number // a name is compared with the user's name, a number with its uid
   group?: string | number // a name is compared with the group's name, a number with its gid
-  sudo?: boolean // run the state command, the diff, and the write as root
+  sudo?: boolean // run the file details command, the diff, and the write as root
   secret?: boolean // never fetch or show the old content
   overwrite?: boolean // default true. false writes the content only when the file is missing
   validate?: (tempPath: string) => string // a command that checks the new content before it replaces the file
@@ -301,8 +301,8 @@ way Ansible, Salt, Chef, and Puppet all do, so a `file` step never loosens a `06
 app. A new file gets mode `644`, or `600` with `secret`, and is owned by whichever user ran the write: the SSH user, or
 root under `sudo`.
 
-**Paths.** A path must be absolute, starting with `/` or `~/`. A relative path fails, like `'app.conf' isn't an
-absolute path, so start it with / or ~/`, because it would land wherever the shell starts. A leading `~/` means the
+**Paths.** A path must be absolute, starting with `/` or `~/`. A relative path fails, like `must be an absolute
+path, starting with / or ~/ (was "app.conf")`, because it would land wherever the shell starts. A leading `~/` means the
 connecting user's home on the host, even under `sudo`. A path goes into every
 command fully single-quoted, with each `'` written as `'\''`, so a space or a quote can't break the command. Quoting
 also stops the shell from expanding `~`, which only happens when `~` is unquoted at the start of a word. So tsinfra
@@ -350,7 +350,7 @@ else
 fi
 ```
 
-- **The hash is sha256,** the default in Salt, Chef, and Puppet. POSIX has no sha256 command, so the state command tries each
+- **The hash is sha256,** the default in Salt, Chef, and Puppet. POSIX has no sha256 command, so the file details command tries each
   common one: `sha256sum` (GNU coreutils, busybox, current macOS), `shasum -a 256` (older macOS), and `sha256` (FreeBSD,
   OpenBSD). This is the same chain pyinfra uses. The file goes in on stdin, because GNU `sha256sum` escapes odd
   filenames in its output and prefixes the line with `\`. tsinfra reads the first 64 hex characters, because GNU,
@@ -455,7 +455,7 @@ await h.file("/etc/sudoers.d/adam", sudoers, {
 | no `sudo`    | the SSH user, via `sh -s` | files the SSH user can write, like anything under `~`          |
 | `sudo: true` | root, via `sudo`          | files under `/etc`, root-only files, or another user as `user` |
 
-Under `sudo: true`, every part runs as root: the state command, the `cat` for the diff, and the write. tsinfra writes all of
+Under `sudo: true`, every part runs as root: the file details command, the `cat` for the diff, and the write. tsinfra writes all of
 those commands, so there is nowhere for a script to add `sudo` itself. This means `plan` also needs sudo on a host that
 manages such a file, and a host whose sudo needs a password declares it on `host()` (see
 [Transport](./transport.md#sudo)).
@@ -467,7 +467,7 @@ Two mistakes get errors of their own instead of a raw shell error:
 
 - **`user` names another user without `sudo`,** like `user 'sonarr' needs sudo: true, because only root can give a
   file away`. Only root can `chown` a file to someone else.
-- **The state command can't read the file without `sudo`,** like `can't read '/etc/shadow' as the SSH user, so it needs sudo:
+- **The file details command can't read the file without `sudo`,** like `can't read '/etc/shadow' as the SSH user, so it needs sudo:
   true`. That way an unreadable file doesn't look missing.
 
 ## `link`

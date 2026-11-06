@@ -10,7 +10,7 @@ export {
   PUBLIC_EXECUTABLE_MODE,
   PUBLIC_FILE_MODE,
 } from "#session/handlers/file/mode.ts"
-export type { FileContent, FileOptions, FileOwner } from "#session/handlers/file.ts"
+export type { FileAttributes, FileContent, FileOptions, FileOwner } from "#session/handlers/file.ts"
 export type { Change } from "#session/handlers/shared/change.ts"
 export type { Check, Want } from "#session/handlers/ensure/check.ts"
 export type { ChangeTools, Exec, Inspect, InspectResult, ReadTools } from "#session/handlers/tools.ts"

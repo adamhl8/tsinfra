@@ -235,11 +235,11 @@ describe("h.file content", () => {
 })
 
 describe("h.file refusals", () => {
-  it("should refuse a relative path", async () => {
+  it.each(["app.conf", "./app.conf", "~bob/app.conf", "~bob"])("should refuse the path '%s'", async (filePath) => {
     const { host: h } = await createSession("plan")
 
-    expect(await fileOrMessage(h, "app.conf", "a\n")).toBe(
-      "'app.conf' isn't an absolute path, so start it with / or ~/",
+    expect(await fileOrMessage(h, filePath, "a\n")).toBe(
+      `failed to validate the path given to 'file' -> must be an absolute path, starting with / or ~/ (was "${filePath}")`,
     )
   })
 
@@ -317,7 +317,7 @@ describe("handleFile", () => {
 
     expect(result).toBeInstanceOf(Error)
     expect(messageChain(castInvalid(result))).toBe(
-      "failed to validate the path given to 'file' -> must be a string (was a number)",
+      "failed to validate the path given to 'file' -> must be an absolute path, starting with / or ~/ (was a number)",
     )
   })
 })

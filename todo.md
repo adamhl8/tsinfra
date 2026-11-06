@@ -19,7 +19,7 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
    host so later calls are skipped.
 3. **`file`.** In seven parts, each reviewed before the next (the design is in [Steps](./docs/steps.md#file) and
    [Transport](./docs/transport.md#file-writes)):
-   1. **Reading the state and the plan output.** The GNU and BSD state command, the local hash, the `file` comparison, the
+   1. **Reading the state and the plan output.** The GNU and BSD file details command, the local hash, the `file` comparison, the
       content diff and its notes (new, secret, binary, large), the `mode: 644 -> 600` attribute lines, path quoting, and
       `~/` resolved as the SSH user.
    2. **The write.** In six pieces, each reviewed before the next:
@@ -28,12 +28,14 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
       2. **The write script and verification.** The write script in its tested order, and verification after it.
       3. **Sudo.** `sudo` in the shell and transport for tsinfra's own commands.
       4. **The size limit.** Content over 10 MB fails before anything is sent.
-      5. **The symlink refusal.** The state command already refuses a symlink in `plan` and `apply`. What's left is a
+      5. **The symlink refusal.** The file details parser already refuses a symlink in `plan` and `apply`. What's left is a
          test that `apply` refuses one without writing.
       6. **The errors without `sudo`.** An error for `user` naming another user. The error for an unreadable file is
          already built.
    3. **Links.** The `link` step: reading the target with `readlink`, absolute targets only, `force` for a regular file, an error for
       a directory, the `points to a missing path` note, and a write that never follows an existing link to a directory.
+      Validate the path and the target with `hostPathSchema`, and give the target its own message from
+      [Steps](./docs/steps.md#link) through `validateInput`'s `reason`.
    4. **Docs and preview.** Preview hosts for a content diff, a new file, attribute changes, a secret file, a binary
       file, and a link.
    5. **Validation.** `validate` on `file`, run against the temp file before the rename, with the temp name keeping the

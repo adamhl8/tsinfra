@@ -23,7 +23,7 @@ import {
 } from "#report/styles.ts"
 import type { EnsureComparisonValues, Want } from "#session/handlers/ensure/check.ts"
 import type { Bytes } from "#session/handlers/file/bytes.ts"
-import type { ContentComparison, SizeComparison } from "#session/handlers/file/comparison.ts"
+import type { ContentComparison, SizeComparison } from "#session/handlers/file/comparison/content.ts"
 import { getMaxWidth, padToWidth, quoteNames } from "#utils.ts"
 
 const INDENT = "  "
