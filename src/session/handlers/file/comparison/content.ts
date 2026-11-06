@@ -1,11 +1,11 @@
 import type { Result } from "ts-explicit-errors"
-import { attempt, err, isErr } from "ts-explicit-errors"
+import { err, isErr } from "ts-explicit-errors"
 
 import type { ValidFileOptions } from "#session/handlers/file.ts"
 import type { Bytes } from "#session/handlers/file/bytes.ts"
 import { toBytes } from "#session/handlers/file/bytes.ts"
-import type { HostFileDetails } from "#session/handlers/file/comparison/host-file-details.ts"
-import type { FileContentDetails } from "#session/handlers/file/content-details.ts"
+import type { HostFileContentDetails } from "#session/handlers/file/comparison/host-file-details.ts"
+import type { ResolvedFileContent } from "#session/handlers/file/resolved-content.ts"
 import type { Shell } from "#session/shell.ts"
 import { quoteShellArg } from "#session/shell.ts"
 
@@ -22,36 +22,37 @@ export interface SizeComparison {
 // Skip the diff when either side is above this size, because fetching and diffing a large file costs more than the diff tells.
 const MAX_DIFF_BYTES = toBytes(100_000) // 100 kB
 
-const TEXT_DECODER = new TextDecoder("utf-8", { fatal: true })
+const TEXT_DECODER = new TextDecoder()
 
-// Treat content with a NUL byte, or that isn't valid UTF-8, as binary, because a line diff of it would be noise.
-const decodeText = (bytes: Uint8Array): string | undefined => {
-  const text = attempt(() => TEXT_DECODER.decode(bytes))
-  return isErr(text) || text.includes("\0") ? undefined : text
-}
+// `TextDecoder` and the transport's `.text()` both put this character where a byte isn't valid UTF-8.
+const REPLACEMENT_CHARACTER = "\uFFFD"
+
+// Check decoded text on both sides, because the host's content is only available as text.
+// Treat text with a NUL byte, or that wasn't valid UTF-8, as binary, because a line diff of it would be noise.
+const isBinary = (text: string): boolean => text.includes("\0") || text.includes(REPLACEMENT_CHARACTER)
 
 /** Works out how the content differs, fetching the old content only when the output can show a diff of it. */
 // oxlint-disable-next-line eslint/max-params - this matches the shape of `compareFile`
 export const compareContent = async (
   shell: Shell,
-  hostFileDetails: HostFileDetails,
-  contentDetails: FileContentDetails,
+  hostContentDetails: HostFileContentDetails,
+  resolvedContent: ResolvedFileContent,
   options: ValidFileOptions,
 ): Promise<Result<ContentComparison>> => {
-  const { path, size: gotSize } = hostFileDetails
-  const { bytes, size: wantSize, hash } = contentDetails
   const { secret } = options
+  const gotSize = hostContentDetails.size
+  const wantSize = resolvedContent.size
 
-  if (hostFileDetails.hash === hash) return { kind: "same" }
+  if (hostContentDetails.hash === resolvedContent.hash) return { kind: "same" }
   if (secret) return { kind: "hidden", gotSize, wantSize }
   if (gotSize > MAX_DIFF_BYTES || wantSize > MAX_DIFF_BYTES) return { kind: "large", gotSize, wantSize }
 
-  const want = decodeText(bytes)
-  if (want === undefined) return { kind: "binary", gotSize, wantSize }
+  const want = TEXT_DECODER.decode(resolvedContent.bytes)
+  if (isBinary(want)) return { kind: "binary", gotSize, wantSize }
 
-  const got = await shell.exec(`cat -- ${quoteShellArg(path)}`, { label: "file content" })
-  if (isErr(got)) return err(`failed to read '${path}' for its diff`, got)
-  if (got.includes("\0") || got.includes("�")) return { kind: "binary", gotSize, wantSize }
+  const got = await shell.exec(`cat ${quoteShellArg(hostContentDetails.path)}`, { label: "file content" })
+  if (isErr(got)) return err(`failed to read the content of '${hostContentDetails.path}'`, got)
+  if (isBinary(got)) return { kind: "binary", gotSize, wantSize }
 
   return { kind: "text", got, want }
 }

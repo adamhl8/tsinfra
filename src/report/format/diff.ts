@@ -3,7 +3,7 @@ import { structuredPatch } from "diff"
 import pc from "picocolors"
 
 import type { FormatOptions } from "#report/format.ts"
-import { styleGot, styleNote, styleWant } from "#report/styles.ts"
+import { styleGot, styleNote, styleWant } from "#report/format/styles.ts"
 import { endWithNewline, getMaxWidth } from "#utils.ts"
 
 // Show one unchanged line around each change, so a plan stays short.

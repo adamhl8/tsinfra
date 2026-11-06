@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { chmod } from "node:fs/promises"
+import { chmod, stat } from "node:fs/promises"
 import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
@@ -9,7 +9,8 @@ import { prepareAndRunHost } from "#__tests__/session.ts"
 import type { Mode } from "#cli/program.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
-import { formatHostBlock, formatSummary } from "#report/format.ts"
+import { formatHostBlock } from "#report/format.ts"
+import { formatSummary } from "#report/format/summary.ts"
 import type { EnsureOptions } from "#session/handlers/ensure.ts"
 import type { Want } from "#session/handlers/ensure/check.ts"
 import type { Host } from "#session/session.ts"
@@ -296,6 +297,35 @@ describe("formatHostBlock for a file step", () => {
         "      mode: rw------- (600) -> rw-r--r-- (644)",
       ].join("\n"),
     )
+  })
+
+  it.each([
+    ["padded to three digits", "044", "---r--r-- (044)"],
+    ["with the special bits and execute", "7755", "rwsr-sr-t (7755)"],
+    ["with the special bits and no execute", "5644", "rwSr--r-T (5644)"],
+  ] as const)("should show a mode in both notations: %s", async (_, mode, expected) => {
+    const filePath = path.join(await makeTempDir(), "app.conf")
+    await Bun.write(filePath, "a\n")
+    await chmod(filePath, 0o644)
+    const hostBlock = await formatBlock(async (h) => {
+      await h.file(filePath, "a\n", { mode })
+    }, "plan")
+
+    expect(hostBlock).toContain(`mode: rw-r--r-- (644) -> ${expected}`)
+  })
+
+  it("should show a user and a group given as ids", async () => {
+    const filePath = path.join(await makeTempDir(), "app.conf")
+    await Bun.write(filePath, "a\n")
+    const { uid, gid } = await stat(filePath)
+    const hostBlock = await formatBlock(async (h) => {
+      await h.file(filePath, "a\n", { user: uid + 1, group: gid + 1 })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
+      `      user:  ${uid} -> ${uid + 1}`,
+      `      group: ${gid} -> ${gid + 1}`,
+    ])
   })
 
   it("should show a note for a new file", async () => {

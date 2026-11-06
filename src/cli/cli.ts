@@ -12,7 +12,8 @@ import type { HostReport } from "#hosts/run.ts"
 import { getExitCode, prepareHosts, runHost } from "#hosts/run.ts"
 import packageJson from "#package.json" with { type: "json" }
 import { ERROR_THEME, printTsinfraError } from "#report/errors.ts"
-import { formatHostBlock, formatSummary } from "#report/format.ts"
+import { formatHostBlock } from "#report/format.ts"
+import { formatSummary } from "#report/format/summary.ts"
 
 /** Runs the hosts, prints each one's host block and then the summary, and returns the exit code. */
 const runTsinfra = async (): Promise<Result<number>> => {

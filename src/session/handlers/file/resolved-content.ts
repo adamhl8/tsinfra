@@ -6,7 +6,7 @@ import type { Bytes } from "#session/handlers/file/bytes.ts"
 import { toBytes } from "#session/handlers/file/bytes.ts"
 
 /** What the script's content is, worked out once before reading the host's state. */
-export interface FileContentDetails {
+export interface ResolvedFileContent {
   bytes: Uint8Array
   size: Bytes
   hash: string
@@ -25,7 +25,7 @@ const getContentBytes = async (content: FileContent): Promise<Result<Uint8Array>
 }
 
 /** Gets the content's bytes, which reads a `Blob` like `Bun.file(...)`, and works out their size and hash. */
-export const getContentDetails = async (content: FileContent): Promise<Result<FileContentDetails>> => {
+export const resolveContent = async (content: FileContent): Promise<Result<ResolvedFileContent>> => {
   const bytes = await getContentBytes(content)
   if (isErr(bytes)) return bytes
 

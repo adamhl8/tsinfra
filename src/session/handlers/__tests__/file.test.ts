@@ -70,7 +70,7 @@ describe("h.file in plan", () => {
       {
         values: {
           content: { kind: "same" },
-          attributes: [{ name: "mode", got: "rw------- (600)", want: "rw-r--r-- (644)" }],
+          attributes: [{ name: "mode", got: 0o600, want: 0o644 }],
         },
       },
       { inSync: true },
@@ -85,7 +85,7 @@ describe("h.file in plan", () => {
     await fileOrMessage(hostSession.host, filePath, "a\n", { mode: PUBLIC_FILE_MODE })
 
     expect(hostSession.stepRecords[0]?.comparisons.before).toMatchObject({
-      values: { attributes: [{ name: "mode", got: "rw------- (600)", want: "rw-r--r-- (644)" }] },
+      values: { attributes: [{ name: "mode", got: 0o600, want: 0o644 }] },
     })
   })
 
@@ -101,7 +101,7 @@ describe("h.file in plan", () => {
     expect(hostSession.stepRecords.map(({ comparisons }) => comparisons.before)).toMatchObject([
       { inSync: true },
       { inSync: true },
-      { values: { attributes: [{ name: "user", got: String(uid), want: String(uid + 1) }] } },
+      { values: { attributes: [{ name: "user", got: uid, want: uid + 1 }] } },
     ])
   })
 
@@ -113,7 +113,7 @@ describe("h.file in plan", () => {
     await fileOrMessage(hostSession.host, filePath, "a\n", { group: gid + 1 })
 
     expect(hostSession.stepRecords[0]?.comparisons.before).toMatchObject({
-      values: { attributes: [{ name: "group", got: String(gid), want: String(gid + 1) }] },
+      values: { attributes: [{ name: "group", got: gid, want: gid + 1 }] },
     })
   })
 
@@ -125,6 +125,31 @@ describe("h.file in plan", () => {
 
     expect(hostSession.stepRecords[0]?.comparisons.before).toMatchObject({ values: { content: { kind: "hidden" } } })
     expect(hostSession.stepRecords[0]?.commands.some(({ cmd }) => cmd.startsWith("cat "))).toBe(false)
+  })
+
+  it.each([
+    ["a NUL byte", new Uint8Array([97, 0, 98])],
+    ["bytes that aren't valid UTF-8", new Uint8Array([97, 255, 98])],
+  ])("should not diff wanted content with %s", async (_, bytes) => {
+    const filePath = await createFilePath()
+    await Bun.write(filePath, "a\n")
+    const hostSession = await createSession("plan")
+    await fileOrMessage(hostSession.host, filePath, bytes)
+
+    expect(hostSession.stepRecords[0]?.comparisons.before).toMatchObject({ values: { content: { kind: "binary" } } })
+    expect(hostSession.stepRecords[0]?.commands.some(({ cmd }) => cmd.startsWith("cat "))).toBe(false)
+  })
+
+  it.each([
+    ["a NUL byte", new Uint8Array([97, 0, 98])],
+    ["bytes that aren't valid UTF-8", new Uint8Array([97, 255, 98])],
+  ])("should not diff a host file with %s", async (_, bytes) => {
+    const filePath = await createFilePath()
+    await Bun.write(filePath, bytes)
+    const hostSession = await createSession("plan")
+    await fileOrMessage(hostSession.host, filePath, "a\n")
+
+    expect(hostSession.stepRecords[0]?.comparisons.before).toMatchObject({ values: { content: { kind: "binary" } } })
   })
 
   it("should not diff binary content", async () => {

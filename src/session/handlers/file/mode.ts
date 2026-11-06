@@ -70,8 +70,8 @@ export const toModeBits = (mode: FileMode) => {
   return bits
 }
 
-/** Formats permission bits the way `ls -l` prints them, like `rw-r--r--`. */
-const toSymbolicMode = (bits: number) =>
+/** Returns permission bits the way `ls -l` prints them, like `rw-r--r--`. */
+export const toSymbolicMode = (bits: number) =>
   Array.from({ length: SYMBOLIC_LENGTH }, (_, index) => {
     const tripleIndex = Math.floor(index / TRIPLE_LENGTH)
     const slot = index % TRIPLE_LENGTH
@@ -85,6 +85,3 @@ const toSymbolicMode = (bits: number) =>
 
     return isGranted ? letter : "-"
   }).join("")
-
-/** Formats permission bits as both notations, like `rw-r--r-- (644)`. */
-export const formatMode = (bits: number) => `${toSymbolicMode(bits)} (${bits.toString(8).padStart(TRIPLE_LENGTH, "0")})`

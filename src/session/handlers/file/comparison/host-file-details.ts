@@ -13,16 +13,26 @@ import type { CommandOutput } from "#transport/transport.ts"
 const SHA256_PATTERN = /^[0-9a-f]{64}/v
 const WHITESPACE = /\s+/v
 
-/** What the file details command found at a path that is a regular file. */
-export interface HostFileDetails {
+/** What the file details command found about the content of a regular file. */
+export interface HostFileContentDetails {
   path: string
   hash: string
+  size: Bytes
+}
+
+/** What the file details command found about the mode and owner of a regular file. */
+export interface HostFileAttributeDetails {
   mode: number
   uid: number
   gid: number
   user: string
   group: string
-  size: Bytes
+}
+
+/** What the file details command found at a path that is a regular file. */
+interface HostFileDetails {
+  content: HostFileContentDetails
+  attributes: HostFileAttributeDetails
 }
 
 const statLineSchema = type([
@@ -90,7 +100,7 @@ export const parseFileDetailsOutput = (
     return err(`the file details command printed '${statLine}' instead of the file's mode, owner, and size`, undefined)
 
   const [mode, uid, gid, user, group, size] = validStatLine
-  return { path, hash, mode, uid, gid, user, group, size }
+  return { content: { path, hash, size }, attributes: { mode, uid, gid, user, group } }
 }
 
 /** Reads the details of the file at `path` on the host, or undefined when nothing is there. */

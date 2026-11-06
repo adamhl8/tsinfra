@@ -20,32 +20,20 @@ const toDetails = (stdout: string, stderr = "") => {
 describe("parseFileDetailsOutput", () => {
   it("should read GNU's hash and stat line", () => {
     expect(toDetails(`kind=file\n${HASH}  -\n644 501 20 adam staff 12\n`)).toStrictEqual({
-      path: "/tmp/x",
-      hash: HASH,
-      mode: 0o644,
-      uid: 501,
-      gid: 20,
-      user: "adam",
-      group: "staff",
-      size: toBytes(12),
+      content: { path: "/tmp/x", hash: HASH, size: toBytes(12) },
+      attributes: { mode: 0o644, uid: 501, gid: 20, user: "adam", group: "staff" },
     })
   })
 
   it("should read BSD's bare hash and its zero-padded mode", () => {
     expect(toDetails(`kind=file\n${HASH}\n0644 0 0 root wheel 3\n`)).toStrictEqual({
-      path: "/tmp/x",
-      hash: HASH,
-      mode: 0o644,
-      uid: 0,
-      gid: 0,
-      user: "root",
-      group: "wheel",
-      size: toBytes(3),
+      content: { path: "/tmp/x", hash: HASH, size: toBytes(3) },
+      attributes: { mode: 0o644, uid: 0, gid: 0, user: "root", group: "wheel" },
     })
   })
 
   it("should read a mode with setuid", () => {
-    expect(toDetails(`kind=file\n${HASH}\n4755 0 0 root wheel 3\n`)).toMatchObject({ mode: 0o4755 })
+    expect(toDetails(`kind=file\n${HASH}\n4755 0 0 root wheel 3\n`)).toMatchObject({ attributes: { mode: 0o4755 } })
   })
 
   it("should return undefined when nothing is at the path", () => {
@@ -108,7 +96,7 @@ const readDetailsWithTools = async (tools: Record<string, string>) => {
   })
   const details = await getHostFileDetails(shell, filePath)
 
-  return { details: isErr(details) ? messageChain(details) : details?.hash, stderr: stderr.trim() }
+  return { details: isErr(details) ? messageChain(details) : details?.content.hash, stderr: stderr.trim() }
 }
 
 describe("getHostFileDetails with sha256 tools", () => {

@@ -7,7 +7,7 @@ import { findAttributeChanges } from "#session/handlers/file/comparison/attribut
 import type { ContentComparison } from "#session/handlers/file/comparison/content.ts"
 import { compareContent } from "#session/handlers/file/comparison/content.ts"
 import { getHostFileDetails } from "#session/handlers/file/comparison/host-file-details.ts"
-import type { FileContentDetails } from "#session/handlers/file/content-details.ts"
+import type { ResolvedFileContent } from "#session/handlers/file/resolved-content.ts"
 import type { Comparison } from "#session/handlers/shared/converge.ts"
 import type { StepContext } from "#session/step.ts"
 
@@ -23,7 +23,7 @@ export interface FileComparisonValues {
 export const compareFile = async (
   ctx: StepContext,
   path: string,
-  contentDetails: FileContentDetails,
+  resolvedContent: ResolvedFileContent,
   options: ValidFileOptions,
 ): Promise<Result<Comparison>> => {
   const { shell } = ctx
@@ -32,14 +32,16 @@ export const compareFile = async (
   if (isErr(hostFileDetails)) return hostFileDetails
 
   if (hostFileDetails === undefined) {
-    const content: ContentComparison = { kind: "new", wantSize: contentDetails.size }
+    const content: ContentComparison = { kind: "new", wantSize: resolvedContent.size }
     return { inSync: false, values: { kind: "file", content, attributes: [] } }
   }
 
-  const content = await compareContent(shell, hostFileDetails, contentDetails, options)
+  const { content: hostContentDetails, attributes: hostAttributeDetails } = hostFileDetails
+
+  const content = await compareContent(shell, hostContentDetails, resolvedContent, options)
   if (isErr(content)) return content
 
-  const attributes = findAttributeChanges(hostFileDetails, options)
+  const attributes = findAttributeChanges(hostAttributeDetails, options)
 
   const inSync = content.kind === "same" && attributes.length === 0
 

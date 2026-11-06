@@ -3,9 +3,9 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import { compareFile } from "#session/handlers/file/comparison.ts"
-import { getContentDetails } from "#session/handlers/file/content-details.ts"
 import type { FileMode } from "#session/handlers/file/mode.ts"
 import { OCTAL_MODE_PATTERN, SYMBOLIC_MODE_PATTERN } from "#session/handlers/file/mode.ts"
+import { resolveContent } from "#session/handlers/file/resolved-content.ts"
 import type { ChangeStepResult, StepNeeds } from "#session/handlers/shared/change-step-result.ts"
 import { NO_NEEDS, stepNeedsSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import { hostPathSchema, resolveHome } from "#session/handlers/shared/path.ts"
@@ -30,7 +30,7 @@ const fileOwnerSchema = type("string | number")
 export type FileOwner = typeof fileOwnerSchema.infer
 
 /** What a file step manages besides its content. An existing file keeps its own value of any left out. */
-export interface FileAttributes {
+export interface FileAttributeOptions {
   /**
    * The file's mode, in octal like `"644"`, symbolic like `"rw-r--r--"`, or a constant like `PUBLIC_FILE_MODE`. An
    * existing file keeps its own when this is left out.
@@ -42,7 +42,9 @@ export interface FileAttributes {
   group?: FileOwner
 }
 
-export interface FileOptions extends FileAttributes {
+export type FileAttributeName = keyof FileAttributeOptions
+
+export interface FileOptions extends FileAttributeOptions {
   /** Never fetches or shows the old content, because it may hold a secret. */
   secret?: boolean
   /**
@@ -93,14 +95,14 @@ export const handleFile = async (
   const validOptions = validateInput(options, fileOptionsSchema, { inputLabel: "options", givenTo: kind })
   if (isErr(validOptions)) return validOptions
 
-  const contentDetails = await getContentDetails(validContent)
-  if (isErr(contentDetails)) return contentDetails
+  const resolvedContent = await resolveContent(validContent)
+  if (isErr(resolvedContent)) return resolvedContent
 
   const { needs } = validOptions
 
   const status = await converge({
     needs,
-    compare: async () => compareFile(ctx, absolutePath, contentDetails, validOptions),
+    compare: async () => compareFile(ctx, absolutePath, resolvedContent, validOptions),
     // oxlint-disable-next-line typescript/require-await - the write comes with part 2 of `file`, and this stands in for it
     fix: async () => err("writing files comes with part 2 of file", undefined),
     verify: true,

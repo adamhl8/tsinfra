@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test"
 
 import type { FileMode } from "#session/handlers/file/mode.ts"
 import {
-  formatMode,
   GROUP_EXECUTABLE_MODE,
   GROUP_FILE_MODE,
   PRIVATE_EXECUTABLE_MODE,
@@ -10,6 +9,7 @@ import {
   PUBLIC_EXECUTABLE_MODE,
   PUBLIC_FILE_MODE,
   toModeBits,
+  toSymbolicMode,
 } from "#session/handlers/file/mode.ts"
 
 describe("toModeBits", () => {
@@ -39,12 +39,12 @@ describe("toModeBits", () => {
   })
 })
 
-describe("formatMode", () => {
-  it("should show the symbolic mode with the octal after it, padded to three digits", () => {
-    expect([formatMode(0o644), formatMode(0o44)]).toStrictEqual(["rw-r--r-- (644)", "---r--r-- (044)"])
+describe("toSymbolicMode", () => {
+  it("should return the mode the way ls prints it", () => {
+    expect([toSymbolicMode(0o644), toSymbolicMode(0o44)]).toStrictEqual(["rw-r--r--", "---r--r--"])
   })
 
-  it("should show the special bits in both notations", () => {
-    expect([formatMode(0o7755), formatMode(0o5644)]).toStrictEqual(["rwsr-sr-t (7755)", "rwSr--r-T (5644)"])
+  it("should show the special bits, in capitals when the execute bit isn't set", () => {
+    expect([toSymbolicMode(0o7755), toSymbolicMode(0o5644)]).toStrictEqual(["rwsr-sr-t", "rwSr--r-T"])
   })
 })
