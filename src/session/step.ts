@@ -1,7 +1,7 @@
 import { type } from "arktype"
 
 import type { Mode } from "#cli/program.ts"
-import type { EnsureComparisonValues } from "#session/handlers/ensure/check.ts"
+import type { EnsureComparisonValues } from "#session/handlers/ensure/comparison.ts"
 import type { FileComparisonValues } from "#session/handlers/file/comparison.ts"
 import type { LinkComparisonValues } from "#session/handlers/link/comparison.ts"
 import type { Converge } from "#session/handlers/shared/converge.ts"

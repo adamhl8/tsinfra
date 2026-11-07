@@ -34,7 +34,7 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
          test that `apply` refuses one without writing.
       6. **The errors without `sudo`.** An error for `user` naming another user. The error for an unreadable file is
          already built.
-   3. **Links.** In three pieces, each reviewed before the next:
+   3. **Links.** In two pieces, each reviewed before the next:
       1. **The `link` step** (see [Steps](./docs/steps.md#link) and [Transport](./docs/transport.md#link-writes)).
       2. **Warnings.** A general way to say "this worked, but look at it", which starts with a broken link. Today
          `points to a missing path` is a dim note on lines that already print, so `plan` hides a broken link that's
@@ -48,10 +48,6 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
            wanted when this is built.
          - Exit codes don't change. A warning isn't drift, so `plan` still exits 0.
          - Settle the exact look in this piece's rundown.
-      3. **Pass the read to `fix`.** `handleFile` and `handleLink` each start with a placeholder value for what
-         `compare` read, only so `fix` can see it. The link's placeholder claims `targetExists: false` before anything
-         was read. Have `converge` hand the last read to `fix` instead, which also touches `ensure`. Give a rundown of
-         what it looks like first.
    4. **Docs and preview.** Preview hosts for a content diff, a new file, attribute changes, a secret file, a binary
       file, and a link.
    5. **Validation.** `validate` on `file`, run against the temp file before the rename, with the temp name keeping the

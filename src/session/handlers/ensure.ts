@@ -3,7 +3,9 @@ import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
 import type { Check, Want } from "#session/handlers/ensure/check.ts"
-import { checkSchema, compareCheck, wantSchema } from "#session/handlers/ensure/check.ts"
+import { checkSchema, wantSchema } from "#session/handlers/ensure/check.ts"
+import { compareCheck } from "#session/handlers/ensure/comparison.ts"
+import { getHostCheckDetails } from "#session/handlers/ensure/host-check-details.ts"
 import type { ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import { withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
@@ -45,7 +47,7 @@ export const handleEnsure = async (
   ctx: StepContext<"ensure">,
   options: unknown,
 ): Promise<Result<HandlerReturn<ChangeStepResult<"ensure">>>> => {
-  const { kind, converge } = ctx
+  const { kind, shell, readTools, converge } = ctx
 
   const validOptions = validateInput(options, ensureOptionsSchema, { inputLabel: "options", givenTo: kind })
   if (isErr(validOptions)) return validOptions
@@ -54,7 +56,8 @@ export const handleEnsure = async (
 
   const status = await converge({
     needs,
-    compare: async () => compareCheck(ctx, check, want),
+    getHostDetails: async () => getHostCheckDetails(shell, readTools, check),
+    compare: (hostCheckDetails) => compareCheck(hostCheckDetails, want),
     fix: async () => runChange(ctx, fix),
     verify,
   })

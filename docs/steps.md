@@ -487,7 +487,7 @@ passes, and they show in `plan` too:
 type LinkOptions = {
   user?: string | number // a name is compared with the user's name, a number with its uid
   group?: string | number // a name is compared with the group's name, a number with its gid
-  force?: boolean // replace a regular file or an empty directory at the path, like `ln -f`
+  force?: boolean // replace a regular file or an empty directory at the path
   sudo?: boolean // read and make the link as root
   needs?: ChangeStepResult<"file" | "link" | "ensure">[]
 }

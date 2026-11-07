@@ -7,7 +7,8 @@ import {
   styleWantExitCode,
   styleWantString,
 } from "#report/format/styles.ts"
-import type { EnsureComparisonValues, Want } from "#session/handlers/ensure/check.ts"
+import type { Want } from "#session/handlers/ensure/check.ts"
+import type { EnsureComparisonValues } from "#session/handlers/ensure/comparison.ts"
 
 interface ValueKindRules {
   formatGot: (got: EnsureComparisonValues["got"]) => string

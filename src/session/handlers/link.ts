@@ -3,7 +3,6 @@ import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
 import { compareLink } from "#session/handlers/link/comparison.ts"
-import type { HostLinkDetails } from "#session/handlers/link/host-link-details.ts"
 import { getHostLinkDetails } from "#session/handlers/link/host-link-details.ts"
 import { writeLink } from "#session/handlers/link/write.ts"
 import type { ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
@@ -17,7 +16,7 @@ import { validateInput } from "#session/handlers/shared/validate-input.ts"
 import type { HandlerOptions, HandlerReturn, StepContext } from "#session/step.ts"
 
 export interface LinkOptions extends OwnerOptions, SudoOptions, NeedsOptions {
-  /** Replaces a regular file or an empty directory at the path, like `ln -f`. A directory with files in it is an error. */
+  /** Replaces a regular file or an empty directory at the path. A directory with files in it is an error. */
   force?: boolean
 }
 
@@ -58,19 +57,11 @@ export const handleLink = async (
 
   const { needs } = validOptions
 
-  // Keep what `compare` read for `fix`, because a write keeps the owner of what it replaces.
-  let hostLinkDetails: HostLinkDetails = { kind: "new", path: absolutePath, targetExists: false }
-
   const status = await converge({
     needs,
-    compare: async () => {
-      const hostLinkDetailsResult = await getHostLinkDetails(shell, absolutePath, absoluteTarget)
-      if (isErr(hostLinkDetailsResult)) return hostLinkDetailsResult
-
-      hostLinkDetails = hostLinkDetailsResult
-      return compareLink(ctx, hostLinkDetails, absoluteTarget, validOptions)
-    },
-    fix: async () => writeLink(ctx, hostLinkDetails, absoluteTarget, validOptions),
+    getHostDetails: async () => getHostLinkDetails(shell, absolutePath, absoluteTarget),
+    compare: async (hostLinkDetails) => compareLink(ctx, hostLinkDetails, absoluteTarget, validOptions),
+    fix: async (hostLinkDetails) => writeLink(ctx, hostLinkDetails, absoluteTarget, validOptions),
     verify: true,
   })
 

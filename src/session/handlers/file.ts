@@ -3,7 +3,6 @@ import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
 import { compareFile } from "#session/handlers/file/comparison.ts"
-import type { HostFileDetails } from "#session/handlers/file/host-file-details.ts"
 import { getHostFileDetails } from "#session/handlers/file/host-file-details.ts"
 import { resolveContent } from "#session/handlers/file/resolved-content.ts"
 import { writeFile } from "#session/handlers/file/write.ts"
@@ -72,19 +71,11 @@ export const handleFile = async (
 
   const { needs } = validOptions
 
-  // Keep what `compare` read for `fix`, because a write keeps the mode and owner of a file it replaces.
-  let hostFileDetails: HostFileDetails = { kind: "new", path: absolutePath }
-
   const status = await converge({
     needs,
-    compare: async () => {
-      const hostFileDetailsResult = await getHostFileDetails(shell, absolutePath)
-      if (isErr(hostFileDetailsResult)) return hostFileDetailsResult
-
-      hostFileDetails = hostFileDetailsResult
-      return compareFile(ctx, hostFileDetails, resolvedContent, validOptions)
-    },
-    fix: async () => writeFile(ctx, hostFileDetails, resolvedContent, validOptions),
+    getHostDetails: async () => getHostFileDetails(shell, absolutePath),
+    compare: async (hostFileDetails) => compareFile(ctx, hostFileDetails, resolvedContent, validOptions),
+    fix: async (hostFileDetails) => writeFile(ctx, hostFileDetails, resolvedContent, validOptions),
     verify: true,
   })
 
