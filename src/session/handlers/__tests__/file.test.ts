@@ -462,7 +462,7 @@ describe("h.file refusals", () => {
     )
   })
 
-  // Root can read every file.
+  // Skip this as root, because root can read every file.
   it.skipIf(isRoot)("should say a file the SSH user can't read needs sudo", async () => {
     const filePath = await createFilePath()
     await Bun.write(filePath, "a\n")
@@ -578,7 +578,7 @@ describe("h.file in apply", () => {
     expect(await readdir(directory)).toStrictEqual(["app.conf"])
   })
 
-  // Root can set any group, so `chown` wouldn't fail.
+  // Skip this as root, because root can set any group, so `chown` wouldn't fail.
   it.skipIf(isRoot)("should fail without touching the file or leaving a temp file when the write fails", async () => {
     const directory = await makeTempDir()
     const filePath = path.join(directory, "app.conf")
@@ -719,10 +719,10 @@ describe("h.file with sudo", () => {
 
   it("should say why when sudo fails", async () => {
     const filePath = await createFilePath()
-    const sudoBody = "echo 'sudo: a password is required' >&2\nexit 1"
-    const { hostSession } = await createFakeSudoSession("plan", sudoBody)
+    const sudo = "echo 'sudo: a password is required' >&2\nexit 1"
+    const { host: h } = await createFakeToolSession("plan", { sudo })
 
-    expect(await fileOrMessage(hostSession.host, filePath, "new\n", { sudo: true })).toBe(
+    expect(await fileOrMessage(h, filePath, "new\n", { sudo: true })).toBe(
       `failed to compare the host with what the step wants -> failed to read the details of '${filePath}' -> exited with code 1: sudo: a password is required`,
     )
   })

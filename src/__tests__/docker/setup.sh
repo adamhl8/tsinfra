@@ -40,12 +40,12 @@ run_tests() {
   shift 2
   echo "--- $heading"
   # Set `USER`, because `os.userInfo` in Bun reads the name from it.
-  su "$user" -s /bin/sh -c "cd /work && HOME=$(eval echo "~$user") USER=$user PATH=$PATH bun test $*" || failed=1
+  su "$user" -s /bin/sh -c "cd /work && USER=$user PATH=$PATH bun test $*" || failed=1
 }
 
 run_tests "the test suite as a non-root user" tester
 run_tests "the test suite as root" root
-run_tests "real sudo and real root" tester ./src/__tests__/docker/file-as-root.docker.ts
-run_tests "a user with no sudo rule" nopass ./src/__tests__/docker/file-no-sudo.docker.ts
+run_tests "real sudo and real root" tester ./src/session/handlers/__tests__/file-sudo.docker.ts
+run_tests "a user with no sudo rule" nopass ./src/session/handlers/__tests__/file-no-sudo.docker.ts
 
 exit "$failed"

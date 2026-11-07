@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test"
 import { readdir } from "node:fs/promises"
-import os from "node:os"
 import path from "node:path"
+
+import { makeTempDir } from "@adamhl8/configs/test"
 
 import { createSession, fileOrMessage } from "#__tests__/session.ts"
 
@@ -25,13 +26,13 @@ describe("a user with no sudo rule", () => {
   })
 
   it("should fail at chown on a group the user isn't in, and leave no temp file", async () => {
-    const directory = os.homedir()
-    const filePath = path.join(directory, "group.conf")
+    const directory = await makeTempDir()
+    const filePath = path.join(directory, "app.conf")
     const { host: h } = await createSession("apply")
 
     expect(await fileOrMessage(h, filePath, "a\n", { group: "sonarr" })).toStartWith(
       `failed to run the fix -> failed to write '${filePath}' -> exited with code 1: chown: `,
     )
-    expect((await readdir(directory)).filter((name) => name.includes("group.conf"))).toStrictEqual([])
+    expect(await readdir(directory)).toStrictEqual([])
   })
 })
