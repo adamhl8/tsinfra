@@ -140,6 +140,20 @@ describe("h.file with real sudo", () => {
   })
 })
 
+describe("h.file validate with real sudo", () => {
+  it("should run the validate command as root", async () => {
+    const filePath = `${ROOT_OWNED_DIR}/validated`
+
+    const result = await applyFile(filePath, "a\n", {
+      sudo: true,
+      validate: (tempPath) => `test "$(id -u)" = 0 && test -s ${tempPath}`,
+    })
+
+    expect(result).toMatchObject({ changed: true })
+    expect(await readAsRoot(filePath)).toBe("a\n")
+  })
+})
+
 describe("h.file without sudo, as a user who could use it", () => {
   it("should refuse another user", async () => {
     const filePath = path.join(await makeTempDir(), "app.conf")

@@ -185,6 +185,19 @@ describe("h.link in apply", () => {
   })
 })
 
+describe("h.link named like the write script's own temp files", () => {
+  it.each(["probe", "probed"])("should make a link named '%s' without touching its target", async (name) => {
+    const directory = await makeTempDir()
+    const linkPath = path.join(directory, name)
+    const target = path.join(directory, "target")
+    const { host: h } = await createSession("apply")
+
+    expect(await linkOrMessage(h, linkPath, target)).toMatchObject({ changed: true })
+    expect(await readlink(linkPath)).toBe(target)
+    expect(await bun.file(target).exists()).toBe(false)
+  })
+})
+
 describe("h.link replacing something", () => {
   it("should refuse a regular file without force, and leave it alone", async () => {
     const { linkPath, target } = await createPaths()

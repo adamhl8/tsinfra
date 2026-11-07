@@ -757,6 +757,78 @@ describe("h.file with invalid input", () => {
   })
 })
 
+// Print to stdout, because the write sends a validate command's stdout to stderr, so the error still shows it.
+const rejectContent = () => "echo 'line 1: bad option'; exit 3"
+const checkJsonName = (tempPath: string) => `case ${tempPath} in */app.json) test -s ${tempPath} ;; *) exit 1 ;; esac`
+const throwBoom = () => {
+  throw new Error("boom")
+}
+
+describe("h.file validate", () => {
+  it("should write the file when the validate command passes", async () => {
+    const filePath = await createFilePath()
+    const { host: h } = await createSession("apply")
+
+    expect(await fileOrMessage(h, filePath, "a\n", { validate: (tempPath) => `test -s ${tempPath}` })).toMatchObject({
+      changed: true,
+    })
+    expect(await bun.file(filePath).text()).toBe("a\n")
+  })
+
+  it("should fail and leave the old file and no temp directory when the validate command fails", async () => {
+    const filePath = await createFilePath()
+    await bun.write(filePath, "old\n")
+    const { host: h } = await createSession("apply")
+
+    expect(await fileOrMessage(h, filePath, "new\n", { validate: rejectContent })).toBe(
+      `failed to run the fix -> failed to write '${filePath}' -> the validate command 'echo 'line 1: bad option'; exit 3' exited with code 3: line 1: bad option`,
+    )
+    expect(await bun.file(filePath).text()).toBe("old\n")
+    expect(await readdir(path.dirname(filePath))).toStrictEqual(["app.conf"])
+  })
+
+  it("should give the temp file the destination's name, extension included, in a path with a space", async () => {
+    const filePath = path.join(await makeTempDir(), "with space", "app.json")
+    const { host: h } = await createSession("apply")
+
+    expect(await fileOrMessage(h, filePath, "{}\n", { validate: checkJsonName })).toMatchObject({ changed: true })
+  })
+
+  it("should never run the validate command in plan", async () => {
+    const filePath = await createFilePath()
+    const marker = `${filePath}.validated`
+    const { host: h } = await createSession("plan")
+
+    await fileOrMessage(h, filePath, "a\n", { validate: () => `touch '${marker}'` })
+
+    expect(await bun.file(marker).exists()).toBe(false)
+  })
+
+  it("should fail in plan when validate returns an empty command", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(await fileOrMessage(h, "/tmp/x", "a\n", { validate: () => "" })).toBe(
+      "failed to validate the validate command given to 'file' -> must be non-empty",
+    )
+  })
+
+  it("should fail in plan when validate throws", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(await fileOrMessage(h, "/tmp/x", "a\n", { validate: throwBoom })).toBe(
+      "failed to call the validate function given to 'file' -> boom",
+    )
+  })
+
+  it("should fail a validate that isn't a function", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(await fileOrMessage(h, "/tmp/x", "a\n", castInvalid({ validate: "test -s" }))).toStartWith(
+      "failed to validate the options given to 'file' -> validate must be a function",
+    )
+  })
+})
+
 describe("handleFile", () => {
   // Call the handler directly, because `h.file` rejects this path first, when it validates the step's name.
   it("should fail a path that isn't a string", async () => {

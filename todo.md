@@ -39,10 +39,9 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
       2. **Warnings.** A `warning:` line under a step that worked but needs a look, which shows it even when it's
          already right, and a count in the summary (see [CLI](./docs/cli.md#how-the-report-is-built)). It starts with a
          link to a missing path.
-   4. **Docs and preview.** Preview hosts for a content diff, a new file, attribute changes, a secret file, a binary
-      file, and a link.
-   5. **Validation.** `validate` on `file`, run against the temp file before the rename, with the temp name keeping the
-      destination's extension (see [Steps](./docs/steps.md#the-write)).
+   4. **Docs and preview.** The preview shows each way a file or a link can look, and the docs for both match the code.
+   5. **Validation.** `validate` on `file`, run against the temp file before the rename, in a temp directory that keeps
+      the destination's name (see [Steps](./docs/steps.md#the-write) and [Transport](./docs/transport.md#file-writes)).
    6. **Sudo passwords.** Adding to the preflight in `prepareHosts`, which prepares every host before any script runs:
       `sudo` declared on `host()` as `true` or `{ password }`, the `sudo -n true` probe, a prompt per host with three
       tries, the no-TTY failure, the preamble's `sudo` function with an askpass helper on a host that declares it, and
@@ -91,6 +90,10 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
     [Steps](./docs/steps.md#file)).
   - **An idempotence check:** in a container, `apply`, then `plan` expecting exit 0 (see
     [Ideas](./docs/ideas.md#decided)).
+  - **Checking a whole config with `run`:** a fragment that only makes sense with the rest of a config is checked after
+    it's in place, like `h.run("Reload nginx", "nginx -t && systemctl reload nginx", { after: [site] })`. A `run` with
+    `after: "always"` that runs `sshd -t` checks the live config on every `apply`, which catches a config that a new
+    version of the tool no longer accepts. `validate` is for a file that must never be broken, even for a moment.
   - **Removing a path with `ensure`:** check `test -e path || test -L path` with `want: false`, because `test -e` is
     false for a dead link, so a check with `-e` alone never removes one.
   - **A directory with `ensure`.** When only its existence matters, check `test -d path` with `want: true`, and fix with

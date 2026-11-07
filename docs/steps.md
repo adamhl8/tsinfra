@@ -343,6 +343,7 @@ One command prints what tsinfra needs, or a marker for a path that isn't a regul
 if [ -L "$p" ]; then echo kind=link
 elif [ ! -e "$p" ]; then echo kind=absent
 elif [ ! -f "$p" ]; then echo kind=other
+elif [ ! -r "$p" ]; then echo kind=unreadable
 else
   echo kind=file
   { command -v sha256sum >/dev/null 2>&1 && sha256sum < "$p"; } ||
@@ -364,7 +365,7 @@ fi
   failed, then `failed to get the sha256 hash of the file on the host`.
 - **`stat -c` goes first,** because GNU's `stat -f fmt file` doesn't fail. It prints filesystem information instead.
   BSD needs `%Mp%Lp`, because `%Lp` alone drops setuid and setgid.
-- **The local hash** comes from `Bun.CryptoHasher("sha256")`. No file is transferred just to learn it is unchanged.
+- **The local hash** comes from Bun's `CryptoHasher("sha256")`. No file is transferred just to learn it is unchanged.
 - **The file is in sync** when the hash matches, and so does each attribute that was given. Modes are compared as octal
   numbers, because GNU prints `644` and BSD prints `0644`. A user or group given as a name is compared with the name
   `stat` prints, and one given as a number with the uid or gid. There's no portable command to turn a group name into
@@ -397,10 +398,12 @@ line:
 
 ```
   ~ change: (file) /etc/app/app.conf
-       3  port = 8080
-         -workers = 4
-       4 +workers = 8
-       5  log = info
+      ──────────────
+      3  port = 8080
+        -workers = 4
+      4 +workers = 8
+      5  log = info
+      ──────────────
       mode: rw-r--r-- (644) -> rw------- (600)
       user: root -> sonarr
 ```
@@ -443,13 +446,16 @@ await h.file("/etc/sudoers.d/adam", sudoers, {
 ```
 
 - **It takes a function,** given the temp file's path already shell-quoted, so there's no placeholder like Ansible's
-  `%s` to learn or forget.
+  `%s` to learn or forget. The function runs in `plan` too, so a command that comes back empty fails before anything
+  is written.
 - **It runs as the write does,** under `sudo` with `sudo: true`.
 - **A non-zero exit fails the step.** The temp file is deleted and the old file stays as it was, like
-  `the new content of '/etc/ssh/sshd_config' isn't valid -> exited with code 255: line 3: Bad configuration option: Foo`.
-- **The temp file keeps the destination's extension,** like `.app.a1b2c3.json` for `app.json`, because some validators
-  pick a parser by extension.
-- **It only runs in `apply`.** `plan` never writes the temp file, so invalid content shows up on the first `apply`.
+  `failed to write '/etc/ssh/sshd_config' -> the validate command 'sshd -t -f "$tmppath"' exited with code 255: line 3:
+  Bad configuration option: Foo`.
+- **The temp file keeps the destination's name,** extension included, inside a temp directory like
+  `.app.json.tsinfra.a1b2c3/app.json`, because some validators pick a parser by extension.
+- **The command only runs in `apply`.** `plan` never writes the temp file, so invalid content shows up on the first
+  `apply`.
 - **It checks the file on its own.** A fragment that only makes sense with the rest of a config, like an nginx site,
   is checked by a `run` after the file instead, like `nginx -t && systemctl reload nginx`.
 
@@ -504,7 +510,7 @@ place on the control machine, so an edit in the repo shows up straight away. The
 follows the same rules as `file`'s (see [`file`](#file)).
 
 `link` is a step of its own, not a form of `file`, because the two share only the path and the owner. A link has no
-content, mode, or `secret`, and `force` means nothing for a regular file. Their state commands, output, and writes
+content, mode, or `secret`, and `force` means nothing for a regular file. Their details commands, output, and writes
 differ too.
 
 The words are easy to mix up. In `ln -s TARGET LINK`, the target is the original file the link points to, and the link
@@ -525,7 +531,7 @@ manages first.
   link is still made, with a `warning: nothing exists at target -> <target>` line under it, so a typo in the repo path stands out.
   The warning shows even when the link is already right, without `--verbose`, and the summary counts it. It's not
   drift, so it doesn't change the exit code.
-- **The state command** reads the existing link's target with `readlink` and compares it with `target` as an exact
+- **The link details command** reads the existing link's target with `readlink` and compares it with `target` as an exact
   string, after `~/` is resolved. It is in sync when `path` is a symlink that points there, with the right owner.
 - **An existing symlink is always updated** to point at `target`, because managing it is the point.
 - **A regular file at `path` is an error** unless `force: true`, like `'/home/adam/.config/fish/config.fish' is a
@@ -536,7 +542,7 @@ manages first.
 - **A directory with anything in it is always an error,** even with `force`, because replacing it would throw away
   everything in it. A hidden file counts. Anything else that isn't a link or a regular file, like a socket, is always
   an error too.
-- **`sudo` works as it does for `file`.** The state command and the write both run as root.
+- **`sudo` works as it does for `file`.** The link details command and the write both run as root.
 - **The output** shows `target: new link to /home/adam/dotfiles/fish/config.fish` for a new link, and a changed target
   as an attribute line, like `target: /home/adam/old -> /home/adam/new`. Paths are absolute, because that's what
   `readlink` gives back. Forcing something out shows `replaces a file` or `replaces an empty directory`.

@@ -57,23 +57,28 @@ commands (`file`'s details command and write) are POSIX sh, so any `shell` must 
 ## File writes
 
 `file` writes with one script, run on the host by `sh -s`, and in a nested `sudo sh -s` with `sudo: true`. The content travels
-inside the script, base64-encoded in a quoted heredoc, and lands in a temp file next to the destination:
+inside the script, base64-encoded in a quoted heredoc, and lands in a temp file in a temp directory next to the
+destination:
 
 ```sh
 set -eu
-mkdir -p '/etc/app'                                 # 1. parent directories, before the umask
-umask 077                                           # 2. new files start private
-tmp=$(mktemp '/etc/app/.app.conf.tsinfra.XXXXXX')   # 3. a unique temp file next to the destination
-trap 'rm -f "$tmp"' EXIT                            #    removed if anything below fails
-base64 -d > "$tmp" <<'__TSINFRA_EOF__'              # 4. the content, decoded into the temp file
+mkdir -p '/etc/app'                                    # 1. parent directories, before the umask
+umask 077                                              # 2. new files start private
+tmp=$(mktemp -d '/etc/app/.app.conf.tsinfra.XXXXXX')   # 3. a unique temp directory next to the destination
+trap 'rm -rf "$tmp"' EXIT                              #    removed if anything below fails
+tmppath="$tmp"/'app.conf'                              #    the temp file keeps the destination's name
+base64 -d > "$tmppath" <<'__TSINFRA_EOF__'             # 4. the content, decoded into the temp file
 <content as base64>
 __TSINFRA_EOF__
-chown -h -- '1000:1000' "$tmp"                      # 5. user and group first
-chmod 644 "$tmp"                                    #    then the mode
-chcon --reference='/etc/app/app.conf' "$tmp"        # 6. an existing file's SELinux label, when chcon exists
-mv -f "$tmp" '/etc/app/app.conf'                    # 7. one rename puts it in place
+chown -h -- '1000:1000' "$tmppath"                     # 5. user and group first
+chmod 644 "$tmppath"                                   #    then the mode
+chcon --reference='/etc/app/app.conf' "$tmppath"       # 6. an existing file's SELinux label, when chcon exists
+( <validate command>                                   # 7. the validate command, when there is one
+) >&2 || { status=$?; echo validate=failed; exit "$status"; }
+mv -f "$tmppath" '/etc/app/app.conf'                   # 8. one rename puts it in place
+rm -rf "$tmp"
 trap - EXIT
-restorecon '/etc/app/app.conf'                      # 8. a new file's default SELinux label, when restorecon exists
+restorecon '/etc/app/app.conf'                         # 9. a new file's default SELinux label, when restorecon exists
 ```
 
 Each step's place in the order matters:
@@ -81,9 +86,12 @@ Each step's place in the order matters:
 1. **`mkdir -p` runs before `umask 077`,** so a parent directory it creates gets the usual permissions. After the
    umask it would come out `0700`, and a daemon that isn't root couldn't reach the file.
 2. **`umask 077`** means the temp file exists only as private, so a secret is never readable while it is written.
-3. **`mktemp` creates the temp file exclusively,** with a name nobody can predict. A fixed name could be a symlink
-   someone planted, and writing to it would follow the link. The temp file sits in the destination's directory, so the
-   final rename stays on one filesystem and is atomic. `mktemp` exists on GNU, BSD and macOS, and busybox.
+3. **`mktemp -d` creates a private temp directory,** with a name nobody can predict. A fixed name could be a symlink
+   someone planted, and writing to it would follow the link. The directory sits next to the destination, so the final
+   rename stays on one filesystem and is atomic. The temp file inside it has the destination's own name, extension
+   included, because some validators pick a parser by extension, and `mktemp` can only put its random part at the end
+   of a name. `mktemp -d` exists on GNU, BSD and macOS, and busybox. `link` writes the same way (see
+   [Link writes](#link-writes)).
 4. **The heredoc** is part of the script, so the shell parses it before running anything, and the content arrives
    intact whatever the shell's buffering. The delimiter has underscores, which base64 never contains, so no line of the
    content can end it early.
@@ -98,9 +106,14 @@ Each step's place in the order matters:
 6. **SELinux.** `mv` keeps the temp file's label, so the replacement takes the old file's label first. Both SELinux
    steps run only when the command exists, and a failure is ignored, because `chcon` can exist on a system with SELinux
    off, and then it fails.
-7. **`mv -f`** is the only moment the destination changes, so it is always either the old file or the complete new one,
+7. **The validate command** checks the temp file once it has its final owner and mode, because `visudo -c` checks
+   those too. It runs in a subshell, so an `exit` in it ends only the command. Its stdout goes to stderr, so the
+   script's stdout holds only the `validate=failed` marker, which tells a failed validation apart from a failed write.
+   The script exits with the command's own code, so the error shows it. The write runs through `shell.inspect`,
+   because `exec` drops stdout on a failure.
+8. **`mv -f`** is the only moment the destination changes, so it is always either the old file or the complete new one,
    already with its owner and mode.
-8. **`restorecon`** gives a newly created file the label the policy expects. It skips an existing file, because it
+9. **`restorecon`** gives a newly created file the label the policy expects. It skips an existing file, because it
    could reset a label that `chcon` just kept.
 
 No step runs `fsync` before the rename. A crash at the wrong moment could leave the new file empty after a reboot.
@@ -197,12 +210,14 @@ set -eu
 mkdir -p '/home/adam/.config/fish'
 tmp=$(mktemp -d '/home/adam/.config/fish/.config.fish.tsinfra.XXXXXX')
 trap 'rm -rf "$tmp"' EXIT
-ln -s '/home/adam/dotfiles/fish/config.fish' "$tmp/link"
-chown -h -- '501:20' "$tmp/link"                    # when there's a value
+tmppath="$tmp"/'config.fish'
 touch "$tmp/probe"
 if mv -T "$tmp/probe" "$tmp/probed" 2>/dev/null; then flag=-T; else flag=-h; fi
+rm -f "$tmp/probe" "$tmp/probed"
+ln -s '/home/adam/dotfiles/fish/config.fish' "$tmppath"
+chown -h -- '501:20' "$tmppath"                     # when there's a value
 rmdir '/home/adam/.config/fish/config.fish'         # only for a forced empty directory
-mv -f "$flag" "$tmp/link" '/home/adam/.config/fish/config.fish'   # with a fallback when replacing a link, see below
+mv -f "$flag" "$tmppath" '/home/adam/.config/fish/config.fish'   # with a fallback when replacing a link, see below
 rm -rf "$tmp"
 trap - EXIT
 ```
@@ -210,7 +225,10 @@ trap - EXIT
 - **A temp directory, not a temp name.** `mktemp` can't create a symlink, and a fixed name could be a symlink someone
   planted. A new private directory has neither problem, and it's on the same filesystem, so the rename is atomic.
 - **The flag gets tried on a file of its own.** GNU and busybox use `mv -T`, and BSD and macOS use `mv -h`. Trying them
-  in turn on the real link would hide a real failure behind `invalid option`.
+  in turn on the real link would hide a real failure behind `invalid option`. The probe runs before the link exists,
+  so a link named `probe` can't be mistaken for it.
+- **The temp link is named like the destination,** the same as `file`'s temp file, so both writes share their temp
+  directory lines.
 - **`rmdir` runs first for an empty directory,** because a rename can't replace a directory with a link. That leaves a
   brief moment with nothing at the path. A file that appears in the directory makes `rmdir` fail, so nothing is lost.
 - **Replacing a link falls back to removing it.** busybox's `mv -T` refuses to replace a link to a directory, unless the
