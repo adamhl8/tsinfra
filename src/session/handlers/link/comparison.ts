@@ -5,7 +5,7 @@ import type { ValidLinkOptions } from "#session/handlers/link.ts"
 import type { HostLinkDetails } from "#session/handlers/link/host-link-details.ts"
 import type { Comparison } from "#session/handlers/shared/converge.ts"
 import type { OwnerChange } from "#session/handlers/shared/filesystem/attributes.ts"
-import { checkWriteOwner, findOwnerChanges } from "#session/handlers/shared/filesystem/owner.ts"
+import { checkCanSetOwner, findOwnerChanges } from "#session/handlers/shared/filesystem/owner.ts"
 import type { StepContext } from "#session/step.ts"
 
 /**
@@ -46,17 +46,18 @@ export const compareLink = async (
   options: ValidLinkOptions,
 ): Promise<Result<Comparison>> => {
   const { shell } = ctx
-  const { kind: hostKind, path, targetExists } = hostLinkDetails
+  const { kind: linkDetailsKind, path, targetExists } = hostLinkDetails
   const { force } = options
 
-  if (hostKind === "file" && !force)
+  if (linkDetailsKind === "file" && !force)
     return err(`'${path}' is a regular file, so link won't replace it without force: true`, undefined)
-  if (hostKind === "emptyDirectory" && !force)
+  if (linkDetailsKind === "emptyDirectory" && !force)
     return err(`'${path}' is an empty directory, so link won't replace it without force: true`, undefined)
 
-  const owner = hostLinkDetails.kind === "new" ? undefined : hostLinkDetails.owner
+  const currentOwner = hostLinkDetails.kind === "new" ? undefined : hostLinkDetails.owner
+  const ownerChanges = currentOwner === undefined ? [] : findOwnerChanges(currentOwner, options)
+
   const linkChange = toLinkChange(hostLinkDetails, target)
-  const ownerChanges = owner === undefined ? [] : findOwnerChanges(owner, options)
 
   const inSync = linkChange.kind === "same" && ownerChanges.length === 0
   const comparison: Comparison = { inSync, values: { kind: "link", linkChange, ownerChanges, targetExists } }
@@ -64,6 +65,6 @@ export const compareLink = async (
   // Skip the owner check for a link in sync, because no write is coming.
   if (inSync) return comparison
 
-  const ownerCheck = await checkWriteOwner(shell, path, owner, options)
+  const ownerCheck = await checkCanSetOwner(shell, path, currentOwner, options)
   return isErr(ownerCheck) ? ownerCheck : comparison
 }

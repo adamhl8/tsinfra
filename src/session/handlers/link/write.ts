@@ -10,13 +10,15 @@ import type { StepContext } from "#session/step.ts"
 /** Returns the script that makes the link under a temp name, then renames it into place (see `docs/transport.md`). */
 const buildLinkWriteScript = (hostLinkDetails: HostLinkDetails, target: string, options: ValidLinkOptions): string => {
   const { path } = hostLinkDetails
-  const owner = hostLinkDetails.kind === "new" ? undefined : hostLinkDetails.owner
+  const currentOwner = hostLinkDetails.kind === "new" ? undefined : hostLinkDetails.owner
+
   const { quotedPath, quotedDirectory, quotedTempTemplate } = toWriteScriptPaths(path)
   const quotedTarget = quoteShellArg(target)
 
-  const chownLines = buildChownLines(owner, options, '"$tmp/link"')
+  const chownLines = buildChownLines(currentOwner, '"$tmp/link"', options)
   // Remove an empty directory first, because a rename can't replace a directory with a link.
   const rmdirLines = hostLinkDetails.kind === "emptyDirectory" ? [`rmdir ${quotedPath}`] : []
+
   const moveCommand = `mv -f "$flag" "$tmp/link" ${quotedPath}`
   // Remove an old link when the rename fails, because busybox's `mv -T` won't replace a link to a directory with a link to
   // anything else, and nothing else renames a link there.
@@ -55,6 +57,7 @@ export const writeLink = async (
   const { shell } = ctx
   const { path } = hostLinkDetails
 
-  const output = await shell.exec(buildLinkWriteScript(hostLinkDetails, target, options), { label: "link write" })
+  const script = buildLinkWriteScript(hostLinkDetails, target, options)
+  const output = await shell.exec(script, { label: "link write" })
   if (isErr(output)) return err(`failed to write the link at '${path}'`, output)
 }

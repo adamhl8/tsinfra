@@ -10,6 +10,7 @@ import { writeFakeTool } from "#__tests__/session.ts"
 import type { HostFileDetails } from "#session/handlers/file/host-file-details.ts"
 import { getHostFileDetails, parseFileDetailsOutput } from "#session/handlers/file/host-file-details.ts"
 import { toBytes } from "#session/handlers/shared/filesystem/bytes.ts"
+import { toModeBits } from "#session/handlers/shared/filesystem/mode.ts"
 import { createShell } from "#session/shell.ts"
 import { runLocal } from "#transport/local.ts"
 
@@ -26,7 +27,7 @@ describe("parseFileDetailsOutput", () => {
       kind: "existing",
       path: "/tmp/x",
       content: { hash: HASH, size: toBytes(12) },
-      attributes: { mode: 0o644, uid: 501, gid: 20, user: "adam", group: "staff" },
+      attributes: { mode: toModeBits(0o644), uid: 501, gid: 20, user: "adam", group: "staff" },
     })
   })
 
@@ -35,7 +36,7 @@ describe("parseFileDetailsOutput", () => {
       kind: "existing",
       path: "/tmp/x",
       content: { hash: HASH, size: toBytes(3) },
-      attributes: { mode: 0o644, uid: 0, gid: 0, user: "root", group: "wheel" },
+      attributes: { mode: toModeBits(0o644), uid: 0, gid: 0, user: "root", group: "wheel" },
     })
   })
 

@@ -1,6 +1,6 @@
 import { type } from "arktype"
 
-import type { FileMode } from "#session/handlers/shared/filesystem/mode.ts"
+import type { FileMode, ModeBits } from "#session/handlers/shared/filesystem/mode.ts"
 import { OCTAL_MODE_PATTERN, SYMBOLIC_MODE_PATTERN } from "#session/handlers/shared/filesystem/mode.ts"
 
 const fileOwnerSchema = type("string | number")
@@ -44,7 +44,7 @@ export interface HostOwner {
 
 /** What the file details command found about the mode and owner of a regular file. */
 export interface HostFileAttributeDetails extends HostOwner {
-  mode: number
+  mode: ModeBits
 }
 
 /** An owner that differs, as raw values: a name, or a uid or gid when the script gave a number. */
@@ -54,11 +54,11 @@ export interface OwnerChange {
   want: FileOwner
 }
 
-/** A file's mode that differs, as permission bits. */
+/** A file's mode that differs, as mode bits. */
 interface ModeChange {
   name: "mode"
-  got: number
-  want: number
+  got: ModeBits
+  want: ModeBits
 }
 
 /** A managed attribute of a file whose value differs. `name` says how the output shows it. */

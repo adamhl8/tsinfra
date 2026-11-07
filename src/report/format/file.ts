@@ -8,6 +8,7 @@ import type { FileComparisonValues } from "#session/handlers/file/comparison.ts"
 import type { ContentComparison, SizeComparison } from "#session/handlers/file/comparison/content.ts"
 import type { AttributeChange } from "#session/handlers/shared/filesystem/attributes.ts"
 import type { Bytes } from "#session/handlers/shared/filesystem/bytes.ts"
+import type { ModeBits } from "#session/handlers/shared/filesystem/mode.ts"
 import { toOctalMode, toSymbolicMode } from "#session/handlers/shared/filesystem/mode.ts"
 
 // Spell out a size in bytes, because a lone `B` reads like "billion".
@@ -38,8 +39,8 @@ const formatFileNote = (sizeComparison: SizeComparison): string => {
   return `${pc.italic(FILE_NOTE_WORDS[kind])}, ${sizes}`
 }
 
-/** Formats permission bits as both notations, like `rw-r--r-- (644)`, because a script can write either one. */
-const formatMode = (bits: number) => `${toSymbolicMode(bits)} (${toOctalMode(bits)})`
+/** Formats mode bits as both notations, like `rw-r--r-- (644)`, because a script can write either one. */
+const formatMode = (bits: ModeBits) => `${toSymbolicMode(bits)} (${toOctalMode(bits)})`
 
 const toAttributeRow = (attributeChange: AttributeChange): LabelRow => {
   if (attributeChange.name !== "mode") return toOwnerRow(attributeChange)

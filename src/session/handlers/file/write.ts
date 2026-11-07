@@ -10,7 +10,7 @@ import type { HostFileAttributeDetails } from "#session/handlers/shared/filesyst
 import {
   PRIVATE_FILE_MODE,
   PUBLIC_FILE_MODE,
-  toModeBits,
+  parseFileMode,
   toOctalMode,
 } from "#session/handlers/shared/filesystem/mode.ts"
 import { buildChownLines, toWriteScriptPaths } from "#session/handlers/shared/filesystem/write-script.ts"
@@ -25,7 +25,7 @@ const getModeArg = (attributes: HostFileAttributeDetails | undefined, options: V
   const { mode, secret } = options
 
   const defaultMode = secret ? PRIVATE_FILE_MODE : PUBLIC_FILE_MODE
-  const bits = mode === undefined ? (attributes?.mode ?? toModeBits(defaultMode)) : toModeBits(mode)
+  const bits = mode === undefined ? (attributes?.mode ?? parseFileMode(defaultMode)) : parseFileMode(mode)
   return toOctalMode(bits)
 }
 
@@ -41,7 +41,7 @@ const createWriteScript = (hostFileDetails: HostFileDetails, options: ValidFileO
   const { quotedPath, quotedDirectory, quotedTempTemplate } = toWriteScriptPaths(path)
   const modeArg = getModeArg(attributes, options)
 
-  const chownLines = buildChownLines(attributes, options, '"$tmp"')
+  const chownLines = buildChownLines(attributes, '"$tmp"', options)
   // Ignore a failure, because `chcon` can exist on a system with SELinux off, and then it fails.
   const chconLines = isNewFile
     ? []

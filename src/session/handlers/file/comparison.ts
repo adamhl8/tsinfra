@@ -9,7 +9,7 @@ import type { HostFileDetails } from "#session/handlers/file/host-file-details.t
 import type { ResolvedFileContent } from "#session/handlers/file/resolved-content.ts"
 import type { Comparison } from "#session/handlers/shared/converge.ts"
 import type { AttributeChange } from "#session/handlers/shared/filesystem/attributes.ts"
-import { checkWriteOwner } from "#session/handlers/shared/filesystem/owner.ts"
+import { checkCanSetOwner } from "#session/handlers/shared/filesystem/owner.ts"
 import type { StepContext } from "#session/step.ts"
 
 /** How a file on the host differs from what the script wants: its content, and each managed attribute that differs. */
@@ -41,6 +41,6 @@ export const compareFile = async (
   // Skip the owner check for a file in sync, because no write is coming.
   if (inSync) return comparison
 
-  const ownerCheck = await checkWriteOwner(shell, path, attributes, options)
+  const ownerCheck = await checkCanSetOwner(shell, path, attributes, options)
   return isErr(ownerCheck) ? ownerCheck : comparison
 }

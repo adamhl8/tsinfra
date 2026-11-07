@@ -478,7 +478,7 @@ describe("h.file refusals", () => {
   })
 })
 
-/** Returns the permission bits of the file at `filePath`. */
+/** Returns the mode bits of the file at `filePath`. */
 const getMode = async (filePath: string) => (await stat(filePath)).mode % 0o1_0000
 
 describe("h.file in apply", () => {

@@ -3,6 +3,19 @@ import { type } from "arktype"
 
 const OCTAL_RADIX = 8
 
+declare const MODE_BITS_BRAND: unique symbol
+
+/**
+ * A file's mode bits: its permission bits, and the setuid, setgid, and sticky bits, like `0o4755`. Only `toModeBits`
+ * makes one, so a plain number like a uid can't stand in.
+ */
+export type ModeBits = number & { readonly [MODE_BITS_BRAND]: true }
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion - a brand exists only in the types, so only `as` can make one
+export const toModeBits = (bits: number): ModeBits => bits as ModeBits
+
+/** Parses a mode written in octal, like `644`, into its bits. */
+const parseOctalMode = (text: string): ModeBits => toModeBits(Number.parseInt(text, OCTAL_RADIX))
+
 type OctalDigit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7"
 
 /** A mode in octal, like `"644"`, or `"4755"` with setuid. */
@@ -16,8 +29,8 @@ export const OCTAL_MODE_PATTERN = regex.as<OctalMode>("^[0-7]{3,4}$", "v")
 // Allow fewer than three digits, because GNU and busybox `stat` print mode `044` as `44`.
 const STAT_MODE_PATTERN = /^[0-7]{1,4}$/v
 
-/** Parses an octal mode as `stat` prints it, like `644` or `44`, into its permission bits. */
-export const statModeSchema = type(STAT_MODE_PATTERN).pipe((mode) => Number.parseInt(mode, OCTAL_RADIX))
+/** Parses an octal mode as `stat` prints it, like `644` or `44`, into its mode bits. */
+export const statModeSchema = type(STAT_MODE_PATTERN).pipe(parseOctalMode)
 
 // Allow `s` and `S` in an `x` slot for setuid and setgid, and `t` and `T` for the sticky bit, like `ls -l` prints them.
 // Leave off the `v` flag, because it requires escaping `-`, and `regex` can't infer a type from `String.raw`.
@@ -47,8 +60,11 @@ export const PRIVATE_EXECUTABLE_MODE = "rwx------" satisfies SymbolicMode
 
 const PERMISSION_LETTERS = "rwx"
 // Index the setuid, setgid, and sticky bits by triple: owner, group, others.
-const SPECIAL_BITS = [0o4000, 0o2000, 0o1000]
-const SPECIAL_LETTERS = ["s", "s", "t"]
+const SPECIAL_BITS = [
+  { bit: 0o4000, letter: "s" },
+  { bit: 0o2000, letter: "s" },
+  { bit: 0o1000, letter: "t" },
+]
 const SPECIAL_CHARS = "sStT"
 // Treat `S` and `T` as a special bit without execute, the way `ls -l` prints it.
 const SPECIAL_WITHOUT_EXECUTE = "ST"
@@ -63,9 +79,9 @@ const hasBit = (bits: number, bit: number) => Math.floor(bits / bit) % 2 === 1
 // Return a plain `boolean`, because narrowing `FileMode` by every symbolic mode slows the whole type check.
 const isSymbolicMode = (mode: FileMode): boolean => SYMBOLIC_MODE_PATTERN.test(mode)
 
-/** Converts `mode` to its permission bits. */
-export const toModeBits = (mode: FileMode) => {
-  if (!isSymbolicMode(mode)) return Number.parseInt(mode, OCTAL_RADIX)
+/** Parses `mode`, in octal or symbolic form, into its mode bits. */
+export const parseFileMode = (mode: FileMode): ModeBits => {
+  if (!isSymbolicMode(mode)) return parseOctalMode(mode)
 
   let bits = 0
   // oxlint-disable-next-line typescript/no-misused-spread - `mode` matched `SYMBOLIC_MODE_PATTERN`, so it's all ASCII
@@ -74,17 +90,17 @@ export const toModeBits = (mode: FileMode) => {
     const isGranted = char !== "-" && !SPECIAL_WITHOUT_EXECUTE.includes(char)
     if (isGranted) bits += permissionBit
 
-    const specialBit = SPECIAL_BITS[Math.floor(index / TRIPLE_LENGTH)] ?? 0
-    if (SPECIAL_CHARS.includes(char)) bits += specialBit
+    const specialBit = SPECIAL_BITS[Math.floor(index / TRIPLE_LENGTH)]
+    if (specialBit && SPECIAL_CHARS.includes(char)) bits += specialBit.bit
   }
-  return bits
+  return toModeBits(bits)
 }
 
-/** Returns permission bits in octal, like `644`, or `4755` with setuid. */
-export const toOctalMode = (bits: number) => bits.toString(OCTAL_RADIX).padStart(OCTAL_MODE_WIDTH, "0")
+/** Returns mode bits in octal, like `644`, or `4755` with setuid. */
+export const toOctalMode = (bits: ModeBits) => bits.toString(OCTAL_RADIX).padStart(OCTAL_MODE_WIDTH, "0")
 
-/** Returns permission bits the way `ls -l` prints them, like `rw-r--r--`. */
-export const toSymbolicMode = (bits: number) =>
+/** Returns mode bits the way `ls -l` prints them, like `rw-r--r--`. */
+export const toSymbolicMode = (bits: ModeBits) =>
   Array.from({ length: SYMBOLIC_LENGTH }, (_, index) => {
     const tripleIndex = Math.floor(index / TRIPLE_LENGTH)
     const slot = index % TRIPLE_LENGTH
@@ -92,9 +108,9 @@ export const toSymbolicMode = (bits: number) =>
     const letter = PERMISSION_LETTERS[slot] ?? "-"
 
     const isExecuteSlot = slot === TRIPLE_LENGTH - 1
-    const specialLetter = SPECIAL_LETTERS[tripleIndex] ?? ""
-    const hasSpecialBit = isExecuteSlot && hasBit(bits, SPECIAL_BITS[tripleIndex] ?? 0)
-    if (hasSpecialBit) return isGranted ? specialLetter : specialLetter.toUpperCase()
+    const specialBit = SPECIAL_BITS[tripleIndex]
+    const hasSpecialBit = isExecuteSlot && specialBit !== undefined && hasBit(bits, specialBit.bit)
+    if (hasSpecialBit) return isGranted ? specialBit.letter : specialBit.letter.toUpperCase()
 
     return isGranted ? letter : "-"
   }).join("")

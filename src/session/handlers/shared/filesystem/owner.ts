@@ -17,15 +17,15 @@ const COMMAND_USER_COMMAND = "id -u && { id -un 2>/dev/null || true; }"
 const commandUidSchema = type("string.integer.parse")
 
 /** Lists the given owners that differ on the host, comparing a name with a name and a number with an id. */
-export const findOwnerChanges = (owner: HostOwner, options: OwnerOptions): OwnerChange[] => {
+export const findOwnerChanges = (currentOwner: HostOwner, options: OwnerOptions): OwnerChange[] => {
   const { user, group } = options
 
   const changes: OwnerChange[] = []
 
-  const gotUser = typeof user === "number" ? owner.uid : owner.user
+  const gotUser = typeof user === "number" ? currentOwner.uid : currentOwner.user
   if (user !== undefined && gotUser !== user) changes.push({ name: "user", got: gotUser, want: user })
 
-  const gotGroup = typeof group === "number" ? owner.gid : owner.group
+  const gotGroup = typeof group === "number" ? currentOwner.gid : currentOwner.group
   if (group !== undefined && gotGroup !== group) changes.push({ name: "group", got: gotGroup, want: group })
 
   return changes
@@ -47,34 +47,33 @@ const getCommandUser = async (shell: Shell): Promise<Result<CommandUser>> => {
  * Fails a write that can only fail at its `chown`, so the mistake shows in `plan` too. A write always ends with `path`
  * owned by `user`, or by its current owner, and only root can make that anyone but itself.
  */
-export const checkWriteOwner = async (
+export const checkCanSetOwner = async (
   shell: Shell,
   path: string,
-  owner: HostOwner | undefined,
+  currentOwner: HostOwner | undefined,
   options: OwnerOptions,
 ): Promise<Result> => {
   const { user } = options
 
   // Skip something new with no `user`, because whoever writes it owns it.
-  if (user === undefined && owner === undefined) return
+  if (user === undefined && currentOwner === undefined) return
 
   const commandUser = await getCommandUser(shell)
   if (isErr(commandUser)) return commandUser
 
   if (commandUser.uid === ROOT_UID) return
 
-  if (user !== undefined) {
-    const isCommandUser = user === (typeof user === "number" ? commandUser.uid : commandUser.user)
-    if (!isCommandUser) {
-      return err(
-        `user '${user}' needs sudo: true, because only root can change a file's owner to another user`,
-        undefined,
-      )
-    }
+  const isOwnedByOther = currentOwner !== undefined && currentOwner.uid !== commandUser.uid
+  if (user === undefined && isOwnedByOther)
+    return err(`'${path}' is owned by '${currentOwner.user}', so writing it needs sudo: true`, undefined)
 
-    return
+  if (user === undefined) return
+
+  const isCommandUser = user === (typeof user === "number" ? commandUser.uid : commandUser.user)
+  if (!isCommandUser) {
+    return err(
+      `user '${user}' needs sudo: true, because only root can change a file's owner to another user`,
+      undefined,
+    )
   }
-
-  if (owner !== undefined && owner.uid !== commandUser.uid)
-    return err(`'${path}' is owned by '${owner.user}', so writing it needs sudo: true`, undefined)
 }

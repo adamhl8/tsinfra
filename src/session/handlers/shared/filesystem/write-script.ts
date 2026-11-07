@@ -11,9 +11,9 @@ interface WriteScriptPaths {
 }
 
 /** Returns `chown`'s `user:group`, each the one given and then the current one, or nothing with neither. */
-const getOwnerArg = (owner: HostOwner | undefined, options: OwnerOptions): string | undefined => {
-  const user = options.user ?? owner?.uid
-  const group = options.group ?? owner?.gid
+const getOwnerArg = (currentOwner: HostOwner | undefined, options: OwnerOptions): string | undefined => {
+  const user = options.user ?? currentOwner?.uid
+  const group = options.group ?? currentOwner?.gid
   if (user === undefined && group === undefined) return undefined
 
   return `${user ?? ""}${group === undefined ? "" : `:${group}`}`
@@ -36,11 +36,11 @@ export const toWriteScriptPaths = (path: string): WriteScriptPaths => {
 
 /** Returns the `chown` line for the temp path, already quoted for the shell, or no lines when there's no owner to set. */
 export const buildChownLines = (
-  owner: HostOwner | undefined,
-  options: OwnerOptions,
+  currentOwner: HostOwner | undefined,
   quotedTempPath: string,
+  options: OwnerOptions,
 ): string[] => {
-  const ownerArg = getOwnerArg(owner, options)
+  const ownerArg = getOwnerArg(currentOwner, options)
   if (ownerArg === undefined) return []
 
   // Use `-h`, so a link gets the owner and not what it points to. It changes nothing for a regular file.
