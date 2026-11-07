@@ -20,8 +20,8 @@ describe("tsinfra", () => {
     expect(stdout).toBe(
       [
         "sonarr",
-        "  ~ Make marker",
-        "  > Restart",
+        "  ~ change:    (ensure) Make marker",
+        "  > triggered: (run)    Restart",
         "",
         PLAN_REMINDER,
         "",
@@ -49,7 +49,7 @@ describe("tsinfra", () => {
     const { stdout, exitCode } = await run`tsinfra plan --hosts-dir hosts-select --verbose a`.nothrow()
 
     expect(exitCode).toBe(0)
-    expect(stdout).toBe("a\n  · true\n  = Install git\n\na   unchanged")
+    expect(stdout).toBe("a\n  · observed:  (read)   true\n  = unchanged: (ensure) Install git\n\na   unchanged")
   })
 
   it("should print a failed host's error on stdout and exit 1, even with drift on another host", async () => {
@@ -59,9 +59,19 @@ describe("tsinfra", () => {
 
     expect(exitCode).toBe(1)
     expect(stdout).toBe(
-      ["a", "  ~ Pending", "", "b", "  ! b.ts", "      boom", "", PLAN_REMINDER, "", "a   1 change", "b   failed"].join(
-        "\n",
-      ),
+      [
+        "a",
+        "  ~ change: (ensure) Pending",
+        "",
+        "b",
+        "  ! failed: (host) b.ts",
+        "      boom",
+        "",
+        PLAN_REMINDER,
+        "",
+        "a   1 change",
+        "b   failed",
+      ].join("\n"),
     )
     expect(stderr).toBe("")
   })

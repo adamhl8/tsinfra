@@ -28,8 +28,8 @@ On a fresh Mac, fish is not installed yet, so the plugin check's `read` would fa
 
 ```
 macbook
-  ~ Install brew packages
-  ? Install fish plugins   needs 'Install brew packages'
+  ~ change:  (ensure) Install brew packages
+  ? waiting: (ensure) Install fish plugins   needs 'Install brew packages'
 ```
 
 ## How it works

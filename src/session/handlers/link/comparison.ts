@@ -54,9 +54,9 @@ export const compareLink = async (
   if (hostKind === "emptyDirectory" && !force)
     return err(`'${path}' is an empty directory, so link won't replace it without force: true`, undefined)
 
-  const hostOwner = hostLinkDetails.kind === "new" ? undefined : hostLinkDetails.owner
+  const owner = hostLinkDetails.kind === "new" ? undefined : hostLinkDetails.owner
   const linkChange = toLinkChange(hostLinkDetails, target)
-  const ownerChanges = hostOwner === undefined ? [] : findOwnerChanges(hostOwner, options)
+  const ownerChanges = owner === undefined ? [] : findOwnerChanges(owner, options)
 
   const inSync = linkChange.kind === "same" && ownerChanges.length === 0
   const comparison: Comparison = { inSync, values: { kind: "link", linkChange, ownerChanges, targetExists } }
@@ -64,6 +64,6 @@ export const compareLink = async (
   // Skip the owner check for a link in sync, because no write is coming.
   if (inSync) return comparison
 
-  const ownerCheck = await checkWriteOwner(shell, path, hostOwner, options)
+  const ownerCheck = await checkWriteOwner(shell, path, owner, options)
   return isErr(ownerCheck) ? ownerCheck : comparison
 }

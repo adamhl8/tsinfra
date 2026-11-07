@@ -1,10 +1,10 @@
-import { chmod, mkdir, mkdtemp, rm, symlink } from "node:fs/promises"
+import { chmod, mkdtemp, rm, symlink } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import process from "node:process"
 
 // Prints the report for one example host per way a block can look, to inspect the output by eye.
-// It runs `plan`, `apply`, `plan --verbose`, and then `apply --verbose`.
+// It runs `plan` for what only shows in `plan` or without `--verbose`, then `apply --verbose` for the rest.
 // Run it with `bask report-preview`, and with `NO_COLOR=1` to see it without colors.
 import bun from "bun"
 import pc from "picocolors"
@@ -19,13 +19,14 @@ import { formatHostBlock } from "#report/format.ts"
 import { formatSummary } from "#report/format/summary.ts"
 import { PUBLIC_FILE_MODE } from "#session/handlers/shared/filesystem/mode.ts"
 
+/** One run of the preview: `plan` shows what only it and a run without `--verbose` show, and `applyVerbose` the rest. */
+type PreviewPass = "plan" | "applyVerbose"
+
 interface Scenario {
   name: string
   target: string
-  /** The modes the case shows up in, when it only means something in some of them. Defaults to both. */
-  modes?: Mode[]
-  /** Leaves the case out of the `--verbose` pass, for a case whose output would only be long there. */
-  skipVerbose?: boolean
+  /** The pass the case shows up in. Defaults to `applyVerbose`, which shows the most. */
+  pass?: PreviewPass
   fn: HostFunction
 }
 
@@ -55,7 +56,8 @@ const numberedLines = (prefix: string) =>
 
 /**
  * Returns one example host for each way a block can look, with markers in `dir` so `apply` can make and see real
- * changes. Cases that only differ in their words, like two errors that both print as red lines, share one example.
+ * changes. Cases that only differ in their words share one example, and each failure needs a host of its own, because a
+ * host stops at its first failure.
  */
 const createScenarios = (dir: string): Scenario[] => {
   const marker = (file: string) => path.join(dir, file)
@@ -67,76 +69,10 @@ const createScenarios = (dir: string): Scenario[] => {
 
   return [
     {
-      // `~` lines, a plural change count, and how a string value would change: `got` and `want` for one line, a diff for
-      // several, with a hunk for each change far from the others. A yes-or-no check like "Install Caddy" shows nothing.
-      name: "changes",
-      target: "@local",
-      fn: async (h) => {
-        await h.ensure("Install Caddy", touchStep("caddy"))
-        await h.ensure("Set the hostname", {
-          check: `cat '${marker("hostname")}' 2>/dev/null || true`,
-          want: "web1",
-          fix: `printf web1 > '${marker("hostname")}'`,
-        })
-        const wantedConfig = CONFIG_LINES.map((line, index) =>
-          index === 1 || index === 10 ? line.replace("default", "tuned") : line,
-        )
-        await h.ensure("Write the config", {
-          check: `cat '${marker("config")}' 2>/dev/null || ${printLines(CONFIG_LINES)}`,
-          want: wantedConfig.join("\n"),
-          fix: `${printLines(wantedConfig)} > '${marker("config")}'`,
-        })
-      },
-    },
-    {
-      // A file's path in the value color, a diff with a `mode:` row after it, and a `content:` row for each case that
-      // can't show a diff, lined up with a `group:` row. With `--verbose`, a file that's already right shows `=`.
-      name: "files",
-      target: "@local",
-      fn: async (h) => {
-        await bun.write(marker("app.conf"), "port = 8080\nworkers = 4\nlog = info\n")
-        await chmod(marker("app.conf"), 0o600)
-        await bun.write(marker("token"), "old-token\n")
-        await bun.write(marker("logo.png"), "logo\n")
-        await bun.write(marker("access.log"), "GET /\n".repeat(30_000))
-        await bun.write(marker("motd"), "welcome\n")
-
-        await h.file(marker("app.conf"), "port = 8080\nworkers = 8\nlog = info\n", { mode: PUBLIC_FILE_MODE })
-        await h.file(marker("new.conf"), "enabled = true\n")
-        await h.file(marker("token"), "new-token\n", { secret: true, group: OTHER_GROUP_ID })
-        await h.file(marker("logo.png"), new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]))
-        await h.file(marker("access.log"), "")
-        await h.file(marker("motd"), "welcome\n")
-      },
-    },
-    {
-      // A `target:` row for each way a link changes, a `group:` row, and the note for a target that's missing.
-      // With `--verbose`, a link that's already right shows `=`.
-      name: "links",
-      target: "@local",
-      fn: async (h) => {
-        const target = marker("dotfile")
-        await bun.write(target, "set -x EDITOR vim\n")
-        await bun.write(marker("old-dotfile"), "set -x EDITOR nano\n")
-        await bun.write(marker("real-file"), "a file where the link goes\n")
-        await mkdir(marker("empty-dir"))
-        await symlink(marker("old-dotfile"), marker("moved-link"))
-        await symlink(target, marker("owned-link"))
-        await symlink(target, marker("right-link"))
-
-        await h.link(marker("new-link"), target)
-        await h.link(marker("real-file"), target, { force: true })
-        await h.link(marker("empty-dir"), target, { force: true })
-        await h.link(marker("moved-link"), target)
-        await h.link(marker("owned-link"), target, { group: OTHER_GROUP_ID })
-        await h.link(marker("broken-link"), marker("missing-dotfile"))
-        await h.link(marker("right-link"), target)
-      },
-    },
-    {
-      // `?` lines with notes in one column, a note that names two steps, and a waiting count.
+      // `?` lines with notes in one column, a note that names two steps, a waiting count, and the plan reminder.
       name: "waiting",
       target: "@local",
+      pass: "plan",
       fn: async (h) => {
         const brew = await h.ensure("Install brew packages", touchStep("brew"))
         const fish = await h.ensure("Install fish", { needs: [brew], ...touchStep("fish") })
@@ -144,30 +80,10 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      // `>` lines, and with `--verbose`, `=` for an already-right step and an untriggered run, and `·` for a read.
-      name: "runs",
-      target: "@local",
-      fn: async (h) => {
-        const unit = await h.ensure("Write the sonarr unit", touchStep("unit"))
-        await h.run("Reload systemd", "true", { after: [unit] })
-        await h.run("Prune docker images", "true", { after: "always" })
-        const caddyfile = await h.ensure("Write the Caddyfile", { check: "true", want: true, fix: "true" })
-        await h.run("Restart caddy", "true", { after: [caddyfile] })
-        await h.read("uname -m")
-      },
-    },
-    {
-      // No block, and an `unchanged` summary line, except with `--verbose`.
-      name: "unchanged",
-      target: "@local",
-      fn: async (h) => {
-        await h.ensure("Install git", { check: "true", want: true, fix: "true" })
-      },
-    },
-    {
-      // A diff too long to show, which becomes a note, except with `--verbose`, where its hunks show in full.
+      // A diff too long to show, which becomes a note without `--verbose`.
       name: "long-diff",
       target: "@local",
+      pass: "plan",
       fn: async (h) => {
         await h.ensure("Write the site config", {
           check: `cat '${marker("site")}' 2>/dev/null || ${printLines(SITE_CONFIG)}`,
@@ -180,7 +96,7 @@ const createScenarios = (dir: string): Scenario[] => {
       // The note that replaces a diff that takes too long, which suggests `--verbose`.
       name: "big-diff",
       target: "@local",
-      skipVerbose: true,
+      pass: "plan",
       fn: async (h) => {
         await h.ensure("Write the big file", {
           check: `cat '${marker("big")}' 2>/dev/null || seq -f 'old %g' 0 ${BIG_VALUE_LINE_COUNT - 1}`,
@@ -190,7 +106,63 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      // A block with "no steps", only with `--verbose`.
+      // No block, only an `unchanged` summary line, because nothing changed and there's no `--verbose`.
+      name: "unchanged",
+      target: "@local",
+      pass: "plan",
+      fn: async (h) => {
+        await h.ensure("Install git", { check: "true", want: true, fix: "true" })
+      },
+    },
+    {
+      // Every kind of step that passes, with the kinds padded to one column.
+      // An `ensure` with nothing under it, a quoted `got` and `want`, and a diff with a hunk for each change far apart.
+      // A file with a diff and a `mode:` row, a new file's size, and a secret file's sizes lined up with a `group:` row.
+      // A link that replaces a file, one whose target changed, and a new one to a missing path, with its note.
+      // `> triggered:` runs, `= unchanged:` for an `ensure` and an untriggered run, and `· observed:` for a read.
+      name: "steps",
+      target: "@local",
+      fn: async (h) => {
+        await bun.write(marker("app.conf"), "port = 8080\nworkers = 4\nlog = info\n")
+        await chmod(marker("app.conf"), 0o600)
+        await bun.write(marker("token"), "old-token\n")
+        const dotfile = marker("dotfile")
+        await bun.write(dotfile, "set -x EDITOR vim\n")
+        await bun.write(marker("old-dotfile"), "set -x EDITOR nano\n")
+        await bun.write(marker("real-file"), "a file where the link goes\n")
+        await symlink(marker("old-dotfile"), marker("moved-link"))
+
+        await h.ensure("Install Caddy", touchStep("caddy"))
+        await h.ensure("Set the hostname", {
+          check: `cat '${marker("hostname")}' 2>/dev/null || true`,
+          want: "web1",
+          fix: `printf web1 > '${marker("hostname")}'`,
+        })
+        const wantedConfig = CONFIG_LINES.map((line, index) =>
+          index === 1 || index === 10 ? line.replace("default", "tuned") : line,
+        )
+        const config = await h.ensure("Write the config", {
+          check: `cat '${marker("config")}' 2>/dev/null || ${printLines(CONFIG_LINES)}`,
+          want: wantedConfig.join("\n"),
+          fix: `${printLines(wantedConfig)} > '${marker("config")}'`,
+        })
+
+        await h.file(marker("app.conf"), "port = 8080\nworkers = 8\nlog = info\n", { mode: PUBLIC_FILE_MODE })
+        await h.file(marker("new.conf"), "enabled = true\n")
+        await h.file(marker("token"), "new-token\n", { secret: true, group: OTHER_GROUP_ID })
+
+        await h.link(marker("real-file"), dotfile, { force: true })
+        await h.link(marker("moved-link"), dotfile)
+        await h.link(marker("broken-link"), marker("missing-dotfile"))
+
+        await h.run("Reload the app", "true", { after: [config] })
+        const caddyfile = await h.ensure("Write the Caddyfile", { check: "true", want: true, fix: "true" })
+        await h.run("Restart caddy", "true", { after: [caddyfile] })
+        await h.read("uname -m")
+      },
+    },
+    {
+      // A block with "no steps", which only shows with `--verbose`.
       name: "no-steps",
       target: "@local",
       fn: async () => {
@@ -198,36 +170,9 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      // A quoted string value, and a one-line stderr.
-      name: "string-value",
-      target: "@local",
-      modes: ["apply"],
-      fn: async (h) => {
-        await h.ensure("Start Sonarr", {
-          check: "echo inactive; echo 'Unit sonarr.service could not be found.' >&2; exit 3",
-          want: "active",
-          fix: "true",
-        })
-      },
-    },
-    {
-      // A multi-line string value as a diff, and a multi-line stderr lined up under its first line.
-      name: "multi-line-value",
-      target: "@local",
-      modes: ["apply"],
-      fn: async (h) => {
-        await h.ensure("Set the allowed hosts", {
-          check: String.raw`printf 'sonarr.lan\nradarr.lan\n'; printf 'warning: radarr.lan is deprecated\nsee the docs\n' >&2`,
-          want: "sonarr.lan\nprowlarr.lan",
-          fix: "true",
-        })
-      },
-    },
-    {
-      // The stderr of a fix that exits 0 and of the check after it, each with its command.
+      // A quoted `got` and `want`, and the stderr of a fix that exits 0 and of the check after it, each with its command.
       name: "fix-and-check-stderr",
       target: "@local",
-      modes: ["apply"],
       fn: async (h) => {
         await h.ensure("Set the app's mode", {
           check: "echo staging; echo 'appctl: warning: config format is deprecated' >&2",
@@ -237,10 +182,21 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      // A check function with one command, which shows its stderr like a command check.
+      // A multi-line string value as a diff, and a multi-line stderr lined up under its first line.
+      name: "multi-line-value",
+      target: "@local",
+      fn: async (h) => {
+        await h.ensure("Set the allowed hosts", {
+          check: String.raw`printf 'sonarr.lan\nradarr.lan\n'; printf 'warning: radarr.lan is deprecated\nsee the docs\n' >&2`,
+          want: "sonarr.lan\nprowlarr.lan",
+          fix: "true",
+        })
+      },
+    },
+    {
+      // A boolean, which is neither quoted nor italic, and a check function with one command, which shows its stderr.
       name: "one-command-check-function",
       target: "@local",
-      modes: ["apply"],
       fn: async (h) => {
         await h.ensure("App is healthy", {
           check: async ({ inspect }) => {
@@ -253,27 +209,9 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      // A check function with several commands, which can't say which stderr matters, so it shows a note.
-      name: "several-commands-check-function",
-      target: "@local",
-      modes: ["apply"],
-      fn: async (h) => {
-        await h.ensure("App is healthy", {
-          check: async ({ inspect }) => {
-            await inspect("echo 'ls: /opt/old: No such file or directory' >&2; exit 2")
-            await inspect("true")
-            return false
-          },
-          want: true,
-          fix: "true",
-        })
-      },
-    },
-    {
       // A note for each phase that ran several commands, one during the fix and one after it.
       name: "several-commands-in-both-phases",
       target: "@local",
-      modes: ["apply"],
       fn: async (h) => {
         await h.ensure("App is healthy", {
           check: async ({ inspect }) => {
@@ -290,27 +228,10 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      // A fix's stderr next to a note for the check after it, which ran several commands.
-      name: "stderr-and-note",
-      target: "@local",
-      modes: ["apply"],
-      fn: async (h) => {
-        await h.ensure("App is healthy", {
-          check: async ({ inspect }) => {
-            await inspect("echo 'ls: /opt/old: No such file or directory' >&2; exit 2")
-            await inspect("true")
-            return false
-          },
-          want: true,
-          fix: "echo 'appctl: warning: config is read-only' >&2",
-        })
-      },
-    },
-    {
-      // A multi-line command, whose stderr follows the arrow on its last line.
+      // An exit code, which is italic because it isn't quoted, and a multi-line command, whose stderr follows the arrow
+      // on its last line.
       name: "multi-line-command",
       target: "@local",
-      modes: ["apply"],
       fn: async (h) => {
         await h.ensure("Enable the app", {
           check: "echo 'checking the app'\necho 'the app is disabled' >&2\nexit 1",
@@ -320,50 +241,14 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      // A failed fix, which only shows the values from before the fix with `--verbose`.
+      // A failed fix, with the values from before the fix under their note.
       name: "failed-fix",
       target: "@local",
-      modes: ["apply"],
       fn: async (h) => {
         await h.ensure("Set the timezone", {
           check: "echo America/New_York",
           want: "UTC",
           fix: "echo 'sudo: a password is required' >&2; exit 1",
-        })
-      },
-    },
-    {
-      // A failed fix on a multi-line value, whose diff follows the note with `--verbose`.
-      name: "failed-fix-multi-line-value",
-      target: "@local",
-      modes: ["apply"],
-      fn: async (h) => {
-        await h.ensure("Set the allowed hosts", {
-          check: String.raw`printf 'sonarr.lan\nradarr.lan\n'`,
-          want: "sonarr.lan\nprowlarr.lan",
-          fix: "echo 'sudo: a password is required' >&2; exit 1",
-        })
-      },
-    },
-    {
-      // An exit code, which is italic because it isn't quoted.
-      name: "exit-code-value",
-      target: "@local",
-      modes: ["apply"],
-      fn: async (h) => {
-        await h.ensure("Remove the old user", { check: "true", want: false, fix: "true" })
-      },
-    },
-    {
-      // A boolean, which is neither quoted nor italic.
-      name: "boolean-value",
-      target: "@local",
-      modes: ["apply"],
-      fn: async (h) => {
-        await h.ensure("Enable the app", {
-          check: async ({ read }) => (await read("echo false")) === "true",
-          want: true,
-          fix: "true",
         })
       },
     },
@@ -382,51 +267,7 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      // A failed read, whose `!` line is named by its command.
-      name: "command-error",
-      target: "@local",
-      fn: async (h) => {
-        await h.read("cat /etc/tsinfra-preview.conf")
-      },
-    },
-    {
-      // A step name that fails validation, named after the host's script, because the step was never recorded.
-      name: "invalid-name",
-      target: "@local",
-      fn: async (h) => {
-        await h.ensure("", { check: "true", want: true, fix: "true" })
-      },
-    },
-    {
-      // An option that fails validation, which names the field.
-      name: "invalid-options",
-      target: "@local",
-      fn: async (h) => {
-        await h.ensure("Install Caddy", { check: "true", want: true, fix: "" })
-      },
-    },
-    {
-      // A run's command that fails validation, which has no field to name.
-      name: "invalid-run-command",
-      target: "@local",
-      fn: async (h) => {
-        await h.run("Reload systemd", "", { after: "always" })
-      },
-    },
-    {
-      // A tool's command that fails validation inside a check, under the step that called it.
-      name: "invalid-tool-command",
-      target: "@local",
-      fn: async (h) => {
-        await h.ensure("Enable the app", {
-          check: async ({ read }) => (await read("")) === "true",
-          want: true,
-          fix: "true",
-        })
-      },
-    },
-    {
-      // A host that couldn't be prepared, named after its target, because its script never ran.
+      // A host that couldn't be prepared, as `(host)` and its target in the value color, because its script never ran.
       name: "unreachable",
       target: "web.lan",
       fn: async (h) => {
@@ -434,7 +275,7 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      // A failure no step owns, named after the host's script, after a step that changed.
+      // A failure no step owns, as `(host)` and the host's script, after a step that changed.
       name: "script-error",
       target: "@local",
       fn: async (h) => {
@@ -450,23 +291,21 @@ const getExitCode = (hostReports: HostReport[], mode: Mode) => {
   return mode === "plan" && hostReports.some((hostReport) => hasDrift(hostReport)) ? 2 : 0
 }
 
-/** Runs every scenario in `mode` and prints each block, the summary, and the exit code the CLI would return. */
-interface PreviewPass {
-  mode: Mode
-  verbose?: boolean
+const PASS_RUNS: Record<PreviewPass, { mode: Mode; verbose: boolean }> = {
+  plan: { mode: "plan", verbose: false },
+  applyVerbose: { mode: "apply", verbose: true },
 }
 
-const previewMode = async (previewPass: PreviewPass) => {
-  const { mode, verbose = false } = previewPass
+/** Runs the scenarios of one pass and prints each block, the summary, and the exit code the CLI would return. */
+const previewPass = async (pass: PreviewPass) => {
+  const { mode, verbose } = PASS_RUNS[pass]
   const dir = await mkdtemp(path.join(os.tmpdir(), "tsinfra-preview-"))
   try {
     console.log(pc.cyan(pc.bold(`==== tsinfra ${mode}${verbose ? " --verbose" : ""} ====`)))
     console.log()
 
     const hostReports: HostReport[] = []
-    const scenarios = createScenarios(dir).filter(
-      ({ modes, skipVerbose }) => (!modes || modes.includes(mode)) && !(verbose && skipVerbose),
-    )
+    const scenarios = createScenarios(dir).filter((scenario) => (scenario.pass ?? "applyVerbose") === pass)
     const preparedHosts = await prepareHosts(scenarios)
     for (const preparedHost of preparedHosts) {
       // oxlint-disable-next-line no-await-in-loop - hosts run one at a time, the same as the CLI
@@ -490,28 +329,15 @@ const previewMode = async (previewPass: PreviewPass) => {
 const previewOwnErrors = () => {
   console.log(pc.cyan(pc.bold("==== tsinfra's own errors (stderr) ====")))
   console.log()
-  const errors = [
-    {
-      label: "load-fails",
-      error: err(
-        "failed to load hosts:\nfailed to load host 'a' -> default must be an object (was missing)",
-        undefined,
-      ),
-    },
-    { label: "no-hosts", error: err("failed to discover hosts", err("no host scripts in 'hosts'", undefined)) },
-  ]
-  for (const { label, error } of errors) {
-    console.log(pc.dim(label))
-    printTsinfraError(error)
-    console.log()
-  }
+  printTsinfraError(
+    err("failed to load hosts:\nfailed to load host 'a' -> default must be an object (was missing)", undefined),
+  )
+  console.log()
 }
 
 const main = async (): Promise<number> => {
-  await previewMode({ mode: "plan" })
-  await previewMode({ mode: "apply" })
-  await previewMode({ mode: "plan", verbose: true })
-  await previewMode({ mode: "apply", verbose: true })
+  await previewPass("plan")
+  await previewPass("applyVerbose")
   previewOwnErrors()
   return 0
 }

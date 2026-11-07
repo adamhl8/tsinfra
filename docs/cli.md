@@ -98,18 +98,18 @@ only change what's printed:
 
 ```
 sonarr
-  ~ Write /etc/systemd/system/sonarr.service
+  ~ change:    (file) /etc/systemd/system/sonarr.service
       -Restart=always
       +Restart=on-failure
-  > Reload systemd
+  > triggered: (run)  Reload systemd
 
 immich
-  ! Start Immich
+  ! failed: (ensure) Start Immich
       docker is missing: launch the container with the docker profile
 
 macbook
-  ~ Install brew packages
-  ? Install fish plugins   needs 'Install brew packages'
+  ~ change:  (ensure) Install brew packages
+  ? waiting: (ensure) Install fish plugins   needs 'Install brew packages'
 
 Steps after a change were checked without that change, so apply may differ.
 
@@ -119,9 +119,9 @@ macbook   1 change, 1 waiting
 sonarr    2 changes
 ```
 
-`~` is a change, `>` is a run, `?` is waiting, `!` is a failure, and `=` and `·` (verbose only) are already right and a
-read. A step's symbol is the same in `plan` and `apply`, because `plan` never changes anything the script manages, so a line needs no
-"would". The exact format is open: see [Open questions](./open-questions.md).
+Each line names its status in words after the symbol. A status reads the same in `plan` and `apply`, because `plan`
+never changes anything the script manages, so its words have no tense, and a line needs no "would". The exact format is
+open: see [Open questions](./open-questions.md).
 
 ### How the report is built
 
@@ -137,11 +137,15 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   `FORCE_COLOR`, and `--no-color`, and prints plain text when stdout is not a terminal. `util.styleText` from `node:util`
   does the same, but its behavior depends on each runtime's `node:util`, and picocolors' rules are its own. Tests set
   `NO_COLOR` in the test preload, before anything imports picocolors.
-- **Step lines.** The symbol names what kind of step it was. A `changed` step from `ensure`, `file`, or `link` is `~`,
-  and a `ran` step from `run` is `>`. Any failed step is `!`, because the status matters more than the kind once
-  something broke, and the error already says what failed. In `--verbose`, every step that was already right is `=`,
-  whatever its kind, so it doesn't rely on color to tell it from a change. A run whose trigger didn't fire is `=` too,
-  because nothing needed doing. A read or inspect has its own `observed` status, so it gets a gray `·` rather than `=`.
+- **Step lines.** A line starts with the step's status, as a symbol and a word in the status's color, then an uncolored colon, like `~ change:`.
+  Then comes the step's kind in dim parentheses, like `(file)`, and then its name. The status and the kind are each
+  padded to the widest in the block, so every kind and every name starts in one column. The parentheses keep the kind
+  apart from the name without color. A failure no step owns shows `(host)` in place of a kind, also in italics, so it
+  doesn't read as a kind of step. That's a failure of the host's script, or a host that couldn't be prepared. A `changed` step from `ensure`, `file`, or `link` is `~ change`, and a `ran` step from `run` is
+  `> triggered`, because a step it follows changed. Any failed step is `! failed`, because the status matters more than the kind once
+  something broke, and the error already says what failed. In `--verbose`, every step that was already right is `= unchanged`,
+  whatever its kind, so it doesn't rely on color to tell it from a change. A run whose trigger didn't fire is `= unchanged` too,
+  because nothing needed doing. A read or inspect has its own `observed` status, so it gets a gray `· observed` rather than `=`.
 - **Failures.** A failed step shows its error's message chain on indented lines under it, in bright red, so it stands
   apart from a red `got:` value. Its `!` and the host's `failed` in the summary are bright red too. That includes a
   failure the script caught inside the step, because the step still fails. The details a step found, like `got:` and

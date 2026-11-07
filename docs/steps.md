@@ -396,7 +396,7 @@ diff at about 100 kB. A changed attribute shows on a line of its own, old value 
 line:
 
 ```
-  ~ /etc/app/app.conf
+  ~ change: (file) /etc/app/app.conf
        3  port = 8080
          -workers = 4
        4 +workers = 8

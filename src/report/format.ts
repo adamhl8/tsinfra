@@ -2,7 +2,7 @@ import pc from "picocolors"
 import { messageChain } from "ts-explicit-errors"
 
 import type { HostReport } from "#hosts/run.ts"
-import type { Detail, NameKind, StepEntry } from "#report/entries.ts"
+import type { Detail, EntryKind, EntryStatus, NameKind, StepEntry } from "#report/entries.ts"
 import { toStepEntries } from "#report/entries.ts"
 import { formatDiff } from "#report/format/diff.ts"
 import { toEnsureRows } from "#report/format/ensure.ts"
@@ -92,20 +92,41 @@ const formatEntryBody = (stepEntry: StepEntry, formatOptions: FormatOptions): st
 /** Formats a waiting step's step note, like `needs 'A', 'B'`. */
 const formatNeedsNote = (needs: string[]): string => `needs ${quoteNames(needs)}`
 
+/** Formats an entry's status as its symbol and its word, like `~ change`. */
+const formatStatus = (status: EntryStatus): string => {
+  const { symbol, word } = STATUS_STYLES[status]
+  return `${symbol} ${word}`
+}
+
+/** Formats an entry's kind, like `(file)`, so it reads apart from the name even without color. */
+const formatEntryKind = (entryKind: EntryKind): string => `(${entryKind})`
+
+// Dim the kind, so the name stays the main thing on the line.
+// Italicize `(host)` too, so a failure no step owns doesn't read as a kind of step.
+const styleEntryKind = (entryKind: EntryKind, text: string): string =>
+  entryKind === "host" ? pc.italic(pc.dim(text)) : pc.dim(text)
+
 const formatStepEntries = (stepEntries: StepEntry[], formatOptions: FormatOptions): string[] => {
+  // Pad each status and each kind to the widest in the block, so every kind and every name starts in one column.
+  const statusColumn = getMaxWidth(stepEntries.map(({ status }) => `${formatStatus(status)}:`))
+  const entryKindColumn = getMaxWidth(stepEntries.map(({ kind }) => formatEntryKind(kind)))
   // Line up every step note in a block in one column, past the longest name that has one.
   const stepNoteColumn = getMaxWidth(stepEntries.filter(({ needs }) => needs).map(({ name }) => name.text))
 
   return stepEntries.flatMap((stepEntry) => {
-    const { status, name, needs } = stepEntry
-    const { color, symbol } = STATUS_STYLES[status]
+    const { status, kind, name, needs } = stepEntry
+    const { color } = STATUS_STYLES[status]
     const stepNote = needs ? formatNeedsNote(needs) : undefined
+
+    const entryKindText = styleEntryKind(kind, padToWidth(formatEntryKind(kind), entryKindColumn))
 
     const styledName = NAME_STYLES[name.kind](name.text)
     const nameText = stepNote ? padToWidth(styledName, stepNoteColumn) : styledName
     // Dim a step note, so the step's name stays the main thing on the line.
     const stepNoteText = stepNote ? `${COLUMN_GAP}${pc.dim(stepNote)}` : ""
-    const headLine = `${INDENT}${color(symbol)} ${nameText}${stepNoteText}`
+    // Leave the colon uncolored, so it reads as punctuation between the status and the kind.
+    const statusText = padToWidth(`${color(formatStatus(status))}:`, statusColumn)
+    const headLine = `${INDENT}${statusText} ${entryKindText} ${nameText}${stepNoteText}`
     const bodyLines = formatEntryBody(stepEntry, formatOptions).map((bodyLine) => `${DETAIL_INDENT}${bodyLine}`)
 
     return [headLine, ...bodyLines]

@@ -12,6 +12,9 @@ import { isMultiLine } from "#utils.ts"
 
 export type EntryStatus = StepStatus | "failed"
 
+/** What an entry is about: a kind of step, or the host, for a failure no step owns. */
+export type EntryKind = StepKind | "host"
+
 /** An entry's name, and what kind of name it is, which decides how it's styled. */
 interface EntryName {
   text: string
@@ -29,6 +32,8 @@ export type NameKind =
 /** One step's part of a host block, as data. */
 export interface StepEntry {
   status: EntryStatus
+  /** What the entry is about, which the head line shows before the name. */
+  kind: EntryKind
   name: EntryName
   /** The names of the steps a waiting step needs. */
   needs?: string[]
@@ -176,29 +181,39 @@ const toStepEntry = (stepRecord: StepRecord, formatOptions: FormatOptions): Step
   const { verbose = false } = formatOptions
   const name: EntryName = { text: stepName, kind: STEP_NAME_KINDS[kind] }
 
-  if (isErr(status))
-    return { status: "failed", name, error: status, details: toFailureDetails(stepRecord, formatOptions) }
+  if (isErr(status)) {
+    return {
+      status: "failed",
+      kind,
+      name,
+      error: status,
+      details: toFailureDetails(stepRecord, formatOptions),
+    }
+  }
   if (status === undefined) return
 
   const isShown = SHOWN_BY_DEFAULT[status] || verbose
   if (!isShown) return
 
-  if (status === "waiting") return { status, name, needs: waitingOn }
+  if (status === "waiting") return { status, kind, name, needs: waitingOn }
 
   if (status === "changed") {
     const values = comparisons.before?.values
     const hasDetails = values && SHOWS_CHANGE_DETAILS[values.kind]
-    return { status, name, details: hasDetails ? toComparisonValuesDetails(values) : [] }
+    return { status, kind, name, details: hasDetails ? toComparisonValuesDetails(values) : [] }
   }
 
-  return { status, name }
+  return { status, kind, name }
 }
 
 /** Returns the entries a host block shows: one per step that shows, then a failure no step owns. */
 export const toStepEntries = (hostReport: HostReport, formatOptions: FormatOptions): StepEntry[] => {
   // Name a host that couldn't be prepared after its target, because that's what failed, and the script never ran.
-  if (!hostReport.started)
-    return [{ status: "failed", name: { text: hostReport.target, kind: "value" }, error: hostReport.failure }]
+  if (!hostReport.started) {
+    return [
+      { status: "failed", kind: "host", name: { text: hostReport.target, kind: "value" }, error: hostReport.failure },
+    ]
+  }
 
   const { name, stepRecords, failure } = hostReport
   const stepEntries = stepRecords
@@ -211,6 +226,7 @@ export const toStepEntries = (hostReport: HostReport, formatOptions: FormatOptio
   if (failure && !isStepFailure) {
     stepEntries.push({
       status: "failed",
+      kind: "host",
       name: { text: `${name}${HOST_SCRIPT_EXTENSION}`, kind: "hostScript" },
       error: failure,
     })

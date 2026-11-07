@@ -6,13 +6,14 @@ import type { EntryStatus } from "#report/entries.ts"
 export type Style = (text: string) => string
 
 // Give each status one color, so a step's symbol and its count in the summary always match.
-export const STATUS_STYLES: Record<EntryStatus, { color: Style; symbol: string }> = {
-  unchanged: { color: pc.green, symbol: "=" },
-  observed: { color: pc.gray, symbol: "·" },
-  changed: { color: pc.yellow, symbol: "~" },
-  ran: { color: pc.yellow, symbol: ">" },
-  waiting: { color: pc.blue, symbol: "?" },
-  failed: { color: pc.redBright, symbol: "!" },
+// Give each a word with no tense, because a line reads the same in `plan`, where nothing has changed yet.
+export const STATUS_STYLES: Record<EntryStatus, { color: Style; symbol: string; word: string }> = {
+  unchanged: { color: pc.green, symbol: "=", word: "unchanged" },
+  observed: { color: pc.gray, symbol: "·", word: "observed" },
+  changed: { color: pc.yellow, symbol: "~", word: "change" },
+  ran: { color: pc.yellow, symbol: ">", word: "triggered" },
+  waiting: { color: pc.blue, symbol: "?", word: "waiting" },
+  failed: { color: pc.redBright, symbol: "!", word: "failed" },
 }
 
 // Color text that came from the script or the host, so it stands apart from tsinfra's own words.

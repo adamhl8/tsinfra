@@ -17,15 +17,15 @@ const COMMAND_USER_COMMAND = "id -u && { id -un 2>/dev/null || true; }"
 const commandUidSchema = type("string.integer.parse")
 
 /** Lists the given owners that differ on the host, comparing a name with a name and a number with an id. */
-export const findOwnerChanges = (hostOwner: HostOwner, options: OwnerOptions): OwnerChange[] => {
+export const findOwnerChanges = (owner: HostOwner, options: OwnerOptions): OwnerChange[] => {
   const { user, group } = options
 
   const changes: OwnerChange[] = []
 
-  const gotUser = typeof user === "number" ? hostOwner.uid : hostOwner.user
+  const gotUser = typeof user === "number" ? owner.uid : owner.user
   if (user !== undefined && gotUser !== user) changes.push({ name: "user", got: gotUser, want: user })
 
-  const gotGroup = typeof group === "number" ? hostOwner.gid : hostOwner.group
+  const gotGroup = typeof group === "number" ? owner.gid : owner.group
   if (group !== undefined && gotGroup !== group) changes.push({ name: "group", got: gotGroup, want: group })
 
   return changes
@@ -50,13 +50,13 @@ const getCommandUser = async (shell: Shell): Promise<Result<CommandUser>> => {
 export const checkWriteOwner = async (
   shell: Shell,
   path: string,
-  hostOwner: HostOwner | undefined,
+  owner: HostOwner | undefined,
   options: OwnerOptions,
 ): Promise<Result> => {
   const { user } = options
 
   // Skip something new with no `user`, because whoever writes it owns it.
-  if (user === undefined && hostOwner === undefined) return
+  if (user === undefined && owner === undefined) return
 
   const commandUser = await getCommandUser(shell)
   if (isErr(commandUser)) return commandUser
@@ -75,6 +75,6 @@ export const checkWriteOwner = async (
     return
   }
 
-  if (hostOwner !== undefined && hostOwner.uid !== commandUser.uid)
-    return err(`'${path}' is owned by '${hostOwner.user}', so writing it needs sudo: true`, undefined)
+  if (owner !== undefined && owner.uid !== commandUser.uid)
+    return err(`'${path}' is owned by '${owner.user}', so writing it needs sudo: true`, undefined)
 }

@@ -113,11 +113,13 @@ const failSecondCompare = async (h: Host) => {
 
 describe("formatHostBlock", () => {
   it("should mark a changed step with '~' and a ran step with '>' in plan", async () => {
-    expect(await formatBlock(changeAndRun, "plan")).toBe("a\n  ~ Write the unit\n  > Reload systemd\n  > Prune")
+    expect(await formatBlock(changeAndRun, "plan")).toBe(
+      "a\n  ~ change:    (ensure) Write the unit\n  > triggered: (run)    Reload systemd\n  > triggered: (run)    Prune",
+    )
   })
 
   it("should mark a ran step with '>' in apply", async () => {
-    expect(await formatBlock(runOnce, "apply")).toBe("a\n  > Reload systemd")
+    expect(await formatBlock(runOnce, "apply")).toBe("a\n  > triggered: (run) Reload systemd")
   })
 
   it("should return nothing when every step was already right", async () => {
@@ -126,7 +128,12 @@ describe("formatHostBlock", () => {
 
   it("should show every step with --verbose, a read by its command", async () => {
     expect(await formatVerboseBlock(stayRight)).toBe(
-      ["a", "  = Install Caddy", "  · true", "  = Reload systemd"].join("\n"),
+      [
+        "a",
+        "  = unchanged: (ensure) Install Caddy",
+        "  · observed:  (read)   true",
+        "  = unchanged: (run)    Reload systemd",
+      ].join("\n"),
     )
   })
 
@@ -142,16 +149,20 @@ describe("formatHostBlock", () => {
     expect(await formatBlock(waitTwiceOnBrew, "plan")).toBe(
       [
         "a",
-        "  ~ Install brew packages",
-        "  ? Install fish           needs 'Install brew packages'",
-        "  ? Install fish plugins   needs 'Install brew packages'",
+        "  ~ change:  (ensure) Install brew packages",
+        "  ? waiting: (ensure) Install fish           needs 'Install brew packages'",
+        "  ? waiting: (ensure) Install fish plugins   needs 'Install brew packages'",
       ].join("\n"),
     )
   })
 
   it("should mark a waiting step with '?' and the steps it needs", async () => {
     expect(await formatBlock(waitOnBrew, "plan")).toBe(
-      ["a", "  ~ Install brew packages", "  ? Install fish plugins   needs 'Install brew packages'"].join("\n"),
+      [
+        "a",
+        "  ~ change:  (ensure) Install brew packages",
+        "  ? waiting: (ensure) Install fish plugins   needs 'Install brew packages'",
+      ].join("\n"),
     )
   })
 
@@ -159,7 +170,7 @@ describe("formatHostBlock", () => {
     expect(await formatBlock(failVerify, "apply")).toBe(
       [
         "a",
-        "  ! Make it",
+        "  ! failed: (ensure) Make it",
         "      the host's state still differs after the fix",
         "        got:    exit code 1",
         "        want:   exit code 0",
@@ -170,12 +181,14 @@ describe("formatHostBlock", () => {
 
   it("should name a failed read by its command", async () => {
     expect(await formatBlock(failRead, "plan")).toBe(
-      "a\n  ! exit 1\n      failed to read 'exit 1' -> exited with code 1",
+      "a\n  ! failed: (read) exit 1\n      failed to read 'exit 1' -> exited with code 1",
     )
   })
 
   it("should show a failure that isn't any step's after the steps", async () => {
-    expect(await formatBlock(changeThenThrow, "plan")).toBe("a\n  ~ Pending\n  ! a.ts\n      boom")
+    expect(await formatBlock(changeThenThrow, "plan")).toBe(
+      "a\n  ~ change: (ensure) Pending\n  ! failed: (host)   a.ts\n      boom",
+    )
   })
 
   it("should name a host that couldn't be prepared after its target, and count it as failed", async () => {
@@ -184,14 +197,14 @@ describe("formatHostBlock", () => {
       "failed to prepare the host -> failed to read the SSH user's home directory -> target 'a.lan' isn't supported yet (only '@local')"
 
     expect([formatHostBlock(hostReport), formatSummary([hostReport], "plan")]).toStrictEqual([
-      `a\n  ! a.lan\n      ${startError}`,
+      `a\n  ! failed: (host) a.lan\n      ${startError}`,
       "a   failed",
     ])
   })
 
   it("should show the error from steps run at once under the step that was running", async () => {
     expect(await formatBlock(runStepsAtOnce, "plan")).toBe(
-      "a\n  ! First\n      'ensure' can't run while ensure step 'First' is running",
+      "a\n  ! failed: (ensure) First\n      'ensure' can't run while ensure step 'First' is running",
     )
   })
 
@@ -199,7 +212,7 @@ describe("formatHostBlock", () => {
     expect(await formatBlock(catchFailedExec, "apply")).toBe(
       [
         "a",
-        "  ! Make marker",
+        "  ! failed: (ensure) Make marker",
         "      failed to run 'exit 1' -> exited with code 1",
         "        got:  exit code 1",
         "        want: exit code 0",
@@ -209,7 +222,7 @@ describe("formatHostBlock", () => {
 
   it("should show a nested step's failure once, under the outer step", async () => {
     expect(await formatBlock(nestStep, "apply")).toBe(
-      "a\n  ! Outer\n      failed to run the fix -> 'ensure' can't run while ensure step 'Outer' is running",
+      "a\n  ! failed: (ensure) Outer\n      failed to run the fix -> 'ensure' can't run while ensure step 'Outer' is running",
     )
   })
 })
@@ -228,7 +241,9 @@ describe("formatHostBlock for a step that would change a string", () => {
       await h.ensure("Start Sonarr", { check: "echo inactive", want: "active", fix: "true" })
     }, "plan")
 
-    expect(hostBlock).toBe(["a", "  ~ Start Sonarr", "      got:  'inactive'", "      want: 'active'"].join("\n"))
+    expect(hostBlock).toBe(
+      ["a", "  ~ change: (ensure) Start Sonarr", "      got:  'inactive'", "      want: 'active'"].join("\n"),
+    )
   })
 
   it("should show a diff under the step for a multi-line value", async () => {
@@ -239,7 +254,7 @@ describe("formatHostBlock for a step that would change a string", () => {
     expect(hostBlock).toBe(
       [
         "a",
-        "  ~ Write the config",
+        "  ~ change: (ensure) Write the config",
         `      ${"─".repeat(4)}`,
         "      1  a",
         "        -b",
@@ -265,7 +280,7 @@ describe("formatHostBlock for a step that would change a string", () => {
     expect(hostBlock).toBe(
       [
         "a",
-        "  ~ Write the config",
+        "  ~ change: (ensure) Write the config",
         `      ${"─".repeat(15)}`,
         "         -line 1",
         "       1 +line one",
@@ -292,7 +307,7 @@ describe("formatHostBlock for a file step", () => {
     expect(hostBlock).toBe(
       [
         "a",
-        `  ~ ${filePath}`,
+        `  ~ change: (file) ${filePath}`,
         `      ${"─".repeat(14)}`,
         "      1  port = 8080",
         "        -workers = 4",
@@ -346,7 +361,12 @@ describe("formatHostBlock for a file step", () => {
     }, "plan")
 
     expect(hostBlock).toBe(
-      ["a", `  ~ ${linkPath}`, `      target: new link to ${target}`, "      points to a missing path"].join("\n"),
+      [
+        "a",
+        `  ~ change: (link) ${linkPath}`,
+        `      target: new link to ${target}`,
+        "      points to a missing path",
+      ].join("\n"),
     )
   })
 
@@ -358,7 +378,7 @@ describe("formatHostBlock for a file step", () => {
       await h.link(linkPath, directory)
     }, "plan")
 
-    expect(hostBlock).toBe(["a", `  ~ ${linkPath}`, `      target: /old -> ${directory}`].join("\n"))
+    expect(hostBlock).toBe(["a", `  ~ change: (link) ${linkPath}`, `      target: /old -> ${directory}`].join("\n"))
   })
 
   it.each([
@@ -372,7 +392,7 @@ describe("formatHostBlock for a file step", () => {
       await h.link(linkPath, directory, { force: true })
     }, "plan")
 
-    expect(hostBlock).toBe(["a", `  ~ ${linkPath}`, `      target: ${words} ${directory}`].join("\n"))
+    expect(hostBlock).toBe(["a", `  ~ change: (link) ${linkPath}`, `      target: ${words} ${directory}`].join("\n"))
   })
 
   it("should line up a link's target with its owner rows", async () => {
@@ -401,7 +421,7 @@ describe("formatHostBlock for a file step", () => {
       await h.file(filePath, "a".repeat(2048))
     }, "plan")
 
-    expect(hostBlock).toBe(["a", `  ~ ${filePath}`, "      content: new file, 2.05 kB"].join("\n"))
+    expect(hostBlock).toBe(["a", `  ~ change: (file) ${filePath}`, "      content: new file, 2.05 kB"].join("\n"))
   })
 
   it("should spell out a size under 1 kB in bytes", async () => {
@@ -414,9 +434,9 @@ describe("formatHostBlock for a file step", () => {
     expect(hostBlock).toBe(
       [
         "a",
-        `  ~ ${filePath}`,
+        `  ~ change: (file) ${filePath}`,
         "      content: new file, 1 byte",
-        `  ~ ${filePath}.new`,
+        `  ~ change: (file) ${filePath}.new`,
         "      content: new file, 3 bytes",
       ].join("\n"),
     )
@@ -665,7 +685,9 @@ describe("formatHostBlock for a step that failed before it could compare again",
       })
     }, "apply")
 
-    expect(hostBlock).toBe(["a", "  ! Make it", "      failed to run 'exit 1' -> exited with code 1"].join("\n"))
+    expect(hostBlock).toBe(
+      ["a", "  ! failed: (ensure) Make it", "      failed to run 'exit 1' -> exited with code 1"].join("\n"),
+    )
   })
 })
 
