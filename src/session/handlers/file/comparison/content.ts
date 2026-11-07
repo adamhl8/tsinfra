@@ -4,7 +4,7 @@ import { err, isErr } from "ts-explicit-errors"
 import type { ValidFileOptions } from "#session/handlers/file.ts"
 import type { Bytes } from "#session/handlers/file/bytes.ts"
 import { toBytes } from "#session/handlers/file/bytes.ts"
-import type { HostFileContentDetails } from "#session/handlers/file/comparison/host-file-details.ts"
+import type { ExistingHostFileDetails } from "#session/handlers/file/host-file-details.ts"
 import type { ResolvedFileContent } from "#session/handlers/file/resolved-content.ts"
 import type { Shell } from "#session/shell.ts"
 import { quoteShellArg } from "#session/shell.ts"
@@ -32,14 +32,15 @@ const REPLACEMENT_CHARACTER = "\uFFFD"
 const isBinary = (text: string): boolean => text.includes("\0") || text.includes(REPLACEMENT_CHARACTER)
 
 /** Works out how the content differs, fetching the old content only when the output can show a diff of it. */
-// oxlint-disable-next-line eslint/max-params - this matches the shape of `compareFile`
 export const compareContent = async (
   shell: Shell,
-  hostContentDetails: HostFileContentDetails,
+  hostFileDetails: ExistingHostFileDetails,
   resolvedContent: ResolvedFileContent,
   options: ValidFileOptions,
 ): Promise<Result<ContentComparison>> => {
+  const { path, content: hostContentDetails } = hostFileDetails
   const { secret } = options
+
   const gotSize = hostContentDetails.size
   const wantSize = resolvedContent.size
 
@@ -50,8 +51,8 @@ export const compareContent = async (
   const want = TEXT_DECODER.decode(resolvedContent.bytes)
   if (isBinary(want)) return { kind: "binary", gotSize, wantSize }
 
-  const got = await shell.exec(`cat ${quoteShellArg(hostContentDetails.path)}`, { label: "file content" })
-  if (isErr(got)) return err(`failed to read the content of '${hostContentDetails.path}'`, got)
+  const got = await shell.exec(`cat ${quoteShellArg(path)}`, { label: "file content" })
+  if (isErr(got)) return err(`failed to read the content of '${path}'`, got)
   if (isBinary(got)) return { kind: "binary", gotSize, wantSize }
 
   return { kind: "text", got, want }

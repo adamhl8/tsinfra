@@ -2,6 +2,10 @@ import { oxlintConfig } from "@adamhl8/configs"
 import { defineConfig } from "oxlint"
 
 const config = oxlintConfig({
+  rules: {
+    // Allow four, because a step's handler and helpers take `ctx`, then each value the step works with.
+    "eslint/max-params": ["error", { max: 4 }],
+  },
   overrides: [
     {
       // Turn this off here, because the rule reports at the file's first character, before a comment can suppress it.

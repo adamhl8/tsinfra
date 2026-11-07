@@ -6,7 +6,7 @@ import type { AttributeChange } from "#session/handlers/file/comparison/attribut
 import { findAttributeChanges } from "#session/handlers/file/comparison/attributes.ts"
 import type { ContentComparison } from "#session/handlers/file/comparison/content.ts"
 import { compareContent } from "#session/handlers/file/comparison/content.ts"
-import { getHostFileDetails } from "#session/handlers/file/comparison/host-file-details.ts"
+import type { HostFileDetails } from "#session/handlers/file/host-file-details.ts"
 import type { ResolvedFileContent } from "#session/handlers/file/resolved-content.ts"
 import type { Comparison } from "#session/handlers/shared/converge.ts"
 import type { StepContext } from "#session/step.ts"
@@ -18,30 +18,24 @@ export interface FileComparisonValues {
   attributes: AttributeChange[]
 }
 
-/** Reads the file's details on the host and compares them with what the script wants. */
-// oxlint-disable-next-line eslint/max-params - this matches the shape of `handleFile`
+/** Compares the file's details on the host with what the script wants. */
 export const compareFile = async (
   ctx: StepContext,
-  path: string,
+  hostFileDetails: HostFileDetails,
   resolvedContent: ResolvedFileContent,
   options: ValidFileOptions,
 ): Promise<Result<Comparison>> => {
   const { shell } = ctx
 
-  const hostFileDetails = await getHostFileDetails(shell, path)
-  if (isErr(hostFileDetails)) return hostFileDetails
-
-  if (hostFileDetails === undefined) {
+  if (hostFileDetails.kind === "new") {
     const content: ContentComparison = { kind: "new", wantSize: resolvedContent.size }
     return { inSync: false, values: { kind: "file", content, attributes: [] } }
   }
 
-  const { content: hostContentDetails, attributes: hostAttributeDetails } = hostFileDetails
-
-  const content = await compareContent(shell, hostContentDetails, resolvedContent, options)
+  const content = await compareContent(shell, hostFileDetails, resolvedContent, options)
   if (isErr(content)) return content
 
-  const attributes = findAttributeChanges(hostAttributeDetails, options)
+  const attributes = findAttributeChanges(hostFileDetails.attributes, options)
 
   const inSync = content.kind === "same" && attributes.length === 0
 

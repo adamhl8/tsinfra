@@ -60,17 +60,17 @@ inside the script, base64-encoded in a quoted heredoc, and lands in a temp file 
 
 ```sh
 set -eu
-mkdir -p -- '/etc/app'                              # 1. parent directories, before the umask
+mkdir -p '/etc/app'                                 # 1. parent directories, before the umask
 umask 077                                           # 2. new files start private
 tmp=$(mktemp '/etc/app/.app.conf.tsinfra.XXXXXX')   # 3. a unique temp file next to the destination
-trap 'rm -f -- "$tmp"' EXIT                         #    removed if anything below fails
+trap 'rm -f "$tmp"' EXIT                            #    removed if anything below fails
 base64 -d > "$tmp" <<'__TSINFRA_EOF__'              # 4. the content, decoded into the temp file
 <content as base64, wrapped at 76 columns>
 __TSINFRA_EOF__
 chown -- '1000:1000' "$tmp"                         # 5. user and group first
-chmod -- 0644 "$tmp"                                #    then the mode
+chmod 644 "$tmp"                                    #    then the mode
 chcon --reference='/etc/app/app.conf' "$tmp"        # 6. an existing file's SELinux label, when chcon exists
-mv -f -- "$tmp" '/etc/app/app.conf'                 # 7. one rename puts it in place
+mv -f "$tmp" '/etc/app/app.conf'                    # 7. one rename puts it in place
 trap - EXIT
 restorecon '/etc/app/app.conf'                      # 8. a new file's default SELinux label, when restorecon exists
 ```
@@ -87,17 +87,26 @@ Each step's place in the order matters:
    intact whatever the shell's buffering. The delimiter has underscores, which base64 never contains, so no line of the
    content can end it early.
 5. **`chown` comes before `chmod`,** because `chown` clears setuid and setgid, even when root runs it. Chef and cdist
-   both have comments about this. Each runs only when the value changes. With no `user`, `group`, or `mode` given, the
-   values come from the existing file, as the file details command found them, or the defaults for a new file.
+   both have comments about this. With no `user`, `group`, or `mode` given, the values come from the existing file, as
+   the file details command found them, or the defaults for a new file. `chown` runs whenever there's a value, because
+   the temp file's owner is whoever ran the script. So a write without `sudo` to a file owned by someone else fails and
+   leaves the file alone, and never takes ownership away from an app. A new file with no `user` or `group` skips it.
+   `chown` keeps its `--`, because a user or group name comes from the script. Paths need none, because they're always
+   absolute.
 6. **SELinux.** `mv` keeps the temp file's label, so the replacement takes the old file's label first. Both SELinux
-   steps run only when the command exists, and skip quietly otherwise.
+   steps run only when the command exists, and a failure is ignored, because `chcon` can exist on a system with SELinux
+   off, and then it fails.
 7. **`mv -f`** is the only moment the destination changes, so it is always either the old file or the complete new one,
    already with its owner and mode.
-8. **`restorecon`** gives a newly created file the label the policy expects.
+8. **`restorecon`** gives a newly created file the label the policy expects. It skips an existing file, because it
+   could reset a label that `chcon` just kept.
 
 No step runs `fsync` before the rename. A crash at the wrong moment could leave the new file empty after a reboot.
 Ansible and Chef skip it too, and Puppet and Salt don't (see
 [Open questions](./open-questions.md#fsync-before-the-rename)).
+
+The record never holds the content. It stores the script with `<content as base64>` in place of the heredoc's content,
+because the content may be a secret, and it can be large.
 
 An earlier draft streamed the raw bytes after the script and let `cat` read them. dash and busybox sh both read ahead on
 stdin and swallow part of the content, so that only worked under bash and zsh. A 3 MB binary through the heredoc arrives

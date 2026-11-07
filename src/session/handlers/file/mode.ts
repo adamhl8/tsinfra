@@ -45,6 +45,7 @@ const SPECIAL_CHARS = "sStT"
 const SPECIAL_WITHOUT_EXECUTE = "ST"
 const TRIPLE_LENGTH = 3
 const SYMBOLIC_LENGTH = 9
+const OCTAL_MODE_WIDTH = 3
 
 // Use arithmetic, because the lint config bans bitwise operators.
 // Each bit is a distinct power of 2, so adding bits never carries.
@@ -69,6 +70,9 @@ export const toModeBits = (mode: FileMode) => {
   }
   return bits
 }
+
+/** Returns permission bits in octal, like `644`, or `4755` with setuid. */
+export const toOctalMode = (bits: number) => bits.toString(8).padStart(OCTAL_MODE_WIDTH, "0")
 
 /** Returns permission bits the way `ls -l` prints them, like `rw-r--r--`. */
 export const toSymbolicMode = (bits: number) =>

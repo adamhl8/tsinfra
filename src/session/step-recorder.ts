@@ -14,6 +14,8 @@ export type ComparePhase = Exclude<ConvergePhase, "fix">
 export interface CommandOptions {
   /** A short name for a command tsinfra wrote itself. */
   label?: string
+  /** The text to record in place of the command, for one that holds content. */
+  recordedCmd?: string
 }
 
 /** Runs a command like a `Transport`, and also takes what the recorder needs to know about it. */
@@ -79,7 +81,12 @@ export const createStepRecorder = (): StepRecorder => {
   const recordCommands =
     (transport: Transport): RecordingTransport =>
     async (cmd, options = {}) => {
-      const commandRecord: CommandRecord = { cmd, ...options, ...(currentPhase && { phase: currentPhase }) }
+      const { label, recordedCmd = cmd } = options
+      const commandRecord: CommandRecord = {
+        cmd: recordedCmd,
+        ...(label !== undefined && { label }),
+        ...(currentPhase && { phase: currentPhase }),
+      }
       currentStep?.commands.push(commandRecord)
       const output = await transport(cmd)
       commandRecord.output = output

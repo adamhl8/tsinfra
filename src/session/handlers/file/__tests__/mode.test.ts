@@ -9,6 +9,7 @@ import {
   PUBLIC_EXECUTABLE_MODE,
   PUBLIC_FILE_MODE,
   toModeBits,
+  toOctalMode,
   toSymbolicMode,
 } from "#session/handlers/file/mode.ts"
 
@@ -36,6 +37,12 @@ describe("toModeBits", () => {
     ]
 
     expect(modes.map((mode) => toModeBits(mode))).toStrictEqual([0o644, 0o640, 0o600, 0o755, 0o750, 0o700])
+  })
+})
+
+describe("toOctalMode", () => {
+  it("should keep three digits, and a fourth for the special bits", () => {
+    expect([toOctalMode(0o644), toOctalMode(0o44), toOctalMode(0o4755)]).toStrictEqual(["644", "044", "4755"])
   })
 })
 

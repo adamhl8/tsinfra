@@ -14,8 +14,7 @@ const SHA256_PATTERN = /^[0-9a-f]{64}/v
 const WHITESPACE = /\s+/v
 
 /** What the file details command found about the content of a regular file. */
-export interface HostFileContentDetails {
-  path: string
+interface HostFileContentDetails {
   hash: string
   size: Bytes
 }
@@ -29,11 +28,22 @@ export interface HostFileAttributeDetails {
   group: string
 }
 
+/** The path of a file that doesn't exist on the host yet. */
+interface NewHostFileDetails {
+  kind: "new"
+  path: string
+}
+
 /** What the file details command found at a path that is a regular file. */
-interface HostFileDetails {
+export interface ExistingHostFileDetails {
+  kind: "existing"
+  path: string
   content: HostFileContentDetails
   attributes: HostFileAttributeDetails
 }
+
+/** What the file details command found at a path: nothing yet, or a regular file. */
+export type HostFileDetails = ExistingHostFileDetails | NewHostFileDetails
 
 const statLineSchema = type([
   type(OCTAL_MODE_PATTERN).pipe(toModeBits),
@@ -70,17 +80,14 @@ const buildFileDetailsCommand = (path: string): string =>
 
 /**
  * Parses the file details command's output, which differs between GNU, busybox, and BSD only in ways this allows for.
- * Returns undefined when nothing is at `path`, and an error when something there isn't a file the step can read.
+ * Returns `new` details when nothing is at `path`, and an error when something there isn't a file the step can read.
  */
-export const parseFileDetailsOutput = (
-  commandOutput: CommandOutput,
-  path: string,
-): Result<HostFileDetails | undefined> => {
+export const parseFileDetailsOutput = (commandOutput: CommandOutput, path: string): Result<HostFileDetails> => {
   const { stdout, stderr } = commandOutput
   const [kindLine = "", hashLine = "", statLine = ""] = stdout.split("\n")
   const kind = kindLine.replace("kind=", "")
 
-  if (kind === "absent") return undefined
+  if (kind === "absent") return { kind: "new", path }
   if (kind === "link") return err(`'${path}' is a symlink, so file won't replace it`, undefined)
   if (kind === "other") return err(`'${path}' isn't a regular file, so file won't replace it`, undefined)
   if (kind === "unreadable") return err(`can't read '${path}' as the SSH user, so it needs sudo: true`, undefined)
@@ -100,11 +107,11 @@ export const parseFileDetailsOutput = (
     return err(`the file details command printed '${statLine}' instead of the file's mode, owner, and size`, undefined)
 
   const [mode, uid, gid, user, group, size] = validStatLine
-  return { content: { path, hash, size }, attributes: { mode, uid, gid, user, group } }
+  return { kind: "existing", path, content: { hash, size }, attributes: { mode, uid, gid, user, group } }
 }
 
-/** Reads the details of the file at `path` on the host, or undefined when nothing is there. */
-export const getHostFileDetails = async (shell: Shell, path: string): Promise<Result<HostFileDetails | undefined>> => {
+/** Reads the details of the file at `path` on the host. */
+export const getHostFileDetails = async (shell: Shell, path: string): Promise<Result<HostFileDetails>> => {
   const commandOutput = await shell.inspect(buildFileDetailsCommand(path), { label: "file details command" })
   if (isErr(commandOutput)) return commandOutput
 

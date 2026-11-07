@@ -3,10 +3,12 @@ import { chmod } from "node:fs/promises"
 import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
+import type { Result } from "ts-explicit-errors"
 import { isErr, messageChain } from "ts-explicit-errors"
 
 import { toBytes } from "#session/handlers/file/bytes.ts"
-import { getHostFileDetails, parseFileDetailsOutput } from "#session/handlers/file/comparison/host-file-details.ts"
+import type { HostFileDetails } from "#session/handlers/file/host-file-details.ts"
+import { getHostFileDetails, parseFileDetailsOutput } from "#session/handlers/file/host-file-details.ts"
 import { createShell } from "#session/shell.ts"
 import { runLocal } from "#transport/local.ts"
 
@@ -20,14 +22,18 @@ const toDetails = (stdout: string, stderr = "") => {
 describe("parseFileDetailsOutput", () => {
   it("should read GNU's hash and stat line", () => {
     expect(toDetails(`kind=file\n${HASH}  -\n644 501 20 adam staff 12\n`)).toStrictEqual({
-      content: { path: "/tmp/x", hash: HASH, size: toBytes(12) },
+      kind: "existing",
+      path: "/tmp/x",
+      content: { hash: HASH, size: toBytes(12) },
       attributes: { mode: 0o644, uid: 501, gid: 20, user: "adam", group: "staff" },
     })
   })
 
   it("should read BSD's bare hash and its zero-padded mode", () => {
     expect(toDetails(`kind=file\n${HASH}\n0644 0 0 root wheel 3\n`)).toStrictEqual({
-      content: { path: "/tmp/x", hash: HASH, size: toBytes(3) },
+      kind: "existing",
+      path: "/tmp/x",
+      content: { hash: HASH, size: toBytes(3) },
       attributes: { mode: 0o644, uid: 0, gid: 0, user: "root", group: "wheel" },
     })
   })
@@ -36,8 +42,8 @@ describe("parseFileDetailsOutput", () => {
     expect(toDetails(`kind=file\n${HASH}\n4755 0 0 root wheel 3\n`)).toMatchObject({ attributes: { mode: 0o4755 } })
   })
 
-  it("should return undefined when nothing is at the path", () => {
-    expect(toDetails("kind=absent\n")).toBeUndefined()
+  it("should return new details when nothing is at the path", () => {
+    expect(toDetails("kind=absent\n")).toStrictEqual({ kind: "new", path: "/tmp/x" })
   })
 
   it("should fail on a kind it doesn't know", () => {
@@ -80,6 +86,11 @@ const writeTool = async (binDir: string, name: string, body: string) => {
   await chmod(toolPath, 0o755)
 }
 
+const toHash = (details: Result<HostFileDetails>) => {
+  if (isErr(details)) return messageChain(details)
+  return details.kind === "existing" ? details.content.hash : undefined
+}
+
 /** Reads a file's details on a host where `tools` are the only commands on `PATH`, apart from `stat`. */
 const readDetailsWithTools = async (tools: Record<string, string>) => {
   const binDir = await makeTempDir()
@@ -96,7 +107,7 @@ const readDetailsWithTools = async (tools: Record<string, string>) => {
   })
   const details = await getHostFileDetails(shell, filePath)
 
-  return { details: isErr(details) ? messageChain(details) : details?.content.hash, stderr: stderr.trim() }
+  return { details: toHash(details), stderr: stderr.trim() }
 }
 
 describe("getHostFileDetails with sha256 tools", () => {

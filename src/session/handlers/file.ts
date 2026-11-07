@@ -1,11 +1,14 @@
 import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
-import { err, isErr } from "ts-explicit-errors"
+import { isErr } from "ts-explicit-errors"
 
 import { compareFile } from "#session/handlers/file/comparison.ts"
+import type { HostFileDetails } from "#session/handlers/file/host-file-details.ts"
+import { getHostFileDetails } from "#session/handlers/file/host-file-details.ts"
 import type { FileMode } from "#session/handlers/file/mode.ts"
 import { OCTAL_MODE_PATTERN, SYMBOLIC_MODE_PATTERN } from "#session/handlers/file/mode.ts"
 import { resolveContent } from "#session/handlers/file/resolved-content.ts"
+import { writeFile } from "#session/handlers/file/write.ts"
 import type { ChangeStepResult, StepNeeds } from "#session/handlers/shared/change-step-result.ts"
 import { NO_NEEDS, stepNeedsSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import { hostPathSchema, resolveHome } from "#session/handlers/shared/path.ts"
@@ -70,14 +73,13 @@ const fileOptionsSchema = type
 /** The options after validation, with their defaults set. */
 export type ValidFileOptions = typeof fileOptionsSchema.infer
 
-// oxlint-disable-next-line eslint/max-params - a handler takes its context, then each input the script gave the step
 export const handleFile = async (
   ctx: StepContext<"file">,
   path: unknown,
   content: unknown,
   options: unknown = {},
 ): Promise<Result<HandlerReturn<ChangeStepResult<"file">>>> => {
-  const { kind, home, converge } = ctx
+  const { kind, home, shell, converge } = ctx
 
   const validPath = validateInput(path, hostPathSchema, { inputLabel: "path", givenTo: kind })
   if (isErr(validPath)) return validPath
@@ -100,11 +102,19 @@ export const handleFile = async (
 
   const { needs } = validOptions
 
+  // Keep what `compare` read for `fix`, because a write keeps the mode and owner of a file it replaces.
+  let hostFileDetails: HostFileDetails = { kind: "new", path: absolutePath }
+
   const status = await converge({
     needs,
-    compare: async () => compareFile(ctx, absolutePath, resolvedContent, validOptions),
-    // oxlint-disable-next-line typescript/require-await - the write comes with part 2 of `file`, and this stands in for it
-    fix: async () => err("writing files comes with part 2 of file", undefined),
+    compare: async () => {
+      const hostFileDetailsResult = await getHostFileDetails(shell, absolutePath)
+      if (isErr(hostFileDetailsResult)) return hostFileDetailsResult
+
+      hostFileDetails = hostFileDetailsResult
+      return compareFile(ctx, hostFileDetails, resolvedContent, validOptions)
+    },
+    fix: async () => writeFile(ctx, hostFileDetails, resolvedContent, validOptions),
     verify: true,
   })
 

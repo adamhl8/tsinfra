@@ -1,5 +1,5 @@
 import type { FileAttributeName, FileAttributeOptions } from "#session/handlers/file.ts"
-import type { HostFileAttributeDetails } from "#session/handlers/file/comparison/host-file-details.ts"
+import type { HostFileAttributeDetails } from "#session/handlers/file/host-file-details.ts"
 import { toModeBits } from "#session/handlers/file/mode.ts"
 
 export type AttributeValue = string | number
@@ -16,8 +16,8 @@ export const findAttributeChanges = (
   hostAttributeDetails: HostFileAttributeDetails,
   options: FileAttributeOptions,
 ): AttributeChange[] => {
-  const { mode, user, group } = options
   const { mode: gotMode } = hostAttributeDetails
+  const { mode, user, group } = options
 
   const changes: AttributeChange[] = []
 

@@ -3,7 +3,7 @@ import { chmod, stat } from "node:fs/promises"
 import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
-import { attempt } from "ts-explicit-errors"
+import { attempt, isErr } from "ts-explicit-errors"
 
 import { prepareAndRunHost } from "#__tests__/session.ts"
 import type { Mode } from "#cli/program.ts"
@@ -13,7 +13,10 @@ import { formatHostBlock } from "#report/format.ts"
 import { formatSummary } from "#report/format/summary.ts"
 import type { EnsureOptions } from "#session/handlers/ensure.ts"
 import type { Want } from "#session/handlers/ensure/check.ts"
+import { buildHostContext } from "#session/host-context.ts"
 import type { Host } from "#session/session.ts"
+import { createHostSession } from "#session/session.ts"
+import type { Transport } from "#transport/transport.ts"
 
 const runNamedHost = async (name: string, fn: HostFunction, mode: Mode) =>
   prepareAndRunHost({ name, ...host("@local", fn) }, mode)
@@ -424,6 +427,22 @@ describe("formatHostBlock for a host state that still differs after the fix", ()
   })
 })
 
+/**
+ * Creates a session where every command writes to stderr, and `filePath` changes right after a write, so it still
+ * differs.
+ */
+const createNoisySession = async (filePath: string) => {
+  const hostContext = await buildHostContext({ name: "a", ...host("@local", changeOnce) })
+  if (isErr(hostContext)) throw hostContext
+
+  const transport: Transport = async (script) => {
+    const output = await hostContext.transport(`echo noise >&2\n${script}`)
+    if (script.includes("mv -f")) await Bun.write(filePath, "changed\n")
+    return output
+  }
+  return createHostSession({ ...hostContext, transport }, "apply")
+}
+
 describe("formatHostBlock for the stderr of a step that still differs", () => {
   const AFTER_FIX_NOTE = "        some commands after the fix wrote to stderr, run with -vvv to see them"
   const DURING_FIX_NOTE = "        some commands during the fix wrote to stderr, run with -vvv to see them"
@@ -531,32 +550,21 @@ describe("formatHostBlock for the stderr of a step that still differs", () => {
     expect(lines).toStrictEqual(["        got:  'old'", "        want: 'new'"])
   })
 
-  it("should leave out a command tsinfra wrote itself", () => {
-    const failure = new Error("the host's state still differs after the fix")
+  it("should leave out the stderr of commands tsinfra wrote itself", async () => {
+    const filePath = path.join(await makeTempDir(), "app.conf")
+    const hostSession = await createNoisySession(filePath)
+    await attempt(async () => hostSession.host.file(filePath, "a\n"))
+
     const hostBlock = formatHostBlock({
       name: "a",
       started: true,
-      failure,
-      stepRecords: [
-        {
-          name: "/tmp/x",
-          kind: "file",
-          commands: [
-            {
-              cmd: "tsinfra's script",
-              label: "file details command",
-              phase: "after",
-              output: { stdout: "", stderr: "noise", exitCode: 0 },
-            },
-          ],
-          comparisons: { after: { inSync: false, values: { kind: "boolean", got: false, want: true } } },
-          waitingOn: [],
-          status: failure,
-        },
-      ],
+      failure: hostSession.getFailure(),
+      stepRecords: hostSession.stepRecords,
     })
 
+    expect(hostBlock).toContain("the host's state still differs after the fix")
     expect(hostBlock).not.toContain("noise")
+    expect(hostBlock).not.toContain("wrote to stderr")
   })
 })
 

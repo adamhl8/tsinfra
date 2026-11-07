@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test"
-import { chmod, mkdir, stat, symlink } from "node:fs/promises"
+import { chmod, mkdir, readdir, stat, symlink } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import process from "node:process"
 
 import { makeTempDir } from "@adamhl8/configs/test"
 import { messageChain } from "ts-explicit-errors"
@@ -13,6 +14,14 @@ import { PUBLIC_FILE_MODE } from "#session/handlers/file/mode.ts"
 const CLOSED_FILE_DESCRIPTOR = 9999
 
 const createFilePath = async () => path.join(await makeTempDir(), "app.conf")
+
+/** Applies new content to `filePath` and returns the write script from the record. */
+const getWriteScript = async (filePath: string) => {
+  const hostSession = await createSession("apply")
+  await fileOrMessage(hostSession.host, filePath, "new\n")
+
+  return hostSession.stepRecords[0]?.commands.find(({ label }) => label === "file write")?.cmd
+}
 
 describe("h.file in plan", () => {
   it("should report a new file without writing it", async () => {
@@ -310,14 +319,156 @@ describe("h.file refusals", () => {
       `failed to compare the host with what the step wants -> can't read '${filePath}' as the SSH user, so it needs sudo: true`,
     )
   })
+})
 
-  it("should fail in apply, because the write comes with part 2", async () => {
+/** Returns the permission bits of the file at `filePath`. */
+const getMode = async (filePath: string) => (await stat(filePath)).mode % 0o1_0000
+
+describe("h.file in apply", () => {
+  it("should write a new file with the default mode, and report it changed", async () => {
+    const filePath = await createFilePath()
+    const hostSession = await createSession("apply")
+    const result = await fileOrMessage(hostSession.host, filePath, "a\n")
+
+    expect(result).toStrictEqual({ name: filePath, kind: "file", changed: true })
+    expect(await Bun.file(filePath).text()).toBe("a\n")
+    expect(await getMode(filePath)).toBe(0o644)
+    expect(hostSession.stepRecords[0]?.status).toBe("changed")
+  })
+
+  it("should write a new secret file as private", async () => {
     const filePath = await createFilePath()
     const { host: h } = await createSession("apply")
+    await fileOrMessage(h, filePath, "token\n", { secret: true })
 
-    expect(await fileOrMessage(h, filePath, "a\n")).toBe(
-      `failed to run the fix -> writing files comes with part 2 of file`,
-    )
+    expect(await getMode(filePath)).toBe(0o600)
+  })
+
+  it("should create the parent directories with the usual permissions", async () => {
+    const parent = path.join(await makeTempDir(), "a", "b")
+    const filePath = path.join(parent, "app.conf")
+    const { host: h } = await createSession("apply")
+    await fileOrMessage(h, filePath, "a\n")
+
+    expect(await Bun.file(filePath).text()).toBe("a\n")
+    expect((await stat(parent)).mode % 0o100).not.toBe(0)
+  })
+
+  it("should replace an existing file and keep its mode", async () => {
+    const filePath = await createFilePath()
+    await Bun.write(filePath, "old\n")
+    await chmod(filePath, 0o640)
+    const { host: h } = await createSession("apply")
+    await fileOrMessage(h, filePath, "new\n")
+
+    expect(await Bun.file(filePath).text()).toBe("new\n")
+    expect(await getMode(filePath)).toBe(0o640)
+  })
+
+  it("should change only the mode when the content already matches", async () => {
+    const filePath = await createFilePath()
+    await Bun.write(filePath, "a\n")
+    await chmod(filePath, 0o600)
+    const { host: h } = await createSession("apply")
+    await fileOrMessage(h, filePath, "a\n", { mode: "644" })
+
+    expect(await Bun.file(filePath).text()).toBe("a\n")
+    expect(await getMode(filePath)).toBe(0o644)
+  })
+
+  it("should keep the setuid bit of a mode it was given", async () => {
+    const filePath = await createFilePath()
+    const { host: h } = await createSession("apply")
+    await fileOrMessage(h, filePath, "a\n", { mode: "4755" })
+
+    expect(await getMode(filePath)).toBe(0o4755)
+  })
+
+  it("should report unchanged on the next apply, and run no write", async () => {
+    const filePath = await createFilePath()
+    const { host: h } = await createSession("apply")
+    await fileOrMessage(h, filePath, "a\n", { mode: "640" })
+
+    const hostSession = await createSession("apply")
+    const result = await fileOrMessage(hostSession.host, filePath, "a\n", { mode: "640" })
+
+    expect(result).toStrictEqual({ name: filePath, kind: "file", changed: false })
+    expect(hostSession.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual(["file details command"])
+  })
+
+  it.each([
+    ["empty content", ""],
+    ["bytes that aren't text", new Uint8Array([0, 255, 1, 254, 10, 13])],
+    ["a line longer than the base64 wrap", "x".repeat(1000)],
+  ])("should write %s exactly", async (_, content) => {
+    const filePath = await createFilePath()
+    const { host: h } = await createSession("apply")
+    await fileOrMessage(h, filePath, content)
+
+    expect(await Bun.file(filePath).bytes()).toStrictEqual(await new Blob([content]).bytes())
+  })
+
+  it("should write to a path with spaces and quotes", async () => {
+    const filePath = path.join(await makeTempDir(), "it's a file.conf")
+    const { host: h } = await createSession("apply")
+    await fileOrMessage(h, filePath, "a\n")
+
+    expect(await Bun.file(filePath).text()).toBe("a\n")
+  })
+
+  it("should leave no temp file behind", async () => {
+    const directory = await makeTempDir()
+    const { host: h } = await createSession("apply")
+    await fileOrMessage(h, path.join(directory, "app.conf"), "a\n")
+
+    expect(await readdir(directory)).toStrictEqual(["app.conf"])
+  })
+
+  // Root can give a file to anyone, so `chown` wouldn't fail.
+  it.skipIf(process.getuid?.() === 0)(
+    "should fail without touching the file or leaving a temp file when the write fails",
+    async () => {
+      const directory = await makeTempDir()
+      const filePath = path.join(directory, "app.conf")
+      await Bun.write(filePath, "old\n")
+      const { uid } = os.userInfo()
+      const hostSession = await createSession("apply")
+      const message = await fileOrMessage(hostSession.host, filePath, "new\n", { user: uid + 1 })
+
+      expect(message).toStartWith(`failed to run the fix -> failed to write '${filePath}' -> exited with code 1: `)
+      expect(await Bun.file(filePath).text()).toBe("old\n")
+      expect(await readdir(directory)).toStrictEqual(["app.conf"])
+    },
+  )
+
+  it("should keep the content out of the record, and label the write", async () => {
+    const filePath = await createFilePath()
+    const hostSession = await createSession("apply")
+    await fileOrMessage(hostSession.host, filePath, "secret token\n", { secret: true })
+
+    const commands = hostSession.stepRecords[0]?.commands
+    const encoded = Buffer.from("secret token\n").toString("base64")
+    expect(commands?.map(({ label, phase }) => [label, phase])).toStrictEqual([
+      ["file details command", "before"],
+      ["file write", "fix"],
+      ["file details command", "after"],
+    ])
+    expect(commands?.[1]?.cmd).toContain("<content as base64>")
+    expect(commands?.some(({ cmd }) => cmd.includes(encoded))).toBe(false)
+  })
+
+  it("should give a new file the default SELinux label, and keep an existing file's", async () => {
+    const newFilePath = await createFilePath()
+    const existingFilePath = await createFilePath()
+    await Bun.write(existingFilePath, "old\n")
+
+    const newFileScript = await getWriteScript(newFilePath)
+    const existingFileScript = await getWriteScript(existingFilePath)
+
+    expect(newFileScript).toContain("restorecon")
+    expect(newFileScript).not.toContain("chcon")
+    expect(existingFileScript).toContain("chcon")
+    expect(existingFileScript).not.toContain("restorecon")
   })
 })
 

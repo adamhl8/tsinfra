@@ -8,7 +8,7 @@ import type { Bytes } from "#session/handlers/file/bytes.ts"
 import type { FileComparisonValues } from "#session/handlers/file/comparison.ts"
 import type { AttributeChange, AttributeValue } from "#session/handlers/file/comparison/attributes.ts"
 import type { ContentComparison, SizeComparison } from "#session/handlers/file/comparison/content.ts"
-import { toSymbolicMode } from "#session/handlers/file/mode.ts"
+import { toOctalMode, toSymbolicMode } from "#session/handlers/file/mode.ts"
 
 // Spell out a size in bytes, because a lone `B` reads like "billion".
 const BYTE_UNIT = / B$/v
@@ -38,10 +38,8 @@ const formatFileNote = (sizeComparison: SizeComparison): string => {
   return `${pc.italic(FILE_NOTE_WORDS[kind])}, ${sizes}`
 }
 
-const OCTAL_MODE_WIDTH = 3
-
 /** Formats permission bits as both notations, like `rw-r--r-- (644)`, because a script can write either one. */
-const formatMode = (bits: number) => `${toSymbolicMode(bits)} (${bits.toString(8).padStart(OCTAL_MODE_WIDTH, "0")})`
+const formatMode = (bits: number) => `${toSymbolicMode(bits)} (${toOctalMode(bits)})`
 
 const ATTRIBUTE_FORMATTERS: Record<FileAttributeName, (value: AttributeValue) => string> = {
   mode: (value) => formatMode(Number(value)),
