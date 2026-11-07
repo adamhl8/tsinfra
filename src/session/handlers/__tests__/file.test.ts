@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { chmod, mkdir, readdir, stat, symlink } from "node:fs/promises"
+import { chmod, mkdir, readdir, stat, symlink, truncate } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import process from "node:process"
@@ -276,6 +276,50 @@ describe("h.file content", () => {
 
     expect(await fileOrMessage(h, "/tmp/x", Bun.file(localPath), { needs: [needed] })).toBe(
       `failed to read local file '${localPath}' -> ENOENT: no such file or directory, open '${localPath}'`,
+    )
+  })
+})
+
+describe("h.file size limit", () => {
+  const LIMIT_BYTES = 10_000_000
+  const SPARSE_FILE_BYTES = 1_000_000_000_000
+
+  it.each([
+    ["a string", () => "a".repeat(LIMIT_BYTES + 1)],
+    ["bytes", () => new Uint8Array(LIMIT_BYTES + 1)],
+    ["a Blob", () => new Blob([new Uint8Array(LIMIT_BYTES + 1)])],
+  ])("should fail on %s one byte over the limit, and run nothing", async (_, toContent) => {
+    const hostSession = await createSession("plan")
+
+    expect(await fileOrMessage(hostSession.host, await createFilePath(), toContent())).toBe(
+      "the content given to 'file' is 10 MB, above the 10 MB limit",
+    )
+    expect(hostSession.stepRecords[0]?.commands).toStrictEqual([])
+  })
+
+  // Use a sparse file, because reading it would take far more memory than the test has.
+  it("should fail on a large local file without reading it", async () => {
+    const localPath = await createFilePath()
+    await Bun.write(localPath, "")
+    await truncate(localPath, SPARSE_FILE_BYTES)
+    const { host: h } = await createSession("plan")
+
+    expect(await fileOrMessage(h, await createFilePath(), Bun.file(localPath))).toBe(
+      `local file '${localPath}' is 1 TB, above the 10 MB limit`,
+    )
+  })
+
+  it("should allow content at the limit", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(await fileOrMessage(h, await createFilePath(), new Uint8Array(LIMIT_BYTES))).toMatchObject({ changed: true })
+  })
+
+  it("should fail on a device without reading it", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(await fileOrMessage(h, await createFilePath(), Bun.file("/dev/zero"))).toBe(
+      "local file '/dev/zero' doesn't have a size (is it a file?), so it can't be checked against the 10 MB limit",
     )
   })
 })

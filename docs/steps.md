@@ -412,7 +412,7 @@ file next to the destination, which one rename puts in place. See [Transport](./
 script and why each step comes in its order. The destination is only ever the old file or the complete new one, already
 with its owner and mode.
 
-**Size limit.** Content over 10 MB fails before anything is sent, like `content is 14 MB, above file's 10 MB limit`. The
+**Size limit.** Content over 10 MB fails before anything is read or sent, like `local file '/srv/app.iso' is 14 MB, above the 10 MB limit`. The
 shell holds the whole script in memory, and base64 adds a third, so the heredoc suits config files, not large binaries.
 A streaming path for large files is open (see [Open questions](./open-questions.md#files-over-10-mb)).
 
