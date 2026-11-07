@@ -106,6 +106,16 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
+      // A warning on a step that was already right, which shows it without `--verbose`, and a warning count.
+      name: "warning",
+      target: "@local",
+      pass: "plan",
+      fn: async (h) => {
+        await symlink(marker("missing-dotfile"), marker("broken-link"))
+        await h.link(marker("broken-link"), marker("missing-dotfile"))
+      },
+    },
+    {
       // No block, only an `unchanged` summary line, because nothing changed and there's no `--verbose`.
       name: "unchanged",
       target: "@local",
@@ -118,7 +128,7 @@ const createScenarios = (dir: string): Scenario[] => {
       // Every kind of step that passes, with the kinds padded to one column.
       // An `ensure` with nothing under it, a quoted `got` and `want`, and a diff with a hunk for each change far apart.
       // A file with a diff and a `mode:` row, a new file's size, and a secret file's sizes lined up with a `group:` row.
-      // A link that replaces a file, one whose target changed, and a new one to a missing path, with its note.
+      // A link that replaces a file, one whose target changed, and a new one to a missing path, with its warning.
       // `> triggered:` runs, `= unchanged:` for an `ensure` and an untriggered run, and `· observed:` for a read.
       name: "steps",
       target: "@local",

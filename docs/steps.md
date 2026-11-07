@@ -522,7 +522,9 @@ manages first.
   [Transport](./transport.md#file-writes) allow a relative target. Refusing one now can be loosened later without
   breaking a script, and the reverse can't.
 - **The target may not exist yet,** because a later step might create it, or a mounted drive might not be there. The
-  link is still made, and its line shows `points to a missing path`, so a typo in the repo path stands out.
+  link is still made, with a `warning: nothing exists at target -> <target>` line under it, so a typo in the repo path stands out.
+  The warning shows even when the link is already right, without `--verbose`, and the summary counts it. It's not
+  drift, so it doesn't change the exit code.
 - **The state command** reads the existing link's target with `readlink` and compares it with `target` as an exact
   string, after `~/` is resolved. It is in sync when `path` is a symlink that points there, with the right owner.
 - **An existing symlink is always updated** to point at `target`, because managing it is the point.

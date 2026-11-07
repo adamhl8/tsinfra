@@ -1,4 +1,3 @@
-import pc from "picocolors"
 import { messageChain } from "ts-explicit-errors"
 
 import type { HostReport } from "#hosts/run.ts"
@@ -9,7 +8,19 @@ import { toEnsureRows } from "#report/format/ensure.ts"
 import { toFileRows } from "#report/format/file.ts"
 import { toLinkRows } from "#report/format/link.ts"
 import type { Style } from "#report/format/styles.ts"
-import { STATUS_STYLES, styleError, styleNote, styleValue } from "#report/format/styles.ts"
+import {
+  STATUS_STYLES,
+  styleAside,
+  styleError,
+  styleHostKind,
+  styleHostName,
+  styleHostScript,
+  styleLabel,
+  styleNote,
+  styleValue,
+  styleWarning,
+} from "#report/format/styles.ts"
+import type { StepWarning } from "#report/warnings.ts"
 import { getMaxWidth, padToWidth, quoteNames } from "#utils.ts"
 
 const INDENT = "  "
@@ -21,17 +32,17 @@ export interface FormatOptions {
   verbose?: boolean
 }
 
-/** One printed `label: value` row, with a multi-line value's later lines under its first. */
-export interface LabelRow {
+/** A `label: value` row, with a multi-line value's later lines under its first, whose value lines up with the others. */
+export interface AlignedRow {
   label: string
   valueLines: string[]
 }
 
-// Style a value name, because it's a command, a path, or a target, and a host script in italics, because it isn't a step.
+// Style a value name, because it's a command, a path, or a target.
 const NAME_STYLES: Record<NameKind, Style> = {
   step: (name) => name,
   value: styleValue,
-  hostScript: pc.italic,
+  hostScript: styleHostScript,
 }
 
 /** Styles each line of `text` on its own, so a continuation line starts in the color too. */
@@ -41,46 +52,64 @@ const styleLines = (text: string, style: Style): string =>
     .map((textLine) => style(textLine))
     .join("\n")
 
-/** Returns the `label: value` rows a detail prints as. A diff or a note has none, because it prints as lines of its own. */
-const toLabelRows = (detail: Detail): LabelRow[] => {
-  if (detail.kind === "diff" || detail.kind === "note") return []
+/**
+ * Formats a warning, like `warning: nothing exists at target -> /x`, with the value it's about after its words. Colors
+ * only the label and the value, so the words read like the rest of the details.
+ */
+const formatWarning = (warning: StepWarning): string => {
+  const { text, value } = warning
+  const valueText = value === undefined ? "" : ` ${styleValue(value)}`
+  return `${styleWarning("warning:")} ${text}${valueText}`
+}
 
-  if (detail.kind === "ensureComparisonValues") return toEnsureRows(detail.values)
-  if (detail.kind === "fileComparisonValues") return toFileRows(detail.values)
-  if (detail.kind === "linkComparisonValues") return toLinkRows(detail.values)
+/**
+ * The rows a detail prints as. A row is one or more lines. Aligned rows line up their values in one column with the
+ * entry's other aligned rows, and unaligned rows, like a diff's lines, print as they are.
+ */
+type DetailRows = { kind: "aligned"; rows: AlignedRow[] } | { kind: "unaligned"; rows: string[] }
+
+/** Returns the rows a detail prints as, aligned or not. */
+const toDetailRows = (detail: Detail, formatOptions: FormatOptions): DetailRows => {
+  if (detail.kind === "diff") return { kind: "unaligned", rows: formatDiff(detail.got, detail.want, formatOptions) }
+  if (detail.kind === "note") return { kind: "unaligned", rows: [styleNote(detail.text)] }
+  if (detail.kind === "warning") return { kind: "unaligned", rows: [formatWarning(detail.warning)] }
+  if (detail.kind === "ensureComparisonValues") return { kind: "aligned", rows: toEnsureRows(detail.values) }
+  if (detail.kind === "fileComparisonValues") return { kind: "aligned", rows: toFileRows(detail.values) }
+  if (detail.kind === "linkComparisonValues") return { kind: "aligned", rows: toLinkRows(detail.values) }
 
   // Color stderr like an error, so it stands apart from its command, and leave the arrow between them uncolored.
   const { command, stderr } = detail
   const valueText = `${styleLines(command, styleValue)} -> ${styleLines(stderr, styleError)}`
-  return [{ label: "stderr", valueLines: valueText.split("\n") }]
+  return { kind: "aligned", rows: [{ label: "stderr", valueLines: valueText.split("\n") }] }
 }
 
-/** Formats rows as `label: value` lines, with each value starting at `valueColumn`. */
-const formatLabelRows = (labelRows: LabelRow[], valueColumn: number): string[] => {
+/** Formats aligned rows as `label: value` lines, with each value starting at `valueColumn`. */
+const formatAlignedRows = (alignedRows: AlignedRow[], valueColumn: number): string[] => {
   const continuationIndent = " ".repeat(valueColumn)
 
-  return labelRows.flatMap(({ label, valueLines }) => {
-    // Dim the label, so the value is what stands out.
-    const labelText = pc.dim(padToWidth(`${label}: `, valueColumn))
+  return alignedRows.flatMap(({ label, valueLines }) => {
+    const labelText = styleLabel(padToWidth(`${label}: `, valueColumn))
     return valueLines.map((valueLine, index) => `${index === 0 ? labelText : continuationIndent}${valueLine}`)
   })
 }
 
 /**
  * Formats the lines under an entry's head line: its error in red, if any, then its details. Lines up the values of
- * every `label: value` row in the entry in one column. Indents the details under an error, so an error stands apart and
- * its details read as belonging to it.
+ * every aligned row in the entry in one column. Indents the details under an error, so an error stands apart and its
+ * details read as belonging to it.
  */
 const formatEntryBody = (stepEntry: StepEntry, formatOptions: FormatOptions): string[] => {
   const { error, details = [] } = stepEntry
-  const labels = details.flatMap((detail) => toLabelRows(detail)).map(({ label }) => `${label}: `)
+  const detailRows = details.map((detail) => toDetailRows(detail, formatOptions))
+
+  const labels = detailRows.flatMap(({ kind, rows }) =>
+    kind === "aligned" ? rows.map(({ label }) => `${label}: `) : [],
+  )
   const valueColumn = getMaxWidth(labels)
 
-  const detailLines = details.flatMap((detail) => {
-    if (detail.kind === "diff") return formatDiff(detail.got, detail.want, formatOptions)
-    if (detail.kind === "note") return [styleNote(detail.text)]
-    return formatLabelRows(toLabelRows(detail), valueColumn)
-  })
+  const detailLines = detailRows.flatMap(({ kind, rows }) =>
+    kind === "aligned" ? formatAlignedRows(rows, valueColumn) : rows,
+  )
   if (!error) return detailLines
 
   const errorLines = messageChain(error)
@@ -101,10 +130,8 @@ const formatStatus = (status: EntryStatus): string => {
 /** Formats an entry's kind, like `(file)`, so it reads apart from the name even without color. */
 const formatEntryKind = (entryKind: EntryKind): string => `(${entryKind})`
 
-// Dim the kind, so the name stays the main thing on the line.
-// Italicize `(host)` too, so a failure no step owns doesn't read as a kind of step.
 const styleEntryKind = (entryKind: EntryKind, text: string): string =>
-  entryKind === "host" ? pc.italic(pc.dim(text)) : pc.dim(text)
+  entryKind === "host" ? styleHostKind(text) : styleLabel(text)
 
 const formatStepEntries = (stepEntries: StepEntry[], formatOptions: FormatOptions): string[] => {
   // Pad each status and each kind to the widest in the block, so every kind and every name starts in one column.
@@ -122,8 +149,7 @@ const formatStepEntries = (stepEntries: StepEntry[], formatOptions: FormatOption
 
     const styledName = NAME_STYLES[name.kind](name.text)
     const nameText = stepNote ? padToWidth(styledName, stepNoteColumn) : styledName
-    // Dim a step note, so the step's name stays the main thing on the line.
-    const stepNoteText = stepNote ? `${COLUMN_GAP}${pc.dim(stepNote)}` : ""
+    const stepNoteText = stepNote ? `${COLUMN_GAP}${styleAside(stepNote)}` : ""
     // Leave the colon uncolored, so it reads as punctuation between the status and the kind.
     const statusText = padToWidth(`${color(formatStatus(status))}:`, statusColumn)
     const headLine = `${INDENT}${statusText} ${entryKindText} ${nameText}${stepNoteText}`
@@ -142,8 +168,8 @@ export const formatHostBlock = (hostReport: HostReport, formatOptions: FormatOpt
   const { verbose = false } = formatOptions
   const stepEntries = toStepEntries(hostReport, formatOptions)
 
-  if (stepEntries.length === 0 && verbose) return [pc.bold(name), `${INDENT}${styleNote("no steps")}`].join("\n")
+  if (stepEntries.length === 0 && verbose) return [styleHostName(name), `${INDENT}${styleNote("no steps")}`].join("\n")
   if (stepEntries.length === 0) return
 
-  return [pc.bold(name), ...formatStepEntries(stepEntries, formatOptions)].join("\n")
+  return [styleHostName(name), ...formatStepEntries(stepEntries, formatOptions)].join("\n")
 }

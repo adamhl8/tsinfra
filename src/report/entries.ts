@@ -3,6 +3,8 @@ import { isErr } from "ts-explicit-errors"
 import { HOST_SCRIPT_EXTENSION } from "#hosts/discover.ts"
 import type { HostReport } from "#hosts/run.ts"
 import type { FormatOptions } from "#report/format.ts"
+import type { StepWarning } from "#report/warnings.ts"
+import { getStepWarnings } from "#report/warnings.ts"
 import type { EnsureComparisonValues } from "#session/handlers/ensure/comparison.ts"
 import type { FileComparisonValues } from "#session/handlers/file/comparison.ts"
 import type { LinkComparisonValues } from "#session/handlers/link/comparison.ts"
@@ -54,6 +56,8 @@ export type Detail =
   | { kind: "stderr"; command: string; stderr: string }
   // tsinfra's own aside about the details around it.
   | { kind: "note"; text: string }
+  // Something that worked, but needs a look, like a link to a path where nothing exists.
+  | { kind: "warning"; warning: StepWarning }
 
 // Treat a read's or an inspect's name as a value, because it's the command itself, and a file's or a link's, because it's a path.
 const STEP_NAME_KINDS: Record<StepKind, NameKind> = {
@@ -97,8 +101,6 @@ const SHOWS_CHANGE_DETAILS: Record<ComparisonValues["kind"], boolean> = {
   link: true,
 }
 
-const MISSING_TARGET_NOTE = "points to a missing path"
-
 /** Returns how a file differs: a diff when its content is text, then its comparison values. */
 const toFileComparisonDetails = (values: FileComparisonValues): Detail[] => {
   const { content } = values
@@ -113,15 +115,9 @@ const toEnsureComparisonDetails = (values: EnsureComparisonValues): Detail[] => 
   return [{ kind: "ensureComparisonValues", values }]
 }
 
-/** Returns how a link differs, then a note when its target doesn't exist, so a typo in the path stands out. */
-const toLinkComparisonDetails = (values: LinkComparisonValues): Detail[] => {
-  const noteDetails: Detail[] = values.targetExists ? [] : [{ kind: "note", text: MISSING_TARGET_NOTE }]
-  return [{ kind: "linkComparisonValues", values }, ...noteDetails]
-}
-
 const toComparisonValuesDetails = (values: ComparisonValues): Detail[] => {
   if (values.kind === "file") return toFileComparisonDetails(values)
-  if (values.kind === "link") return toLinkComparisonDetails(values)
+  if (values.kind === "link") return [{ kind: "linkComparisonValues", values }]
   return toEnsureComparisonDetails(values)
 }
 
@@ -192,7 +188,9 @@ const toStepEntry = (stepRecord: StepRecord, formatOptions: FormatOptions): Step
   }
   if (status === undefined) return
 
-  const isShown = SHOWN_BY_DEFAULT[status] || verbose
+  // Show a step with a warning, even one that was already right, so the warning can't be missed.
+  const warningDetails: Detail[] = getStepWarnings(stepRecord).map((warning) => ({ kind: "warning", warning }))
+  const isShown = SHOWN_BY_DEFAULT[status] || verbose || warningDetails.length > 0
   if (!isShown) return
 
   if (status === "waiting") return { status, kind, name, needs: waitingOn }
@@ -200,10 +198,11 @@ const toStepEntry = (stepRecord: StepRecord, formatOptions: FormatOptions): Step
   if (status === "changed") {
     const values = comparisons.before?.values
     const hasDetails = values && SHOWS_CHANGE_DETAILS[values.kind]
-    return { status, kind, name, details: hasDetails ? toComparisonValuesDetails(values) : [] }
+    const changeDetails = hasDetails ? toComparisonValuesDetails(values) : []
+    return { status, kind, name, details: [...changeDetails, ...warningDetails] }
   }
 
-  return { status, kind, name }
+  return { status, kind, name, details: warningDetails }
 }
 
 /** Returns the entries a host block shows: one per step that shows, then a failure no step owns. */

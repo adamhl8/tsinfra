@@ -24,6 +24,8 @@ export interface LinkComparisonValues {
   kind: "link"
   linkChange: LinkChange
   ownerChanges: OwnerChange[]
+  /** The target the script wants, so the report can name it even when the link is already right. */
+  target: string
   targetExists: boolean
 }
 
@@ -60,7 +62,7 @@ export const compareLink = async (
   const linkChange = toLinkChange(hostLinkDetails, target)
 
   const inSync = linkChange.kind === "same" && ownerChanges.length === 0
-  const comparison: Comparison = { inSync, values: { kind: "link", linkChange, ownerChanges, targetExists } }
+  const comparison: Comparison = { inSync, values: { kind: "link", linkChange, ownerChanges, target, targetExists } }
 
   // Skip the owner check for a link in sync, because no write is coming.
   if (inSync) return comparison

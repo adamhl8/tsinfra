@@ -1,9 +1,8 @@
-import pc from "picocolors"
 import prettyBytes from "pretty-bytes"
 
-import type { LabelRow } from "#report/format.ts"
+import type { AlignedRow } from "#report/format.ts"
 import { toOwnerRow } from "#report/format/owner.ts"
-import { styleGot, styleWant } from "#report/format/styles.ts"
+import { styleDescription, styleGot, styleWant } from "#report/format/styles.ts"
 import type { FileComparisonValues } from "#session/handlers/file/comparison.ts"
 import type { ContentComparison, SizeComparison } from "#session/handlers/file/comparison/content.ts"
 import type { AttributeChange } from "#session/handlers/shared/filesystem/attributes.ts"
@@ -35,14 +34,13 @@ const formatFileNote = (sizeComparison: SizeComparison): string => {
   // Color the sizes like `got` and `want`, because they're the change, like an attribute's values.
   const wantText = styleWant(formatSize(wantSize))
   const sizes = gotSize === undefined ? wantText : `${styleGot(formatSize(gotSize))} -> ${wantText}`
-  // Italicize the words, because they describe the content rather than show a value.
-  return `${pc.italic(FILE_NOTE_WORDS[kind])}, ${sizes}`
+  return `${styleDescription(FILE_NOTE_WORDS[kind])}, ${sizes}`
 }
 
 /** Formats mode bits as both notations, like `rw-r--r-- (644)`, because a script can write either one. */
 const formatMode = (bits: ModeBits) => `${toSymbolicMode(bits)} (${toOctalMode(bits)})`
 
-const toAttributeRow = (attributeChange: AttributeChange): LabelRow => {
+const toAttributeRow = (attributeChange: AttributeChange): AlignedRow => {
   if (attributeChange.name !== "mode") return toOwnerRow(attributeChange)
 
   const { name, got, want } = attributeChange
@@ -50,7 +48,7 @@ const toAttributeRow = (attributeChange: AttributeChange): LabelRow => {
 }
 
 /** Returns a note row for content the output can't diff, then a row for each attribute that changes. */
-export const toFileRows = (values: FileComparisonValues): LabelRow[] => {
+export const toFileRows = (values: FileComparisonValues): AlignedRow[] => {
   const { content, attributeChanges } = values
   // Show a note for content the output can't diff, because a text diff prints as its own detail.
   const contentRows = isSizeComparison(content) ? [{ label: "content", valueLines: [formatFileNote(content)] }] : []

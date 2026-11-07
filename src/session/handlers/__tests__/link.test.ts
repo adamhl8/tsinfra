@@ -33,6 +33,7 @@ describe("h.link in plan", () => {
       kind: "link",
       linkChange: { kind: "new", want: target },
       ownerChanges: [],
+      target,
       targetExists: true,
     })
     expect(await readdir(path.dirname(linkPath))).toStrictEqual(["target"])

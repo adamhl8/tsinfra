@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { symlink } from "node:fs/promises"
 import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
@@ -154,6 +155,19 @@ describe("getExitCode", () => {
 
   it("should be 0 from apply when a host has drift", async () => {
     expect(getExitCode([await planReport("a", ensurePending)], "apply")).toBe(0)
+  })
+
+  it("should be 0 from plan when the only finding is a warning", async () => {
+    const directory = await makeTempDir()
+    const linkPath = path.join(directory, "link")
+    const target = path.join(directory, "missing")
+    await symlink(target, linkPath)
+
+    const hostReport = await planReport("a", async (h) => {
+      await h.link(linkPath, target)
+    })
+
+    expect(getExitCode([hostReport], "plan")).toBe(0)
   })
 
   it("should be 1 when a host fails, even with drift on another", async () => {

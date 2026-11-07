@@ -173,9 +173,15 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
 - **Colors** follow the status: a summary's change count matches `~` and `>`, and its waiting count matches `?`. The
   plan reminder is dim, so the host lines stay the main thing in the summary. In a block, the notes of waiting steps
   line up in one column.
+- **Warnings.** A step that worked but needs a look, like a link to a missing path, gets a `warning:` line under its
+  details, with the label in bright yellow, so it stands apart from the plain yellow of a change. A warning makes its
+  step show even when it was already right, without `--verbose`. The report decides what's a warning from the facts
+  in the record, so no step records words. A failed step gets none, because its error is what needs fixing first. A
+  warning isn't drift, so it doesn't change the exit code.
 - **A host with nothing to show** gets no block, only its line in the summary.
 - **The summary** has one line per host: `unchanged`, `failed`, or a count of changes, where a count includes both
-  `changed` and `ran` steps, so it matches the `~` lines in the blocks. In `plan`, when any step's state differed, it
+  `changed` and `ran` steps, so it matches the `~` lines in the blocks. A count of warnings follows, like
+  `unchanged, 1 warning`, so one isn't lost once the blocks have scrolled away. In `plan`, when any step's state differed, it
   starts with the reminder that steps after a change were checked without it (see
   [Steps](./steps.md#what-plan-can-and-cannot-show)).
 - **Diffs** come from jsdiff (the `diff` package), not hand-written code. It is the standard line-diff library for

@@ -1,4 +1,4 @@
-import type { LabelRow } from "#report/format.ts"
+import type { AlignedRow } from "#report/format.ts"
 import {
   styleGot,
   styleGotExitCode,
@@ -31,7 +31,7 @@ const VALUE_KIND_RULES: Record<EnsureComparisonValues["kind"], ValueKindRules> =
 }
 
 /** Returns the `got` and `want` rows of what an `ensure` compared. */
-export const toEnsureRows = (values: EnsureComparisonValues): LabelRow[] => {
+export const toEnsureRows = (values: EnsureComparisonValues): AlignedRow[] => {
   const { formatGot, formatWant } = VALUE_KIND_RULES[values.kind]
   return [
     { label: "got", valueLines: [formatGot(values.got)] },

@@ -36,18 +36,9 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
          already built.
    3. **Links.** In two pieces, each reviewed before the next:
       1. **The `link` step** (see [Steps](./docs/steps.md#link) and [Transport](./docs/transport.md#link-writes)).
-      2. **Warnings.** A general way to say "this worked, but look at it", which starts with a broken link. Today
-         `points to a missing path` is a dim note on lines that already print, so `plan` hides a broken link that's
-         already in sync.
-         - A `warning` kind of `Detail` with its own style, likely yellow, because a dim note is too easy to miss.
-         - A warning makes a step print. An in-sync step with a warning shows without `--verbose`, as `=` with the warning
-           under it.
-         - Facts stay in the record. `targetExists` stays raw in `LinkComparisonValues`, and the report decides it's a
-           warning, through a small function the report owns, so no step records words.
-         - A count in the summary, like `unchanged, 1 warning`, so a warning isn't lost on a long run. Settle whether it's
-           wanted when this is built.
-         - Exit codes don't change. A warning isn't drift, so `plan` still exits 0.
-         - Settle the exact look in this piece's rundown.
+      2. **Warnings.** A `warning:` line under a step that worked but needs a look, which shows it even when it's
+         already right, and a count in the summary (see [CLI](./docs/cli.md#how-the-report-is-built)). It starts with a
+         link to a missing path.
    4. **Docs and preview.** Preview hosts for a content diff, a new file, attribute changes, a secret file, a binary
       file, and a link.
    5. **Validation.** `validate` on `file`, run against the temp file before the rename, with the temp name keeping the

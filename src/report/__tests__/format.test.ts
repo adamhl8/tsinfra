@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { chmod, lstat, mkdir, stat, symlink } from "node:fs/promises"
 import path from "node:path"
+import process from "node:process"
 
 import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
@@ -21,6 +22,8 @@ import type { Transport } from "#transport/transport.ts"
 
 const runNamedHost = async (name: string, fn: HostFunction, mode: Mode) =>
   prepareAndRunHost({ name, ...host("@local", fn) }, mode)
+
+const isRoot = process.getuid?.() === 0
 
 const formatBlock = async (fn: HostFunction, mode: Mode) => formatHostBlock(await runNamedHost("a", fn, mode))
 
@@ -352,7 +355,7 @@ describe("formatHostBlock for a file step", () => {
     ])
   })
 
-  it("should show a new link and a note for a missing target", async () => {
+  it("should show a new link and a warning for a missing target", async () => {
     const directory = await makeTempDir()
     const linkPath = path.join(directory, "link")
     const target = path.join(directory, "target")
@@ -365,7 +368,7 @@ describe("formatHostBlock for a file step", () => {
         "a",
         `  ~ change: (link) ${linkPath}`,
         `      target: new link to ${target}`,
-        "      points to a missing path",
+        `      warning: nothing exists at target -> ${target}`,
       ].join("\n"),
     )
   })
@@ -688,6 +691,75 @@ describe("formatHostBlock for a step that failed before it could compare again",
     expect(hostBlock).toBe(
       ["a", "  ! failed: (ensure) Make it", "      failed to run 'exit 1' -> exited with code 1"].join("\n"),
     )
+  })
+})
+
+/** Makes a link to a path that doesn't exist, in a new temp directory. */
+const createBrokenLink = async () => {
+  const directory = await makeTempDir()
+  const linkPath = path.join(directory, "link")
+  const target = path.join(directory, "missing")
+  await symlink(target, linkPath)
+  return { directory, linkPath, target }
+}
+
+describe("formatHostBlock and formatSummary for a warning", () => {
+  it("should show a link to a missing path that's already right without --verbose, and count it", async () => {
+    const { linkPath, target } = await createBrokenLink()
+    const hostReport = await runNamedHost(
+      "a",
+      async (h) => {
+        await h.link(linkPath, target)
+      },
+      "plan",
+    )
+
+    expect([formatHostBlock(hostReport), formatSummary([hostReport], "plan")]).toStrictEqual([
+      ["a", `  = unchanged: (link) ${linkPath}`, `      warning: nothing exists at target -> ${target}`].join("\n"),
+      "a   unchanged, 1 warning",
+    ])
+  })
+
+  it("should warn about the state apply left", async () => {
+    const directory = await makeTempDir()
+    const linkPath = path.join(directory, "link")
+    const target = path.join(directory, "missing")
+    const hostBlock = await formatBlock(async (h) => {
+      await h.link(linkPath, target)
+    }, "apply")
+
+    expect(hostBlock?.split("\n").at(-1)).toBe(`      warning: nothing exists at target -> ${target}`)
+  })
+
+  it("should count every warning after the change count", async () => {
+    const { directory, linkPath, target } = await createBrokenLink()
+    const hostReport = await runNamedHost(
+      "a",
+      async (h) => {
+        await h.link(linkPath, target)
+        await h.link(path.join(directory, "new-link"), target)
+      },
+      "plan",
+    )
+
+    expect(formatSummary([hostReport], "plan").split("\n").at(-1)).toBe("a   1 change, 2 warnings")
+  })
+
+  // Skip this as root, because root can write to any directory, so the write wouldn't fail.
+  it.skipIf(isRoot)("should give a step that failed no warning", async () => {
+    const directory = await makeTempDir()
+    const linkPath = path.join(directory, "link")
+    await chmod(directory, 0o555)
+
+    try {
+      const hostBlock = await formatBlock(async (h) => {
+        await h.link(linkPath, path.join(directory, "missing"))
+      }, "apply")
+      expect(hostBlock).toContain(`  ! failed: (link) ${linkPath}`)
+      expect(hostBlock).not.toContain("warning:")
+    } finally {
+      await chmod(directory, 0o755)
+    }
   })
 })
 

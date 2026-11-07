@@ -1,9 +1,8 @@
 import type { StructuredPatchHunk } from "diff"
 import { structuredPatch } from "diff"
-import pc from "picocolors"
 
 import type { FormatOptions } from "#report/format.ts"
-import { styleGot, styleNote, styleWant } from "#report/format/styles.ts"
+import { styleDiffFrame, styleGot, styleNote, styleWant } from "#report/format/styles.ts"
 import { endWithNewline, getMaxWidth } from "#utils.ts"
 
 // Show one unchanged line around each change, so a plan stays short.
@@ -35,7 +34,7 @@ const formatHunk = (hunk: StructuredPatchHunk, gutterWidth: number): string[] =>
   return hunk.lines.map((diffLine) => {
     if (diffLine.startsWith("-")) return `${" ".repeat(gutterWidth)} ${styleDiffLine(diffLine)}`
 
-    const gutter = pc.dim(String(lineNumber).padStart(gutterWidth))
+    const gutter = styleDiffFrame(String(lineNumber).padStart(gutterWidth))
     lineNumber += 1
     return `${gutter} ${styleDiffLine(diffLine)}`
   })
@@ -65,7 +64,7 @@ export const formatDiff = (got: string, want: string, formatOptions: FormatOptio
 
   // Draw the rule as wide as the diff's widest line, so it reads as a divider within the diff.
   const ruleWidth = getMaxWidth(hunkLines.flat())
-  const rule = pc.dim(HUNK_RULE_CHAR.repeat(ruleWidth))
+  const rule = styleDiffFrame(HUNK_RULE_CHAR.repeat(ruleWidth))
   const diffLines: string[] = []
   for (const [index, lines] of hunkLines.entries()) {
     if (index > 0) diffLines.push(rule)
