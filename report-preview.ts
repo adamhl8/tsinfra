@@ -1,6 +1,6 @@
 // Prints the report for one example host per way a block can look, to inspect the output by eye.
 // It runs `plan`, `apply`, `plan --verbose`, and then `apply --verbose`.
-// Run it with `bun run report:preview`, and with `NO_COLOR=1` to see it without colors.
+// Run it with `bask report-preview`, and with `NO_COLOR=1` to see it without colors.
 import { chmod, mkdtemp, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -86,7 +86,7 @@ const createScenarios = (dir: string): Scenario[] => {
     },
     {
       // A file's path in the value color, a diff with a `mode:` row after it, and a `content:` row for each case that
-      // can't show a diff, lined up with a `user:` row. With `--verbose`, a file that's already right shows `=`.
+      // can't show a diff, lined up with a `group:` row. With `--verbose`, a file that's already right shows `=`.
       // Only `plan` shows these, because `apply` can't write files yet.
       name: "files",
       target: "@local",
@@ -101,7 +101,7 @@ const createScenarios = (dir: string): Scenario[] => {
 
         await h.file(marker("app.conf"), "port = 8080\nworkers = 8\nlog = info\n", { mode: PUBLIC_FILE_MODE })
         await h.file(marker("new.conf"), "enabled = true\n")
-        await h.file(marker("token"), "new-token\n", { secret: true, user: "root" })
+        await h.file(marker("token"), "new-token\n", { secret: true, group: "sonarr" })
         await h.file(marker("logo.png"), new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]))
         await h.file(marker("access.log"), "")
         await h.file(marker("motd"), "welcome\n")

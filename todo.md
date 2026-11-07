@@ -11,7 +11,7 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
 
 1. **Transport.** Local and SSH, commands on stdin to `sh -s`, the `{ ... } </dev/null` wrapper, ControlMaster options,
    the `sudo` preamble, the `shell` host option, and `ssh -G` deciding `accept-new` and `ConnectTimeout`. Integration tests against a real local shell and a real sshd. Test the file
-   write rule on dash, bash, busybox sh, and macOS `/bin/sh`. The sshd and Linux shells run in Docker containers, and
+   write rule on dash, bash, busybox sh, and macOS `/bin/sh`. `bask test-docker` already covers dash and busybox, and the sshd joins it. The sshd and Linux shells run in Docker containers, and
    those tests skip when Docker is not available. The macOS `/bin/sh` case runs only on darwin, so it is local only.
    Test a command that can't run after the session starts, like sshd going away mid-run: it fails the host, and the
    step's record keeps the command and its error.
@@ -49,8 +49,8 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
    7. **Content written only once.** `overwrite: false` on `file`: write a missing file, never read or compare an
       existing one's content, and still manage its attributes (see [Steps](./docs/steps.md#the-write)).
 
-   The tests run on the platform they run on, so macOS covers the BSD paths. The GNU and busybox paths wait for the
-   Docker containers in step 1. The `sudo` path can't run in tests, so its command line gets a unit test.
+   The tests run on the platform they run on, so macOS covers the BSD paths. `bask test-docker` covers the GNU and
+   busybox paths, and real `sudo` and root, in containers. Real SELinux labels need a VM with it enforcing.
 
 4. **Needs.** `needs` on `ensure` and `file`, `name` and `kind` on `ChangeStepResult`, and waiting in plan.
 5. **CLI.** Discover `hosts/`, run hosts in parallel, hold output per host, the summary, and exit codes.

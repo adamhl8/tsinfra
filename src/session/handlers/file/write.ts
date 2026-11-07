@@ -13,11 +13,6 @@ import type { StepContext } from "#session/step.ts"
 const HEREDOC_DELIMITER = "__TSINFRA_EOF__"
 // Stand in for the content in the record, because it may be a secret and it can be large.
 const RECORDED_CONTENT = "<content as base64>"
-// Wrap the base64 at 76 columns, like GNU `base64` does, because one huge line isn't checked on every shell.
-const BASE64_LINE = /.{1,76}/gv
-
-const encodeContent = (bytes: Uint8Array): string =>
-  (Buffer.from(bytes).toString("base64").match(BASE64_LINE) ?? []).join("\n")
 
 /** Returns the mode to write: the one given, then the file's own, then the default for a new file. */
 const getModeArg = (attributes: HostFileAttributeDetails | undefined, options: ValidFileOptions): string => {
@@ -103,7 +98,8 @@ export const writeFile = async (
   const attributes = hostFileDetails.kind === "existing" ? hostFileDetails.attributes : undefined
 
   const withContent = createWriteScript(path, attributes, options)
-  const script = withContent(encodeContent(resolvedContent.bytes))
+  const encodedContent = Buffer.from(resolvedContent.bytes).toString("base64")
+  const script = withContent(encodedContent)
   const output = await shell.exec(script, {
     label: "file write",
     recordedCmd: withContent(RECORDED_CONTENT),

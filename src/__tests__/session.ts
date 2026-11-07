@@ -37,27 +37,42 @@ export const createSession = async (mode: Mode = "apply") => {
   return createHostSession(hostContext, mode)
 }
 
-/**
- * Creates a session where `sudo` is a fake on `PATH`, because a test can't rely on real sudo. It logs its arguments,
- * and then runs `sudoBody`, which by default runs the command without escalating.
- */
-export const createFakeSudoSession = async (mode: Mode, sudoBody = `exec "$@"`) => {
-  const binDir = await makeTempDir()
-  const logPath = path.join(binDir, "sudo.log")
-  const toolPath = path.join(binDir, "sudo")
-  await Bun.write(toolPath, `#!/bin/sh\necho "$*" >> '${logPath}'\n[ "$1" = -n ] && shift\n${sudoBody}\n`)
+/** Writes a shell script named `name` into `binDir`, to stand in for a command on `PATH`. */
+export const writeFakeTool = async (binDir: string, name: string, body: string) => {
+  const toolPath = path.join(binDir, name)
+  await Bun.write(toolPath, `#!/bin/sh\n${body}\n`)
   await chmod(toolPath, 0o755)
+}
+
+/** Creates a session where each of `tools` stands in for a command on `PATH`, by its name and shell script body. */
+export const createFakeToolSession = async (mode: Mode, tools: Record<string, string>) => {
+  const binDir = await makeTempDir()
+  await Promise.all(Object.entries(tools).map(async ([name, body]) => writeFakeTool(binDir, name, body)))
 
   const hostContext = await buildHostContext({ name: "a", ...host("@local", doNothing) })
   if (isErr(hostContext)) throw hostContext
 
   const transport: Transport = async (script) => hostContext.transport(`PATH='${binDir}':"$PATH"\n${script}`)
+  return createHostSession({ ...hostContext, transport }, mode)
+}
+
+/**
+ * Creates a session where `sudo` is a fake on `PATH`, because a test can't rely on real sudo. It logs its arguments,
+ * and then runs `sudoBody`, which by default runs the command as the same user, with a fake `id` that reports root.
+ */
+export const createFakeSudoSession = async (mode: Mode, sudoBody = `TSINFRA_FAKE_ROOT=1 exec "$@"`) => {
+  const logPath = path.join(await makeTempDir(), "sudo.log")
+  const hostSession = await createFakeToolSession(mode, {
+    sudo: `echo "$*" >> '${logPath}'\n[ "$1" = -n ] && shift\n${sudoBody}`,
+    id: `[ -n "$TSINFRA_FAKE_ROOT" ] || exec '${Bun.which("id")}' "$@"\n[ "$1" = -u ] && echo 0 || echo root`,
+  })
+
   const readSudoCalls = async () => {
     const log = Bun.file(logPath)
     return (await log.exists()) ? (await log.text()).trim().split("\n") : []
   }
 
-  return { hostSession: createHostSession({ ...hostContext, transport }, mode), readSudoCalls }
+  return { hostSession, readSudoCalls }
 }
 
 /** Prepares one host and runs it, for a test that only cares about its report. */

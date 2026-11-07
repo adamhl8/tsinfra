@@ -470,10 +470,14 @@ manages such a file, and a host whose sudo needs a password declares it on `host
 `sudo` isn't the default, because a file written as root under `~` would end up owned by root, and because a host that
 never escalates shouldn't need sudo set up. A `file` step only escalates when it asks to.
 
-Two mistakes get errors of their own instead of a raw shell error:
+Three mistakes get errors of their own instead of a raw shell error. For the first two, tsinfra runs `id` to see who
+runs the step's commands, which is root under `sudo`. They only fail when a write is coming, so a file already in sync
+passes, and they show in `plan` too:
 
-- **`user` names another user without `sudo`,** like `user 'sonarr' needs sudo: true, because only root can give a
-  file away`. Only root can `chown` a file to someone else.
+- **`user` names another user without `sudo`,** like `user 'sonarr' needs sudo: true, because only root can change a
+  file's owner to another user`. Only root can `chown` a file to someone else.
+- **Someone else owns the file, and no `user` is given, without `sudo`,** like `'/etc/app.conf' is owned by 'sonarr', so
+  writing it needs sudo: true`. A write keeps the file's owner with `chown`, which needs the same permission.
 - **The file details command can't read the file without `sudo`,** like `can't read '/etc/shadow' as the SSH user, so it needs sudo:
   true`. That way an unreadable file doesn't look missing.
 

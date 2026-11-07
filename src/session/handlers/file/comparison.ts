@@ -6,6 +6,7 @@ import type { AttributeChange } from "#session/handlers/file/comparison/attribut
 import { findAttributeChanges } from "#session/handlers/file/comparison/attributes.ts"
 import type { ContentComparison } from "#session/handlers/file/comparison/content.ts"
 import { compareContent } from "#session/handlers/file/comparison/content.ts"
+import { checkWriteOwner } from "#session/handlers/file/comparison/owner.ts"
 import type { HostFileDetails } from "#session/handlers/file/host-file-details.ts"
 import type { ResolvedFileContent } from "#session/handlers/file/resolved-content.ts"
 import type { Comparison } from "#session/handlers/shared/converge.ts"
@@ -18,8 +19,7 @@ export interface FileComparisonValues {
   attributes: AttributeChange[]
 }
 
-/** Compares the file's details on the host with what the script wants. */
-export const compareFile = async (
+const compareDetails = async (
   ctx: StepContext,
   hostFileDetails: HostFileDetails,
   resolvedContent: ResolvedFileContent,
@@ -40,4 +40,21 @@ export const compareFile = async (
   const inSync = content.kind === "same" && attributes.length === 0
 
   return { inSync, values: { kind: "file", content, attributes } }
+}
+
+/** Compares the file's details on the host with what the script wants, and fails a write that can't work. */
+export const compareFile = async (
+  ctx: StepContext,
+  hostFileDetails: HostFileDetails,
+  resolvedContent: ResolvedFileContent,
+  options: ValidFileOptions,
+): Promise<Result<Comparison>> => {
+  const comparison = await compareDetails(ctx, hostFileDetails, resolvedContent, options)
+  if (isErr(comparison)) return comparison
+
+  // Skip the owner check for a file in sync, because no write is coming.
+  if (comparison.inSync) return comparison
+
+  const ownerCheck = await checkWriteOwner(ctx, hostFileDetails, options)
+  return isErr(ownerCheck) ? ownerCheck : comparison
 }

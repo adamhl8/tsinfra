@@ -1,0 +1,37 @@
+import { describe, expect, it } from "bun:test"
+import { readdir } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+
+import { createSession, fileOrMessage } from "#__tests__/session.ts"
+
+describe("a user with no sudo rule", () => {
+  it("should fail straight away when a step needs sudo", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(await fileOrMessage(h, "/etc/tsinfra-docker-x", "a\n", { sudo: true })).toBe(
+      "failed to compare the host with what the step wants -> failed to read the details of '/etc/tsinfra-docker-x' -> exited with code 1: sudo: a password is required",
+    )
+  })
+
+  it("should make a script's own sudo fail instead of prompting", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(await h.inspect("sudo true")).toStrictEqual({
+      stdout: "",
+      stderr: "sudo: a password is required",
+      exitCode: 1,
+    })
+  })
+
+  it("should fail at chown on a group the user isn't in, and leave no temp file", async () => {
+    const directory = os.homedir()
+    const filePath = path.join(directory, "group.conf")
+    const { host: h } = await createSession("apply")
+
+    expect(await fileOrMessage(h, filePath, "a\n", { group: "sonarr" })).toStartWith(
+      `failed to run the fix -> failed to write '${filePath}' -> exited with code 1: chown: `,
+    )
+    expect((await readdir(directory)).filter((name) => name.includes("group.conf"))).toStrictEqual([])
+  })
+})

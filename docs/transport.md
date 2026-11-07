@@ -65,7 +65,7 @@ umask 077                                           # 2. new files start private
 tmp=$(mktemp '/etc/app/.app.conf.tsinfra.XXXXXX')   # 3. a unique temp file next to the destination
 trap 'rm -f "$tmp"' EXIT                            #    removed if anything below fails
 base64 -d > "$tmp" <<'__TSINFRA_EOF__'              # 4. the content, decoded into the temp file
-<content as base64, wrapped at 76 columns>
+<content as base64>
 __TSINFRA_EOF__
 chown -- '1000:1000' "$tmp"                         # 5. user and group first
 chmod 644 "$tmp"                                    #    then the mode
@@ -89,8 +89,8 @@ Each step's place in the order matters:
 5. **`chown` comes before `chmod`,** because `chown` clears setuid and setgid, even when root runs it. Chef and cdist
    both have comments about this. With no `user`, `group`, or `mode` given, the values come from the existing file, as
    the file details command found them, or the defaults for a new file. `chown` runs whenever there's a value, because
-   the temp file's owner is whoever ran the script. So a write without `sudo` to a file owned by someone else fails and
-   leaves the file alone, and never takes ownership away from an app. A new file with no `user` or `group` skips it.
+   the temp file's owner is whoever ran the script. So a write without `sudo` to a file owned by someone else is refused
+   before it starts (see [Steps](./steps.md#sudo-and-permissions)), and never takes ownership away from an app. A new file with no `user` or `group` skips it.
    `chown` keeps its `--`, because a user or group name comes from the script. Paths need none, because they're always
    absolute.
 6. **SELinux.** `mv` keeps the temp file's label, so the replacement takes the old file's label first. Both SELinux
@@ -109,7 +109,7 @@ The record never holds the content. It stores the script with `<content as base6
 because the content may be a secret, and it can be large.
 
 An earlier draft streamed the raw bytes after the script and let `cat` read them. dash and busybox sh both read ahead on
-stdin and swallow part of the content, so that only worked under bash and zsh. A 3 MB binary through the heredoc arrives
+stdin and swallow part of the content, so that only worked under bash and zsh. A 10 MB binary through the heredoc arrives
 intact under dash, bash, busybox sh, zsh, and macOS `/bin/sh`.
 
 ### How other tools write files

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test"
-import { chmod } from "node:fs/promises"
 import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
 import type { Result } from "ts-explicit-errors"
 import { isErr, messageChain } from "ts-explicit-errors"
 
+import { writeFakeTool } from "#__tests__/session.ts"
 import { toBytes } from "#session/handlers/file/bytes.ts"
 import type { HostFileDetails } from "#session/handlers/file/host-file-details.ts"
 import { getHostFileDetails, parseFileDetailsOutput } from "#session/handlers/file/host-file-details.ts"
@@ -40,6 +40,14 @@ describe("parseFileDetailsOutput", () => {
 
   it("should read a mode with setuid", () => {
     expect(toDetails(`kind=file\n${HASH}\n4755 0 0 root wheel 3\n`)).toMatchObject({ attributes: { mode: 0o4755 } })
+  })
+
+  it.each([
+    ["0", 0o0],
+    ["4", 0o4],
+    ["44", 0o44],
+  ])("should read GNU's unpadded mode '%s'", (statMode, mode) => {
+    expect(toDetails(`kind=file\n${HASH}\n${statMode} 0 0 root root 3\n`)).toMatchObject({ attributes: { mode } })
   })
 
   it("should return new details when nothing is at the path", () => {
@@ -80,12 +88,6 @@ describe("parseFileDetailsOutput", () => {
   })
 })
 
-const writeTool = async (binDir: string, name: string, body: string) => {
-  const toolPath = path.join(binDir, name)
-  await Bun.write(toolPath, `#!/bin/sh\n${body}\n`)
-  await chmod(toolPath, 0o755)
-}
-
 const toHash = (details: Result<HostFileDetails>, filePath: string) => {
   if (isErr(details)) return messageChain(details).replaceAll(filePath, "<file>")
   return details.kind === "existing" ? details.content.hash : undefined
@@ -94,8 +96,8 @@ const toHash = (details: Result<HostFileDetails>, filePath: string) => {
 /** Reads a file's details on a host where `tools` are the only commands on `PATH`, apart from `stat`. */
 const readDetailsWithTools = async (tools: Record<string, string>) => {
   const binDir = await makeTempDir()
-  await writeTool(binDir, "stat", `exec '${Bun.which("stat")}' "$@"`)
-  await Promise.all(Object.entries(tools).map(async ([name, body]) => writeTool(binDir, name, body)))
+  await writeFakeTool(binDir, "stat", `exec '${Bun.which("stat")}' "$@"`)
+  await Promise.all(Object.entries(tools).map(async ([name, body]) => writeFakeTool(binDir, name, body)))
   const filePath = path.join(binDir, "file")
   await Bun.write(filePath, "a")
 

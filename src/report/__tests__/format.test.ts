@@ -5,7 +5,7 @@ import path from "node:path"
 import { makeTempDir } from "@adamhl8/configs/test"
 import { attempt, isErr } from "ts-explicit-errors"
 
-import { prepareAndRunHost } from "#__tests__/session.ts"
+import { createFakeSudoSession, prepareAndRunHost } from "#__tests__/session.ts"
 import type { Mode } from "#cli/program.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
@@ -321,9 +321,14 @@ describe("formatHostBlock for a file step", () => {
     const filePath = path.join(await makeTempDir(), "app.conf")
     await Bun.write(filePath, "a\n")
     const { uid, gid } = await stat(filePath)
-    const hostBlock = await formatBlock(async (h) => {
-      await h.file(filePath, "a\n", { user: uid + 1, group: gid + 1 })
-    }, "plan")
+    const { hostSession } = await createFakeSudoSession("plan")
+    await hostSession.host.file(filePath, "a\n", { user: uid + 1, group: gid + 1, sudo: true })
+    const hostBlock = formatHostBlock({
+      name: "a",
+      started: true,
+      failure: hostSession.getFailure(),
+      stepRecords: hostSession.stepRecords,
+    })
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
       `      user:  ${uid} -> ${uid + 1}`,

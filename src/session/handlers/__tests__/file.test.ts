@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { chmod, mkdir, readdir, stat, symlink, truncate } from "node:fs/promises"
+import { chmod, lstat, mkdir, readdir, stat, symlink, truncate } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import process from "node:process"
@@ -7,13 +7,24 @@ import process from "node:process"
 import { makeTempDir } from "@adamhl8/configs/test"
 import { messageChain } from "ts-explicit-errors"
 
-import { castInvalid, createFakeSudoSession, createSession, fileOrMessage } from "#__tests__/session.ts"
+import {
+  castInvalid,
+  createFakeSudoSession,
+  createFakeToolSession,
+  createSession,
+  fileOrMessage,
+} from "#__tests__/session.ts"
 import { handleFile } from "#session/handlers/file.ts"
 import { PUBLIC_FILE_MODE } from "#session/handlers/file/mode.ts"
 
 const CLOSED_FILE_DESCRIPTOR = 9999
 
 const createFilePath = async () => path.join(await makeTempDir(), "app.conf")
+
+const isRoot = process.getuid?.() === 0
+
+/** Returns a group id above all of the user's own, so `chown` to it fails. */
+const getOtherGroupId = () => Math.max(os.userInfo().gid, ...(process.getgroups?.() ?? [])) + 1
 
 /** Applies new content to `filePath` and returns the write script from the record. */
 const getWriteScript = async (filePath: string) => {
@@ -64,6 +75,7 @@ describe("h.file in plan", () => {
     expect(hostSession.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual([
       "file details command",
       "file content",
+      "file user command",
     ])
   })
 
@@ -102,10 +114,10 @@ describe("h.file in plan", () => {
     const filePath = await createFilePath()
     await Bun.write(filePath, "a\n")
     const { username, uid } = os.userInfo()
-    const hostSession = await createSession("plan")
-    await fileOrMessage(hostSession.host, filePath, "a\n", { user: username })
-    await fileOrMessage(hostSession.host, filePath, "a\n", { user: uid })
-    await fileOrMessage(hostSession.host, filePath, "a\n", { user: uid + 1 })
+    const { hostSession } = await createFakeSudoSession("plan")
+    await fileOrMessage(hostSession.host, filePath, "a\n", { user: username, sudo: true })
+    await fileOrMessage(hostSession.host, filePath, "a\n", { user: uid, sudo: true })
+    await fileOrMessage(hostSession.host, filePath, "a\n", { user: uid + 1, sudo: true })
 
     expect(hostSession.stepRecords.map(({ comparisons }) => comparisons.before)).toMatchObject([
       { inSync: true },
@@ -256,9 +268,8 @@ describe("h.file content", () => {
     const localPath = await makeTempDir()
     const { host: h } = await createSession("plan")
 
-    expect(await fileOrMessage(h, "/tmp/x", Bun.file(localPath))).toBe(
-      `failed to read local file '${localPath}' -> Directories cannot be read like files`,
-    )
+    // Check only that the error names the path, because Linux gives a directory a size of `Infinity`, and macOS doesn't.
+    expect(await fileOrMessage(h, "/tmp/x", Bun.file(localPath))).toContain(`local file '${localPath}'`)
   })
 
   it("should fail on content it can't read and can't name", async () => {
@@ -277,6 +288,104 @@ describe("h.file content", () => {
     expect(await fileOrMessage(h, "/tmp/x", Bun.file(localPath), { needs: [needed] })).toBe(
       `failed to read local file '${localPath}' -> ENOENT: no such file or directory, open '${localPath}'`,
     )
+  })
+})
+
+describe("h.file owner check", () => {
+  // Use `/etc/hosts`, because it's a real file owned by root that everyone can read.
+  const ROOT_OWNED_PATH = "/etc/hosts"
+  const FAKE_UID = 1234
+
+  it.skipIf(isRoot).each(["plan", "apply"] as const)("should refuse another user's name in %s", async (mode) => {
+    const filePath = await createFilePath()
+    const hostSession = await createSession(mode)
+
+    expect(await fileOrMessage(hostSession.host, filePath, "a\n", { user: "root" })).toBe(
+      "failed to compare the host with what the step wants -> user 'root' needs sudo: true, because only root can change a file's owner to another user",
+    )
+    expect(hostSession.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual([
+      "file details command",
+      "file user command",
+    ])
+    expect(await Bun.file(filePath).exists()).toBe(false)
+  })
+
+  it.skipIf(isRoot)("should refuse another user's id", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(await fileOrMessage(h, await createFilePath(), "a\n", { user: os.userInfo().uid + 1 })).toBe(
+      `failed to compare the host with what the step wants -> user '${os.userInfo().uid + 1}' needs sudo: true, because only root can change a file's owner to another user`,
+    )
+  })
+
+  it("should write with the user's own name and id", async () => {
+    const { username, uid } = os.userInfo()
+    const namePath = await createFilePath()
+    const idPath = await createFilePath()
+    const { host: h } = await createSession("apply")
+
+    expect(await fileOrMessage(h, namePath, "a\n", { user: username })).toMatchObject({ changed: true })
+    expect(await fileOrMessage(h, idPath, "a\n", { user: uid })).toMatchObject({ changed: true })
+    expect(await Bun.file(namePath).text()).toBe("a\n")
+    expect(await Bun.file(idPath).text()).toBe("a\n")
+  })
+
+  it.skipIf(isRoot)("should refuse to write a file someone else owns", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(await fileOrMessage(h, ROOT_OWNED_PATH, "new\n")).toBe(
+      `failed to compare the host with what the step wants -> '${ROOT_OWNED_PATH}' is owned by 'root', so writing it needs sudo: true`,
+    )
+  })
+
+  it("should pass a file someone else owns when it's in sync", async () => {
+    const content = await Bun.file(ROOT_OWNED_PATH).bytes()
+    const { host: h } = await createSession("plan")
+
+    expect(await fileOrMessage(h, ROOT_OWNED_PATH, content, { user: "root" })).toMatchObject({ changed: false })
+  })
+
+  it("should pass under sudo, because the command runs as root", async () => {
+    const { hostSession } = await createFakeSudoSession("plan")
+    const { host: h } = hostSession
+
+    expect(await fileOrMessage(h, await createFilePath(), "a\n", { user: "root", sudo: true })).toMatchObject({
+      changed: true,
+    })
+    expect(await fileOrMessage(h, ROOT_OWNED_PATH, "new\n", { sudo: true })).toMatchObject({ changed: true })
+  })
+
+  it("should match only a uid for a user with no name", async () => {
+    const id = `[ "$1" = -u ] && echo ${FAKE_UID} || exit 1`
+    const { host: h } = await createFakeToolSession("plan", { id })
+
+    expect(await fileOrMessage(h, await createFilePath(), "a\n", { user: FAKE_UID })).toMatchObject({ changed: true })
+    expect(await fileOrMessage(h, await createFilePath(), "a\n", { user: "adam" })).toBe(
+      "failed to compare the host with what the step wants -> user 'adam' needs sudo: true, because only root can change a file's owner to another user",
+    )
+  })
+
+  it("should fail when id fails", async () => {
+    const { host: h } = await createFakeToolSession("plan", { id: 'echo "id broke" >&2; exit 1' })
+
+    expect(await fileOrMessage(h, await createFilePath(), "a\n", { user: FAKE_UID })).toBe(
+      "failed to compare the host with what the step wants -> failed to read who runs the step's commands -> exited with code 1: id broke",
+    )
+  })
+
+  it("should fail when id doesn't print a uid", async () => {
+    const { host: h } = await createFakeToolSession("plan", { id: "echo adam" })
+
+    expect(await fileOrMessage(h, await createFilePath(), "a\n", { user: FAKE_UID })).toBe(
+      "failed to compare the host with what the step wants -> the file user command printed 'adam' instead of the id of the user running it",
+    )
+  })
+
+  it("should not run id for a new file with no user", async () => {
+    const hostSession = await createSession("plan")
+    await fileOrMessage(hostSession.host, await createFilePath(), "a\n")
+
+    expect(hostSession.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual(["file details command"])
   })
 })
 
@@ -353,7 +462,8 @@ describe("h.file refusals", () => {
     )
   })
 
-  it("should say a file the SSH user can't read needs sudo", async () => {
+  // Root can read every file.
+  it.skipIf(isRoot)("should say a file the SSH user can't read needs sudo", async () => {
     const filePath = await createFilePath()
     await Bun.write(filePath, "a\n")
     await chmod(filePath, 0o000)
@@ -468,22 +578,50 @@ describe("h.file in apply", () => {
     expect(await readdir(directory)).toStrictEqual(["app.conf"])
   })
 
-  // Root can give a file to anyone, so `chown` wouldn't fail.
-  it.skipIf(process.getuid?.() === 0)(
-    "should fail without touching the file or leaving a temp file when the write fails",
-    async () => {
-      const directory = await makeTempDir()
-      const filePath = path.join(directory, "app.conf")
-      await Bun.write(filePath, "old\n")
-      const { uid } = os.userInfo()
-      const hostSession = await createSession("apply")
-      const message = await fileOrMessage(hostSession.host, filePath, "new\n", { user: uid + 1 })
+  // Root can set any group, so `chown` wouldn't fail.
+  it.skipIf(isRoot)("should fail without touching the file or leaving a temp file when the write fails", async () => {
+    const directory = await makeTempDir()
+    const filePath = path.join(directory, "app.conf")
+    await Bun.write(filePath, "old\n")
+    const hostSession = await createSession("apply")
+    const message = await fileOrMessage(hostSession.host, filePath, "new\n", { group: getOtherGroupId() })
 
-      expect(message).toStartWith(`failed to run the fix -> failed to write '${filePath}' -> exited with code 1: `)
-      expect(await Bun.file(filePath).text()).toBe("old\n")
-      expect(await readdir(directory)).toStrictEqual(["app.conf"])
-    },
-  )
+    expect(message).toStartWith(`failed to run the fix -> failed to write '${filePath}' -> exited with code 1: `)
+    expect(await Bun.file(filePath).text()).toBe("old\n")
+    expect(await readdir(directory)).toStrictEqual(["app.conf"])
+  })
+
+  it("should refuse a symlink without writing to it or its target", async () => {
+    const targetPath = await createFilePath()
+    await Bun.write(targetPath, "old\n")
+    const filePath = await createFilePath()
+    await symlink(targetPath, filePath)
+    const hostSession = await createSession("apply")
+
+    expect(await fileOrMessage(hostSession.host, filePath, "new\n")).toBe(
+      `failed to compare the host with what the step wants -> '${filePath}' is a symlink, so file won't replace it`,
+    )
+    expect(hostSession.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual(["file details command"])
+    expect(await Bun.file(targetPath).text()).toBe("old\n")
+    expect((await lstat(filePath)).isSymbolicLink()).toBe(true)
+  })
+
+  // Use fakes, because `chcon` can exist on a system with SELinux off, and then it fails.
+  it("should run the SELinux commands only where they apply, and ignore a failure", async () => {
+    const logPath = await createFilePath()
+    const failAfterLogging = (name: string) => `echo ${name} >> '${logPath}'\nexit 1`
+    const { host: h } = await createFakeToolSession("apply", {
+      chcon: failAfterLogging("chcon"),
+      restorecon: failAfterLogging("restorecon"),
+    })
+    const filePath = await createFilePath()
+
+    expect(await fileOrMessage(h, filePath, "a\n")).toMatchObject({ changed: true })
+    expect(await fileOrMessage(h, filePath, "b\n")).toMatchObject({ changed: true })
+
+    expect(await Bun.file(filePath).text()).toBe("b\n")
+    expect(await Bun.file(logPath).text()).toBe("restorecon\nchcon\n")
+  })
 
   it("should keep the content out of the record, and label the write", async () => {
     const filePath = await createFilePath()
@@ -529,10 +667,11 @@ describe("h.file with sudo", () => {
     expect(commands?.map(({ label }) => label)).toStrictEqual([
       "file details command",
       "file content",
+      "file user command",
       "file write",
       "file details command",
     ])
-    expect(await readSudoCalls()).toStrictEqual(["-n sh -s", "-n sh -s", "-n sh -s", "-n sh -s"])
+    expect(await readSudoCalls()).toStrictEqual(["-n sh -s", "-n sh -s", "-n sh -s", "-n sh -s", "-n sh -s"])
     expect(commands?.some(({ cmd }) => cmd.includes("sudo"))).toBe(false)
   })
 

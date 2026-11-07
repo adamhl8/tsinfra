@@ -4,13 +4,15 @@ import { err, isErr } from "ts-explicit-errors"
 
 import type { Bytes } from "#session/handlers/file/bytes.ts"
 import { toBytes } from "#session/handlers/file/bytes.ts"
-import { OCTAL_MODE_PATTERN, toModeBits } from "#session/handlers/file/mode.ts"
 import type { Shell } from "#session/shell.ts"
 import { quoteShellArg } from "#session/shell.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
 
 const SHA256_PATTERN = /^[0-9a-f]{64}/v
 const WHITESPACE = /\s+/v
+// Allow fewer than three digits, because GNU and busybox `stat` print mode `044` as `44`.
+const STAT_MODE_PATTERN = /^[0-7]{1,4}$/v
+const OCTAL_RADIX = 8
 
 /** What the file details command found about the content of a regular file. */
 interface HostFileContentDetails {
@@ -45,7 +47,7 @@ export interface ExistingHostFileDetails {
 export type HostFileDetails = ExistingHostFileDetails | NewHostFileDetails
 
 const statLineSchema = type([
-  type(OCTAL_MODE_PATTERN).pipe(toModeBits),
+  type(STAT_MODE_PATTERN).pipe((mode) => Number.parseInt(mode, OCTAL_RADIX)),
   "string.integer.parse",
   "string.integer.parse",
   nonEmptyStringSchema,
