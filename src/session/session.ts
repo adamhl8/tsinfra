@@ -21,8 +21,9 @@ import type { HostContext } from "#session/host-context.ts"
 import { createShell } from "#session/shell.ts"
 import type { StepRecord } from "#session/step-recorder.ts"
 import { createStepRecorder } from "#session/step-recorder.ts"
-import type { HandlerReturn, StepContext, StepKind } from "#session/step.ts"
-import { nonEmptyStringSchema } from "#session/step.ts"
+import type { HandlerReturn, StepContext, StepKind, StepOptions } from "#session/step.ts"
+import { nonEmptyStringSchema, stepOptionsSchema } from "#session/step.ts"
+import { createSudoTransport } from "#transport/sudo.ts"
 
 // Extend `Record<StepKind, unknown>` so a step kind with no method fails to compile.
 /** What a host's function is given. Each method call is one step, and steps run one at a time at the top level. */
@@ -129,6 +130,7 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
 
   // Record each command under the running step, because every command passes through the transport.
   const shell = createShell(recordCommands(transport))
+  const sudoShell = createShell(recordCommands(createSudoTransport(transport)))
   // Record what `converge` finds as it goes, so a failure can't lose it and a handler never records anything itself.
   const converge = createConverge(mode, convergeRecorder)
 
@@ -136,6 +138,7 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
     stepName: unknown,
     kind: K,
     handler: (ctx: StepContext<K>) => Promise<Result<HandlerReturn<T>>>,
+    options: StepOptions = {},
   ): Promise<T> =>
     callOrFail(async () => {
       // Validate the name before recording the step, because the output shows every recorded step by its name.
@@ -148,13 +151,33 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
       const stepRecord = startStep(validName, kind)
       if (isErr(stepRecord)) return stepRecord
 
+      // Validate `options` after recording the step, so a bad one fails under the step like the step's other inputs.
+      const validOptions = validateInput(options, stepOptionsSchema, { inputLabel: "options", givenTo: kind })
+      if (isErr(validOptions)) {
+        finishStep(stepRecord, keepFailure(failure, validOptions))
+        return validOptions
+      }
+
+      // Leave the tools on the plain shell, because no tool takes a `sudo` option.
       const readTool: Exec = async (cmd) => callOrFail(async () => execCommand({ toolName: "read", shell }, cmd))
       const inspectTool: Inspect = async (cmd) =>
         callOrFail(async () => inspectCommand({ toolName: "inspect", shell }, cmd))
       const execTool: Exec = async (cmd) => callOrFail(async () => execCommand({ toolName: "exec", shell }, cmd))
       const readTools: ReadTools = { read: readTool, inspect: inspectTool }
       const changeTools: ChangeTools = { exec: execTool, inspect: inspectTool }
-      const ctx: StepContext<K> = { stepName: validName, kind, mode, shell, home, readTools, changeTools, converge }
+
+      const stepShell = validOptions.sudo ? sudoShell : shell
+
+      const ctx: StepContext<K> = {
+        stepName: validName,
+        kind,
+        mode,
+        shell: stepShell,
+        home,
+        readTools,
+        changeTools,
+        converge,
+      }
 
       const handlerReturn = await handler(ctx)
 
@@ -174,7 +197,7 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
     read: async (cmd) => callStep(cmd, "read", async (ctx) => handleRead(ctx, cmd)),
     inspect: async (cmd) => callStep(cmd, "inspect", async (ctx) => handleInspect(ctx, cmd)),
     file: async (path, content, options) =>
-      callStep(path, "file", async (ctx) => handleFile(ctx, path, content, options)),
+      callStep(path, "file", async (ctx) => handleFile(ctx, path, content, options), options),
     ensure: async (stepName, options) => callStep(stepName, "ensure", async (ctx) => handleEnsure(ctx, options)),
     run: async (stepName, cmd, options) => callStep(stepName, "run", async (ctx) => handleRun(ctx, cmd, options)),
   }

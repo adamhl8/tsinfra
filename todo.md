@@ -44,8 +44,8 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
       destination's extension (see [Steps](./docs/steps.md#the-write)).
    6. **Sudo passwords.** Adding to the preflight in `prepareHosts`, which prepares every host before any script runs:
       `sudo` declared on `host()` as `true` or `{ password }`, the `sudo -n true` probe, a prompt per host with three
-      tries, the no-TTY failure, and the preamble's `sudo` function with an askpass helper, or `sudo -n` on a host that didn't declare it
-      (see [Transport](./docs/transport.md#sudo)).
+      tries, the no-TTY failure, the preamble's `sudo` function with an askpass helper on a host that declares it, and
+      `host() needs sudo: true` added to sudo's error on one that doesn't (see [Transport](./docs/transport.md#sudo)).
    7. **Content written only once.** `overwrite: false` on `file`: write a missing file, never read or compare an
       existing one's content, and still manage its attributes (see [Steps](./docs/steps.md#the-write)).
 
@@ -208,7 +208,9 @@ Decided, and wanted eventually, with no place in the order yet.
   `apply`, running only hosts that have it (see [CLI](./docs/cli.md#tasks)).
 - **Verbosity levels.** `-vv` lists each step's commands, with labels for tsinfra's own, and `-vvv` adds their output
   (see [CLI](./docs/cli.md#output)). A failure's note already tells people to run with `-vvv`, so `-vvv` has to show the
-  stderr that note promises.
+  stderr that note promises. A command that `sudo: true` ran as root gets a `sudo` boolean on `CommandRecord`, set where
+  `session.ts` builds `sudoShell`, because the record holds the script without the `sudo sh -s` around it. The report
+  shows it as a tag, not as the wrapped command.
 - **Ordering between hosts.** `needs` on `host()`, taking imported host scripts. The design is tentative, and it comes
   after `--parallel` and most of the rest of this file (see
   [Open questions](./docs/open-questions.md#ordering-between-hosts)).

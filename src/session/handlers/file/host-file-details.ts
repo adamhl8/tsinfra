@@ -8,7 +8,6 @@ import { OCTAL_MODE_PATTERN, toModeBits } from "#session/handlers/file/mode.ts"
 import type { Shell } from "#session/shell.ts"
 import { quoteShellArg } from "#session/shell.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
-import type { CommandOutput } from "#transport/transport.ts"
 
 const SHA256_PATTERN = /^[0-9a-f]{64}/v
 const WHITESPACE = /\s+/v
@@ -60,7 +59,8 @@ const statLineSchema = type([
  * file names in its output. `stat -c` goes first, because GNU's `stat -f` prints filesystem information instead of
  * failing. BSD needs `%Mp%Lp` to keep setuid and setgid. Check that each sha256 command exists before running it, so a
  * missing one writes nothing to stderr. One that exists and fails keeps its stderr, because it says why a hash is
- * missing.
+ * missing. Exit when no sha256 command gives a hash, because `stat` runs next, and its exit code would hide the
+ * failure.
  */
 const buildFileDetailsCommand = (path: string): string =>
   [
@@ -73,7 +73,8 @@ const buildFileDetailsCommand = (path: string): string =>
     "  echo kind=file",
     `  { command -v sha256sum >/dev/null 2>&1 && sha256sum < "$p"; } ||`,
     `  { command -v shasum >/dev/null 2>&1 && shasum -a 256 < "$p"; } ||`,
-    `  { command -v sha256 >/dev/null 2>&1 && sha256 < "$p"; }`,
+    `  { command -v sha256 >/dev/null 2>&1 && sha256 < "$p"; } ||`,
+    `  { echo 'failed to get the sha256 hash of the file on the host' >&2; exit 1; }`,
     `  stat -c '%a %u %g %U %G %s' "$p" 2>/dev/null || stat -f '%Mp%Lp %u %g %Su %Sg %z' "$p"`,
     "fi",
   ].join("\n")
@@ -82,8 +83,7 @@ const buildFileDetailsCommand = (path: string): string =>
  * Parses the file details command's output, which differs between GNU, busybox, and BSD only in ways this allows for.
  * Returns `new` details when nothing is at `path`, and an error when something there isn't a file the step can read.
  */
-export const parseFileDetailsOutput = (commandOutput: CommandOutput, path: string): Result<HostFileDetails> => {
-  const { stdout, stderr } = commandOutput
+export const parseFileDetailsOutput = (stdout: string, path: string): Result<HostFileDetails> => {
   const [kindLine = "", hashLine = "", statLine = ""] = stdout.split("\n")
   const kind = kindLine.replace("kind=", "")
 
@@ -96,11 +96,8 @@ export const parseFileDetailsOutput = (commandOutput: CommandOutput, path: strin
 
   // Read the first 64 hex characters, because GNU, busybox, and `shasum` print `<hash>  -`, and BSD prints the hash.
   const hash = SHA256_PATTERN.exec(hashLine)?.[0]
-  if (hash === undefined) {
-    const trimmedStderr = stderr.trim()
-    const cause = trimmedStderr === "" ? undefined : err(trimmedStderr, undefined)
-    return err("failed to get the sha256 hash of the file on the host", cause)
-  }
+  if (hash === undefined)
+    return err(`the file details command printed '${hashLine}' instead of the file's sha256 hash`, undefined)
 
   const validStatLine = statLineSchema(statLine.trim().split(WHITESPACE))
   if (validStatLine instanceof type.errors)
@@ -110,10 +107,13 @@ export const parseFileDetailsOutput = (commandOutput: CommandOutput, path: strin
   return { kind: "existing", path, content: { hash, size }, attributes: { mode, uid, gid, user, group } }
 }
 
-/** Reads the details of the file at `path` on the host. */
+/**
+ * Reads the details of the file at `path` on the host. Use `exec`, because every answer the command gives exits 0, so a
+ * non-zero exit means it broke.
+ */
 export const getHostFileDetails = async (shell: Shell, path: string): Promise<Result<HostFileDetails>> => {
-  const commandOutput = await shell.inspect(buildFileDetailsCommand(path), { label: "file details command" })
-  if (isErr(commandOutput)) return commandOutput
+  const stdout = await shell.exec(buildFileDetailsCommand(path), { label: "file details command" })
+  if (isErr(stdout)) return err(`failed to read the details of '${path}'`, stdout)
 
-  return parseFileDetailsOutput(commandOutput, path)
+  return parseFileDetailsOutput(stdout, path)
 }

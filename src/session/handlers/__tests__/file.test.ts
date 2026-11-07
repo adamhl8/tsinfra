@@ -7,7 +7,7 @@ import process from "node:process"
 import { makeTempDir } from "@adamhl8/configs/test"
 import { messageChain } from "ts-explicit-errors"
 
-import { castInvalid, createSession, fileOrMessage } from "#__tests__/session.ts"
+import { castInvalid, createFakeSudoSession, createSession, fileOrMessage } from "#__tests__/session.ts"
 import { handleFile } from "#session/handlers/file.ts"
 import { PUBLIC_FILE_MODE } from "#session/handlers/file/mode.ts"
 
@@ -469,6 +469,79 @@ describe("h.file in apply", () => {
     expect(newFileScript).not.toContain("chcon")
     expect(existingFileScript).toContain("chcon")
     expect(existingFileScript).not.toContain("restorecon")
+  })
+})
+
+describe("h.file with sudo", () => {
+  it("should run every command through sudo, and keep the record as written", async () => {
+    const filePath = await createFilePath()
+    await Bun.write(filePath, "old\n")
+    const { hostSession, readSudoCalls } = await createFakeSudoSession("apply")
+
+    expect(await fileOrMessage(hostSession.host, filePath, "new\n", { sudo: true })).toMatchObject({ changed: true })
+
+    const commands = hostSession.stepRecords[0]?.commands
+    expect(await Bun.file(filePath).text()).toBe("new\n")
+    expect(commands?.map(({ label }) => label)).toStrictEqual([
+      "file details command",
+      "file content",
+      "file write",
+      "file details command",
+    ])
+    expect(await readSudoCalls()).toStrictEqual(["-n sh -s", "-n sh -s", "-n sh -s", "-n sh -s"])
+    expect(commands?.some(({ cmd }) => cmd.includes("sudo"))).toBe(false)
+  })
+
+  it("should read through sudo in plan, without writing", async () => {
+    const filePath = await createFilePath()
+    const { hostSession, readSudoCalls } = await createFakeSudoSession("plan")
+
+    expect(await fileOrMessage(hostSession.host, filePath, "new\n", { sudo: true })).toMatchObject({ changed: true })
+
+    expect(await readSudoCalls()).toStrictEqual(["-n sh -s"])
+    expect(await Bun.file(filePath).exists()).toBe(false)
+  })
+
+  it("should not use sudo without the option", async () => {
+    const filePath = await createFilePath()
+    const { hostSession, readSudoCalls } = await createFakeSudoSession("apply")
+
+    expect(await fileOrMessage(hostSession.host, filePath, "new\n")).toMatchObject({ changed: true })
+
+    expect(await readSudoCalls()).toStrictEqual([])
+  })
+
+  it("should write binary content to a path with a newline intact", async () => {
+    const filePath = path.join(await makeTempDir(), "app\nconf")
+    const bytes = new Uint8Array([0, 255, 10, 0, 128])
+    const { hostSession } = await createFakeSudoSession("apply")
+
+    expect(await fileOrMessage(hostSession.host, filePath, bytes, { sudo: true })).toMatchObject({ changed: true })
+
+    expect(await Bun.file(filePath).bytes()).toStrictEqual(bytes)
+  })
+
+  it("should fail a sudo that isn't a boolean, and run nothing", async () => {
+    const filePath = await createFilePath()
+    const { hostSession, readSudoCalls } = await createFakeSudoSession("apply")
+
+    expect(await fileOrMessage(hostSession.host, filePath, "new\n", { sudo: castInvalid("yes") })).toBe(
+      `failed to validate the options given to 'file' -> sudo must be boolean (was "yes")`,
+    )
+
+    expect(hostSession.stepRecords[0]?.commands).toStrictEqual([])
+    expect(hostSession.stepRecords[0]?.status).toBeInstanceOf(Error)
+    expect(await readSudoCalls()).toStrictEqual([])
+  })
+
+  it("should say why when sudo fails", async () => {
+    const filePath = await createFilePath()
+    const sudoBody = "echo 'sudo: a password is required' >&2\nexit 1"
+    const { hostSession } = await createFakeSudoSession("plan", sudoBody)
+
+    expect(await fileOrMessage(hostSession.host, filePath, "new\n", { sudo: true })).toBe(
+      `failed to compare the host with what the step wants -> failed to read the details of '${filePath}' -> exited with code 1: sudo: a password is required`,
+    )
   })
 })
 

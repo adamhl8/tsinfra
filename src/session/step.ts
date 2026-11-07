@@ -11,6 +11,14 @@ import type { Shell } from "#session/shell.ts"
 // An empty command is a `sh` syntax error, and an empty name leaves a blank in the output.
 export const nonEmptyStringSchema = type("string > 0")
 
+// Check only `sudo`, because a step's handler validates the rest of its options, and ArkType ignores keys it doesn't name.
+export const stepOptionsSchema = type({ sudo: "boolean = false" })
+/** The options `callStep` handles itself, before a step's handler runs. */
+export type StepOptions = typeof stepOptionsSchema.inferIn
+
+/** Removes the options `callStep` handles from `T`, leaving the ones a step's handler validates. */
+export type HandlerOptions<T> = Omit<T, keyof StepOptions>
+
 const READ_STEP_KINDS = ["read", "inspect"] as const
 export const CHANGE_STEP_KINDS = ["file", "ensure", "run"] as const
 

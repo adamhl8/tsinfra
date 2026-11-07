@@ -1,3 +1,7 @@
+import { chmod } from "node:fs/promises"
+import path from "node:path"
+
+import { makeTempDir } from "@adamhl8/configs/test"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
@@ -11,6 +15,7 @@ import type { Change } from "#session/handlers/shared/change.ts"
 import { buildHostContext } from "#session/host-context.ts"
 import type { Host } from "#session/session.ts"
 import { createHostSession } from "#session/session.ts"
+import type { Transport } from "#transport/transport.ts"
 
 const doNothing = async () => {
   /* empty */
@@ -30,6 +35,29 @@ export const createSession = async (mode: Mode = "apply") => {
   if (isErr(hostContext)) throw hostContext
 
   return createHostSession(hostContext, mode)
+}
+
+/**
+ * Creates a session where `sudo` is a fake on `PATH`, because a test can't rely on real sudo. It logs its arguments,
+ * and then runs `sudoBody`, which by default runs the command without escalating.
+ */
+export const createFakeSudoSession = async (mode: Mode, sudoBody = `exec "$@"`) => {
+  const binDir = await makeTempDir()
+  const logPath = path.join(binDir, "sudo.log")
+  const toolPath = path.join(binDir, "sudo")
+  await Bun.write(toolPath, `#!/bin/sh\necho "$*" >> '${logPath}'\n[ "$1" = -n ] && shift\n${sudoBody}\n`)
+  await chmod(toolPath, 0o755)
+
+  const hostContext = await buildHostContext({ name: "a", ...host("@local", doNothing) })
+  if (isErr(hostContext)) throw hostContext
+
+  const transport: Transport = async (script) => hostContext.transport(`PATH='${binDir}':"$PATH"\n${script}`)
+  const readSudoCalls = async () => {
+    const log = Bun.file(logPath)
+    return (await log.exists()) ? (await log.text()).trim().split("\n") : []
+  }
+
+  return { hostSession: createHostSession({ ...hostContext, transport }, mode), readSudoCalls }
 }
 
 /** Prepares one host and runs it, for a test that only cares about its report. */

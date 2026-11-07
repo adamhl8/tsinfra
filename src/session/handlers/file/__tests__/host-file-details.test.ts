@@ -14,8 +14,8 @@ import { runLocal } from "#transport/local.ts"
 
 const HASH = "a".repeat(64)
 
-const toDetails = (stdout: string, stderr = "") => {
-  const details = parseFileDetailsOutput({ stdout, stderr, exitCode: 0 }, "/tmp/x")
+const toDetails = (stdout: string) => {
+  const details = parseFileDetailsOutput(stdout, "/tmp/x")
   return isErr(details) ? messageChain(details) : details
 }
 
@@ -53,6 +53,7 @@ describe("parseFileDetailsOutput", () => {
   })
 
   it.each([
+    "",
     "not a stat line",
     "644",
     "644 1000",
@@ -68,15 +69,14 @@ describe("parseFileDetailsOutput", () => {
     )
   })
 
-  // Leave out the hash line, because a failed sha256 command prints nothing, so the stat line takes its place.
-  it("should say why when no sha256 command printed a hash", () => {
-    expect(toDetails("kind=file\n644 0 0 root root 3\n", "sh: sha256sum: command not found\n")).toBe(
-      "failed to get the sha256 hash of the file on the host -> sh: sha256sum: command not found",
+  it("should fail on a line that isn't a hash", () => {
+    expect(toDetails("kind=file\nnot a hash\n644 0 0 root root 3\n")).toBe(
+      "the file details command printed 'not a hash' instead of the file's sha256 hash",
     )
   })
 
-  it("should still fail when a missing hash left nothing on stderr", () => {
-    expect(toDetails("kind=file\n644 0 0 root root 3\n")).toBe("failed to get the sha256 hash of the file on the host")
+  it("should fail when the command printed nothing", () => {
+    expect(toDetails("")).toBe("the file details command printed '' instead of what is at the path")
   })
 })
 
@@ -86,8 +86,8 @@ const writeTool = async (binDir: string, name: string, body: string) => {
   await chmod(toolPath, 0o755)
 }
 
-const toHash = (details: Result<HostFileDetails>) => {
-  if (isErr(details)) return messageChain(details)
+const toHash = (details: Result<HostFileDetails>, filePath: string) => {
+  if (isErr(details)) return messageChain(details).replaceAll(filePath, "<file>")
   return details.kind === "existing" ? details.content.hash : undefined
 }
 
@@ -107,7 +107,7 @@ const readDetailsWithTools = async (tools: Record<string, string>) => {
   })
   const details = await getHostFileDetails(shell, filePath)
 
-  return { details: toHash(details), stderr: stderr.trim() }
+  return { details: toHash(details, filePath), stderr: stderr.trim() }
 }
 
 describe("getHostFileDetails with sha256 tools", () => {
@@ -125,16 +125,27 @@ describe("getHostFileDetails with sha256 tools", () => {
     })
   })
 
-  it("should fail with no cause when every tool is missing", async () => {
+  it("should fail and say so when every tool is missing", async () => {
+    const message = "failed to get the sha256 hash of the file on the host"
+
     expect(await readDetailsWithTools({})).toStrictEqual({
-      details: "failed to get the sha256 hash of the file on the host",
-      stderr: "",
+      details: `failed to read the details of '<file>' -> exited with code 1: ${message}`,
+      stderr: message,
     })
   })
 
   it("should fail with a tool's stderr when no tool works", async () => {
+    const stderr = "tool broke\nfailed to get the sha256 hash of the file on the host"
+
     expect(await readDetailsWithTools({ sha256sum: FAILING_TOOL })).toStrictEqual({
-      details: "failed to get the sha256 hash of the file on the host -> tool broke",
+      details: `failed to read the details of '<file>' -> exited with code 1: ${stderr}`,
+      stderr,
+    })
+  })
+
+  it("should fail with stat's stderr when stat fails", async () => {
+    expect(await readDetailsWithTools({ shasum: WORKING_TOOL, stat: FAILING_TOOL })).toStrictEqual({
+      details: "failed to read the details of '<file>' -> exited with code 1: tool broke",
       stderr: "tool broke",
     })
   })

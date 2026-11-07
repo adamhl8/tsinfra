@@ -87,7 +87,8 @@ only change what's printed:
 
 - **`-vv`** also lists each command a step ran, dimmed, under the step, like `$ systemctl is-active sonarr`. Commands
   tsinfra writes itself, like `file`'s multi-line details command, show as a short label, like
-  `$ (file details command)`. The exact labels get settled when this is built.
+  `$ (file details command)`. The exact labels get settled when this is built. A command that `sudo: true` ran as root
+  gets a tag, and never shows the `sudo sh -s` around it. The tag's look gets settled at the same time.
 - **`-vvv`** also shows each command's exit code, stdout, and stderr, indented under it and cut off after some number
   of lines, and tsinfra's own commands in full.
 - **Secrets never show.** A `secret` command keeps its text and output out of the record, and `shell.inspect` records

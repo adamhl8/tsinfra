@@ -55,7 +55,7 @@ commands (`file`'s details command and write) are POSIX sh, so any `shell` must 
 
 ## File writes
 
-`file` writes with one script, run on the host by `sh -s`, escalating inside the script with `sudo: true`. The content travels
+`file` writes with one script, run on the host by `sh -s`, and in a nested `sudo sh -s` with `sudo: true`. The content travels
 inside the script, base64-encoded in a quoted heredoc, and lands in a temp file next to the destination:
 
 ```sh
@@ -234,7 +234,9 @@ new session with no terminal.
   the command runs, the same as Ansible's become password.
 - **The record shows the command as written,** like `sudo systemctl restart caddy`.
 - **tsinfra's own commands escalate the same way,** through the same function, so the command that starts the shell is
-  always plain `sh -s`.
+  always plain `sh -s`. With `sudo: true`, the step's script runs in a nested `sudo sh -s`, sent in a heredoc with a
+  random delimiter, because a path in the script can hold any line. The record holds the step's script as tsinfra wrote
+  it, without the nesting.
 - **A `sudo` inside a child process,** like a script file the command runs, or `xargs sudo`, doesn't see the function.
   Exporting `SUDO_ASKPASS` might cover it, which needs checking against sudo's docs when this is built. Until then those
   need passwordless sudo.

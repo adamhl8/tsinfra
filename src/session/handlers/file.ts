@@ -13,7 +13,7 @@ import type { ChangeStepResult, StepNeeds } from "#session/handlers/shared/chang
 import { NO_NEEDS, stepNeedsSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import { hostPathSchema, resolveHome } from "#session/handlers/shared/path.ts"
 import { validateInput } from "#session/handlers/validate-input.ts"
-import type { HandlerReturn, StepContext } from "#session/step.ts"
+import type { HandlerOptions, HandlerReturn, StepContext } from "#session/step.ts"
 
 /**
  * What the file should hold: a string or bytes computed on the control machine, or a `Blob` like `Bun.file(...)` for a
@@ -50,6 +50,8 @@ export type FileAttributeName = keyof FileAttributeOptions
 export interface FileOptions extends FileAttributeOptions {
   /** Never fetches or shows the old content, because it may hold a secret. */
   secret?: boolean
+  /** Runs the file details command, the diff, and the write as root, in `plan` as well as `apply`. */
+  sudo?: boolean
   /**
    * Earlier steps this step depends on. In `plan`, the step waits instead of reading the file when one of them would
    * change or is waiting.
@@ -60,7 +62,7 @@ export interface FileOptions extends FileAttributeOptions {
 // Validate the options at runtime too, because a script can get past the types, like with `as` or `@ts-ignore`.
 // Set the defaults in a pipe, because ArkType only allows a default on a required key.
 const fileOptionsSchema = type
-  .declare<FileOptions>()
+  .declare<HandlerOptions<FileOptions>>()
   .type({
     "mode?": type(OCTAL_MODE_PATTERN).or(type(SYMBOLIC_MODE_PATTERN)),
     "user?": fileOwnerSchema,

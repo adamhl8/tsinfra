@@ -347,7 +347,8 @@ else
   echo kind=file
   { command -v sha256sum >/dev/null 2>&1 && sha256sum < "$p"; } ||
   { command -v shasum >/dev/null 2>&1 && shasum -a 256 < "$p"; } ||
-  { command -v sha256 >/dev/null 2>&1 && sha256 < "$p"; }
+  { command -v sha256 >/dev/null 2>&1 && sha256 < "$p"; } ||
+  { echo 'failed to get the sha256 hash of the file on the host' >&2; exit 1; }
   stat -c '%a %u %g %U %G %s' "$p" 2>/dev/null || stat -f '%Mp%Lp %u %g %Su %Sg %z' "$p"
 fi
 ```
@@ -357,8 +358,10 @@ fi
   OpenBSD). This is the same chain pyinfra uses. It checks that each one exists first, so a missing one writes nothing
   to stderr. One that exists and fails keeps its stderr, and the next one still runs. The file goes in on stdin, because GNU `sha256sum` escapes odd
   filenames in its output and prefixes the line with `\`. tsinfra reads the first 64 hex characters, because GNU,
-  busybox, and `shasum` print `<hash>  -` and BSD `sha256` prints the bare hash. A missing hash is an error, like
-  `failed to get the sha256 hash of the file on the host`, followed by the stderr of any command that exists and failed.
+  busybox, and `shasum` print `<hash>  -` and BSD `sha256` prints the bare hash. When no command gives a hash, the
+  script exits 1, because `stat` would otherwise exit 0 and hide the failure. Every answer the script gives exits 0, so
+  a non-zero exit always means it broke, and the error holds its stderr: the stderr of any command that exists and
+  failed, then `failed to get the sha256 hash of the file on the host`.
 - **`stat -c` goes first,** because GNU's `stat -f fmt file` doesn't fail. It prints filesystem information instead.
   BSD needs `%Mp%Lp`, because `%Lp` alone drops setuid and setgid.
 - **The local hash** comes from `Bun.CryptoHasher("sha256")`. No file is transferred just to learn it is unchanged.
