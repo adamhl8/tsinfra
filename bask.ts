@@ -1,6 +1,6 @@
 import { task } from "@adamhl8/bask"
 import { lint } from "@adamhl8/configs/bask"
-import { Glob } from "bun"
+import bun, { Glob } from "bun"
 
 export * from "@adamhl8/configs/bask"
 
@@ -26,7 +26,7 @@ export const testDocker = task(
   { desc: "Run the tests that need Linux, real root, and real sudo, in Docker" },
   async ({ sh }) => {
     for (const distro of DOCKER_DISTROS) {
-      const image = `oven/bun:${Bun.version}-${distro}`
+      const image = `oven/bun:${bun.version}-${distro}`
       // oxlint-disable-next-line eslint/no-await-in-loop - run one at a time, so each container's output stays together
       await sh`docker run --rm -v ${import.meta.dir}:/repo:ro ${image} sh /repo/src/__tests__/docker/setup.sh ${distro}`
     }

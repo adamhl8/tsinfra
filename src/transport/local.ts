@@ -1,5 +1,6 @@
 import os from "node:os"
 
+import { spawn } from "bun"
 import type { Result } from "ts-explicit-errors"
 import { attempt, err, isErr } from "ts-explicit-errors"
 
@@ -11,7 +12,7 @@ const LOCAL_SHELL = ["sh", "-s"]
 /** Runs `script` in `sh -s` on the control machine, from the home directory, like an SSH session would. */
 export const runLocal = async (script: string): Promise<Result<CommandOutput>> => {
   const shell = attempt(() =>
-    Bun.spawn(LOCAL_SHELL, {
+    spawn(LOCAL_SHELL, {
       cwd: os.homedir(),
       stdin: new Blob([wrapScript(script)]),
       stdout: "pipe",

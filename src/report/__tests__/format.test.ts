@@ -1,8 +1,9 @@
 import { describe, expect, it } from "bun:test"
-import { chmod, stat } from "node:fs/promises"
+import { chmod, lstat, mkdir, stat, symlink } from "node:fs/promises"
 import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
+import bun from "bun"
 import { attempt, isErr } from "ts-explicit-errors"
 
 import { createFakeSudoSession, prepareAndRunHost } from "#__tests__/session.ts"
@@ -282,7 +283,7 @@ describe("formatHostBlock for a step that would change a string", () => {
 describe("formatHostBlock for a file step", () => {
   it("should show a file's diff and each attribute that changes, old value to new", async () => {
     const filePath = path.join(await makeTempDir(), "app.conf")
-    await Bun.write(filePath, "port = 8080\nworkers = 4\n")
+    await bun.write(filePath, "port = 8080\nworkers = 4\n")
     await chmod(filePath, 0o600)
     const hostBlock = await formatBlock(async (h) => {
       await h.file(filePath, "port = 8080\nworkers = 8\n", { mode: "644" })
@@ -308,7 +309,7 @@ describe("formatHostBlock for a file step", () => {
     ["with the special bits and no execute", "5644", "rwSr--r-T (5644)"],
   ] as const)("should show a mode in both notations: %s", async (_, mode, expected) => {
     const filePath = path.join(await makeTempDir(), "app.conf")
-    await Bun.write(filePath, "a\n")
+    await bun.write(filePath, "a\n")
     await chmod(filePath, 0o644)
     const hostBlock = await formatBlock(async (h) => {
       await h.file(filePath, "a\n", { mode })
@@ -319,7 +320,7 @@ describe("formatHostBlock for a file step", () => {
 
   it("should show a user and a group given as ids", async () => {
     const filePath = path.join(await makeTempDir(), "app.conf")
-    await Bun.write(filePath, "a\n")
+    await bun.write(filePath, "a\n")
     const { uid, gid } = await stat(filePath)
     const { hostSession } = await createFakeSudoSession("plan")
     await hostSession.host.file(filePath, "a\n", { user: uid + 1, group: gid + 1, sudo: true })
@@ -333,6 +334,64 @@ describe("formatHostBlock for a file step", () => {
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
       `      user:  ${uid} -> ${uid + 1}`,
       `      group: ${gid} -> ${gid + 1}`,
+    ])
+  })
+
+  it("should show a new link and a note for a missing target", async () => {
+    const directory = await makeTempDir()
+    const linkPath = path.join(directory, "link")
+    const target = path.join(directory, "target")
+    const hostBlock = await formatBlock(async (h) => {
+      await h.link(linkPath, target)
+    }, "plan")
+
+    expect(hostBlock).toBe(
+      ["a", `  ~ ${linkPath}`, `      target: new link to ${target}`, "      points to a missing path"].join("\n"),
+    )
+  })
+
+  it("should show a link's new target, with no note when the target exists", async () => {
+    const directory = await makeTempDir()
+    const linkPath = path.join(directory, "link")
+    await symlink("/old", linkPath)
+    const hostBlock = await formatBlock(async (h) => {
+      await h.link(linkPath, directory)
+    }, "plan")
+
+    expect(hostBlock).toBe(["a", `  ~ ${linkPath}`, `      target: /old -> ${directory}`].join("\n"))
+  })
+
+  it.each([
+    ["a file", "replaces a file, with a link to", async (filePath: string) => bun.write(filePath, "a\n")],
+    ["an empty directory", "replaces an empty directory, with a link to", async (filePath: string) => mkdir(filePath)],
+  ])("should show that a forced link replaces %s", async (_, words, createExisting) => {
+    const directory = await makeTempDir()
+    const linkPath = path.join(directory, "link")
+    await createExisting(linkPath)
+    const hostBlock = await formatBlock(async (h) => {
+      await h.link(linkPath, directory, { force: true })
+    }, "plan")
+
+    expect(hostBlock).toBe(["a", `  ~ ${linkPath}`, `      target: ${words} ${directory}`].join("\n"))
+  })
+
+  it("should line up a link's target with its owner rows", async () => {
+    const directory = await makeTempDir()
+    const linkPath = path.join(directory, "link")
+    await symlink("/old", linkPath)
+    const { uid } = await lstat(linkPath)
+    const { hostSession } = await createFakeSudoSession("plan")
+    await hostSession.host.link(linkPath, directory, { user: uid + 1, sudo: true })
+    const hostBlock = formatHostBlock({
+      name: "a",
+      started: true,
+      failure: hostSession.getFailure(),
+      stepRecords: hostSession.stepRecords,
+    })
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
+      `      target: /old -> ${directory}`,
+      `      user:   ${uid} -> ${uid + 1}`,
     ])
   })
 
@@ -442,7 +501,7 @@ const createNoisySession = async (filePath: string) => {
 
   const transport: Transport = async (script) => {
     const output = await hostContext.transport(`echo noise >&2\n${script}`)
-    if (script.includes("mv -f")) await Bun.write(filePath, "changed\n")
+    if (script.includes("mv -f")) await bun.write(filePath, "changed\n")
     return output
   }
   return createHostSession({ ...hostContext, transport }, "apply")

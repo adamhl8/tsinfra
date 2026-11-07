@@ -2,6 +2,7 @@ import { chmod, copyFile } from "node:fs/promises"
 import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
+import bun from "bun"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
@@ -42,7 +43,7 @@ export const createSession = async (mode: Mode = "apply") => {
 /** Writes a shell script named `name` into `binDir`, to stand in for a command on `PATH`. */
 export const writeFakeTool = async (binDir: string, name: string, body: string) => {
   const toolPath = path.join(binDir, name)
-  await Bun.write(toolPath, `#!/bin/sh\n${body}\n`)
+  await bun.write(toolPath, `#!/bin/sh\n${body}\n`)
   await chmod(toolPath, 0o755)
 }
 
@@ -70,7 +71,7 @@ export const createFakeSudoSession = async (mode: Mode) => {
   await copyFile(path.join(FIXTURES_DIR, "fake-id.sh"), path.join(binDir, "id"))
 
   const readSudoCalls = async () => {
-    const log = Bun.file(path.join(binDir, "sudo.log"))
+    const log = bun.file(path.join(binDir, "sudo.log"))
     return (await log.exists()) ? (await log.text()).trim().split("\n") : []
   }
 
@@ -96,6 +97,12 @@ export const ensureOrMessage = async <T extends Want>(h: Host, options: EnsureOp
 /** Runs `h.file` on `path` and returns its result, or the thrown error's message chain. */
 export const fileOrMessage = async (h: Host, ...fileArgs: Parameters<Host["file"]>) => {
   const result = await attempt(async () => h.file(...fileArgs))
+  return isErr(result) ? messageChain(result) : result
+}
+
+/** Runs `h.link` on `path` and returns its result, or the thrown error's message chain. */
+export const linkOrMessage = async (h: Host, ...linkArgs: Parameters<Host["link"]>) => {
+  const result = await attempt(async () => h.link(...linkArgs))
   return isErr(result) ? messageChain(result) : result
 }
 

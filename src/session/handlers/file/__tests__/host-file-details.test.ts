@@ -2,13 +2,14 @@ import { describe, expect, it } from "bun:test"
 import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
+import bun, { which } from "bun"
 import type { Result } from "ts-explicit-errors"
 import { isErr, messageChain } from "ts-explicit-errors"
 
 import { writeFakeTool } from "#__tests__/session.ts"
-import { toBytes } from "#session/handlers/file/bytes.ts"
 import type { HostFileDetails } from "#session/handlers/file/host-file-details.ts"
 import { getHostFileDetails, parseFileDetailsOutput } from "#session/handlers/file/host-file-details.ts"
+import { toBytes } from "#session/handlers/shared/filesystem/bytes.ts"
 import { createShell } from "#session/shell.ts"
 import { runLocal } from "#transport/local.ts"
 
@@ -96,10 +97,10 @@ const toHash = (details: Result<HostFileDetails>, filePath: string) => {
 /** Reads a file's details on a host where `tools` are the only commands on `PATH`, apart from `stat`. */
 const readDetailsWithTools = async (tools: Record<string, string>) => {
   const binDir = await makeTempDir()
-  await writeFakeTool(binDir, "stat", `exec '${Bun.which("stat")}' "$@"`)
+  await writeFakeTool(binDir, "stat", `exec '${which("stat")}' "$@"`)
   await Promise.all(Object.entries(tools).map(async ([name, body]) => writeFakeTool(binDir, name, body)))
   const filePath = path.join(binDir, "file")
-  await Bun.write(filePath, "a")
+  await bun.write(filePath, "a")
 
   let stderr = ""
   const shell = createShell(async (script) => {

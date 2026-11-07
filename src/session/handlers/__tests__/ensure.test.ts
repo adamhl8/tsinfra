@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
+import bun from "bun"
 import { attempt } from "ts-explicit-errors"
 
 import { castInvalid, createSession, ensureOrMessage, getFailureMessage, throwBoom } from "#__tests__/session.ts"
@@ -29,7 +30,7 @@ describe("h.ensure", () => {
     const { host: h } = await createSession("apply")
 
     expect(await ensureOrMessage(h, options)).toMatchObject({ changed: true })
-    expect(await Bun.file(marker).exists()).toBe(true)
+    expect(await bun.file(marker).exists()).toBe(true)
   })
 
   it("should return changed in plan without running the fix", async () => {
@@ -37,7 +38,7 @@ describe("h.ensure", () => {
     const { host: h } = await createSession("plan")
 
     expect(await ensureOrMessage(h, options)).toMatchObject({ changed: true })
-    expect(await Bun.file(marker).exists()).toBe(false)
+    expect(await bun.file(marker).exists()).toBe(false)
   })
 
   it("should fail the host when the fix fails", async () => {
@@ -77,13 +78,13 @@ describe("h.ensure", () => {
 
   it("should run the fix when want is false and the check exits 0", async () => {
     const { marker } = await createMarkerStep()
-    await Bun.write(marker, "")
+    await bun.write(marker, "")
     const { host: h } = await createSession()
 
     expect(
       await ensureOrMessage(h, { check: `test -f '${marker}'`, want: false, fix: `rm '${marker}'` }),
     ).toMatchObject({ changed: true })
-    expect(await Bun.file(marker).exists()).toBe(false)
+    expect(await bun.file(marker).exists()).toBe(false)
   })
 
   it("should compare the boolean a function check returns to want", async () => {
@@ -192,7 +193,7 @@ describe("h.ensure with a string want", () => {
     const { host: h } = await createSession("plan")
 
     expect(await ensureOrMessage(h, options)).toMatchObject({ changed: true })
-    expect(await Bun.file(file).exists()).toBe(false)
+    expect(await bun.file(file).exists()).toBe(false)
   })
 
   it("should run the fix in apply and return changed", async () => {
@@ -200,7 +201,7 @@ describe("h.ensure with a string want", () => {
     const { host: h } = await createSession("apply")
 
     expect(await ensureOrMessage(h, options)).toMatchObject({ changed: true })
-    expect(await Bun.file(file).text()).toBe("v2\n")
+    expect(await bun.file(file).text()).toBe("v2\n")
   })
 
   it("should fail a check that exits non-zero but matches want", async () => {
@@ -312,7 +313,7 @@ describe("h.ensure with the inspect tool", () => {
     })
 
     expect(result).toMatchObject({ changed: true })
-    expect(await Bun.file(marker).exists()).toBe(true)
+    expect(await bun.file(marker).exists()).toBe(true)
   })
 
   it("should give a fix function the exit code of a command", async () => {
@@ -327,7 +328,7 @@ describe("h.ensure with the inspect tool", () => {
     })
 
     expect(result).toMatchObject({ changed: true })
-    expect(await Bun.file(marker).text()).toBe("4")
+    expect(await bun.file(marker).text()).toBe("4")
   })
 })
 
@@ -345,7 +346,7 @@ describe("h.ensure with a fix function", () => {
     })
 
     expect(result).toMatchObject({ changed: true })
-    expect(await Bun.file(file).text()).toBe("a\nb\n")
+    expect(await bun.file(file).text()).toBe("a\nb\n")
   })
 
   it("should return each command's stdout trimmed", async () => {
@@ -361,7 +362,7 @@ describe("h.ensure with a fix function", () => {
     })
 
     expect(result).toMatchObject({ changed: true })
-    expect(await Bun.file(file).text()).toBe("v")
+    expect(await bun.file(file).text()).toBe("v")
   })
 
   it("should stop at the first failed command and fail the host with the step's name", async () => {
@@ -378,7 +379,7 @@ describe("h.ensure with a fix function", () => {
 
     expect(result).toBe(message)
     expect(getFailureMessage(hostSession)).toBe(message)
-    expect(await Bun.file(marker).exists()).toBe(false)
+    expect(await bun.file(marker).exists()).toBe(false)
   })
 
   it("should fail the step when the fix function catches a failed command", async () => {
@@ -428,7 +429,7 @@ describe("h.ensure with a fix function", () => {
     })
 
     expect(result).toMatchObject({ changed: true })
-    expect(await Bun.file(marker).exists()).toBe(false)
+    expect(await bun.file(marker).exists()).toBe(false)
   })
 })
 
@@ -463,7 +464,7 @@ describe("h.ensure with invalid input", () => {
     const prune = await h.run("Prune", "true", { after: "always" })
 
     expect(await ensureOrMessage(h, { needs: castInvalid([prune]), check: "true", want: true, fix: "true" })).toBe(
-      `failed to validate the options given to 'ensure' -> needs[0].kind must be "ensure" or "file" (was "run")`,
+      `failed to validate the options given to 'ensure' -> needs[0].kind must be "ensure", "file" or "link" (was "run")`,
     )
   })
 

@@ -8,21 +8,25 @@ import type { Want } from "#session/handlers/ensure/check.ts"
 import type { FileContent, FileOptions } from "#session/handlers/file.ts"
 import { handleFile } from "#session/handlers/file.ts"
 import { handleInspect } from "#session/handlers/inspect.ts"
+import type { LinkOptions } from "#session/handlers/link.ts"
+import { handleLink } from "#session/handlers/link.ts"
 import { handleRead } from "#session/handlers/read.ts"
 import type { RunOptions } from "#session/handlers/run.ts"
 import { handleRun } from "#session/handlers/run.ts"
 import type { ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
 import { createConverge } from "#session/handlers/shared/converge.ts"
+import type { SudoOptions } from "#session/handlers/shared/step-options.ts"
+import { sudoOptionsSchema } from "#session/handlers/shared/step-options.ts"
+import { validateInput } from "#session/handlers/shared/validate-input.ts"
 import type { ChangeTools, Exec, Inspect, InspectResult, ReadTools } from "#session/handlers/tools.ts"
 import { execCommand, inspectCommand } from "#session/handlers/tools.ts"
-import { validateInput } from "#session/handlers/validate-input.ts"
 import type { HostContext } from "#session/host-context.ts"
 import { createShell } from "#session/shell.ts"
 import type { StepRecord } from "#session/step-recorder.ts"
 import { createStepRecorder } from "#session/step-recorder.ts"
-import type { HandlerReturn, StepContext, StepKind, StepOptions } from "#session/step.ts"
-import { nonEmptyStringSchema, stepOptionsSchema } from "#session/step.ts"
+import type { HandlerReturn, StepContext, StepKind } from "#session/step.ts"
+import { nonEmptyStringSchema } from "#session/step.ts"
 import { createSudoTransport } from "#transport/sudo.ts"
 
 // Extend `Record<StepKind, unknown>` so a step kind with no method fails to compile.
@@ -53,6 +57,14 @@ export interface Host extends Record<StepKind, unknown> {
    */
   file: (path: string, content: FileContent, options?: FileOptions) => Promise<ChangeStepResult<"file">>
   /**
+   * Makes `path` a symlink to `target`, on the same host, and manages its user and group when they are given. Both must
+   * be absolute, and a leading `~/` means the SSH user's home. In `plan` it only reads what's at the path.
+   *
+   * A regular file or an empty directory at the path fails the host and throws, unless `force` is set. So does a
+   * directory with files in it, always, and a failed write.
+   */
+  link: (path: string, target: string, options?: LinkOptions) => Promise<ChangeStepResult<"link">>
+  /**
    * Compares what `check` gives to `want`, and in `apply` runs `fix` when they differ, then checks again. In `plan` the
    * fix never runs.
    *
@@ -74,6 +86,7 @@ const STEP_NAME_LABELS: Record<StepKind, string> = {
   read: "command",
   inspect: "command",
   file: "path",
+  link: "path",
   ensure: "name",
   run: "name",
 }
@@ -138,7 +151,7 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
     stepName: unknown,
     kind: K,
     handler: (ctx: StepContext<K>) => Promise<Result<HandlerReturn<T>>>,
-    options: StepOptions = {},
+    options: SudoOptions = {},
   ): Promise<T> =>
     callOrFail(async () => {
       // Validate the name before recording the step, because the output shows every recorded step by its name.
@@ -152,7 +165,7 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
       if (isErr(stepRecord)) return stepRecord
 
       // Validate `options` after recording the step, so a bad one fails under the step like the step's other inputs.
-      const validOptions = validateInput(options, stepOptionsSchema, { inputLabel: "options", givenTo: kind })
+      const validOptions = validateInput(options, sudoOptionsSchema, { inputLabel: "options", givenTo: kind })
       if (isErr(validOptions)) {
         finishStep(stepRecord, keepFailure(failure, validOptions))
         return validOptions
@@ -198,6 +211,8 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
     inspect: async (cmd) => callStep(cmd, "inspect", async (ctx) => handleInspect(ctx, cmd)),
     file: async (path, content, options) =>
       callStep(path, "file", async (ctx) => handleFile(ctx, path, content, options), options),
+    link: async (path, target, options) =>
+      callStep(path, "link", async (ctx) => handleLink(ctx, path, target, options), options),
     ensure: async (stepName, options) => callStep(stepName, "ensure", async (ctx) => handleEnsure(ctx, options)),
     run: async (stepName, cmd, options) => callStep(stepName, "run", async (ctx) => handleRun(ctx, cmd, options)),
   }

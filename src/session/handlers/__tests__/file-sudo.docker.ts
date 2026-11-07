@@ -1,8 +1,9 @@
 import { beforeAll, describe, expect, it } from "bun:test"
+import crypto from "node:crypto"
 import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
-import { $ } from "bun"
+import { $, CryptoHasher } from "bun"
 
 import { createSession, fileOrMessage } from "#__tests__/session.ts"
 import type { Host } from "#session/session.ts"
@@ -79,7 +80,7 @@ describe("h.file with real sudo", () => {
     expect(hostSession.stepRecords[0]?.comparisons.before?.values).toStrictEqual({
       kind: "file",
       content: { kind: "text", got: "old\n", want: "new\n" },
-      attributes: [],
+      attributeChanges: [],
     })
   })
 
@@ -115,7 +116,7 @@ describe("h.file with real sudo", () => {
     expect(await applyFile(filePath, bytes, { sudo: true })).toMatchObject({ changed: true })
 
     const [hostHash] = (await $`sudo sha256sum ${filePath}`.text()).split(" ")
-    expect(hostHash).toBe(new Bun.CryptoHasher("sha256").update(bytes).digest("hex"))
+    expect(hostHash).toBe(new CryptoHasher("sha256").update(bytes).digest("hex"))
   })
 
   it("should write to a path with a quote and a newline", async () => {

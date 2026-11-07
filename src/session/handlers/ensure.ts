@@ -4,15 +4,17 @@ import { isErr } from "ts-explicit-errors"
 
 import type { Check, Want } from "#session/handlers/ensure/check.ts"
 import { checkSchema, compareCheck, wantSchema } from "#session/handlers/ensure/check.ts"
-import type { ChangeStepResult, StepNeeds } from "#session/handlers/shared/change-step-result.ts"
-import { NO_NEEDS, stepNeedsSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
+import type { ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
+import { withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
 import { changeSchema, runChange } from "#session/handlers/shared/change.ts"
-import { validateInput } from "#session/handlers/validate-input.ts"
+import type { NeedsOptions } from "#session/handlers/shared/step-options.ts"
+import { NO_NEEDS, needsOptionsSchema } from "#session/handlers/shared/step-options.ts"
+import { validateInput } from "#session/handlers/shared/validate-input.ts"
 import type { HandlerReturn, StepContext } from "#session/step.ts"
 
 /** `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string. */
-export interface EnsureOptions<T extends Want> {
+export interface EnsureOptions<T extends Want> extends NeedsOptions {
   /**
    * A command, or a function given `read` that returns the value to compare. It also runs during `plan`, so it must not
    * change what the script manages.
@@ -30,24 +32,13 @@ export interface EnsureOptions<T extends Want> {
    * for a fix whose effect nothing in the run can make visible, like one that needs a reboot.
    */
   verify?: boolean
-  /**
-   * Earlier steps this step's check depends on. In `plan`, the step waits instead of checking when one of them would
-   * change or is waiting. A run's result can't be needed, so need the step that triggered the run instead.
-   */
-  needs?: StepNeeds
 }
 
 // Validate the options at runtime too, because a script can get past the types, like with `as` or `@ts-ignore`.
 // Set the defaults in a pipe, because ArkType only allows a default on a required key.
 const ensureOptionsSchema = type
   .declare<EnsureOptions<Want>>()
-  .type({
-    check: checkSchema,
-    want: wantSchema,
-    fix: changeSchema,
-    "verify?": "boolean",
-    "needs?": stepNeedsSchema,
-  })
+  .type(needsOptionsSchema.merge({ check: checkSchema, want: wantSchema, fix: changeSchema, "verify?": "boolean" }))
   .pipe((options) => ({ verify: true, needs: NO_NEEDS, ...options }))
 
 export const handleEnsure = async (

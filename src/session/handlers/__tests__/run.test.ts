@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
+import bun from "bun"
 
 import { castInvalid, createSession, getFailureMessage, runOrMessage, throwBoom } from "#__tests__/session.ts"
 
@@ -13,7 +14,7 @@ describe("h.run", () => {
     const { host: h } = await createSession("apply")
 
     expect(await runOrMessage(h, `touch '${marker}'`, { after: "always" })).toMatchObject({ changed: true })
-    expect(await Bun.file(marker).exists()).toBe(true)
+    expect(await bun.file(marker).exists()).toBe(true)
   })
 
   it("should fail the host without running when after is empty", async () => {
@@ -23,7 +24,7 @@ describe("h.run", () => {
 
     expect(await runOrMessage(hostSession.host, `touch '${marker}'`, { after: [] })).toBe(message)
     expect(getFailureMessage(hostSession)).toBe(message)
-    expect(await Bun.file(marker).exists()).toBe(false)
+    expect(await bun.file(marker).exists()).toBe(false)
   })
 
   it("should return changed in plan without running", async () => {
@@ -31,7 +32,7 @@ describe("h.run", () => {
     const { host: h } = await createSession("plan")
 
     expect(await runOrMessage(h, `touch '${marker}'`, { after: "always" })).toMatchObject({ changed: true })
-    expect(await Bun.file(marker).exists()).toBe(false)
+    expect(await bun.file(marker).exists()).toBe(false)
   })
 
   it("should run after a step that changed", async () => {
@@ -41,7 +42,7 @@ describe("h.run", () => {
     const changed = await h.ensure("Change", { check: "false", want: true, fix: "true", verify: false })
 
     expect(await runOrMessage(h, `touch '${marker}'`, { after: [unchanged, changed] })).toMatchObject({ changed: true })
-    expect(await Bun.file(marker).exists()).toBe(true)
+    expect(await bun.file(marker).exists()).toBe(true)
   })
 
   it("should not run after steps that were all unchanged", async () => {
@@ -50,7 +51,7 @@ describe("h.run", () => {
     const unchanged = await h.ensure("Stay right", { check: "true", want: true, fix: "true" })
 
     expect(await runOrMessage(h, `touch '${marker}'`, { after: [unchanged] })).toMatchObject({ changed: false })
-    expect(await Bun.file(marker).exists()).toBe(false)
+    expect(await bun.file(marker).exists()).toBe(false)
   })
 
   it("should fail the host with the run's name when the command fails", async () => {
@@ -76,7 +77,7 @@ describe("h.run with a function", () => {
     )
 
     expect(result).toMatchObject({ changed: true })
-    expect(await Bun.file(file).text()).toBe("a\nb\n")
+    expect(await bun.file(file).text()).toBe("a\nb\n")
   })
 
   it("should stop at the first failed command and fail the host with the run's name", async () => {
@@ -94,7 +95,7 @@ describe("h.run with a function", () => {
 
     expect(result).toBe(message)
     expect(getFailureMessage(hostSession)).toBe(message)
-    expect(await Bun.file(marker).exists()).toBe(false)
+    expect(await bun.file(marker).exists()).toBe(false)
   })
 
   it("should fail the host with the run's name when the function throws", async () => {
@@ -115,7 +116,7 @@ describe("h.run with a function", () => {
     )
 
     expect(result).toMatchObject({ changed: true })
-    expect(await Bun.file(marker).exists()).toBe(false)
+    expect(await bun.file(marker).exists()).toBe(false)
   })
 })
 
@@ -134,7 +135,7 @@ describe("h.run with invalid input", () => {
     {
       description: "follows a step that can't change the host",
       options: { after: [{ name: "uname -m", kind: "read", changed: false }] },
-      message: 'after[0].kind must be "ensure", "file" or "run" (was "read")',
+      message: 'after[0].kind must be "ensure", "file", "link" or "run" (was "read")',
     },
   ])("should fail a run that $description", async (testCase) => {
     const { options, message } = testCase

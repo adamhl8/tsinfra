@@ -1,10 +1,11 @@
+import { CryptoHasher } from "bun"
 import prettyBytes from "pretty-bytes"
 import type { Result } from "ts-explicit-errors"
 import { attempt, err, isErr } from "ts-explicit-errors"
 
 import type { FileContent } from "#session/handlers/file.ts"
-import type { Bytes } from "#session/handlers/file/bytes.ts"
-import { toBytes } from "#session/handlers/file/bytes.ts"
+import type { Bytes } from "#session/handlers/shared/filesystem/bytes.ts"
+import { toBytes } from "#session/handlers/shared/filesystem/bytes.ts"
 
 /** What the script's content is, worked out once before reading the host's state. */
 export interface ResolvedFileContent {
@@ -26,7 +27,7 @@ const getContentBytes = async (content: FileContent): Promise<Result<Uint8Array>
   const source = typeof name === "string" ? `local file '${name}'` : "the content given to 'file'"
 
   const { size } = blob
-  // Check for `Infinity` first, because `Bun.file` gives it for a device, and `prettyBytes` throws on it.
+  // Check for `Infinity` first, because `bun.file` gives it for a device, and `prettyBytes` throws on it.
   if (size === Number.POSITIVE_INFINITY) {
     return err(
       `${source} doesn't have a size (is it a file?), so it can't be checked against the ${MAX_CONTENT_TEXT} limit`,
@@ -40,11 +41,11 @@ const getContentBytes = async (content: FileContent): Promise<Result<Uint8Array>
   return isErr(bytes) ? err(`failed to read ${source}`, bytes) : bytes
 }
 
-/** Gets the content's bytes, which reads a `Blob` like `Bun.file(...)`, and works out their size and hash. */
+/** Gets the content's bytes, which reads a `Blob` like `bun.file(...)`, and works out their size and hash. */
 export const resolveContent = async (content: FileContent): Promise<Result<ResolvedFileContent>> => {
   const bytes = await getContentBytes(content)
   if (isErr(bytes)) return bytes
 
-  const hash = new Bun.CryptoHasher("sha256").update(bytes).digest("hex")
+  const hash = new CryptoHasher("sha256").update(bytes).digest("hex")
   return { bytes, size: toBytes(bytes.length), hash }
 }

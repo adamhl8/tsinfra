@@ -6,7 +6,7 @@ import { err } from "ts-explicit-errors"
 import type { ToolName } from "#session/handlers/tools.ts"
 import type { StepKind } from "#session/step.ts"
 
-interface InputDescription {
+export interface InputDescription {
   /** What the input is to the script, like `options` or `command`. */
   inputLabel: string
   /** Who the script gave the input to. A step's error shows under its name, so this only needs the kind. */

@@ -10,6 +10,7 @@ the remote shell.
 - [File writes](#file-writes)
   - [How other tools write files](#how-other-tools-write-files)
 - [SSH and ControlMaster](#ssh-and-controlmaster)
+- [Link writes](#link-writes)
 - [sudo](#sudo)
 
 <!-- tocstop -->
@@ -67,7 +68,7 @@ trap 'rm -f "$tmp"' EXIT                            #    removed if anything bel
 base64 -d > "$tmp" <<'__TSINFRA_EOF__'              # 4. the content, decoded into the temp file
 <content as base64>
 __TSINFRA_EOF__
-chown -- '1000:1000' "$tmp"                         # 5. user and group first
+chown -h -- '1000:1000' "$tmp"                      # 5. user and group first
 chmod 644 "$tmp"                                    #    then the mode
 chcon --reference='/etc/app/app.conf' "$tmp"        # 6. an existing file's SELinux label, when chcon exists
 mv -f "$tmp" '/etc/app/app.conf'                    # 7. one rename puts it in place
@@ -91,7 +92,8 @@ Each step's place in the order matters:
    the file details command found them, or the defaults for a new file. `chown` runs whenever there's a value, because
    the temp file's owner is whoever ran the script. So a write without `sudo` to a file owned by someone else is refused
    before it starts (see [Steps](./steps.md#sudo-and-permissions)), and never takes ownership away from an app. A new file with no `user` or `group` skips it.
-   `chown` keeps its `--`, because a user or group name comes from the script. Paths need none, because they're always
+   `chown` keeps its `--`, because a user or group name comes from the script. It takes `-h` too, because `link` shares
+   this line, and `-h` changes nothing for a regular file. Paths need none, because they're always
    absolute.
 6. **SELinux.** `mv` keeps the temp file's label, so the replacement takes the old file's label first. Both SELinux
    steps run only when the command exists, and a failure is ignored, because `chcon` can exist on a system with SELinux
@@ -184,6 +186,40 @@ network, once per host in preflight. Then it fills in only what ssh would otherw
 - **`ConnectTimeout=10`** is passed when `-G` shows `connecttimeout none`, ssh's default, which leaves it to the OS and
   can take about 75 seconds. A timeout the user set is kept.
 - **Connect retries are left to ssh.** `ConnectionAttempts` defaults to 1, and `-G` can't tell that from an explicit 1.
+
+## Link writes
+
+`link` writes with one script too, and it has its own problem. A plain `mv` onto a link to a directory moves the new link
+into that directory, so the script has to tell `mv` not to follow it:
+
+```sh
+set -eu
+mkdir -p '/home/adam/.config/fish'
+tmp=$(mktemp -d '/home/adam/.config/fish/.config.fish.tsinfra.XXXXXX')
+trap 'rm -rf "$tmp"' EXIT
+ln -s '/home/adam/dotfiles/fish/config.fish' "$tmp/link"
+chown -h -- '501:20' "$tmp/link"                    # when there's a value
+touch "$tmp/probe"
+if mv -T "$tmp/probe" "$tmp/probed" 2>/dev/null; then flag=-T; else flag=-h; fi
+rmdir '/home/adam/.config/fish/config.fish'         # only for a forced empty directory
+mv -f "$flag" "$tmp/link" '/home/adam/.config/fish/config.fish'   # with a fallback when replacing a link, see below
+rm -rf "$tmp"
+trap - EXIT
+```
+
+- **A temp directory, not a temp name.** `mktemp` can't create a symlink, and a fixed name could be a symlink someone
+  planted. A new private directory has neither problem, and it's on the same filesystem, so the rename is atomic.
+- **The flag gets tried on a file of its own.** GNU and busybox use `mv -T`, and BSD and macOS use `mv -h`. Trying them
+  in turn on the real link would hide a real failure behind `invalid option`.
+- **`rmdir` runs first for an empty directory,** because a rename can't replace a directory with a link. That leaves a
+  brief moment with nothing at the path. A file that appears in the directory makes `rmdir` fail, so nothing is lost.
+- **Replacing a link falls back to removing it.** busybox's `mv -T` refuses to replace a link to a directory, unless the
+  new link also points to a directory, and busybox has nothing else that renames a link. So when `mv` fails on an
+  existing link, the script runs `rm -f` and tries again. That leaves the same brief moment, on busybox, in this case
+  only. GNU and BSD rename it directly.
+
+Of the tools in the table above, only Ansible replaces a link atomically by default, and Salt does with `atomic: true`.
+Both call `rename()` directly, which never follows a link. pyinfra, Chef, Puppet, and cdist remove the old link first.
 
 ## sudo
 

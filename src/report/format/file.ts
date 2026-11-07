@@ -2,13 +2,13 @@ import pc from "picocolors"
 import prettyBytes from "pretty-bytes"
 
 import type { LabelRow } from "#report/format.ts"
+import { toOwnerRow } from "#report/format/owner.ts"
 import { styleGot, styleWant } from "#report/format/styles.ts"
-import type { FileAttributeName } from "#session/handlers/file.ts"
-import type { Bytes } from "#session/handlers/file/bytes.ts"
 import type { FileComparisonValues } from "#session/handlers/file/comparison.ts"
-import type { AttributeChange, AttributeValue } from "#session/handlers/file/comparison/attributes.ts"
 import type { ContentComparison, SizeComparison } from "#session/handlers/file/comparison/content.ts"
-import { toOctalMode, toSymbolicMode } from "#session/handlers/file/mode.ts"
+import type { AttributeChange } from "#session/handlers/shared/filesystem/attributes.ts"
+import type { Bytes } from "#session/handlers/shared/filesystem/bytes.ts"
+import { toOctalMode, toSymbolicMode } from "#session/handlers/shared/filesystem/mode.ts"
 
 // Spell out a size in bytes, because a lone `B` reads like "billion".
 const BYTE_UNIT = / B$/v
@@ -41,22 +41,17 @@ const formatFileNote = (sizeComparison: SizeComparison): string => {
 /** Formats permission bits as both notations, like `rw-r--r-- (644)`, because a script can write either one. */
 const formatMode = (bits: number) => `${toSymbolicMode(bits)} (${toOctalMode(bits)})`
 
-const ATTRIBUTE_FORMATTERS: Record<FileAttributeName, (value: AttributeValue) => string> = {
-  mode: (value) => formatMode(Number(value)),
-  user: String,
-  group: String,
-}
-
 const toAttributeRow = (attributeChange: AttributeChange): LabelRow => {
+  if (attributeChange.name !== "mode") return toOwnerRow(attributeChange)
+
   const { name, got, want } = attributeChange
-  const format = ATTRIBUTE_FORMATTERS[name]
-  return { label: name, valueLines: [`${styleGot(format(got))} -> ${styleWant(format(want))}`] }
+  return { label: name, valueLines: [`${styleGot(formatMode(got))} -> ${styleWant(formatMode(want))}`] }
 }
 
 /** Returns a note row for content the output can't diff, then a row for each attribute that changes. */
 export const toFileRows = (values: FileComparisonValues): LabelRow[] => {
-  const { content, attributes } = values
+  const { content, attributeChanges } = values
   // Show a note for content the output can't diff, because a text diff prints as its own detail.
   const contentRows = isSizeComparison(content) ? [{ label: "content", valueLines: [formatFileNote(content)] }] : []
-  return [...contentRows, ...attributes.map((attributeChange) => toAttributeRow(attributeChange))]
+  return [...contentRows, ...attributeChanges.map((attributeChange) => toAttributeRow(attributeChange))]
 }

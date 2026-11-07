@@ -1,11 +1,12 @@
-// Prints the report for one example host per way a block can look, to inspect the output by eye.
-// It runs `plan`, `apply`, `plan --verbose`, and then `apply --verbose`.
-// Run it with `bask report-preview`, and with `NO_COLOR=1` to see it without colors.
-import { chmod, mkdtemp, rm } from "node:fs/promises"
+import { chmod, mkdir, mkdtemp, rm, symlink } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import process from "node:process"
 
+// Prints the report for one example host per way a block can look, to inspect the output by eye.
+// It runs `plan`, `apply`, `plan --verbose`, and then `apply --verbose`.
+// Run it with `bask report-preview`, and with `NO_COLOR=1` to see it without colors.
+import bun from "bun"
 import pc from "picocolors"
 import { err } from "ts-explicit-errors"
 
@@ -16,7 +17,7 @@ import { hasDrift, prepareHosts, runHost } from "#hosts/run.ts"
 import { printTsinfraError } from "#report/errors.ts"
 import { formatHostBlock } from "#report/format.ts"
 import { formatSummary } from "#report/format/summary.ts"
-import { PUBLIC_FILE_MODE } from "#session/handlers/file/mode.ts"
+import { PUBLIC_FILE_MODE } from "#session/handlers/shared/filesystem/mode.ts"
 
 interface Scenario {
   name: string
@@ -44,6 +45,9 @@ const WANTED_SITE_CONFIG = SITE_CONFIG.flatMap((line, index) => {
   if (number === 28) return []
   return [line]
 })
+
+// Pick a group the user is in besides their own, so a `group:` row can change in `apply` without root.
+const OTHER_GROUP_ID = process.getgroups?.().find((gid) => gid !== os.userInfo().gid) ?? os.userInfo().gid
 
 const BIG_VALUE_LINE_COUNT = 2000
 const numberedLines = (prefix: string) =>
@@ -87,24 +91,46 @@ const createScenarios = (dir: string): Scenario[] => {
     {
       // A file's path in the value color, a diff with a `mode:` row after it, and a `content:` row for each case that
       // can't show a diff, lined up with a `group:` row. With `--verbose`, a file that's already right shows `=`.
-      // Only `plan` shows these, because `apply` can't write files yet.
       name: "files",
       target: "@local",
-      modes: ["plan"],
       fn: async (h) => {
-        await Bun.write(marker("app.conf"), "port = 8080\nworkers = 4\nlog = info\n")
+        await bun.write(marker("app.conf"), "port = 8080\nworkers = 4\nlog = info\n")
         await chmod(marker("app.conf"), 0o600)
-        await Bun.write(marker("token"), "old-token\n")
-        await Bun.write(marker("logo.png"), "logo\n")
-        await Bun.write(marker("access.log"), "GET /\n".repeat(30_000))
-        await Bun.write(marker("motd"), "welcome\n")
+        await bun.write(marker("token"), "old-token\n")
+        await bun.write(marker("logo.png"), "logo\n")
+        await bun.write(marker("access.log"), "GET /\n".repeat(30_000))
+        await bun.write(marker("motd"), "welcome\n")
 
         await h.file(marker("app.conf"), "port = 8080\nworkers = 8\nlog = info\n", { mode: PUBLIC_FILE_MODE })
         await h.file(marker("new.conf"), "enabled = true\n")
-        await h.file(marker("token"), "new-token\n", { secret: true, group: "sonarr" })
+        await h.file(marker("token"), "new-token\n", { secret: true, group: OTHER_GROUP_ID })
         await h.file(marker("logo.png"), new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]))
         await h.file(marker("access.log"), "")
         await h.file(marker("motd"), "welcome\n")
+      },
+    },
+    {
+      // A `target:` row for each way a link changes, a `group:` row, and the note for a target that's missing.
+      // With `--verbose`, a link that's already right shows `=`.
+      name: "links",
+      target: "@local",
+      fn: async (h) => {
+        const target = marker("dotfile")
+        await bun.write(target, "set -x EDITOR vim\n")
+        await bun.write(marker("old-dotfile"), "set -x EDITOR nano\n")
+        await bun.write(marker("real-file"), "a file where the link goes\n")
+        await mkdir(marker("empty-dir"))
+        await symlink(marker("old-dotfile"), marker("moved-link"))
+        await symlink(target, marker("owned-link"))
+        await symlink(target, marker("right-link"))
+
+        await h.link(marker("new-link"), target)
+        await h.link(marker("real-file"), target, { force: true })
+        await h.link(marker("empty-dir"), target, { force: true })
+        await h.link(marker("moved-link"), target)
+        await h.link(marker("owned-link"), target, { group: OTHER_GROUP_ID })
+        await h.link(marker("broken-link"), marker("missing-dotfile"))
+        await h.link(marker("right-link"), target)
       },
     },
     {

@@ -1,7 +1,7 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import { validateInput } from "#session/handlers/validate-input.ts"
+import { validateInput } from "#session/handlers/shared/validate-input.ts"
 import type { Shell } from "#session/shell.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
 

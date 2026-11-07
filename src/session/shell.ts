@@ -16,7 +16,7 @@ export const quoteShellArg = (text: string): string => `'${text.replaceAll("'", 
 
 /** Describes a non-zero exit as an error, with the exit code and stderr in its message. */
 export const createCommandExitError = (commandOutput: CommandOutput) => {
-  const { exitCode, stderr } = commandOutput
+  const { stderr, exitCode } = commandOutput
   let trimmedStderr = stderr.trim()
   trimmedStderr &&= `: ${trimmedStderr}`
   return err(`exited with code ${exitCode}${trimmedStderr}`, undefined)

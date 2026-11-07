@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test"
 
 import { isErr, messageChain } from "ts-explicit-errors"
 
-import { resolveHome } from "#session/handlers/shared/path.ts"
+import { resolveHome } from "#session/handlers/shared/filesystem/path.ts"
 
 const toMessage = (...resolveHomeArgs: Parameters<typeof resolveHome>) => {
   const resolved = resolveHome(...resolveHomeArgs)

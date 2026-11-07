@@ -2,31 +2,23 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { Bytes } from "#session/handlers/file/bytes.ts"
-import { toBytes } from "#session/handlers/file/bytes.ts"
+import type { HostFileAttributeDetails } from "#session/handlers/shared/filesystem/attributes.ts"
+import type { Bytes } from "#session/handlers/shared/filesystem/bytes.ts"
+import { toBytes } from "#session/handlers/shared/filesystem/bytes.ts"
+import { statModeSchema } from "#session/handlers/shared/filesystem/mode.ts"
 import type { Shell } from "#session/shell.ts"
 import { quoteShellArg } from "#session/shell.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
+import { splitWords } from "#utils.ts"
 
+// Read the first 64 hex characters, because GNU, busybox, and `shasum` print `<hash>  -`, and BSD prints the hash.
 const SHA256_PATTERN = /^[0-9a-f]{64}/v
-const WHITESPACE = /\s+/v
-// Allow fewer than three digits, because GNU and busybox `stat` print mode `044` as `44`.
-const STAT_MODE_PATTERN = /^[0-7]{1,4}$/v
-const OCTAL_RADIX = 8
+const SHA256_LENGTH = 64
 
 /** What the file details command found about the content of a regular file. */
 interface HostFileContentDetails {
   hash: string
   size: Bytes
-}
-
-/** What the file details command found about the mode and owner of a regular file. */
-export interface HostFileAttributeDetails {
-  mode: number
-  uid: number
-  gid: number
-  user: string
-  group: string
 }
 
 /** The path of a file that doesn't exist on the host yet. */
@@ -36,7 +28,7 @@ interface NewHostFileDetails {
 }
 
 /** What the file details command found at a path that is a regular file. */
-export interface ExistingHostFileDetails {
+interface ExistingHostFileDetails {
   kind: "existing"
   path: string
   content: HostFileContentDetails
@@ -46,14 +38,27 @@ export interface ExistingHostFileDetails {
 /** What the file details command found at a path: nothing yet, or a regular file. */
 export type HostFileDetails = ExistingHostFileDetails | NewHostFileDetails
 
-const statLineSchema = type([
-  type(STAT_MODE_PATTERN).pipe((mode) => Number.parseInt(mode, OCTAL_RADIX)),
-  "string.integer.parse",
-  "string.integer.parse",
-  nonEmptyStringSchema,
-  nonEmptyStringSchema,
-  type("string.integer.parse").pipe(toBytes),
-])
+const KIND_PREFIX = "kind="
+
+// List what the file details command can say is at the path.
+const kindLineSchema = type("string")
+  .narrow((line) => line.startsWith(KIND_PREFIX))
+  .pipe((line) => line.slice(KIND_PREFIX.length))
+  .to("'absent' | 'link' | 'other' | 'unreadable' | 'file'")
+
+const hashLineSchema = type(SHA256_PATTERN).pipe((line) => line.slice(0, SHA256_LENGTH))
+
+const statLineSchema = type("string")
+  .pipe(splitWords)
+  .to([
+    statModeSchema,
+    "string.integer.parse",
+    "string.integer.parse",
+    nonEmptyStringSchema,
+    nonEmptyStringSchema,
+    type("string.integer.parse").pipe(toBytes),
+  ])
+  .pipe(([mode, uid, gid, user, group, size]) => ({ attributes: { mode, uid, gid, user, group }, size }))
 
 /**
  * Returns one command that says what is at `path`, and for a regular file, its sha256, mode, owner, and size. It tries
@@ -87,26 +92,26 @@ const buildFileDetailsCommand = (path: string): string =>
  */
 export const parseFileDetailsOutput = (stdout: string, path: string): Result<HostFileDetails> => {
   const [kindLine = "", hashLine = "", statLine = ""] = stdout.split("\n")
-  const kind = kindLine.replace("kind=", "")
+
+  const kind = kindLineSchema(kindLine)
+  if (kind instanceof type.errors)
+    return err(`the file details command printed '${kindLine}' instead of what is at the path`, undefined)
 
   if (kind === "absent") return { kind: "new", path }
   if (kind === "link") return err(`'${path}' is a symlink, so file won't replace it`, undefined)
   if (kind === "other") return err(`'${path}' isn't a regular file, so file won't replace it`, undefined)
   if (kind === "unreadable") return err(`can't read '${path}' as the SSH user, so it needs sudo: true`, undefined)
-  if (kind !== "file")
-    return err(`the file details command printed '${kindLine}' instead of what is at the path`, undefined)
 
-  // Read the first 64 hex characters, because GNU, busybox, and `shasum` print `<hash>  -`, and BSD prints the hash.
-  const hash = SHA256_PATTERN.exec(hashLine)?.[0]
-  if (hash === undefined)
+  const hash = hashLineSchema(hashLine)
+  if (hash instanceof type.errors)
     return err(`the file details command printed '${hashLine}' instead of the file's sha256 hash`, undefined)
 
-  const validStatLine = statLineSchema(statLine.trim().split(WHITESPACE))
-  if (validStatLine instanceof type.errors)
+  const fileStat = statLineSchema(statLine)
+  if (fileStat instanceof type.errors)
     return err(`the file details command printed '${statLine}' instead of the file's mode, owner, and size`, undefined)
 
-  const [mode, uid, gid, user, group, size] = validStatLine
-  return { kind: "existing", path, content: { hash, size }, attributes: { mode, uid, gid, user, group } }
+  const { attributes, size } = fileStat
+  return { kind: "existing", path, content: { hash, size }, attributes }
 }
 
 /**

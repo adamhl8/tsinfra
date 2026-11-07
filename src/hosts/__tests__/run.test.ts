@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
+import bun from "bun"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
 import { prepareAndRunHost } from "#__tests__/session.ts"
@@ -70,7 +71,7 @@ describe("prepareHosts", () => {
       ["b", true],
       ["c", false],
     ])
-    expect(await Bun.file(marker).exists()).toBe(false)
+    expect(await bun.file(marker).exists()).toBe(false)
   })
 })
 

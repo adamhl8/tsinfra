@@ -7,6 +7,7 @@ import { toStepEntries } from "#report/entries.ts"
 import { formatDiff } from "#report/format/diff.ts"
 import { toEnsureRows } from "#report/format/ensure.ts"
 import { toFileRows } from "#report/format/file.ts"
+import { toLinkRows } from "#report/format/link.ts"
 import type { Style } from "#report/format/styles.ts"
 import { STATUS_STYLES, styleError, styleNote, styleValue } from "#report/format/styles.ts"
 import { getMaxWidth, padToWidth, quoteNames } from "#utils.ts"
@@ -46,6 +47,7 @@ const toLabelRows = (detail: Detail): LabelRow[] => {
 
   if (detail.kind === "ensureComparisonValues") return toEnsureRows(detail.values)
   if (detail.kind === "fileComparisonValues") return toFileRows(detail.values)
+  if (detail.kind === "linkComparisonValues") return toLinkRows(detail.values)
 
   // Color stderr like an error, so it stands apart from its command, and leave the arrow between them uncolored.
   const { command, stderr } = detail

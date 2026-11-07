@@ -5,6 +5,7 @@ import type { HostReport } from "#hosts/run.ts"
 import type { FormatOptions } from "#report/format.ts"
 import type { EnsureComparisonValues } from "#session/handlers/ensure/check.ts"
 import type { FileComparisonValues } from "#session/handlers/file/comparison.ts"
+import type { LinkComparisonValues } from "#session/handlers/link/comparison.ts"
 import type { CommandRecord, ConvergePhase, StepRecord } from "#session/step-recorder.ts"
 import type { ComparisonValues, StepKind, StepStatus } from "#session/step.ts"
 import { isMultiLine } from "#utils.ts"
@@ -20,7 +21,7 @@ interface EntryName {
 export type NameKind =
   // A name the script gave the step.
   | "step"
-  // A name that's a value: a read's or an inspect's command, a file's path, or a target.
+  // A name that's a value: a read's or an inspect's command, a file's or a link's path, or a target.
   | "value"
   // The host's script, for a failure no step owns.
   | "hostScript"
@@ -40,19 +41,21 @@ export interface StepEntry {
 /** What a step entry shows under its head line. */
 export type Detail =
   | { kind: "diff"; got: string; want: string }
-  | { kind: "ensureComparisonValues"; values: EnsureComparisonValues }
   // Holds everything about a file but a text diff, which is a detail of its own.
   | { kind: "fileComparisonValues"; values: FileComparisonValues }
+  | { kind: "linkComparisonValues"; values: LinkComparisonValues }
+  | { kind: "ensureComparisonValues"; values: EnsureComparisonValues }
   // The stderr of a command that can explain a failure that still differs after its fix.
   | { kind: "stderr"; command: string; stderr: string }
   // tsinfra's own aside about the details around it.
   | { kind: "note"; text: string }
 
-// Treat a read's or an inspect's name as a value, because it's the command itself, and a file's, because it's a path.
+// Treat a read's or an inspect's name as a value, because it's the command itself, and a file's or a link's, because it's a path.
 const STEP_NAME_KINDS: Record<StepKind, NameKind> = {
   read: "value",
   inspect: "value",
   file: "value",
+  link: "value",
   ensure: "step",
   run: "step",
 }
@@ -79,14 +82,17 @@ const PHASE_DESCRIPTIONS: Record<StillDiffersPhase, string> = {
   after: "after the fix",
 }
 
-// Show how a string value or a file would change, because the step's name doesn't say.
+// Show how a string value, a file, or a link would change, because the step's name doesn't say.
 // A boolean or an exit code needs no details, because the name already says what yes and no mean.
 const SHOWS_CHANGE_DETAILS: Record<ComparisonValues["kind"], boolean> = {
   string: true,
   boolean: false,
   exit: false,
   file: true,
+  link: true,
 }
+
+const MISSING_TARGET_NOTE = "points to a missing path"
 
 /** Returns how a file differs: a diff when its content is text, then its comparison values. */
 const toFileComparisonDetails = (values: FileComparisonValues): Detail[] => {
@@ -102,8 +108,17 @@ const toEnsureComparisonDetails = (values: EnsureComparisonValues): Detail[] => 
   return [{ kind: "ensureComparisonValues", values }]
 }
 
-const toComparisonValuesDetails = (values: ComparisonValues): Detail[] =>
-  values.kind === "file" ? toFileComparisonDetails(values) : toEnsureComparisonDetails(values)
+/** Returns how a link differs, then a note when its target doesn't exist, so a typo in the path stands out. */
+const toLinkComparisonDetails = (values: LinkComparisonValues): Detail[] => {
+  const noteDetails: Detail[] = values.targetExists ? [] : [{ kind: "note", text: MISSING_TARGET_NOTE }]
+  return [{ kind: "linkComparisonValues", values }, ...noteDetails]
+}
+
+const toComparisonValuesDetails = (values: ComparisonValues): Detail[] => {
+  if (values.kind === "file") return toFileComparisonDetails(values)
+  if (values.kind === "link") return toLinkComparisonDetails(values)
+  return toEnsureComparisonDetails(values)
+}
 
 const getCommandStderr = (commandRecord: CommandRecord): string | undefined => {
   const { output } = commandRecord

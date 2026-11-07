@@ -40,12 +40,12 @@ export interface StepRecord {
   /** The name the script gave the step, or a read step's command. */
   name: string
   kind: StepKind
+  /** Unset until the step finishes, and an error if it failed. */
+  status?: Result<StepStatus>
   commands: CommandRecord[]
   comparisons: StepComparisons
   /** The names of the needed steps this step waited on. */
   waitingOn: string[]
-  /** Unset until the step finishes, and an error if it failed. */
-  status?: Result<StepStatus>
 }
 
 /** What `converge` uses to record what it does, so a step's handler never records anything itself. */

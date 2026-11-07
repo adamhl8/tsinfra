@@ -27,19 +27,6 @@ export const changeStepResultSchema = type.declare<ChangeStepResult>().type({
   changed: "boolean",
 })
 
-// Accept only steps that read the host's state in `needs`, so not a run.
-const NEEDABLE_STEP_KINDS = ["file", "ensure"] as const satisfies ChangeStepKind[]
-type NeedableStepKind = (typeof NEEDABLE_STEP_KINDS)[number]
-/** The earlier steps a step depends on. */
-export type StepNeeds = ChangeStepResult<NeedableStepKind>[]
-
-/** The `needs` of a step that gives none. */
-export const NO_NEEDS: StepNeeds = []
-
-export const stepNeedsSchema = type
-  .declare<StepNeeds>()
-  .type(changeStepResultSchema.and({ kind: type.enumerated(...NEEDABLE_STEP_KINDS) }).array())
-
 // Count a waiting step as changed, so a step that needs it waits too, and a run that follows it shows up in the plan.
 const COUNTS_AS_CHANGED: Record<StepStatus, boolean> = {
   unchanged: false,

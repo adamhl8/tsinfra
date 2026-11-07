@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
+import bun from "bun"
 import type { Result } from "ts-explicit-errors"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
@@ -13,7 +14,7 @@ const toPlainResult = <T>(result: Result<T> | undefined) => (isErr(result) ? mes
 
 /** Turns records into plain values to compare, with each error as its message chain and each command as its text. */
 const toPlainRecords = (stepRecords: StepRecord[]) =>
-  stepRecords.map(({ name, kind, commands, status }) => ({
+  stepRecords.map(({ name, kind, status, commands }) => ({
     name,
     kind,
     status: toPlainResult(status),
@@ -29,7 +30,7 @@ describe("createHostSession", () => {
     expect(await readOrMessage(hostSession.host, `touch '${file}'`)).toBe(
       "failed to read 'exit 1' -> exited with code 1",
     )
-    expect(await Bun.file(file).exists()).toBe(false)
+    expect(await bun.file(file).exists()).toBe(false)
   })
 
   it("should keep the first failure when a later one doesn't wrap it", async () => {

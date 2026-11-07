@@ -1,6 +1,8 @@
 import { describe, expect, it, setDefaultTimeout } from "bun:test"
 import path from "node:path"
 
+import bun from "bun"
+
 import { createProject } from "#cli/__tests__/utils.ts"
 
 setDefaultTimeout(30_000)
@@ -28,7 +30,7 @@ describe("tsinfra", () => {
       ].join("\n"),
     )
     expect(stderr).toBe("")
-    expect(await Bun.file(marker).exists()).toBe(false)
+    expect(await bun.file(marker).exists()).toBe(false)
   })
 
   it("should run the fix and exit 0 from apply", async () => {
@@ -38,7 +40,7 @@ describe("tsinfra", () => {
     const { exitCode } = await run`tsinfra apply`.env({ MARKER: marker }).nothrow()
 
     expect(exitCode).toBe(0)
-    expect(await Bun.file(marker).exists()).toBe(true)
+    expect(await bun.file(marker).exists()).toBe(true)
   })
 
   it("should run only the named host from the hosts dir it's given, with every step in verbose", async () => {

@@ -1,10 +1,13 @@
 import { describe, expect, it } from "bun:test"
+import { Buffer } from "node:buffer"
+import crypto from "node:crypto"
 import { chmod, lstat, mkdir, readdir, stat, symlink, truncate } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import process from "node:process"
 
 import { makeTempDir } from "@adamhl8/configs/test"
+import bun from "bun"
 import { messageChain } from "ts-explicit-errors"
 
 import {
@@ -15,7 +18,7 @@ import {
   fileOrMessage,
 } from "#__tests__/session.ts"
 import { handleFile } from "#session/handlers/file.ts"
-import { PUBLIC_FILE_MODE } from "#session/handlers/file/mode.ts"
+import { PUBLIC_FILE_MODE } from "#session/handlers/shared/filesystem/mode.ts"
 
 const CLOSED_FILE_DESCRIPTOR = 9999
 
@@ -42,14 +45,14 @@ describe("h.file in plan", () => {
 
     expect(result).toStrictEqual({ name: filePath, kind: "file", changed: true })
     expect(hostSession.stepRecords[0]?.comparisons.before).toMatchObject({
-      values: { kind: "file", content: { kind: "new", wantSize: 2 }, attributes: [] },
+      values: { kind: "file", content: { kind: "new", wantSize: 2 }, attributeChanges: [] },
     })
-    expect(await Bun.file(filePath).exists()).toBe(false)
+    expect(await bun.file(filePath).exists()).toBe(false)
   })
 
   it("should be unchanged when the content matches", async () => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, "a\n")
+    await bun.write(filePath, "a\n")
     const { host: h } = await createSession("plan")
 
     expect(await fileOrMessage(h, filePath, "a\n")).toMatchObject({ changed: false })
@@ -57,7 +60,7 @@ describe("h.file in plan", () => {
 
   it("should fetch the old content for a diff when it differs", async () => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, "a\nb\n")
+    await bun.write(filePath, "a\nb\n")
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, "a\nc\n")
 
@@ -68,20 +71,20 @@ describe("h.file in plan", () => {
 
   it("should label every command it runs, because the script didn't write them", async () => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, "a\nb\n")
+    await bun.write(filePath, "a\nb\n")
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, "a\nc\n")
 
     expect(hostSession.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual([
       "file details command",
       "file content",
-      "file user command",
+      "user command",
     ])
   })
 
   it("should report a mode that differs, and leave a mode that wasn't given alone", async () => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, "a\n")
+    await bun.write(filePath, "a\n")
     await chmod(filePath, 0o600)
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, "a\n", { mode: "644" })
@@ -91,7 +94,7 @@ describe("h.file in plan", () => {
       {
         values: {
           content: { kind: "same" },
-          attributes: [{ name: "mode", got: 0o600, want: 0o644 }],
+          attributeChanges: [{ name: "mode", got: 0o600, want: 0o644 }],
         },
       },
       { inSync: true },
@@ -100,19 +103,19 @@ describe("h.file in plan", () => {
 
   it("should show a mode in both notations, whichever one the script wrote", async () => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, "a\n")
+    await bun.write(filePath, "a\n")
     await chmod(filePath, 0o600)
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, "a\n", { mode: PUBLIC_FILE_MODE })
 
     expect(hostSession.stepRecords[0]?.comparisons.before).toMatchObject({
-      values: { attributes: [{ name: "mode", got: 0o600, want: 0o644 }] },
+      values: { attributeChanges: [{ name: "mode", got: 0o600, want: 0o644 }] },
     })
   })
 
   it("should compare a user name with the user's name, and a user id with its uid", async () => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, "a\n")
+    await bun.write(filePath, "a\n")
     const { username, uid } = os.userInfo()
     const { hostSession } = await createFakeSudoSession("plan")
     await fileOrMessage(hostSession.host, filePath, "a\n", { user: username, sudo: true })
@@ -122,25 +125,25 @@ describe("h.file in plan", () => {
     expect(hostSession.stepRecords.map(({ comparisons }) => comparisons.before)).toMatchObject([
       { inSync: true },
       { inSync: true },
-      { values: { attributes: [{ name: "user", got: uid, want: uid + 1 }] } },
+      { values: { attributeChanges: [{ name: "user", got: uid, want: uid + 1 }] } },
     ])
   })
 
   it("should report a group that differs", async () => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, "a\n")
+    await bun.write(filePath, "a\n")
     const { gid } = await stat(filePath)
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, "a\n", { group: gid + 1 })
 
     expect(hostSession.stepRecords[0]?.comparisons.before).toMatchObject({
-      values: { attributes: [{ name: "group", got: gid, want: gid + 1 }] },
+      values: { attributeChanges: [{ name: "group", got: gid, want: gid + 1 }] },
     })
   })
 
   it("should never fetch the old content of a secret file", async () => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, "old token\n")
+    await bun.write(filePath, "old token\n")
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, "new token\n", { secret: true })
 
@@ -153,7 +156,7 @@ describe("h.file in plan", () => {
     ["bytes that aren't valid UTF-8", new Uint8Array([97, 255, 98])],
   ])("should not diff wanted content with %s", async (_, bytes) => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, "a\n")
+    await bun.write(filePath, "a\n")
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, bytes)
 
@@ -166,7 +169,7 @@ describe("h.file in plan", () => {
     ["bytes that aren't valid UTF-8", new Uint8Array([97, 255, 98])],
   ])("should not diff a host file with %s", async (_, bytes) => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, bytes)
+    await bun.write(filePath, bytes)
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, "a\n")
 
@@ -175,7 +178,7 @@ describe("h.file in plan", () => {
 
   it("should not diff binary content", async () => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, "a\n")
+    await bun.write(filePath, "a\n")
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, new Uint8Array([0, 1, 2]))
 
@@ -186,7 +189,7 @@ describe("h.file in plan", () => {
 
   it("should not fetch a file over 100 kB for a diff", async () => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, "a".repeat(200 * 1024))
+    await bun.write(filePath, "a".repeat(200 * 1024))
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, "b\n")
 
@@ -196,7 +199,7 @@ describe("h.file in plan", () => {
 
   it("should not diff new content over 100 kB", async () => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, "a\n")
+    await bun.write(filePath, "a\n")
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, "b".repeat(200 * 1024))
 
@@ -223,19 +226,19 @@ describe("h.file content", () => {
     ["a Blob", () => new Blob([CONTENT])],
   ])("should treat %s as the same content", async (_, toContent) => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, CONTENT)
+    await bun.write(filePath, CONTENT)
     const { host: h } = await createSession("plan")
 
     expect(await fileOrMessage(h, filePath, toContent())).toMatchObject({ changed: false })
   })
 
-  it("should read a local file given with Bun.file, and diff it", async () => {
+  it("should read a local file given with bun.file, and diff it", async () => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, "a\nb\n")
+    await bun.write(filePath, "a\nb\n")
     const localPath = await createFilePath()
-    await Bun.write(localPath, "a\nc\n")
+    await bun.write(localPath, "a\nc\n")
     const hostSession = await createSession("plan")
-    await fileOrMessage(hostSession.host, filePath, Bun.file(localPath))
+    await fileOrMessage(hostSession.host, filePath, bun.file(localPath))
 
     expect(hostSession.stepRecords[0]?.comparisons.before).toMatchObject({
       values: { content: { kind: "text", got: "a\nb\n", want: "a\nc\n" } },
@@ -244,11 +247,11 @@ describe("h.file content", () => {
 
   it("should not diff binary content from a local file", async () => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, "a\n")
+    await bun.write(filePath, "a\n")
     const localPath = await createFilePath()
-    await Bun.write(localPath, new Uint8Array([0, 1, 2]))
+    await bun.write(localPath, new Uint8Array([0, 1, 2]))
     const hostSession = await createSession("plan")
-    await fileOrMessage(hostSession.host, filePath, Bun.file(localPath))
+    await fileOrMessage(hostSession.host, filePath, bun.file(localPath))
 
     expect(hostSession.stepRecords[0]?.comparisons.before).toMatchObject({
       values: { content: { kind: "binary", gotSize: 2, wantSize: 3 } },
@@ -259,7 +262,7 @@ describe("h.file content", () => {
     const localPath = await createFilePath()
     const { host: h } = await createSession("plan")
 
-    expect(await fileOrMessage(h, "/tmp/x", Bun.file(localPath))).toBe(
+    expect(await fileOrMessage(h, "/tmp/x", bun.file(localPath))).toBe(
       `failed to read local file '${localPath}' -> ENOENT: no such file or directory, open '${localPath}'`,
     )
   })
@@ -269,13 +272,13 @@ describe("h.file content", () => {
     const { host: h } = await createSession("plan")
 
     // Check only that the error names the path, because Linux gives a directory a size of `Infinity`, and macOS doesn't.
-    expect(await fileOrMessage(h, "/tmp/x", Bun.file(localPath))).toContain(`local file '${localPath}'`)
+    expect(await fileOrMessage(h, "/tmp/x", bun.file(localPath))).toContain(`local file '${localPath}'`)
   })
 
   it("should fail on content it can't read and can't name", async () => {
     const { host: h } = await createSession("plan")
 
-    expect(await fileOrMessage(h, "/tmp/x", Bun.file(CLOSED_FILE_DESCRIPTOR))).toBe(
+    expect(await fileOrMessage(h, "/tmp/x", bun.file(CLOSED_FILE_DESCRIPTOR))).toBe(
       "failed to read the content given to 'file' -> EBADF: bad file descriptor, fstat",
     )
   })
@@ -285,7 +288,7 @@ describe("h.file content", () => {
     const { host: h } = await createSession("plan")
     const needed = await h.file(await createFilePath(), "a\n")
 
-    expect(await fileOrMessage(h, "/tmp/x", Bun.file(localPath), { needs: [needed] })).toBe(
+    expect(await fileOrMessage(h, "/tmp/x", bun.file(localPath), { needs: [needed] })).toBe(
       `failed to read local file '${localPath}' -> ENOENT: no such file or directory, open '${localPath}'`,
     )
   })
@@ -305,9 +308,9 @@ describe("h.file owner check", () => {
     )
     expect(hostSession.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual([
       "file details command",
-      "file user command",
+      "user command",
     ])
-    expect(await Bun.file(filePath).exists()).toBe(false)
+    expect(await bun.file(filePath).exists()).toBe(false)
   })
 
   it.skipIf(isRoot)("should refuse another user's id", async () => {
@@ -326,8 +329,8 @@ describe("h.file owner check", () => {
 
     expect(await fileOrMessage(h, namePath, "a\n", { user: username })).toMatchObject({ changed: true })
     expect(await fileOrMessage(h, idPath, "a\n", { user: uid })).toMatchObject({ changed: true })
-    expect(await Bun.file(namePath).text()).toBe("a\n")
-    expect(await Bun.file(idPath).text()).toBe("a\n")
+    expect(await bun.file(namePath).text()).toBe("a\n")
+    expect(await bun.file(idPath).text()).toBe("a\n")
   })
 
   it.skipIf(isRoot)("should refuse to write a file someone else owns", async () => {
@@ -339,7 +342,7 @@ describe("h.file owner check", () => {
   })
 
   it("should pass a file someone else owns when it's in sync", async () => {
-    const content = await Bun.file(ROOT_OWNED_PATH).bytes()
+    const content = await bun.file(ROOT_OWNED_PATH).bytes()
     const { host: h } = await createSession("plan")
 
     expect(await fileOrMessage(h, ROOT_OWNED_PATH, content, { user: "root" })).toMatchObject({ changed: false })
@@ -377,7 +380,7 @@ describe("h.file owner check", () => {
     const { host: h } = await createFakeToolSession("plan", { id: "echo adam" })
 
     expect(await fileOrMessage(h, await createFilePath(), "a\n", { user: FAKE_UID })).toBe(
-      "failed to compare the host with what the step wants -> the file user command printed 'adam' instead of the id of the user running it",
+      "failed to compare the host with what the step wants -> the user command printed 'adam' instead of the id of the user running it",
     )
   })
 
@@ -409,11 +412,11 @@ describe("h.file size limit", () => {
   // Use a sparse file, because reading it would take far more memory than the test has.
   it("should fail on a large local file without reading it", async () => {
     const localPath = await createFilePath()
-    await Bun.write(localPath, "")
+    await bun.write(localPath, "")
     await truncate(localPath, SPARSE_FILE_BYTES)
     const { host: h } = await createSession("plan")
 
-    expect(await fileOrMessage(h, await createFilePath(), Bun.file(localPath))).toBe(
+    expect(await fileOrMessage(h, await createFilePath(), bun.file(localPath))).toBe(
       `local file '${localPath}' is 1 TB, above the 10 MB limit`,
     )
   })
@@ -427,7 +430,7 @@ describe("h.file size limit", () => {
   it("should fail on a device without reading it", async () => {
     const { host: h } = await createSession("plan")
 
-    expect(await fileOrMessage(h, await createFilePath(), Bun.file("/dev/zero"))).toBe(
+    expect(await fileOrMessage(h, await createFilePath(), bun.file("/dev/zero"))).toBe(
       "local file '/dev/zero' doesn't have a size (is it a file?), so it can't be checked against the 10 MB limit",
     )
   })
@@ -465,7 +468,7 @@ describe("h.file refusals", () => {
   // Skip this as root, because root can read every file.
   it.skipIf(isRoot)("should say a file the SSH user can't read needs sudo", async () => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, "a\n")
+    await bun.write(filePath, "a\n")
     await chmod(filePath, 0o000)
     const { host: h } = await createSession("plan")
 
@@ -485,7 +488,7 @@ describe("h.file in apply", () => {
     const result = await fileOrMessage(hostSession.host, filePath, "a\n")
 
     expect(result).toStrictEqual({ name: filePath, kind: "file", changed: true })
-    expect(await Bun.file(filePath).text()).toBe("a\n")
+    expect(await bun.file(filePath).text()).toBe("a\n")
     expect(await getMode(filePath)).toBe(0o644)
     expect(hostSession.stepRecords[0]?.status).toBe("changed")
   })
@@ -504,29 +507,29 @@ describe("h.file in apply", () => {
     const { host: h } = await createSession("apply")
     await fileOrMessage(h, filePath, "a\n")
 
-    expect(await Bun.file(filePath).text()).toBe("a\n")
+    expect(await bun.file(filePath).text()).toBe("a\n")
     expect((await stat(parent)).mode % 0o100).not.toBe(0)
   })
 
   it("should replace an existing file and keep its mode", async () => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, "old\n")
+    await bun.write(filePath, "old\n")
     await chmod(filePath, 0o640)
     const { host: h } = await createSession("apply")
     await fileOrMessage(h, filePath, "new\n")
 
-    expect(await Bun.file(filePath).text()).toBe("new\n")
+    expect(await bun.file(filePath).text()).toBe("new\n")
     expect(await getMode(filePath)).toBe(0o640)
   })
 
   it("should change only the mode when the content already matches", async () => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, "a\n")
+    await bun.write(filePath, "a\n")
     await chmod(filePath, 0o600)
     const { host: h } = await createSession("apply")
     await fileOrMessage(h, filePath, "a\n", { mode: "644" })
 
-    expect(await Bun.file(filePath).text()).toBe("a\n")
+    expect(await bun.file(filePath).text()).toBe("a\n")
     expect(await getMode(filePath)).toBe(0o644)
   })
 
@@ -559,7 +562,7 @@ describe("h.file in apply", () => {
     const { host: h } = await createSession("apply")
     await fileOrMessage(h, filePath, content)
 
-    expect(await Bun.file(filePath).bytes()).toStrictEqual(await new Blob([content]).bytes())
+    expect(await bun.file(filePath).bytes()).toStrictEqual(await new Blob([content]).bytes())
   })
 
   it("should write to a path with spaces and quotes", async () => {
@@ -567,7 +570,7 @@ describe("h.file in apply", () => {
     const { host: h } = await createSession("apply")
     await fileOrMessage(h, filePath, "a\n")
 
-    expect(await Bun.file(filePath).text()).toBe("a\n")
+    expect(await bun.file(filePath).text()).toBe("a\n")
   })
 
   it("should leave no temp file behind", async () => {
@@ -582,18 +585,18 @@ describe("h.file in apply", () => {
   it.skipIf(isRoot)("should fail without touching the file or leaving a temp file when the write fails", async () => {
     const directory = await makeTempDir()
     const filePath = path.join(directory, "app.conf")
-    await Bun.write(filePath, "old\n")
+    await bun.write(filePath, "old\n")
     const hostSession = await createSession("apply")
     const message = await fileOrMessage(hostSession.host, filePath, "new\n", { group: getOtherGroupId() })
 
     expect(message).toStartWith(`failed to run the fix -> failed to write '${filePath}' -> exited with code 1: `)
-    expect(await Bun.file(filePath).text()).toBe("old\n")
+    expect(await bun.file(filePath).text()).toBe("old\n")
     expect(await readdir(directory)).toStrictEqual(["app.conf"])
   })
 
   it("should refuse a symlink without writing to it or its target", async () => {
     const targetPath = await createFilePath()
-    await Bun.write(targetPath, "old\n")
+    await bun.write(targetPath, "old\n")
     const filePath = await createFilePath()
     await symlink(targetPath, filePath)
     const hostSession = await createSession("apply")
@@ -602,7 +605,7 @@ describe("h.file in apply", () => {
       `failed to compare the host with what the step wants -> '${filePath}' is a symlink, so file won't replace it`,
     )
     expect(hostSession.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual(["file details command"])
-    expect(await Bun.file(targetPath).text()).toBe("old\n")
+    expect(await bun.file(targetPath).text()).toBe("old\n")
     expect((await lstat(filePath)).isSymbolicLink()).toBe(true)
   })
 
@@ -619,8 +622,8 @@ describe("h.file in apply", () => {
     expect(await fileOrMessage(h, filePath, "a\n")).toMatchObject({ changed: true })
     expect(await fileOrMessage(h, filePath, "b\n")).toMatchObject({ changed: true })
 
-    expect(await Bun.file(filePath).text()).toBe("b\n")
-    expect(await Bun.file(logPath).text()).toBe("restorecon\nchcon\n")
+    expect(await bun.file(filePath).text()).toBe("b\n")
+    expect(await bun.file(logPath).text()).toBe("restorecon\nchcon\n")
   })
 
   it("should keep the content out of the record, and label the write", async () => {
@@ -642,7 +645,7 @@ describe("h.file in apply", () => {
   it("should give a new file the default SELinux label, and keep an existing file's", async () => {
     const newFilePath = await createFilePath()
     const existingFilePath = await createFilePath()
-    await Bun.write(existingFilePath, "old\n")
+    await bun.write(existingFilePath, "old\n")
 
     const newFileScript = await getWriteScript(newFilePath)
     const existingFileScript = await getWriteScript(existingFilePath)
@@ -657,17 +660,17 @@ describe("h.file in apply", () => {
 describe("h.file with sudo", () => {
   it("should run every command through sudo, and keep the record as written", async () => {
     const filePath = await createFilePath()
-    await Bun.write(filePath, "old\n")
+    await bun.write(filePath, "old\n")
     const { hostSession, readSudoCalls } = await createFakeSudoSession("apply")
 
     expect(await fileOrMessage(hostSession.host, filePath, "new\n", { sudo: true })).toMatchObject({ changed: true })
 
     const commands = hostSession.stepRecords[0]?.commands
-    expect(await Bun.file(filePath).text()).toBe("new\n")
+    expect(await bun.file(filePath).text()).toBe("new\n")
     expect(commands?.map(({ label }) => label)).toStrictEqual([
       "file details command",
       "file content",
-      "file user command",
+      "user command",
       "file write",
       "file details command",
     ])
@@ -682,7 +685,7 @@ describe("h.file with sudo", () => {
     expect(await fileOrMessage(hostSession.host, filePath, "new\n", { sudo: true })).toMatchObject({ changed: true })
 
     expect(await readSudoCalls()).toStrictEqual(["-n sh -s"])
-    expect(await Bun.file(filePath).exists()).toBe(false)
+    expect(await bun.file(filePath).exists()).toBe(false)
   })
 
   it("should not use sudo without the option", async () => {
@@ -701,7 +704,7 @@ describe("h.file with sudo", () => {
 
     expect(await fileOrMessage(hostSession.host, filePath, bytes, { sudo: true })).toMatchObject({ changed: true })
 
-    expect(await Bun.file(filePath).bytes()).toStrictEqual(bytes)
+    expect(await bun.file(filePath).bytes()).toStrictEqual(bytes)
   })
 
   it("should fail a sudo that isn't a boolean, and run nothing", async () => {

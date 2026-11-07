@@ -1,4 +1,7 @@
 import { regex } from "arkregex"
+import { type } from "arktype"
+
+const OCTAL_RADIX = 8
 
 type OctalDigit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7"
 
@@ -9,6 +12,12 @@ export type OctalMode =
 
 // Give `OCTAL_MODE_PATTERN` its type, because `regex` infers `[0-7]{3,4}` as any number.
 export const OCTAL_MODE_PATTERN = regex.as<OctalMode>("^[0-7]{3,4}$", "v")
+
+// Allow fewer than three digits, because GNU and busybox `stat` print mode `044` as `44`.
+const STAT_MODE_PATTERN = /^[0-7]{1,4}$/v
+
+/** Parses an octal mode as `stat` prints it, like `644` or `44`, into its permission bits. */
+export const statModeSchema = type(STAT_MODE_PATTERN).pipe((mode) => Number.parseInt(mode, OCTAL_RADIX))
 
 // Allow `s` and `S` in an `x` slot for setuid and setgid, and `t` and `T` for the sticky bit, like `ls -l` prints them.
 // Leave off the `v` flag, because it requires escaping `-`, and `regex` can't infer a type from `String.raw`.
@@ -56,7 +65,7 @@ const isSymbolicMode = (mode: FileMode): boolean => SYMBOLIC_MODE_PATTERN.test(m
 
 /** Converts `mode` to its permission bits. */
 export const toModeBits = (mode: FileMode) => {
-  if (!isSymbolicMode(mode)) return Number.parseInt(mode, 8)
+  if (!isSymbolicMode(mode)) return Number.parseInt(mode, OCTAL_RADIX)
 
   let bits = 0
   // oxlint-disable-next-line typescript/no-misused-spread - `mode` matched `SYMBOLIC_MODE_PATTERN`, so it's all ASCII
@@ -72,7 +81,7 @@ export const toModeBits = (mode: FileMode) => {
 }
 
 /** Returns permission bits in octal, like `644`, or `4755` with setuid. */
-export const toOctalMode = (bits: number) => bits.toString(8).padStart(OCTAL_MODE_WIDTH, "0")
+export const toOctalMode = (bits: number) => bits.toString(OCTAL_RADIX).padStart(OCTAL_MODE_WIDTH, "0")
 
 /** Returns permission bits the way `ls -l` prints them, like `rw-r--r--`. */
 export const toSymbolicMode = (bits: number) =>

@@ -1,3 +1,5 @@
+import crypto from "node:crypto"
+
 import type { Transport } from "#transport/transport.ts"
 import { wrapScript } from "#transport/wrap-script.ts"
 

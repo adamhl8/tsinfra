@@ -485,7 +485,9 @@ passes, and they show in `plan` too:
 
 ```ts
 type LinkOptions = {
-  force?: boolean // replace a regular file at the path, like `ln -f`
+  user?: string | number // a name is compared with the user's name, a number with its uid
+  group?: string | number // a name is compared with the group's name, a number with its gid
+  force?: boolean // replace a regular file or an empty directory at the path, like `ln -f`
   sudo?: boolean // read and make the link as root
   needs?: ChangeStepResult<"file" | "link" | "ensure">[]
 }
@@ -501,8 +503,9 @@ Makes `path` a symlink to `target`, and reports whether it changed. This is how 
 place on the control machine, so an edit in the repo shows up straight away. The step is named by its path, and its path
 follows the same rules as `file`'s (see [`file`](#file)).
 
-`link` is a step of its own, not a form of `file`, because the two share only the path. A link has no content, mode,
-owner, or `secret`, and `force` means nothing for a regular file. Their state commands, output, and writes differ too.
+`link` is a step of its own, not a form of `file`, because the two share only the path and the owner. A link has no
+content, mode, or `secret`, and `force` means nothing for a regular file. Their state commands, output, and writes
+differ too.
 
 The words are easy to mix up. In `ln -s TARGET LINK`, the target is the original file the link points to, and the link
 is the new path. `h.link` takes them the other way around, `path` then `target`, because every step names the path it
@@ -514,26 +517,33 @@ manages first.
 - **The target must be absolute,** starting with `/` or `~/`. A relative target is resolved from the link's own
   directory, every time the link is followed, not from where the script runs. That is the classic mistake: a link to
   `dotfiles/config.fish` made from the repo looks for `~/.config/fish/dotfiles/config.fish`. A relative target fails
-  with `target must be an absolute path, like /etc/... or ~/..., because a relative target is resolved from the link's
-  directory`. `~/` means the SSH user's home, as it does for `path`.
+  with `target must be an absolute path, like '/etc/...' or '~/...', because a relative target is resolved from the link's
+  directory`. `~/` means the SSH user's home, as it does for `path`. All six tools compared in
+  [Transport](./transport.md#file-writes) allow a relative target. Refusing one now can be loosened later without
+  breaking a script, and the reverse can't.
 - **The target may not exist yet,** because a later step might create it, or a mounted drive might not be there. The
   link is still made, and its line shows `points to a missing path`, so a typo in the repo path stands out.
-- **The state command** reads the existing link's target with `readlink` and compares it with `target`. It is in sync
-  when `path` is a symlink that points there.
+- **The state command** reads the existing link's target with `readlink` and compares it with `target` as an exact
+  string, after `~/` is resolved. It is in sync when `path` is a symlink that points there, with the right owner.
 - **An existing symlink is always updated** to point at `target`, because managing it is the point.
-- **A regular file at `path` is an error** unless `force: true`, like `'~/.config/fish/config.fish' is a regular file,
-  so link won't replace it`. This is the first run for dotfiles, where the real file still sits where the link will go.
-  Move it into the repo, or set `force` to replace it. That is the same as `ln -f`.
-- **A directory at `path` is always an error,** even with `force`, because replacing it would throw away everything in
-  it. `ln -f` won't replace a directory either.
+- **A regular file at `path` is an error** unless `force: true`, like `'/home/adam/.config/fish/config.fish' is a
+  regular file, so link won't replace it without force: true`. This is the first run for dotfiles, where the real file
+  still sits where the link will go. Move it into the repo, or set `force` to replace it. That is the same as `ln -f`,
+  and there's no backup.
+- **An empty directory at `path` is an error** unless `force: true`, like Ansible, because nothing can be lost.
+- **A directory with anything in it is always an error,** even with `force`, because replacing it would throw away
+  everything in it. A hidden file counts. Anything else that isn't a link or a regular file, like a socket, is always
+  an error too.
 - **`sudo` works as it does for `file`.** The state command and the write both run as root.
-- **The output** shows `new link` for a new link, and a changed target as an attribute line, like
-  `target: ~/old/config.fish -> ~/dotfiles/fish/config.fish`. Forcing out a regular file shows `replaces a file`.
-- **The write** makes the link under a temp name next to `path`, then renames it into place, so there is never a moment
-  with nothing at `path`. Renaming over an existing link to a directory follows that link with a plain `mv`, so the
-  write has to avoid that. GNU has `mv -T`, and BSD differs, which gets settled when this is built.
-- **There's no `mode`, `user`, or `group`.** A symlink's mode doesn't apply to it. `user` would need `chown -h`, and
-  is left out until a port needs a link owned by someone else.
+- **The output** shows `target: new link to /home/adam/dotfiles/fish/config.fish` for a new link, and a changed target
+  as an attribute line, like `target: /home/adam/old -> /home/adam/new`. Paths are absolute, because that's what
+  `readlink` gives back. Forcing something out shows `replaces a file` or `replaces an empty directory`.
+- **The write** makes the link in a temp directory next to `path`, then renames it into place, so there is almost never
+  a moment with nothing at `path`. The exceptions are a forced empty directory, and replacing a link to a directory on
+  busybox (see [Transport](./transport.md#link-writes)).
+- **`user` and `group` work as they do for `file`:** the value given, then what's at `path` now, then the default for
+  something new. So do its errors for `user` naming another user, and for something someone else owns. There's no
+  `mode`, because a symlink's mode doesn't apply to it. `chown -h` changes the link, not what it points to.
 - **It returns a `ChangeStepResult<"link">`,** so `needs` and `after` accept it the same as a file's. A run can follow a link
   that changed.
 

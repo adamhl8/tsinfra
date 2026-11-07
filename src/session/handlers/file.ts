@@ -5,18 +5,20 @@ import { isErr } from "ts-explicit-errors"
 import { compareFile } from "#session/handlers/file/comparison.ts"
 import type { HostFileDetails } from "#session/handlers/file/host-file-details.ts"
 import { getHostFileDetails } from "#session/handlers/file/host-file-details.ts"
-import type { FileMode } from "#session/handlers/file/mode.ts"
-import { OCTAL_MODE_PATTERN, SYMBOLIC_MODE_PATTERN } from "#session/handlers/file/mode.ts"
 import { resolveContent } from "#session/handlers/file/resolved-content.ts"
 import { writeFile } from "#session/handlers/file/write.ts"
-import type { ChangeStepResult, StepNeeds } from "#session/handlers/shared/change-step-result.ts"
-import { NO_NEEDS, stepNeedsSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
-import { hostPathSchema, resolveHome } from "#session/handlers/shared/path.ts"
-import { validateInput } from "#session/handlers/validate-input.ts"
+import type { ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
+import { withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
+import type { FileAttributeOptions } from "#session/handlers/shared/filesystem/attributes.ts"
+import { fileAttributeOptionsSchema } from "#session/handlers/shared/filesystem/attributes.ts"
+import { validateHostPath } from "#session/handlers/shared/filesystem/path.ts"
+import type { NeedsOptions, SudoOptions } from "#session/handlers/shared/step-options.ts"
+import { NO_NEEDS, needsOptionsSchema } from "#session/handlers/shared/step-options.ts"
+import { validateInput } from "#session/handlers/shared/validate-input.ts"
 import type { HandlerOptions, HandlerReturn, StepContext } from "#session/step.ts"
 
 /**
- * What the file should hold: a string or bytes computed on the control machine, or a `Blob` like `Bun.file(...)` for a
+ * What the file should hold: a string or bytes computed on the control machine, or a `Blob` like `bun.file(...)` for a
  * file there.
  */
 export type FileContent = string | Uint8Array | Blob
@@ -29,47 +31,16 @@ const fileContentSchema = type
 // Write the reason here, because ArkType's summary names different types depending on the value.
 const INVALID_CONTENT_REASON = "must be a string, bytes, or a Blob"
 
-const fileOwnerSchema = type("string | number")
-export type FileOwner = typeof fileOwnerSchema.infer
-
-/** What a file step manages besides its content. An existing file keeps its own value of any left out. */
-export interface FileAttributeOptions {
-  /**
-   * The file's mode, in octal like `"644"`, symbolic like `"rw-r--r--"`, or a constant like `PUBLIC_FILE_MODE`. An
-   * existing file keeps its own when this is left out.
-   */
-  mode?: FileMode
-  /** The user that owns the file: a name is compared with its name, and a number with its uid. */
-  user?: FileOwner
-  /** The group that owns the file: a name is compared with its name, and a number with its gid. */
-  group?: FileOwner
-}
-
-export type FileAttributeName = keyof FileAttributeOptions
-
-export interface FileOptions extends FileAttributeOptions {
+export interface FileOptions extends FileAttributeOptions, SudoOptions, NeedsOptions {
   /** Never fetches or shows the old content, because it may hold a secret. */
   secret?: boolean
-  /** Runs the file details command, the diff, and the write as root, in `plan` as well as `apply`. */
-  sudo?: boolean
-  /**
-   * Earlier steps this step depends on. In `plan`, the step waits instead of reading the file when one of them would
-   * change or is waiting.
-   */
-  needs?: StepNeeds
 }
 
 // Validate the options at runtime too, because a script can get past the types, like with `as` or `@ts-ignore`.
 // Set the defaults in a pipe, because ArkType only allows a default on a required key.
 const fileOptionsSchema = type
   .declare<HandlerOptions<FileOptions>>()
-  .type({
-    "mode?": type(OCTAL_MODE_PATTERN).or(type(SYMBOLIC_MODE_PATTERN)),
-    "user?": fileOwnerSchema,
-    "group?": fileOwnerSchema,
-    "secret?": "boolean",
-    "needs?": stepNeedsSchema,
-  })
+  .type(fileAttributeOptionsSchema.merge(needsOptionsSchema).merge({ "secret?": "boolean" }))
   .pipe((options) => ({ secret: false, needs: NO_NEEDS, ...options }))
 
 /** The options after validation, with their defaults set. */
@@ -81,12 +52,9 @@ export const handleFile = async (
   content: unknown,
   options: unknown = {},
 ): Promise<Result<HandlerReturn<ChangeStepResult<"file">>>> => {
-  const { kind, home, shell, converge } = ctx
+  const { kind, shell, home, converge } = ctx
 
-  const validPath = validateInput(path, hostPathSchema, { inputLabel: "path", givenTo: kind })
-  if (isErr(validPath)) return validPath
-
-  const absolutePath = resolveHome(validPath, home)
+  const absolutePath = validateHostPath(path, home, { inputLabel: "path", givenTo: kind })
   if (isErr(absolutePath)) return absolutePath
 
   const validContent = validateInput(content, fileContentSchema, {

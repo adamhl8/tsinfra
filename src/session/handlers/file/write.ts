@@ -1,13 +1,19 @@
-import nodePath from "node:path"
+import { Buffer } from "node:buffer"
 
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { ValidFileOptions } from "#session/handlers/file.ts"
-import type { HostFileAttributeDetails, HostFileDetails } from "#session/handlers/file/host-file-details.ts"
-import { PRIVATE_FILE_MODE, PUBLIC_FILE_MODE, toModeBits, toOctalMode } from "#session/handlers/file/mode.ts"
+import type { HostFileDetails } from "#session/handlers/file/host-file-details.ts"
 import type { ResolvedFileContent } from "#session/handlers/file/resolved-content.ts"
-import { quoteShellArg } from "#session/shell.ts"
+import type { HostFileAttributeDetails } from "#session/handlers/shared/filesystem/attributes.ts"
+import {
+  PRIVATE_FILE_MODE,
+  PUBLIC_FILE_MODE,
+  toModeBits,
+  toOctalMode,
+} from "#session/handlers/shared/filesystem/mode.ts"
+import { buildChownLines, toWriteScriptPaths } from "#session/handlers/shared/filesystem/write-script.ts"
 import type { StepContext } from "#session/step.ts"
 
 const HEREDOC_DELIMITER = "__TSINFRA_EOF__"
@@ -23,39 +29,19 @@ const getModeArg = (attributes: HostFileAttributeDetails | undefined, options: V
   return toOctalMode(bits)
 }
 
-/** Returns `chown`'s `user:group`, each the one given and then the file's own, or nothing for a new file with neither. */
-const getOwnerArg = (
-  attributes: HostFileAttributeDetails | undefined,
-  options: ValidFileOptions,
-): string | undefined => {
-  const user = options.user ?? attributes?.uid
-  const group = options.group ?? attributes?.gid
-  if (user === undefined && group === undefined) return undefined
-
-  return `${user ?? ""}${group === undefined ? "" : `:${group}`}`
-}
-
 /**
  * Returns a function that puts the given text in the heredoc of the script that writes the file (see
  * `docs/transport.md`). The real script and the recorded one differ only in that text.
  */
-const createWriteScript = (
-  path: string,
-  attributes: HostFileAttributeDetails | undefined,
-  options: ValidFileOptions,
-) => {
-  const directory = nodePath.posix.dirname(path)
-  const tempTemplate = nodePath.posix.join(directory, `.${nodePath.posix.basename(path)}.tsinfra.XXXXXX`)
+const createWriteScript = (hostFileDetails: HostFileDetails, options: ValidFileOptions) => {
+  const { path } = hostFileDetails
+  const isNewFile = hostFileDetails.kind === "new"
+  const attributes = isNewFile ? undefined : hostFileDetails.attributes
 
-  const quotedPath = quoteShellArg(path)
-  const quotedDirectory = quoteShellArg(directory)
-  const quotedTempTemplate = quoteShellArg(tempTemplate)
+  const { quotedPath, quotedDirectory, quotedTempTemplate } = toWriteScriptPaths(path)
   const modeArg = getModeArg(attributes, options)
-  const ownerArg = getOwnerArg(attributes, options)
-  const isNewFile = attributes === undefined
 
-  // Keep `--` here, because a user or group name comes from the script.
-  const chownLines = ownerArg === undefined ? [] : [`chown -- ${quoteShellArg(ownerArg)} "$tmp"`]
+  const chownLines = buildChownLines(attributes, options, '"$tmp"')
   // Ignore a failure, because `chcon` can exist on a system with SELinux off, and then it fails.
   const chconLines = isNewFile
     ? []
@@ -95,11 +81,11 @@ export const writeFile = async (
 ): Promise<Result> => {
   const { shell } = ctx
   const { path } = hostFileDetails
-  const attributes = hostFileDetails.kind === "existing" ? hostFileDetails.attributes : undefined
 
-  const withContent = createWriteScript(path, attributes, options)
+  const withContent = createWriteScript(hostFileDetails, options)
   const encodedContent = Buffer.from(resolvedContent.bytes).toString("base64")
   const script = withContent(encodedContent)
+
   const output = await shell.exec(script, {
     label: "file write",
     recordedCmd: withContent(RECORDED_CONTENT),

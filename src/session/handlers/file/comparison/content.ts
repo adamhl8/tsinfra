@@ -2,10 +2,10 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { ValidFileOptions } from "#session/handlers/file.ts"
-import type { Bytes } from "#session/handlers/file/bytes.ts"
-import { toBytes } from "#session/handlers/file/bytes.ts"
-import type { ExistingHostFileDetails } from "#session/handlers/file/host-file-details.ts"
+import type { HostFileDetails } from "#session/handlers/file/host-file-details.ts"
 import type { ResolvedFileContent } from "#session/handlers/file/resolved-content.ts"
+import type { Bytes } from "#session/handlers/shared/filesystem/bytes.ts"
+import { toBytes } from "#session/handlers/shared/filesystem/bytes.ts"
 import type { Shell } from "#session/shell.ts"
 import { quoteShellArg } from "#session/shell.ts"
 
@@ -31,18 +31,23 @@ const REPLACEMENT_CHARACTER = "\uFFFD"
 // Treat text with a NUL byte, or that wasn't valid UTF-8, as binary, because a line diff of it would be noise.
 const isBinary = (text: string): boolean => text.includes("\0") || text.includes(REPLACEMENT_CHARACTER)
 
-/** Works out how the content differs, fetching the old content only when the output can show a diff of it. */
+/**
+ * Works out how the content differs, fetching the old content only when the output can show a diff of it. A new file
+ * compares only by its size.
+ */
 export const compareContent = async (
   shell: Shell,
-  hostFileDetails: ExistingHostFileDetails,
+  hostFileDetails: HostFileDetails,
   resolvedContent: ResolvedFileContent,
   options: ValidFileOptions,
 ): Promise<Result<ContentComparison>> => {
+  const wantSize = resolvedContent.size
+  if (hostFileDetails.kind === "new") return { kind: "new", wantSize }
+
   const { path, content: hostContentDetails } = hostFileDetails
   const { secret } = options
 
   const gotSize = hostContentDetails.size
-  const wantSize = resolvedContent.size
 
   if (hostContentDetails.hash === resolvedContent.hash) return { kind: "same" }
   if (secret) return { kind: "hidden", gotSize, wantSize }
