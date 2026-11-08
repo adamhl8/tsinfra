@@ -316,12 +316,12 @@ const previewPass = async (pass: PreviewPass) => {
 
     const hostReports: HostReport[] = []
     const scenarios = createScenarios(dir).filter((scenario) => (scenario.pass ?? "applyVerbose") === pass)
-    const preparedHosts = await prepareHosts(
+    const hostEntries = await prepareHosts(
       scenarios.map((scenario) => Object.assign(scenario, { options: { sudo: false } })),
     )
-    for (const preparedHost of preparedHosts) {
+    for (const hostEntry of hostEntries) {
       // oxlint-disable-next-line no-await-in-loop - hosts run one at a time, the same as the CLI
-      const hostReport = await runHost(preparedHost, mode)
+      const hostReport = await runHost(hostEntry, mode)
       hostReports.push(hostReport)
 
       const block = formatHostBlock(hostReport, { verbose })

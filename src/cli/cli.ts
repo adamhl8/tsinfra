@@ -25,13 +25,13 @@ const runTsinfra = async (): Promise<Result<number>> => {
   const loadedHosts = await loadHosts(hostScripts)
   if (isErr(loadedHosts)) return loadedHosts
 
-  const preparedHosts = await prepareHosts(loadedHosts)
+  const hostEntries = await prepareHosts(loadedHosts)
 
   const hostReports: HostReport[] = []
 
-  for (const preparedHost of preparedHosts) {
+  for (const hostEntry of hostEntries) {
     // oxlint-disable-next-line no-await-in-loop - hosts run one at a time until there's a parallel option
-    const hostReport = await runHost(preparedHost, config.mode)
+    const hostReport = await runHost(hostEntry, config.mode)
     hostReports.push(hostReport)
 
     const hostBlock = formatHostBlock(hostReport, { verbose: config.verbose })

@@ -14,14 +14,14 @@ const ANY_FUNCTION: HostFunction = expect.any(Function)
 
 const toHostScript = (dir: string, name: string) => ({ name, file: path.join(FIXTURES, dir, `${name}.ts`) })
 
-/** Loads the host scripts and returns their entries, or the error's message chain. */
+/** Loads the host scripts and returns their loaded hosts, or the error's message chain. */
 const loadOrMessage = async (hostScripts: HostScript[]) => {
   const loadedHosts = await loadHosts(hostScripts)
   return isErr(loadedHosts) ? messageChain(loadedHosts) : loadedHosts
 }
 
 describe("loadHosts", () => {
-  it("should return each host script's entry", async () => {
+  it("should return each host script's loaded host", async () => {
     const loadedHosts = await loadHosts([toHostScript("hosts", "a"), toHostScript("hosts", "b")])
 
     expect(loadedHosts).toStrictEqual([

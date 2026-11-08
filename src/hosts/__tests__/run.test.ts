@@ -4,7 +4,7 @@ import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
-import { attempt, isErr, messageChain } from "ts-explicit-errors"
+import { attempt, messageChain } from "ts-explicit-errors"
 
 import { prepareAndRunHost, toLoadedHost } from "#__tests__/session.ts"
 import type { HostFunction } from "#hosts/host.ts"
@@ -64,13 +64,13 @@ describe("prepareHosts", () => {
     const touchMarker = async (h: Host) => {
       await h.read(`touch '${marker}'`)
     }
-    const preparedHosts = await prepareHosts([
+    const hostEntries = await prepareHosts([
       toLoadedHost("a", host("@local", touchMarker)),
       toLoadedHost("b", host("b.lan", touchMarker)),
       toLoadedHost("c", host("@local", touchMarker)),
     ])
 
-    expect(preparedHosts.map(({ loadedHost, hostContext }) => [loadedHost.name, isErr(hostContext)])).toStrictEqual([
+    expect(hostEntries.map((hostEntry) => [hostEntry.loadedHost.name, "failure" in hostEntry])).toStrictEqual([
       ["a", false],
       ["b", true],
       ["c", false],

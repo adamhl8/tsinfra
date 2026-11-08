@@ -3,6 +3,7 @@ import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
+import type { Result } from "ts-explicit-errors"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
@@ -14,7 +15,7 @@ import type { EnsureOptions } from "#session/handlers/ensure.ts"
 import type { Want } from "#session/handlers/ensure/check.ts"
 import type { RunOptions } from "#session/handlers/run.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
-import type { Host } from "#session/session.ts"
+import type { Host, HostContext } from "#session/session.ts"
 import { createHostSession } from "#session/session.ts"
 import type { Transport } from "#transport/transport.ts"
 
@@ -39,15 +40,21 @@ export const toLoadedHost = (name: string, hostDefinition: HostDefinition): Load
 })
 
 /** Prepares one host the way a run does. */
-export const prepareHost = async (loadedHost: LoadedHost) => {
-  const [preparedHost] = await prepareHosts([loadedHost])
-  if (!preparedHost) throw new Error("prepareHosts returned no host")
-  return preparedHost
+const prepareHostEntry = async (loadedHost: LoadedHost) => {
+  const [hostEntry] = await prepareHosts([loadedHost])
+  if (!hostEntry) throw new Error("prepareHosts returned no host")
+  return hostEntry
+}
+
+/** Prepares one host the way a run does, and returns its context, or why it couldn't be prepared. */
+export const prepareHostContext = async (loadedHost: LoadedHost): Promise<Result<HostContext>> => {
+  const hostEntry = await prepareHostEntry(loadedHost)
+  return "failure" in hostEntry ? hostEntry.failure : hostEntry.hostContext
 }
 
 /** Prepares a host 'a' on `@local`. */
 export const buildLocalHostContext = async (hostOptions?: HostOptions) =>
-  (await prepareHost(toLoadedHost("a", host("@local", doNothing, hostOptions)))).hostContext
+  prepareHostContext(toLoadedHost("a", host("@local", doNothing, hostOptions)))
 
 /** Creates a session for a host 'a' on `@local`. */
 export const createSession = async (mode: Mode = "apply", hostOptions?: HostOptions) => {
@@ -97,7 +104,7 @@ export const createFakeSudoSession = async (mode: Mode) => {
 
 /** Prepares one host and runs it, for a test that only cares about its report. */
 export const prepareAndRunHost = async (loadedHost: LoadedHost, mode: Mode) =>
-  runHost(await prepareHost(loadedHost), mode)
+  runHost(await prepareHostEntry(loadedHost), mode)
 
 /** Reads `cmd` and returns its output, or the thrown error's message chain. */
 export const readOrMessage = async (h: Host, cmd: string) => {

@@ -12,13 +12,13 @@ import type { CommandRecord, ConvergePhase, StepRecord } from "#session/step-rec
 import type { ComparisonValues, StepKind, StepStatus } from "#session/step.ts"
 import { isMultiLine } from "#utils.ts"
 
-export type EntryStatus = StepStatus | "failed"
+export type StepEntryStatus = StepStatus | "failed"
 
-/** What an entry is about: a kind of step, or the host, for a failure no step owns. */
-export type EntryKind = StepKind | "host"
+/** What a step entry is about: a kind of step, or the host, for a failure no step owns. */
+export type StepEntryKind = StepKind | "host"
 
-/** An entry's name, and what kind of name it is, which decides how it's styled. */
-interface EntryName {
+/** A step entry's name, and what kind of name it is, which decides how it's styled. */
+interface StepEntryName {
   text: string
   kind: NameKind
 }
@@ -33,13 +33,13 @@ export type NameKind =
 
 /** One step's part of a host block, as data. */
 export interface StepEntry {
-  status: EntryStatus
-  /** What the entry is about, which the head line shows before the name. */
-  kind: EntryKind
-  name: EntryName
+  status: StepEntryStatus
+  /** What the step entry is about, which the head line shows before the name. */
+  kind: StepEntryKind
+  name: StepEntryName
   /** The names of the steps a waiting step needs. */
   needs?: string[]
-  /** Why a failed entry failed. */
+  /** Why a failed step entry failed. */
   error?: Error
   /** How a value would change, or for a failure, what the step last found on the host. */
   details?: Detail[]
@@ -171,11 +171,11 @@ const toFailureDetails = (stepRecord: StepRecord, formatOptions: FormatOptions):
   return []
 }
 
-/** Returns the entry a host block shows for a step, or nothing for a step that's hidden or never finished. */
+/** Returns the step entry a host block shows for a step, or nothing for a step that's hidden or never finished. */
 const toStepEntry = (stepRecord: StepRecord, formatOptions: FormatOptions): StepEntry | undefined => {
   const { name: stepName, kind, status, comparisons, waitingOn } = stepRecord
   const { verbose = false } = formatOptions
-  const name: EntryName = { text: stepName, kind: STEP_NAME_KINDS[kind] }
+  const name: StepEntryName = { text: stepName, kind: STEP_NAME_KINDS[kind] }
 
   if (isErr(status)) {
     return {
@@ -205,7 +205,7 @@ const toStepEntry = (stepRecord: StepRecord, formatOptions: FormatOptions): Step
   return { status, kind, name, details: warningDetails }
 }
 
-/** Returns the entries a host block shows: one per step that shows, then a failure no step owns. */
+/** Returns the step entries a host block shows: one per step that shows, then a failure no step owns. */
 export const toStepEntries = (hostReport: HostReport, formatOptions: FormatOptions): StepEntry[] => {
   // Name a host that couldn't be prepared after its target, because that's what failed, and the script never ran.
   if (!hostReport.started) {

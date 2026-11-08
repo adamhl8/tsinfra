@@ -1,7 +1,7 @@
 import { messageChain } from "ts-explicit-errors"
 
 import type { HostReport } from "#hosts/run.ts"
-import type { Detail, EntryKind, EntryStatus, NameKind, StepEntry } from "#report/entries.ts"
+import type { Detail, StepEntryKind, StepEntryStatus, NameKind, StepEntry } from "#report/entries.ts"
 import { toStepEntries } from "#report/entries.ts"
 import { formatDiff } from "#report/format/diff.ts"
 import { toEnsureRows } from "#report/format/ensure.ts"
@@ -94,11 +94,11 @@ const formatAlignedRows = (alignedRows: AlignedRow[], valueColumn: number): stri
 }
 
 /**
- * Formats the lines under an entry's head line: its error in red, if any, then its details. Lines up the values of
+ * Formats the lines under a step entry's head line: its error in red, if any, then its details. Lines up the values of
  * every aligned row in the entry in one column. Indents the details under an error, so an error stands apart and its
  * details read as belonging to it.
  */
-const formatEntryBody = (stepEntry: StepEntry, formatOptions: FormatOptions): string[] => {
+const formatStepEntryBody = (stepEntry: StepEntry, formatOptions: FormatOptions): string[] => {
   const { error, details = [] } = stepEntry
   const detailRows = details.map((detail) => toDetailRows(detail, formatOptions))
 
@@ -121,22 +121,22 @@ const formatEntryBody = (stepEntry: StepEntry, formatOptions: FormatOptions): st
 /** Formats a waiting step's step note, like `needs 'A', 'B'`. */
 const formatNeedsNote = (needs: string[]): string => `needs ${quoteNames(needs)}`
 
-/** Formats an entry's status as its symbol and its word, like `~ change`. */
-const formatStatus = (status: EntryStatus): string => {
+/** Formats a step entry's status as its symbol and its word, like `~ change`. */
+const formatStatus = (status: StepEntryStatus): string => {
   const { symbol, word } = STATUS_STYLES[status]
   return `${symbol} ${word}`
 }
 
-/** Formats an entry's kind, like `(file)`, so it reads apart from the name even without color. */
-const formatEntryKind = (entryKind: EntryKind): string => `(${entryKind})`
+/** Formats a step entry's kind, like `(file)`, so it reads apart from the name even without color. */
+const formatStepEntryKind = (stepEntryKind: StepEntryKind): string => `(${stepEntryKind})`
 
-const styleEntryKind = (entryKind: EntryKind, text: string): string =>
-  entryKind === "host" ? styleHostKind(text) : styleLabel(text)
+const styleStepEntryKind = (stepEntryKind: StepEntryKind, text: string): string =>
+  stepEntryKind === "host" ? styleHostKind(text) : styleLabel(text)
 
 const formatStepEntries = (stepEntries: StepEntry[], formatOptions: FormatOptions): string[] => {
   // Pad each status and each kind to the widest in the block, so every kind and every name starts in one column.
   const statusColumn = getMaxWidth(stepEntries.map(({ status }) => `${formatStatus(status)}:`))
-  const entryKindColumn = getMaxWidth(stepEntries.map(({ kind }) => formatEntryKind(kind)))
+  const stepEntryKindColumn = getMaxWidth(stepEntries.map(({ kind }) => formatStepEntryKind(kind)))
   // Line up every step note in a block in one column, past the longest name that has one.
   const stepNoteColumn = getMaxWidth(stepEntries.filter(({ needs }) => needs).map(({ name }) => name.text))
 
@@ -145,15 +145,15 @@ const formatStepEntries = (stepEntries: StepEntry[], formatOptions: FormatOption
     const { color } = STATUS_STYLES[status]
     const stepNote = needs ? formatNeedsNote(needs) : undefined
 
-    const entryKindText = styleEntryKind(kind, padToWidth(formatEntryKind(kind), entryKindColumn))
+    const stepEntryKindText = styleStepEntryKind(kind, padToWidth(formatStepEntryKind(kind), stepEntryKindColumn))
 
     const styledName = NAME_STYLES[name.kind](name.text)
     const nameText = stepNote ? padToWidth(styledName, stepNoteColumn) : styledName
     const stepNoteText = stepNote ? `${COLUMN_GAP}${styleAside(stepNote)}` : ""
     // Leave the colon uncolored, so it reads as punctuation between the status and the kind.
     const statusText = padToWidth(`${color(formatStatus(status))}:`, statusColumn)
-    const headLine = `${INDENT}${statusText} ${entryKindText} ${nameText}${stepNoteText}`
-    const bodyLines = formatEntryBody(stepEntry, formatOptions).map((bodyLine) => `${DETAIL_INDENT}${bodyLine}`)
+    const headLine = `${INDENT}${statusText} ${stepEntryKindText} ${nameText}${stepNoteText}`
+    const bodyLines = formatStepEntryBody(stepEntry, formatOptions).map((bodyLine) => `${DETAIL_INDENT}${bodyLine}`)
 
     return [headLine, ...bodyLines]
   })

@@ -1,6 +1,6 @@
 import pc from "picocolors"
 
-import type { EntryStatus } from "#report/entries.ts"
+import type { StepEntryStatus } from "#report/entries.ts"
 
 /** Styles a piece of text, like `styleGot` or a color from picocolors. */
 export type Style = (text: string) => string
@@ -9,7 +9,7 @@ export type Style = (text: string) => string
  * Gives each status its color, symbol, and word. One color per status keeps a step's symbol and its count in the
  * summary matching. The words have no tense, because a line reads the same in `plan`, where nothing has changed yet.
  */
-export const STATUS_STYLES: Record<EntryStatus, { color: Style; symbol: string; word: string }> = {
+export const STATUS_STYLES: Record<StepEntryStatus, { color: Style; symbol: string; word: string }> = {
   unchanged: { color: pc.green, symbol: "=", word: "unchanged" },
   observed: { color: pc.gray, symbol: "·", word: "observed" },
   changed: { color: pc.yellow, symbol: "~", word: "change" },

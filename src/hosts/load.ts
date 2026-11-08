@@ -24,7 +24,7 @@ const loadHost = async (hostScript: HostScript): Promise<Result<LoadedHost>> => 
   return { name, ...validModule.default }
 }
 
-/** Imports each host script and returns its entry, or an error that lists every file that failed. */
+/** Imports each host script and returns its loaded host, or an error that lists every file that failed. */
 export const loadHosts = async (hostScripts: HostScript[]): Promise<Result<LoadedHost[]>> => {
   const { values: loadedHosts, errors } = await filterMap(hostScripts, loadHost)
   if (errors) return err(`failed to load hosts:\n${errors.map((error) => messageChain(error)).join("\n")}`, undefined)

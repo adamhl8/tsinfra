@@ -44,11 +44,20 @@ export const getExitCode = (hostReports: HostReport[], mode: Mode): number => {
   return mode === "plan" && hasAnyDrift ? DRIFT_EXIT_CODE : 0
 }
 
-/** A loaded host and what preparing it gave, which `runHost` reports when it's an error. */
-export interface PreparedHost {
+/** A host that preflight prepared, ready to run. */
+interface PreparedHostEntry {
   loadedHost: LoadedHost
-  hostContext: Result<HostContext>
+  hostContext: HostContext
 }
+
+/** A host that preflight couldn't prepare, like an unreachable one, so its script never runs. */
+interface UnpreparedHostEntry {
+  loadedHost: LoadedHost
+  failure: Error
+}
+
+/** What preparing a host gave: a host ready to run, or one that couldn't be prepared. */
+export type HostEntry = PreparedHostEntry | UnpreparedHostEntry
 
 /** Finishes a host's details, prompting for its sudo password when it has no transport yet, and builds its context. */
 const buildHostContext = async (
@@ -67,28 +76,28 @@ const buildHostContext = async (
  * Prepares every host at once, before any script runs, and keeps them in order. Prompts for sudo passwords after every
  * host is prepared, one host at a time, so the prompts come in the hosts' order.
  */
-export const prepareHosts = async (loadedHosts: LoadedHost[]): Promise<PreparedHost[]> => {
+export const prepareHosts = async (loadedHosts: LoadedHost[]): Promise<HostEntry[]> => {
   const builtHostDetails = await Promise.all(
     loadedHosts.map(async (loadedHost) => ({ loadedHost, hostDetails: await buildHostDetails(loadedHost) })),
   )
 
-  const preparedHosts: PreparedHost[] = []
+  const hostEntries: HostEntry[] = []
   for (const { loadedHost, hostDetails } of builtHostDetails) {
     // oxlint-disable-next-line no-await-in-loop - prompts run one at a time
     const hostContext = isErr(hostDetails) ? hostDetails : await buildHostContext(loadedHost, hostDetails)
-    preparedHosts.push({ loadedHost, hostContext })
+    const hostEntry = isErr(hostContext) ? { loadedHost, failure: hostContext } : { loadedHost, hostContext }
+    hostEntries.push(hostEntry)
   }
-  return preparedHosts
+  return hostEntries
 }
 
 /** Calls the script's host function with its `Host`, catches what it throws, and reports what the host did. */
-export const runHost = async (preparedHost: PreparedHost, mode: Mode): Promise<HostReport> => {
-  const { loadedHost, hostContext } = preparedHost
-  const { name, target, fn: hostFunction } = loadedHost
-  if (isErr(hostContext))
-    return { name, target, started: false, failure: err("failed to prepare the host", hostContext) }
+export const runHost = async (hostEntry: HostEntry, mode: Mode): Promise<HostReport> => {
+  const { name, target, fn: hostFunction } = hostEntry.loadedHost
+  if ("failure" in hostEntry)
+    return { name, target, started: false, failure: err("failed to prepare the host", hostEntry.failure) }
 
-  const { host, stepRecords, getFailure } = createHostSession(hostContext, mode)
+  const { host, stepRecords, getFailure } = createHostSession(hostEntry.hostContext, mode)
   const fnResult = await attempt(async () => hostFunction(host))
 
   // Report the failure recorded in the session first, because a script that catches it can go on to throw something else.
