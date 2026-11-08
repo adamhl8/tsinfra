@@ -7,7 +7,7 @@ import bun from "bun"
 import { isErr, messageChain } from "ts-explicit-errors"
 
 import { writeFakeTool } from "#__tests__/session.ts"
-import { resolveHostSudo } from "#session/host-sudo.ts"
+import { resolveHostSudo } from "#session/host-context/host-sudo.ts"
 import { runLocal } from "#transport/local.ts"
 import type { Transport } from "#transport/transport.ts"
 

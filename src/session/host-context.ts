@@ -2,7 +2,7 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { LoadedHost } from "#hosts/load.ts"
-import { resolveHostSudo } from "#session/host-sudo.ts"
+import { resolveHostSudo } from "#session/host-context/host-sudo.ts"
 import { createShell } from "#session/shell.ts"
 import type { Transport } from "#transport/transport.ts"
 import { getTransport } from "#transport/transport.ts"
