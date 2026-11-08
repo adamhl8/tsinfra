@@ -9,12 +9,11 @@ import type { Mode } from "#cli/program.ts"
 import type { HostDefinition, HostOptions } from "#hosts/host.ts"
 import { host, hostDefinitionSchema } from "#hosts/host.ts"
 import type { LoadedHost } from "#hosts/load.ts"
-import { prepareHost, runHost } from "#hosts/run.ts"
+import { prepareHosts, runHost } from "#hosts/run.ts"
 import type { EnsureOptions } from "#session/handlers/ensure.ts"
 import type { Want } from "#session/handlers/ensure/check.ts"
 import type { RunOptions } from "#session/handlers/run.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
-import { buildHostContext } from "#session/host-context.ts"
 import type { Host } from "#session/session.ts"
 import { createHostSession } from "#session/session.ts"
 import type { Transport } from "#transport/transport.ts"
@@ -39,9 +38,16 @@ export const toLoadedHost = (name: string, hostDefinition: HostDefinition): Load
   ...hostDefinitionSchema.assert(hostDefinition),
 })
 
+/** Prepares one host the way a run does. */
+export const prepareHost = async (loadedHost: LoadedHost) => {
+  const [preparedHost] = await prepareHosts([loadedHost])
+  if (!preparedHost) throw new Error("prepareHosts returned no host")
+  return preparedHost
+}
+
 /** Prepares a host 'a' on `@local`. */
 export const buildLocalHostContext = async (hostOptions?: HostOptions) =>
-  buildHostContext(toLoadedHost("a", host("@local", doNothing, hostOptions)))
+  (await prepareHost(toLoadedHost("a", host("@local", doNothing, hostOptions)))).hostContext
 
 /** Creates a session for a host 'a' on `@local`. */
 export const createSession = async (mode: Mode = "apply", hostOptions?: HostOptions) => {

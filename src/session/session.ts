@@ -21,12 +21,20 @@ import { sudoOptionsSchema } from "#session/handlers/shared/step-options.ts"
 import { validateInput } from "#session/handlers/shared/validate-input.ts"
 import type { ChangeTools, Exec, Inspect, InspectResult, ReadTools } from "#session/handlers/tools.ts"
 import { execCommand, inspectCommand } from "#session/handlers/tools.ts"
-import type { HostContext } from "#session/host-context.ts"
 import { createStepShell } from "#session/shell.ts"
 import type { StepRecord } from "#session/step-recorder.ts"
 import { createStepRecorder } from "#session/step-recorder.ts"
 import type { HandlerReturn, StepContext, StepKind } from "#session/step.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
+import type { Transport } from "#transport/transport.ts"
+
+/** What a host's session needs, set up before any script runs. */
+export interface HostContext {
+  name: string
+  transport: Transport
+  /** The SSH user's home directory. It's empty when `$HOME` isn't set. */
+  home: string
+}
 
 // Extend `Record<StepKind, unknown>` so a step kind with no method fails to compile.
 /** What a host's function is given. Each method call is one step, and steps run one at a time at the top level. */

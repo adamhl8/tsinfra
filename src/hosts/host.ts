@@ -12,7 +12,10 @@ export type HostSudo = boolean | { password: string }
 
 /** What a host script can set besides its target and function. */
 export interface HostOptions {
-  /** Declares that the host's commands use sudo, so preflight can make sure sudo works (see `docs/transport.md`). */
+  /**
+   * Declares that the host's script uses sudo, so preflight makes sure sudo works before any host changes anything. Set
+   * it even with passwordless sudo, and give `{ password }` only when the run can't prompt (see `docs/transport.md`).
+   */
   sudo?: HostSudo
 }
 

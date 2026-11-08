@@ -3,8 +3,9 @@ import { attempt, err, isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
 import type { LoadedHost } from "#hosts/load.ts"
-import type { HostContext } from "#session/host-context.ts"
-import { buildHostContext } from "#session/host-context.ts"
+import type { HostDetails, ReadyHostDetails } from "#session/host-details.ts"
+import { buildHostDetails, finishHostDetails } from "#session/host-details.ts"
+import type { HostContext } from "#session/session.ts"
 import { createHostSession } from "#session/session.ts"
 import type { StepRecord } from "#session/step-recorder.ts"
 
@@ -49,15 +50,36 @@ export interface PreparedHost {
   hostContext: Result<HostContext>
 }
 
-/** Prepares one host. */
-export const prepareHost = async (loadedHost: LoadedHost): Promise<PreparedHost> => {
-  const hostContext = await buildHostContext(loadedHost)
-  return { loadedHost, hostContext }
+/** Finishes a host's details, prompting for its sudo password when it has no transport yet, and builds its context. */
+const buildHostContext = async (
+  loadedHost: LoadedHost,
+  hostDetails: HostDetails | ReadyHostDetails,
+): Promise<Result<HostContext>> => {
+  const readyHostDetails = "transport" in hostDetails ? hostDetails : await finishHostDetails(loadedHost, hostDetails)
+  if (isErr(readyHostDetails)) return readyHostDetails
+
+  const { name } = loadedHost
+  const { home, transport } = readyHostDetails
+  return { name, transport, home }
 }
 
-/** Prepares every host at once, before any script runs, and keeps them in order. */
-export const prepareHosts = async (loadedHosts: LoadedHost[]): Promise<PreparedHost[]> =>
-  Promise.all(loadedHosts.map(async (loadedHost) => prepareHost(loadedHost)))
+/**
+ * Prepares every host at once, before any script runs, and keeps them in order. Prompts for sudo passwords after every
+ * host is prepared, one host at a time, so the prompts come in the hosts' order.
+ */
+export const prepareHosts = async (loadedHosts: LoadedHost[]): Promise<PreparedHost[]> => {
+  const builtHostDetails = await Promise.all(
+    loadedHosts.map(async (loadedHost) => ({ loadedHost, hostDetails: await buildHostDetails(loadedHost) })),
+  )
+
+  const preparedHosts: PreparedHost[] = []
+  for (const { loadedHost, hostDetails } of builtHostDetails) {
+    // oxlint-disable-next-line no-await-in-loop - prompts run one at a time
+    const hostContext = isErr(hostDetails) ? hostDetails : await buildHostContext(loadedHost, hostDetails)
+    preparedHosts.push({ loadedHost, hostContext })
+  }
+  return preparedHosts
+}
 
 /** Calls the script's host function with its `Host`, catches what it throws, and reports what the host did. */
 export const runHost = async (preparedHost: PreparedHost, mode: Mode): Promise<HostReport> => {

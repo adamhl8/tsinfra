@@ -470,8 +470,7 @@ await h.file("/etc/sudoers.d/adam", sudoers, {
 
 Under `sudo: true`, every part runs as root: the file details script, the `cat` for the diff, and the write. tsinfra writes all of
 those commands, so there is nowhere for a script to add `sudo` itself. This means `plan` also needs sudo on a host that
-manages such a file, and a host whose sudo needs a password declares it on `host()` (see
-[Transport](./transport.md#sudo)).
+manages such a file, and the host declares `sudo` on `host()` (see [Transport](./transport.md#sudo)).
 
 `sudo` isn't the default, because a file written as root under `~` would end up owned by root, and because a host that
 never escalates shouldn't need sudo set up. A `file` step only escalates when it asks to.
@@ -925,8 +924,8 @@ not state a check can read, so it works like a [`run`](#run):
   polls until the host answers. Then it reads the boot id again. An unchanged boot id fails the step with
   `the host didn't reboot`, so a host that never went down doesn't count, the same check Ansible's `reboot` makes.
 - **One `timeout`** covers going down and coming back. Ansible splits it in two, which mostly helps it word its errors.
-- **It escalates like any command,** through the `sudo` function, so a host whose sudo needs a password declares it on
-  `host()` (see [Transport](./transport.md#sudo)).
+- **It escalates like any command,** through the `sudo` function, so the host declares `sudo` on `host()` (see
+  [Transport](./transport.md#sudo)).
 - **`@local` refuses it,** with `can't reboot @local, because it's the machine tsinfra runs on`.
 - **It's a top-level step.** A fix that installs a kernel doesn't reboot by itself, and the script follows that step
   with `h.reboot`.

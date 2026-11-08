@@ -129,8 +129,9 @@ The output is a report, not a log. tsinfra renders it from each host's [record](
 formatting functions, because no library draws this layout. A logging library formats one event per line, with a level
 and a timestamp, and would not help with blocks, aligned columns, or diffs.
 
-- **Streams.** The whole report goes to stdout, failures included. stderr is only for tsinfra's own errors: a usage
-  error, or hosts that can't be discovered or loaded. Those print through Optique's `printError`, so they look like the
+- **Streams.** The whole report goes to stdout, failures included. stderr is only for tsinfra's own errors and the sudo
+  password prompt (see [Transport](./transport.md#sudo)). The errors are a usage error, or hosts that can't be
+  discovered or loaded. Those print through Optique's `printError`, so they look like the
   parser's own errors. They happen before any host runs, so they never mix with a report. A theme passed to both
   `run()` and `printError` makes the `Error:` label red and bold. Optique colors stderr only when it is a terminal.
 - **Colors** come from [picocolors](https://github.com/alexeyraspopov/picocolors). It follows `NO_COLOR`,

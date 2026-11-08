@@ -51,8 +51,8 @@ run_tests() {
 
 run_tests "the test suite as a non-root user" tester
 run_tests "the test suite as root" root
-run_tests "real sudo and real root" tester ./src/session/handlers/__tests__/file-sudo.docker.ts ./src/session/handlers/__tests__/link-sudo.docker.ts ./src/session/host-context/__tests__/sudo-passwordless.docker.ts
-run_tests "a user whose sudo needs a password" sudopw ./src/session/host-context/__tests__/sudo-password.docker.ts
+run_tests "real sudo and real root" tester ./src/session/handlers/__tests__/file-sudo.docker.ts ./src/session/handlers/__tests__/link-sudo.docker.ts ./src/session/host-details/__tests__/sudo-passwordless.docker.ts
+run_tests "a user whose sudo needs a password" sudopw ./src/session/host-details/__tests__/sudo-password.docker.ts ./src/session/host-details/__tests__/sudo-prompt.docker.ts
 run_tests "a user with no sudo rule" nopass ./src/session/handlers/__tests__/file-no-sudo.docker.ts
 
 exit "$failed"

@@ -29,7 +29,7 @@ export const WRITE_ASKPASS_HELPER_SCRIPT = [
 ].join("\n")
 
 // Use `-n`, because a `sudo` that needs a password would otherwise prompt on a local terminal, in the middle of the report.
-const NO_PASSWORD_SUDO_FUNCTION = `sudo() { command sudo -n "$@"; }`
+const PASSWORDLESS_SUDO_FUNCTION = `sudo() { command sudo -n "$@"; }`
 
 /** Returns the `sudo` function that gives sudo `password` through the askpass helper. */
 const buildAskpassSudoFunction = (password: string): string =>
@@ -45,8 +45,8 @@ const withSudoFunction =
     transport(`${sudoFunction}\n${cmd}`)
 
 /** Returns a transport whose scripts' `sudo` fails instead of asking for a password. */
-export const createNoPasswordSudoTransport = (transport: Transport): Transport =>
-  withSudoFunction(transport, NO_PASSWORD_SUDO_FUNCTION)
+export const createPasswordlessSudoTransport = (transport: Transport): Transport =>
+  withSudoFunction(transport, PASSWORDLESS_SUDO_FUNCTION)
 
 /** Returns a transport whose scripts' `sudo` gets `password` through the askpass helper. */
 export const createAskpassSudoTransport = (transport: Transport, password: string): Transport =>

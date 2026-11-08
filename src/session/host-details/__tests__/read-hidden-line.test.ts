@@ -2,32 +2,15 @@ import { describe, expect, it } from "bun:test"
 import path from "node:path"
 import process from "node:process"
 
-import { Terminal, spawn } from "bun"
+import { answerPrompts } from "#__tests__/terminal.ts"
 
 const FIXTURE = path.join(import.meta.dir, "fixtures", "read-hidden-line.ts")
 const PROMPT = "password: "
 
-/**
- * Runs the fixture in a terminal and types `keys` once the prompt shows. Returns everything the terminal showed, and
- * the signal that ended the process, if any.
- */
+/** Runs the fixture in a terminal and types `keys` once the prompt shows. */
 const typeIntoPrompt = async (keys: string) => {
-  const decoder = new TextDecoder()
-  let screen = ""
-  const { promise: prompted, resolve } = Promise.withResolvers<string>()
-  await using terminal = new Terminal({
-    data: (_terminal, data) => {
-      screen += decoder.decode(data, { stream: true })
-      if (screen.includes(PROMPT)) resolve(screen)
-    },
-  })
-
-  const subprocess = spawn([process.execPath, FIXTURE], { terminal })
-  await prompted
-  terminal.write(keys)
-  await subprocess.exited
-
-  return { screen, signalCode: subprocess.signalCode ?? undefined }
+  const { screen, signalCode } = await answerPrompts([process.execPath, FIXTURE], PROMPT, [keys])
+  return { screen, signalCode }
 }
 
 /** Returns what the terminal shows when the reader returns `line` and leaves stdin as it found it. */

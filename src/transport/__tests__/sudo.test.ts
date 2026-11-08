@@ -16,7 +16,7 @@ const rootTransport = createRootTransport(async (cmd) => runLocal(`sudo() { "$@"
 /** Runs `script` with `home` as `$HOME`, so the askpass helper goes under it instead of the real home. */
 const runInHome = async (home: string, cmd: string) => runLocal(`HOME='${home}'\n${cmd}`)
 
-describe("createNoPasswordSudoTransport", () => {
+describe("createPasswordlessSudoTransport", () => {
   it("should add -n to a script's own sudo, and stay off the record", async () => {
     const { hostSession, readSudoCalls } = await createFakeSudoSession("plan")
 

@@ -7,7 +7,7 @@ import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
 import { attempt, isErr } from "ts-explicit-errors"
 
-import { createFakeSudoSession, prepareAndRunHost, toLoadedHost } from "#__tests__/session.ts"
+import { createFakeSudoSession, prepareAndRunHost, prepareHost, toLoadedHost } from "#__tests__/session.ts"
 import type { Mode } from "#cli/program.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
@@ -15,7 +15,6 @@ import { formatHostBlock } from "#report/format.ts"
 import { formatSummary } from "#report/format/summary.ts"
 import type { EnsureOptions } from "#session/handlers/ensure.ts"
 import type { Want } from "#session/handlers/ensure/check.ts"
-import { buildHostContext } from "#session/host-context.ts"
 import type { Host } from "#session/session.ts"
 import { createHostSession } from "#session/session.ts"
 import type { Transport } from "#transport/transport.ts"
@@ -519,7 +518,7 @@ describe("formatHostBlock for a host state that still differs after the fix", ()
  * differs.
  */
 const createNoisySession = async (filePath: string) => {
-  const hostContext = await buildHostContext(toLoadedHost("a", host("@local", changeOnce)))
+  const { hostContext } = await prepareHost(toLoadedHost("a", host("@local", changeOnce)))
   if (isErr(hostContext)) throw hostContext
 
   const transport: Transport = async (cmd) => {

@@ -47,26 +47,9 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
       1. **The option, the check, and askpass for a password given in `host()`.** `sudo?: true | { password }` on
          `host()`, the `sudo -n -k true` check in preflight, and the askpass preamble with `~/.tsinfra/askpass.sh` on a
          host given a password.
-      2. **The prompt.** A host with `sudo: true` that needs a password prompts in preflight, one host at a time, like
-         `To run host 'macbook', enter the sudo password for 'adam' (press Ctrl-D to skip this host, or Ctrl-C to
-         cancel the entire run): `, with the input hidden. In three steps, each with its tests:
-         1. **The `-S` check.** Check every password, from `host()` or a prompt, with
-            `printf '%s\n' <password> | sudo -k -S -p '' true` on the base transport. sudo makes one
-            try and stops at the end of stdin. The askpass check makes three tries and logs three failures.
-            `resolveHostSudo` checks the host's `sudo` option and returns the transport with the `sudo` function it
-            needs.
-         2. **Reading hidden input.** `readHiddenLine`, on `node:readline` with its output muted, so it edits the
-            line like readline does without echoing it. Ctrl-C ends the run with exit 130, and Ctrl-D anywhere in the
-            line skips the host. `@inquirer/password` and `@clack/prompts` hang on Ctrl-D, and `@clack/core` needs as
-            much code as readline does. Test it under Bun's PTY (`spawn({ terminal })`).
-         3. **Wiring it up.** When the `-n` check fails on a `sudo: true` host and both stdin and stderr are TTYs,
-            read the user with `id -un` and prompt. A wrong try prints `Sorry, try again.`, and three fail the host
-            with `incorrect sudo password`. Otherwise the host fails with the message from piece 1. Check stderr too,
-            because the prompt goes there, and a run with stderr redirected would wait on a prompt nobody sees. sudo
-            prompts on `/dev/tty` instead, which survives redirects, but Bun 1.4.4 can't read from it. A lock in the
-            prompt module keeps prompts one host at a time, and `prepareHosts` stays parallel. Remove the `knip.ts`
-            ignore for `read-hidden-line.ts`. Test it in Docker as a user whose sudo needs a password, with the CLI
-            under a PTY.
+      2. **The prompt.** A `sudo: true` host whose sudo needs a password prompts for it in preflight, after every host
+         is prepared, one host at a time in the hosts' order. Every password is checked with `sudo -k -S`, so a wrong
+         one logs one failed try, and `readHiddenLine` reads it with `node:readline` muted.
       3. **The hint for a host that doesn't declare `sudo`.** Its `sudo` stays `sudo -n`, and a failure for want of a
          password gets `host() needs sudo: true` added. Detect it by sudo's `a password is required` message, because a
          `sudo -n true` probe before each call is wrong on hosts whose sudoers allow only some commands without a

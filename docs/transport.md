@@ -246,21 +246,28 @@ Commands say `sudo` themselves, exactly where they need it, like `fix: "sudo sys
 No command step or tool takes a `sudo` option. `file` and `link` do, because tsinfra writes their commands, so there's
 nowhere else to put it (see [Steps](./steps.md#sudo-and-permissions)).
 
-A host whose sudo needs a password declares `sudo` on `host()`. It's off by default, and a passwordless host can leave
-it off, because its `sudo` runs as `sudo -n`, which works there:
+A host whose script uses sudo declares `sudo` on `host()`, whether that's a command's own `sudo` or `sudo: true` on
+`file` or `link`. It's off by default:
 
 ```ts
 export default host("macbook", fn, { sudo: true }) // prompts when passwordless sudo isn't set up
 export default host("incus.lan", fn, { sudo: { password: incusSudo } }) // a password the script decrypted, never prompts
 ```
 
-One option has both forms, because a password already implies sudo. The Incus containers have passwordless sudo
-through cloud-init. The Mac and the first run on the Incus host need a password.
+- **Declare `sudo: true` even with passwordless sudo.** There it only adds a check in preflight, with no prompt and no
+  password. A broken sudo then fails in preflight, before any host changes anything. Without it, the host fails at the
+  first `sudo` that needs a password, after the steps before it have run.
+- **Give `{ password }` only when the run can't prompt,** like in CI or a cron job. A password already implies sudo, so
+  one option has both forms.
+
+The Incus containers have passwordless sudo through cloud-init, so `sudo: true` only checks it there. The Mac and the
+first run on the Incus host need a password.
 
 **Preflight.** Every host is prepared before any script runs: connect, read `$HOME`, and for a host that declares
-`sudo`, check it. Then the scripts run, one after another or in parallel. Prompts happen in between, one host at a time,
-so they never mix with a running host's output. A host that can't be reached fails here, before any other host changes
-anything. A host has to declare `sudo` because of this: by the time its script runs, it's too late to ask.
+`sudo`, check it. That happens for every host at once. Then the hosts that need a password prompt, one at a time, in the
+hosts' order. Then the scripts run, one after another or in parallel, so a prompt never mixes with a running host's
+output. A host that can't be reached fails here, before any other host changes anything. A host has to declare `sudo`
+because of this: by the time its script runs, it's too late to ask.
 
 - **The check** runs with no `sudo` function in front of it, and ignores cached credentials with `-k`. With
   `sudo: true`, it runs `sudo -n -k true`, so it works only when sudo needs no password. A password is checked by
@@ -275,13 +282,25 @@ anything. A host has to declare `sudo` because of this: by the time its script r
   `printf` is a shell builtin, so the password still never goes into a command line. It works when sudo accepts the
   password or needs none.
 
-- **`sudo: true` without passwordless sudo needs a password:** a prompt like
-  `To run host 'macbook', enter the sudo password for 'adam': `, checked the same way. A wrong one prompts again, up to
-  three tries like sudo itself, then the host fails with `incorrect sudo password`. A wrong password from `host()`
-  fails without a prompt, after the wait sudo adds to a failed try where it's set up to (about 2 seconds on Debian,
-  none on Alpine).
-- **No terminal, no prompt.** When stdin isn't a TTY, like in CI, a host that needs a prompt fails in preflight with
-  `needs a sudo password: set up passwordless sudo, or pass sudo: { password } to host()`.
+- **`sudo: true` without passwordless sudo needs a password,** so preflight prompts for it, naming the SSH user from
+  `id -un`:
+
+  ```
+  To run host 'macbook', enter the sudo password for 'adam' (press Ctrl-D to skip this host, or Ctrl-C to cancel the entire run):
+  ```
+
+  Each password is checked the same way. A wrong one prints `Sorry, try again.` and prompts again, up to three tries
+  like sudo itself. Then the host fails with `incorrect sudo password`. Ctrl-D, anywhere in the line, fails the host
+  with `skipped sudo password prompt`, and Ctrl-C ends the run. A wrong password from `host()` fails without a
+  prompt, after the wait sudo adds to a failed try where it's set up to (about 2 seconds on Debian, none on Alpine).
+
+- **The prompt goes to stderr,** because stdout is the report. sudo itself prompts on `/dev/tty`, which still works
+  when stdout and stderr are redirected, but Bun can't read from it. The input is read from stdin with `node:readline`,
+  whose output is muted so nothing typed is echoed. The prompt prints only once readline has the terminal in raw mode,
+  because the terminal echoes anything typed before that.
+- **No terminal, no prompt.** When stdin or stderr isn't a TTY, like in CI or with `2>file`, a host that needs a prompt
+  fails in preflight with `needs a sudo password: set up passwordless sudo, or pass sudo: { password } to host()`.
+  stderr counts too, because a redirected prompt would leave the run waiting on a prompt nobody sees.
 
 **How a command's `sudo` gets the password.** On a host with a password, preflight writes an askpass helper to
 `~/.tsinfra/askpass.sh`, and every script tsinfra sends starts with a preamble that defines `sudo` as a shell function:
