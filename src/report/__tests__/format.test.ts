@@ -522,9 +522,9 @@ const createNoisySession = async (filePath: string) => {
   const hostContext = await buildHostContext(toLoadedHost("a", host("@local", changeOnce)))
   if (isErr(hostContext)) throw hostContext
 
-  const transport: Transport = async (script) => {
-    const output = await hostContext.transport(`echo noise >&2\n${script}`)
-    if (script.includes("mv -f")) await bun.write(filePath, "changed\n")
+  const transport: Transport = async (cmd) => {
+    const output = await hostContext.transport(`echo noise >&2\n${cmd}`)
+    if (cmd.includes("mv -f")) await bun.write(filePath, "changed\n")
     return output
   }
   return createHostSession({ ...hostContext, transport }, "apply")

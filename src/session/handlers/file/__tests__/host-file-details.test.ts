@@ -104,8 +104,8 @@ const readDetailsWithTools = async (tools: Record<string, string>) => {
   await bun.write(filePath, "a")
 
   let stderr = ""
-  const shell = createShell(async (script) => {
-    const output = await runLocal(`PATH='${binDir}'\n${script}`)
+  const shell = createShell(async (cmd) => {
+    const output = await runLocal(`PATH='${binDir}'\n${cmd}`)
     if (!isErr(output)) ({ stderr } = output)
     return output
   })

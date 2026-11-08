@@ -45,13 +45,25 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
    6. **Sudo passwords.** In three pieces, each reviewed before the next (the design is in
       [Transport](./docs/transport.md#sudo)):
       1. **The option, the check, and askpass for a password given in `host()`.** `sudo?: true | { password }` on
-         `host()`, the `sudo -k true` check in preflight, and the askpass preamble with `~/.tsinfra/askpass.sh` on a
+         `host()`, the `sudo -n -k true` check in preflight, and the askpass preamble with `~/.tsinfra/askpass.sh` on a
          host given a password.
       2. **The prompt.** A host with `sudo: true` that needs a password prompts in preflight, one host at a time, like
-         `sudo password for adam on macbook:`, with the input hidden. Each try is checked with `sudo -k true` through the askpass function, which needs a new transport with the password, and
-         three wrong tries fail the host with `incorrect sudo password`. With no TTY, the host fails with the message from
-         piece 1. Read the hidden input with a small library like `@inquirer/password` (check what it pulls in first), or
-         about 30 lines of raw-mode stdin. Test it by running the CLI as a subprocess under a pty.
+         `To run host 'macbook', enter the sudo password for 'adam': `, with the input hidden. In three steps, each with
+         its tests:
+         1. **The `-S` check.** Check every password, from `host()` or a prompt, with
+            `printf '%s\n' <password> | sudo -k -S -p '' true` on the base transport. sudo makes one
+            try and stops at the end of stdin. The askpass check makes three tries and logs three failures.
+            `resolveHostSudo` checks the host's `sudo` option and returns the transport with the `sudo` function it
+            needs.
+         2. **Reading hidden input.** A reader that takes a prompt and returns the line. Enter ends it, Backspace
+            removes a character, Ctrl-C ends the run with exit 130, and Ctrl-D on an empty line skips the host. Compare
+            `@inquirer/password` (10 packages, about 600K) with about 30 lines of raw-mode stdin. Test it under Bun's
+            PTY (`spawn({ terminal })`).
+         3. **Wiring it up.** When the `-n` check fails on a `sudo: true` host and stdin is a TTY, read the user with
+            `id -un` and prompt. A wrong try prints `Sorry, try again.`, and three fail the host with
+            `incorrect sudo password`. With no TTY, the host fails with the message from piece 1. A lock in the prompt
+            module keeps prompts one host at a time, and `prepareHosts` stays parallel. Test it in Docker as a user
+            whose sudo needs a password, with the CLI under a PTY.
       3. **The hint for a host that doesn't declare `sudo`.** Its `sudo` stays `sudo -n`, and a failure for want of a
          password gets `host() needs sudo: true` added. Detect it by sudo's `a password is required` message, because a
          `sudo -n true` probe before each call is wrong on hosts whose sudoers allow only some commands without a
@@ -225,8 +237,8 @@ Decided, and wanted eventually, with no place in the order yet.
   `apply`, running only hosts that have it (see [CLI](./docs/cli.md#tasks)).
 - **Verbosity levels.** `-vv` lists each step's commands, with labels for tsinfra's own, and `-vvv` adds their output
   (see [CLI](./docs/cli.md#output)). A failure's note already tells people to run with `-vvv`, so `-vvv` has to show the
-  stderr that note promises. A command that `sudo: true` ran as root gets a `sudo` boolean on `CommandRecord`, set where
-  `session.ts` builds `rootShell`, because the record holds the script without the `sudo sh -s` around it. The report
+  stderr that note promises. A command that `sudo: true` ran as root gets a `sudo` boolean on `CommandRecord`,
+  set in `createStepShell`, because the record holds the script without the `sudo sh -s` around it. The report
   shows it as a tag, not as the wrapped command.
 - **Ordering between hosts.** `needs` on `host()`, taking imported host scripts. The design is tentative, and it comes
   after `--parallel` and most of the rest of this file (see

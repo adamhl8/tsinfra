@@ -1,8 +1,9 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { CommandOptions, RecordingTransport } from "#session/step-recorder.ts"
-import type { CommandOutput } from "#transport/transport.ts"
+import type { CommandOptions, RecordingTransport, StepRecorder } from "#session/step-recorder.ts"
+import { createRootTransport } from "#transport/sudo.ts"
+import type { CommandOutput, Transport } from "#transport/transport.ts"
 
 export interface Shell {
   /** Runs `cmd` and returns its output untouched. Only failing to run at all is an error. */
@@ -32,4 +33,17 @@ export const createShell = (transport: RecordingTransport): Shell => {
   }
 
   return { inspect, exec }
+}
+
+/**
+ * Returns the shell a step runs on, recording each command under the step, and running as root for `sudo: true`. Record
+ * above the root transport, so the record holds the step's script without the `sudo sh -s` around it.
+ */
+export const createStepShell = (
+  transport: Transport,
+  recordCommands: StepRecorder["recordCommands"],
+  sudo: boolean,
+): Shell => {
+  const stepTransport = sudo ? createRootTransport(transport) : transport
+  return createShell(recordCommands(stepTransport))
 }

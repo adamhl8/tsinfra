@@ -58,7 +58,7 @@ export interface ConvergeRecorder {
   recordWaitingOn: (stepNames: string[]) => void
 }
 
-interface StepRecorder {
+export interface StepRecorder {
   /** Every step that started, in the order the script called them. */
   stepRecords: StepRecord[]
   /** Wraps `transport` so each command is recorded under the running step. */

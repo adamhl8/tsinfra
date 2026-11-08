@@ -13,9 +13,6 @@ import type { HostOptions } from "#hosts/host.ts"
 const PASSWORD = "it's tsinfra"
 const ASKPASS_HELPER_PATH = path.join(os.homedir(), ".tsinfra", "askpass.sh")
 
-// Give a wrong password time to fail, because sudo waits after each of its three tries.
-const WRONG_PASSWORD_TIMEOUT_MS = 30_000
-
 /** Prepares a host on `@local` and returns the error's message chain, or `prepared`. */
 const prepareOrMessage = async (hostOptions: HostOptions) => {
   const hostContext = await buildLocalHostContext(hostOptions)
@@ -34,15 +31,12 @@ describe("a user whose sudo needs a password", () => {
     expect(JSON.stringify(hostSession.stepRecords)).not.toContain(PASSWORD)
   })
 
-  it(
-    "should fail in preflight with a wrong password from host()",
-    async () => {
-      expect(await prepareOrMessage({ sudo: { password: "wrong" } })).toStartWith(
-        "incorrect sudo password -> exited with code 1: ",
-      )
-    },
-    WRONG_PASSWORD_TIMEOUT_MS,
-  )
+  it("should fail in preflight with a wrong password from host(), after one try", async () => {
+    const message = await prepareOrMessage({ sudo: { password: "wrong" } })
+
+    expect(message).toStartWith("incorrect sudo password -> exited with code 1: ")
+    expect(message).toEndWith("sudo: 1 incorrect password attempt")
+  })
 
   it("should fail in preflight with sudo: true and no password", async () => {
     expect(await prepareOrMessage({ sudo: true })).toBe(

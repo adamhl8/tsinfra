@@ -262,14 +262,24 @@ through cloud-init. The Mac and the first run on the Incus host need a password.
 so they never mix with a running host's output. A host that can't be reached fails here, before any other host changes
 anything. A host has to declare `sudo` because of this: by the time its script runs, it's too late to ask.
 
-- **The check** runs `sudo -k true`, where `-k` makes sudo ignore cached credentials. With `sudo: true`, it runs
-  through the `-n` function, so it works only when sudo needs no password. With a password, it runs through the
-  askpass function, so it works only when sudo accepts the password or needs none.
-- **`sudo: true` without passwordless sudo needs a password:** a prompt like `sudo password for adam on macbook:`,
-  checked the same way. A wrong one prompts again, up to three tries like sudo itself, then the host fails with
-  `incorrect sudo password`. A wrong password from `host()`
-  fails without a prompt. sudo still asks the helper three times and logs three failed tries, and it waits after each
-  try where it's set up to (about 6 seconds in all on Debian, none on Alpine).
+- **The check** runs with no `sudo` function in front of it, and ignores cached credentials with `-k`. With
+  `sudo: true`, it runs `sudo -n -k true`, so it works only when sudo needs no password. A password is checked by
+  giving it to sudo on stdin, with `-p ''` so sudo prints no prompt:
+
+  ```sh
+  printf '%s\n' '...' | sudo -k -S -p '' true
+  ```
+
+  With `-S`, sudo makes one try and stops at the end of stdin, so a wrong password logs one failed try. Through the
+  askpass helper, sudo would ask three times and log three, which can lock an account that `pam_faillock` guards.
+  `printf` is a shell builtin, so the password still never goes into a command line. It works when sudo accepts the
+  password or needs none.
+
+- **`sudo: true` without passwordless sudo needs a password:** a prompt like
+  `To run host 'macbook', enter the sudo password for 'adam': `, checked the same way. A wrong one prompts again, up to
+  three tries like sudo itself, then the host fails with `incorrect sudo password`. A wrong password from `host()`
+  fails without a prompt, after the wait sudo adds to a failed try where it's set up to (about 2 seconds on Debian,
+  none on Alpine).
 - **No terminal, no prompt.** When stdin isn't a TTY, like in CI, a host that needs a prompt fails in preflight with
   `needs a sudo password: set up passwordless sudo, or pass sudo: { password } to host()`.
 

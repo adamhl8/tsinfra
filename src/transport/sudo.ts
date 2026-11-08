@@ -2,7 +2,7 @@ import crypto from "node:crypto"
 
 import { quoteShellArg } from "#transport/quote.ts"
 import type { Transport } from "#transport/transport.ts"
-import { wrapScript } from "#transport/wrap-script.ts"
+import { wrapCommand } from "#transport/wrap-command.ts"
 
 const SUDO_PASSWORD_VARIABLE = "TSINFRA_SUDO_PASSWORD"
 
@@ -29,11 +29,28 @@ export const WRITE_ASKPASS_HELPER_SCRIPT = [
 ].join("\n")
 
 // Use `-n`, because a `sudo` that needs a password would otherwise prompt on a local terminal, in the middle of the report.
-export const NO_PASSWORD_SUDO_FUNCTION = `sudo() { command sudo -n "$@"; }`
+const NO_PASSWORD_SUDO_FUNCTION = `sudo() { command sudo -n "$@"; }`
 
 /** Returns the `sudo` function that gives sudo `password` through the askpass helper. */
-export const buildAskpassSudoFunction = (password: string): string =>
+const buildAskpassSudoFunction = (password: string): string =>
   `sudo() { ${SUDO_PASSWORD_VARIABLE}=${quoteShellArg(password)} SUDO_ASKPASS=${ASKPASS_HELPER_PATH} command sudo -A "$@"; }`
+
+/**
+ * Starts every script with `sudoFunction`, which a script's own `sudo` calls. It sits below the recorder, so it's never
+ * on the record.
+ */
+const withSudoFunction =
+  (transport: Transport, sudoFunction: string): Transport =>
+  async (cmd) =>
+    transport(`${sudoFunction}\n${cmd}`)
+
+/** Returns a transport whose scripts' `sudo` fails instead of asking for a password. */
+export const createNoPasswordSudoTransport = (transport: Transport): Transport =>
+  withSudoFunction(transport, NO_PASSWORD_SUDO_FUNCTION)
+
+/** Returns a transport whose scripts' `sudo` gets `password` through the askpass helper. */
+export const createAskpassSudoTransport = (transport: Transport, password: string): Transport =>
+  withSudoFunction(transport, buildAskpassSudoFunction(password))
 
 /**
  * Runs each script as root, in a `sh -s` under `sudo`, for a step given `sudo: true`. Send the script on stdin, so it's
@@ -42,7 +59,7 @@ export const buildAskpassSudoFunction = (password: string): string =>
  */
 export const createRootTransport =
   (transport: Transport): Transport =>
-  async (script) => {
+  async (cmd) => {
     const delimiter = `__TSINFRA_SUDO_${crypto.randomUUID()}__`
-    return transport(`sudo sh -s <<'${delimiter}'\n${wrapScript(script)}\n${delimiter}`)
+    return transport(`sudo sh -s <<'${delimiter}'\n${wrapCommand(cmd)}\n${delimiter}`)
   }

@@ -63,7 +63,7 @@ const createSessionWithBinDir = async (mode: Mode, binDir: string) => {
   const hostContext = await buildLocalHostContext()
   if (isErr(hostContext)) throw hostContext
 
-  const transport: Transport = async (script) => hostContext.transport(`PATH='${binDir}':"$PATH"\n${script}`)
+  const transport: Transport = async (cmd) => hostContext.transport(`PATH='${binDir}':"$PATH"\n${cmd}`)
   return createHostSession({ ...hostContext, transport }, mode)
 }
 

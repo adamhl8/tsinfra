@@ -6,18 +6,17 @@ import { makeTempDir } from "@adamhl8/configs/test"
 
 import { createFakeSudoSession, readOrMessage, writeFakeTool } from "#__tests__/session.ts"
 import { runLocal } from "#transport/local.ts"
-import { WRITE_ASKPASS_HELPER_SCRIPT, createRootTransport } from "#transport/sudo.ts"
-import { getTransport } from "#transport/transport.ts"
+import { WRITE_ASKPASS_HELPER_SCRIPT, createAskpassSudoTransport, createRootTransport } from "#transport/sudo.ts"
 
 const OCTAL_RADIX = 8
 
 // Stand in for `sudo` with a shell function, so the script still runs in a real nested `sh -s`.
-const rootTransport = createRootTransport(async (script) => runLocal(`sudo() { "$@"; }\n${script}`))
+const rootTransport = createRootTransport(async (cmd) => runLocal(`sudo() { "$@"; }\n${cmd}`))
 
 /** Runs `script` with `home` as `$HOME`, so the askpass helper goes under it instead of the real home. */
-const runInHome = async (home: string, script: string) => runLocal(`HOME='${home}'\n${script}`)
+const runInHome = async (home: string, cmd: string) => runLocal(`HOME='${home}'\n${cmd}`)
 
-describe("getTransport without a password", () => {
+describe("createNoPasswordSudoTransport", () => {
   it("should add -n to a script's own sudo, and stay off the record", async () => {
     const { hostSession, readSudoCalls } = await createFakeSudoSession("plan")
 
@@ -27,7 +26,7 @@ describe("getTransport without a password", () => {
   })
 })
 
-describe("getTransport with a password", () => {
+describe("createAskpassSudoTransport", () => {
   it("should give sudo the password through the helper in ~/.tsinfra", async () => {
     const home = await makeTempDir()
     const binDir = await makeTempDir()
@@ -38,7 +37,7 @@ describe("getTransport with a password", () => {
       "sudo",
       '[ "$1" = -A ] && shift\nprintf \'password: %s\\n\' "$("$SUDO_ASKPASS")"\nexec "$@"',
     )
-    const askpassTransport = getTransport("@local", { password })
+    const askpassTransport = createAskpassSudoTransport(runLocal, password)
 
     expect(await runInHome(home, WRITE_ASKPASS_HELPER_SCRIPT)).toStrictEqual({ stdout: "", stderr: "", exitCode: 0 })
     expect((await stat(path.join(home, ".tsinfra", "askpass.sh"))).mode.toString(OCTAL_RADIX)).toEndWith("700")

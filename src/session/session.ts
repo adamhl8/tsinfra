@@ -22,12 +22,11 @@ import { validateInput } from "#session/handlers/shared/validate-input.ts"
 import type { ChangeTools, Exec, Inspect, InspectResult, ReadTools } from "#session/handlers/tools.ts"
 import { execCommand, inspectCommand } from "#session/handlers/tools.ts"
 import type { HostContext } from "#session/host-context.ts"
-import { createShell } from "#session/shell.ts"
+import { createStepShell } from "#session/shell.ts"
 import type { StepRecord } from "#session/step-recorder.ts"
 import { createStepRecorder } from "#session/step-recorder.ts"
 import type { HandlerReturn, StepContext, StepKind } from "#session/step.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
-import { createRootTransport } from "#transport/sudo.ts"
 
 // Extend `Record<StepKind, unknown>` so a step kind with no method fails to compile.
 /** What a host's function is given. Each method call is one step, and steps run one at a time at the top level. */
@@ -141,9 +140,16 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
 
   const { stepRecords, recordCommands, startStep, finishStep, convergeRecorder } = createStepRecorder()
 
-  // Record each command under the running step, because every command passes through the transport.
-  const shell = createShell(recordCommands(transport))
-  const rootShell = createShell(recordCommands(createRootTransport(transport)))
+  // Leave the tools on a shell without sudo, because no tool takes a `sudo` option.
+  const toolShell = createStepShell(transport, recordCommands, false)
+
+  const readTool: Exec = async (cmd) => callOrFail(async () => execCommand({ toolName: "read", shell: toolShell }, cmd))
+  const inspectTool: Inspect = async (cmd) =>
+    callOrFail(async () => inspectCommand({ toolName: "inspect", shell: toolShell }, cmd))
+  const execTool: Exec = async (cmd) => callOrFail(async () => execCommand({ toolName: "exec", shell: toolShell }, cmd))
+  const readTools: ReadTools = { read: readTool, inspect: inspectTool }
+  const changeTools: ChangeTools = { exec: execTool, inspect: inspectTool }
+
   // Record what `converge` finds as it goes, so a failure can't lose it and a handler never records anything itself.
   const converge = createConverge(mode, convergeRecorder)
 
@@ -171,21 +177,13 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
         return validOptions
       }
 
-      // Leave the tools on the plain shell, because no tool takes a `sudo` option.
-      const readTool: Exec = async (cmd) => callOrFail(async () => execCommand({ toolName: "read", shell }, cmd))
-      const inspectTool: Inspect = async (cmd) =>
-        callOrFail(async () => inspectCommand({ toolName: "inspect", shell }, cmd))
-      const execTool: Exec = async (cmd) => callOrFail(async () => execCommand({ toolName: "exec", shell }, cmd))
-      const readTools: ReadTools = { read: readTool, inspect: inspectTool }
-      const changeTools: ChangeTools = { exec: execTool, inspect: inspectTool }
-
-      const stepShell = validOptions.sudo ? rootShell : shell
+      const shell = createStepShell(transport, recordCommands, validOptions.sudo)
 
       const ctx: StepContext<K> = {
         stepName: validName,
         kind,
         mode,
-        shell: stepShell,
+        shell,
         home,
         readTools,
         changeTools,
