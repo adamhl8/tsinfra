@@ -42,7 +42,7 @@ export interface HostOwner {
   group: string
 }
 
-/** What the file details command found about the mode and owner of a regular file. */
+/** What the file details script found about the mode and owner of a regular file. */
 export interface HostFileAttributeDetails extends HostOwner {
   mode: ModeBits
 }

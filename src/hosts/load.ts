@@ -3,10 +3,10 @@ import type { Result } from "ts-explicit-errors"
 import { attempt, err, filterMap, isErr, messageChain } from "ts-explicit-errors"
 
 import type { HostScript } from "#hosts/discover.ts"
-import type { HostDefinition } from "#hosts/host.ts"
+import type { ValidHostDefinition } from "#hosts/host.ts"
 import { hostDefinitionSchema } from "#hosts/host.ts"
 
-export interface LoadedHost extends HostDefinition {
+export interface LoadedHost extends ValidHostDefinition {
   name: string
 }
 

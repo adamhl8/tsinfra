@@ -34,7 +34,7 @@ const getWriteScript = async (filePath: string) => {
   const hostSession = await createSession("apply")
   await fileOrMessage(hostSession.host, filePath, "new\n")
 
-  return hostSession.stepRecords[0]?.commands.find(({ label }) => label === "file write")?.cmd
+  return hostSession.stepRecords[0]?.commands.find(({ label }) => label === "file write script")?.cmd
 }
 
 describe("h.file in plan", () => {
@@ -76,7 +76,7 @@ describe("h.file in plan", () => {
     await fileOrMessage(hostSession.host, filePath, "a\nc\n")
 
     expect(hostSession.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual([
-      "file details command",
+      "file details script",
       "file content",
       "user command",
     ])
@@ -307,7 +307,7 @@ describe("h.file owner check", () => {
       "failed to compare the host with what the step wants -> user 'root' needs sudo: true, because only root can change a file's owner to another user",
     )
     expect(hostSession.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual([
-      "file details command",
+      "file details script",
       "user command",
     ])
     expect(await bun.file(filePath).exists()).toBe(false)
@@ -388,7 +388,7 @@ describe("h.file owner check", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, await createFilePath(), "a\n")
 
-    expect(hostSession.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual(["file details command"])
+    expect(hostSession.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual(["file details script"])
   })
 })
 
@@ -550,7 +550,7 @@ describe("h.file in apply", () => {
     const result = await fileOrMessage(hostSession.host, filePath, "a\n", { mode: "640" })
 
     expect(result).toStrictEqual({ name: filePath, kind: "file", changed: false })
-    expect(hostSession.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual(["file details command"])
+    expect(hostSession.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual(["file details script"])
   })
 
   it.each([
@@ -604,7 +604,7 @@ describe("h.file in apply", () => {
     expect(await fileOrMessage(hostSession.host, filePath, "new\n")).toBe(
       `failed to compare the host with what the step wants -> '${filePath}' is a symlink, so file won't replace it`,
     )
-    expect(hostSession.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual(["file details command"])
+    expect(hostSession.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual(["file details script"])
     expect(await bun.file(targetPath).text()).toBe("old\n")
     expect((await lstat(filePath)).isSymbolicLink()).toBe(true)
   })
@@ -634,9 +634,9 @@ describe("h.file in apply", () => {
     const commands = hostSession.stepRecords[0]?.commands
     const encoded = Buffer.from("secret token\n").toString("base64")
     expect(commands?.map(({ label, phase }) => [label, phase])).toStrictEqual([
-      ["file details command", "before"],
-      ["file write", "fix"],
-      ["file details command", "after"],
+      ["file details script", "before"],
+      ["file write script", "fix"],
+      ["file details script", "after"],
     ])
     expect(commands?.[1]?.cmd).toContain("<content as base64>")
     expect(commands?.some(({ cmd }) => cmd.includes(encoded))).toBe(false)
@@ -668,11 +668,11 @@ describe("h.file with sudo", () => {
     const commands = hostSession.stepRecords[0]?.commands
     expect(await bun.file(filePath).text()).toBe("new\n")
     expect(commands?.map(({ label }) => label)).toStrictEqual([
-      "file details command",
+      "file details script",
       "file content",
       "user command",
-      "file write",
-      "file details command",
+      "file write script",
+      "file details script",
     ])
     expect(await readSudoCalls()).toStrictEqual(["-n sh -s", "-n sh -s", "-n sh -s", "-n sh -s", "-n sh -s"])
     expect(commands?.some(({ cmd }) => cmd.includes("sudo"))).toBe(false)

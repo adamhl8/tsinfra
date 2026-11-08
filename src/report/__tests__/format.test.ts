@@ -7,7 +7,7 @@ import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
 import { attempt, isErr } from "ts-explicit-errors"
 
-import { createFakeSudoSession, prepareAndRunHost } from "#__tests__/session.ts"
+import { createFakeSudoSession, prepareAndRunHost, toLoadedHost } from "#__tests__/session.ts"
 import type { Mode } from "#cli/program.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
@@ -21,7 +21,7 @@ import { createHostSession } from "#session/session.ts"
 import type { Transport } from "#transport/transport.ts"
 
 const runNamedHost = async (name: string, fn: HostFunction, mode: Mode) =>
-  prepareAndRunHost({ name, ...host("@local", fn) }, mode)
+  prepareAndRunHost(toLoadedHost(name, host("@local", fn)), mode)
 
 const isRoot = process.getuid?.() === 0
 
@@ -195,7 +195,7 @@ describe("formatHostBlock", () => {
   })
 
   it("should name a host that couldn't be prepared after its target, and count it as failed", async () => {
-    const hostReport = await prepareAndRunHost({ name: "a", ...host("a.lan", changeThenThrow) }, "plan")
+    const hostReport = await prepareAndRunHost(toLoadedHost("a", host("a.lan", changeThenThrow)), "plan")
     const startError =
       "failed to prepare the host -> failed to read the SSH user's home directory -> target 'a.lan' isn't supported yet (only '@local')"
 
@@ -519,7 +519,7 @@ describe("formatHostBlock for a host state that still differs after the fix", ()
  * differs.
  */
 const createNoisySession = async (filePath: string) => {
-  const hostContext = await buildHostContext({ name: "a", ...host("@local", changeOnce) })
+  const hostContext = await buildHostContext(toLoadedHost("a", host("@local", changeOnce)))
   if (isErr(hostContext)) throw hostContext
 
   const transport: Transport = async (script) => {

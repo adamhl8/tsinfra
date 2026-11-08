@@ -1,22 +1,46 @@
 import crypto from "node:crypto"
 
+import { quoteShellArg } from "#transport/quote.ts"
 import type { Transport } from "#transport/transport.ts"
 import { wrapScript } from "#transport/wrap-script.ts"
 
-// Use `-n`, because a `sudo` that needs a password would otherwise prompt on a local terminal, in the middle of the report.
-const SUDO_PREAMBLE = `sudo() { command sudo -n "$@"; }`
+const SUDO_PASSWORD_VARIABLE = "TSINFRA_SUDO_PASSWORD"
 
-/** Starts every script with the `sudo` function, below the recorder, so it's never on the record. */
-export const withSudoPreamble =
-  (transport: Transport): Transport =>
-  async (script) =>
-    transport(`${SUDO_PREAMBLE}\n${script}`)
+// Print the password from a variable, so the helper itself holds no secret.
+// sudo runs it with the caller's environment, which the Docker tests check on Alpine and Debian.
+const ASKPASS_HELPER = `#!/bin/sh\nprintf '%s\\n' "$${SUDO_PASSWORD_VARIABLE}"\n`
+
+// Keep the helper in the SSH user's home, because sudo can't run a helper from a `/tmp` mounted `noexec`.
+// It holds no secret, so it stays there between runs.
+const ASKPASS_DIRECTORY = `"$HOME"/.tsinfra`
+const ASKPASS_HELPER_PATH = `${ASKPASS_DIRECTORY}/askpass.sh`
 
 /**
- * Runs each script as root, in a `sh -s` under `sudo`. Send the script on stdin, so it's never in `ps` or the sudo log.
- * Use a random delimiter, because a path in the script can hold any line, even one matching a fixed delimiter.
+ * Writes the askpass helper, replacing the one from an earlier run. Write it under a temp name and rename it into
+ * place, because another host on the same machine can be running it while preflight writes it.
  */
-export const createSudoTransport =
+export const WRITE_ASKPASS_HELPER_SCRIPT = [
+  "set -eu",
+  `mkdir -p -m 700 ${ASKPASS_DIRECTORY}`,
+  `tmp=${ASKPASS_HELPER_PATH}.$$`,
+  `printf '%s' ${quoteShellArg(ASKPASS_HELPER)} >"$tmp"`,
+  `chmod 700 "$tmp"`,
+  `mv -f "$tmp" ${ASKPASS_HELPER_PATH}`,
+].join("\n")
+
+// Use `-n`, because a `sudo` that needs a password would otherwise prompt on a local terminal, in the middle of the report.
+export const NO_PASSWORD_SUDO_FUNCTION = `sudo() { command sudo -n "$@"; }`
+
+/** Returns the `sudo` function that gives sudo `password` through the askpass helper. */
+export const buildAskpassSudoFunction = (password: string): string =>
+  `sudo() { ${SUDO_PASSWORD_VARIABLE}=${quoteShellArg(password)} SUDO_ASKPASS=${ASKPASS_HELPER_PATH} command sudo -A "$@"; }`
+
+/**
+ * Runs each script as root, in a `sh -s` under `sudo`, for a step given `sudo: true`. Send the script on stdin, so it's
+ * never in `ps` or the sudo log. Use a random delimiter, because a path in the script can hold any line, even one
+ * matching a fixed delimiter.
+ */
+export const createRootTransport =
   (transport: Transport): Transport =>
   async (script) => {
     const delimiter = `__TSINFRA_SUDO_${crypto.randomUUID()}__`

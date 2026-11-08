@@ -27,7 +27,7 @@ import type { StepRecord } from "#session/step-recorder.ts"
 import { createStepRecorder } from "#session/step-recorder.ts"
 import type { HandlerReturn, StepContext, StepKind } from "#session/step.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
-import { createSudoTransport } from "#transport/sudo.ts"
+import { createRootTransport } from "#transport/sudo.ts"
 
 // Extend `Record<StepKind, unknown>` so a step kind with no method fails to compile.
 /** What a host's function is given. Each method call is one step, and steps run one at a time at the top level. */
@@ -143,7 +143,7 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
 
   // Record each command under the running step, because every command passes through the transport.
   const shell = createShell(recordCommands(transport))
-  const sudoShell = createShell(recordCommands(createSudoTransport(transport)))
+  const rootShell = createShell(recordCommands(createRootTransport(transport)))
   // Record what `converge` finds as it goes, so a failure can't lose it and a handler never records anything itself.
   const converge = createConverge(mode, convergeRecorder)
 
@@ -179,7 +179,7 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
       const readTools: ReadTools = { read: readTool, inspect: inspectTool }
       const changeTools: ChangeTools = { exec: execTool, inspect: inspectTool }
 
-      const stepShell = validOptions.sudo ? sudoShell : shell
+      const stepShell = validOptions.sudo ? rootShell : shell
 
       const ctx: StepContext<K> = {
         stepName: validName,

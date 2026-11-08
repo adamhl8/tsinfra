@@ -7,7 +7,7 @@ import type { ResolvedFileContent } from "#session/handlers/file/resolved-conten
 import type { Bytes } from "#session/handlers/shared/filesystem/bytes.ts"
 import { toBytes } from "#session/handlers/shared/filesystem/bytes.ts"
 import type { Shell } from "#session/shell.ts"
-import { quoteShellArg } from "#session/shell.ts"
+import { quoteShellArg } from "#transport/quote.ts"
 
 /** How a managed file's content differs. `text` holds both sides for a diff. */
 export type ContentComparison = { kind: "same" } | { kind: "text"; got: string; want: string } | SizeComparison

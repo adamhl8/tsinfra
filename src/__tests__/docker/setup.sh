@@ -7,12 +7,12 @@ distro="$1"
 case "$distro" in
   alpine)
     apk add --no-cache sudo >/dev/null
-    for user in tester sonarr nopass; do adduser -D "$user"; done
+    for user in tester sonarr nopass sudopw; do adduser -D "$user"; done
     ;;
   debian)
     apt-get update -qq >/dev/null
     apt-get install -y -qq sudo >/dev/null 2>&1
-    for user in tester sonarr nopass; do useradd -m "$user"; done
+    for user in tester sonarr nopass sudopw; do useradd -m "$user"; done
     ;;
   *)
     echo "unknown distro '$distro'" >&2
@@ -22,6 +22,12 @@ esac
 
 echo 'tester ALL=(ALL) NOPASSWD: ALL' >/etc/sudoers.d/tester
 chmod 440 /etc/sudoers.d/tester
+
+# Give `sudopw` a password with a quote in it, which `sudo-password.docker.ts` uses.
+# Set `timestamp_timeout=0`, so a password one test gives can't carry over to the next.
+echo "sudopw:it's tsinfra" | chpasswd >/dev/null 2>&1
+printf '%s\n' 'Defaults:sudopw timestamp_timeout=0' 'sudopw ALL=(ALL) ALL' >/etc/sudoers.d/sudopw
+chmod 440 /etc/sudoers.d/sudopw
 
 # Copy the repo, because the tests write to it, and install again, because node_modules holds the host's binaries.
 mkdir /work
@@ -45,7 +51,8 @@ run_tests() {
 
 run_tests "the test suite as a non-root user" tester
 run_tests "the test suite as root" root
-run_tests "real sudo and real root" tester ./src/session/handlers/__tests__/file-sudo.docker.ts ./src/session/handlers/__tests__/link-sudo.docker.ts
+run_tests "real sudo and real root" tester ./src/session/handlers/__tests__/file-sudo.docker.ts ./src/session/handlers/__tests__/link-sudo.docker.ts ./src/session/__tests__/sudo-passwordless.docker.ts
+run_tests "a user whose sudo needs a password" sudopw ./src/session/__tests__/sudo-password.docker.ts
 run_tests "a user with no sudo rule" nopass ./src/session/handlers/__tests__/file-no-sudo.docker.ts
 
 exit "$failed"

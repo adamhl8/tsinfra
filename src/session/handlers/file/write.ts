@@ -119,7 +119,7 @@ export const writeFile = async (
   const writeScript = withContent(encodedContent)
 
   const writeScriptOutput = await shell.inspect(writeScript, {
-    label: "file write",
+    label: "file write script",
     recordedCmd: withContent(RECORDED_CONTENT),
   })
   if (isErr(writeScriptOutput)) return err(`failed to write '${path}'`, writeScriptOutput)

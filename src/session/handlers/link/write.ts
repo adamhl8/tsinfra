@@ -10,8 +10,8 @@ import {
   buildTempDirectoryLines,
   toWriteScriptPaths,
 } from "#session/handlers/shared/filesystem/write-script.ts"
-import { quoteShellArg } from "#session/shell.ts"
 import type { StepContext } from "#session/step.ts"
+import { quoteShellArg } from "#transport/quote.ts"
 
 /** Returns the script that makes the link under a temp name, then renames it into place (see `docs/transport.md`). */
 const buildLinkWriteScript = (hostLinkDetails: HostLinkDetails, target: string, options: ValidLinkOptions): string => {
@@ -65,6 +65,6 @@ export const writeLink = async (
   const { path } = hostLinkDetails
 
   const writeScript = buildLinkWriteScript(hostLinkDetails, target, options)
-  const writeScriptOutput = await shell.exec(writeScript, { label: "link write" })
+  const writeScriptOutput = await shell.exec(writeScript, { label: "link write script" })
   if (isErr(writeScriptOutput)) return err(`failed to write the link at '${path}'`, writeScriptOutput)
 }

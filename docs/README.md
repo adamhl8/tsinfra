@@ -118,14 +118,14 @@ tsinfra plan            # every host
 
 ## Concepts
 
-|           |                                                                                         |
-| --------- | --------------------------------------------------------------------------------------- |
-| **Host**  | A file in `hosts/` that exports `host(target, fn)`. The file name is what the CLI uses. |
-| **Step**  | One call on `h`, like `h.ensure` or `h.read`. Steps run one at a time.                  |
-| **Need**  | An earlier step whose change a step's state depends on, named in `needs`.               |
-| **Plan**  | Read every step's state, run no fix. Show what would change.                            |
-| **Apply** | Read every step's state, and run the fix wherever it differs.                           |
-| **Task**  | A named function on a host besides its main one, like `update`, run with `--task`.      |
+|           |                                                                                                   |
+| --------- | ------------------------------------------------------------------------------------------------- |
+| **Host**  | A file in `hosts/` that exports `host(target, fn, options?)`. The file name is what the CLI uses. |
+| **Step**  | One call on `h`, like `h.ensure` or `h.read`. Steps run one at a time.                            |
+| **Need**  | An earlier step whose change a step's state depends on, named in `needs`.                         |
+| **Plan**  | Read every step's state, run no fix. Show what would change.                                      |
+| **Apply** | Read every step's state, and run the fix wherever it differs.                                     |
+| **Task**  | A named function on a host besides its main one, like `update`, run with `--task`.                |
 
 ## Contents
 

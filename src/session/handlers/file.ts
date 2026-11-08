@@ -83,7 +83,7 @@ export const handleFile = async (
   const resolvedContent = await resolveContent(validContent)
   if (isErr(resolvedContent)) return resolvedContent
 
-  const { validate, needs } = validOptions
+  const { needs, validate } = validOptions
 
   const validateCommand = buildValidateCommand(validate)
   if (isErr(validateCommand)) return validateCommand

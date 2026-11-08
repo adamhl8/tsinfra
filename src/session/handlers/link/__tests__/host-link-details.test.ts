@@ -30,13 +30,13 @@ describe("parseLinkDetailsOutput", () => {
 
   it("should fail on a kind it doesn't know", () => {
     expect(toDetails("kind=socket\n")).toBe(
-      "the link details command printed 'kind=socket' instead of what is at the path",
+      "the link details script printed 'kind=socket' instead of what is at the path",
     )
   })
 
   it("should fail on a target line it doesn't know", () => {
     expect(toDetails(`kind=file\n${STAT_LINE}\ntarget=maybe\n`)).toBe(
-      "the link details command printed 'target=maybe' instead of whether the target exists",
+      "the link details script printed 'target=maybe' instead of whether the target exists",
     )
   })
 
@@ -44,7 +44,7 @@ describe("parseLinkDetailsOutput", () => {
     "should fail on the stat line '%s'",
     (statLine) => {
       expect(toDetails(`kind=file\n${statLine}\ntarget=missing\n`)).toBe(
-        `the link details command printed '${statLine}' instead of the owner of the path`,
+        `the link details script printed '${statLine}' instead of the owner of the path`,
       )
     },
   )

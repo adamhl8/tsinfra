@@ -158,7 +158,7 @@ How the data travels should follow how `file` sends content, base64 in a heredoc
 `file` refuses a path that is a symlink, so it never replaces a link with a regular file, or writes somewhere the
 script didn't name (see [Steps](./steps.md#file)). Making a link is [`link`](./steps.md#link)'s job. This question is
 only whether `file` should follow an existing link and write to its target instead. The tools split on
-this. Chef writes through the link to its target, and Ansible makes it an option. Following links would mean the file details command
+this. Chef writes through the link to its target, and Ansible makes it an option. Following links would mean the file details script
 resolves the real path first and reports it, and the write goes there. Decide when a port needs to manage a file that
 is reached through a symlink.
 

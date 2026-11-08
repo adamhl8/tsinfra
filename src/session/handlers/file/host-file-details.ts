@@ -7,15 +7,15 @@ import type { Bytes } from "#session/handlers/shared/filesystem/bytes.ts"
 import { toBytes } from "#session/handlers/shared/filesystem/bytes.ts"
 import { statModeSchema } from "#session/handlers/shared/filesystem/mode.ts"
 import type { Shell } from "#session/shell.ts"
-import { quoteShellArg } from "#session/shell.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
+import { quoteShellArg } from "#transport/quote.ts"
 import { splitWords } from "#utils.ts"
 
 // Read the first 64 hex characters, because GNU, busybox, and `shasum` print `<hash>  -`, and BSD prints the hash.
 const SHA256_PATTERN = /^[0-9a-f]{64}/v
 const SHA256_LENGTH = 64
 
-/** What the file details command found about the content of a regular file. */
+/** What the file details script found about the content of a regular file. */
 interface HostFileContentDetails {
   hash: string
   size: Bytes
@@ -27,7 +27,7 @@ interface NewHostFileDetails {
   path: string
 }
 
-/** What the file details command found at a path that is a regular file. */
+/** What the file details script found at a path that is a regular file. */
 interface ExistingHostFileDetails {
   kind: "existing"
   path: string
@@ -35,12 +35,12 @@ interface ExistingHostFileDetails {
   attributes: HostFileAttributeDetails
 }
 
-/** What the file details command found at a path: nothing yet, or a regular file. */
+/** What the file details script found at a path: nothing yet, or a regular file. */
 export type HostFileDetails = ExistingHostFileDetails | NewHostFileDetails
 
 const KIND_PREFIX = "kind="
 
-// List what the file details command can say is at the path.
+// List what the file details script can say is at the path.
 const kindLineSchema = type("string")
   .narrow((line) => line.startsWith(KIND_PREFIX))
   .pipe((line) => line.slice(KIND_PREFIX.length))
@@ -69,7 +69,7 @@ const statLineSchema = type("string")
  * missing. Exit when no sha256 command gives a hash, because `stat` runs next, and its exit code would hide the
  * failure.
  */
-const buildFileDetailsCommand = (path: string): string =>
+const buildFileDetailsScript = (path: string): string =>
   [
     `p=${quoteShellArg(path)}`,
     `if [ -L "$p" ]; then echo kind=link`,
@@ -87,7 +87,7 @@ const buildFileDetailsCommand = (path: string): string =>
   ].join("\n")
 
 /**
- * Parses the file details command's output, which differs between GNU, busybox, and BSD only in ways this allows for.
+ * Parses the file details script's output, which differs between GNU, busybox, and BSD only in ways this allows for.
  * Returns `new` details when nothing is at `path`, and an error when something there isn't a file the step can read.
  */
 export const parseFileDetailsOutput = (stdout: string, path: string): Result<HostFileDetails> => {
@@ -95,7 +95,7 @@ export const parseFileDetailsOutput = (stdout: string, path: string): Result<Hos
 
   const kind = kindLineSchema(kindLine)
   if (kind instanceof type.errors)
-    return err(`the file details command printed '${kindLine}' instead of what is at the path`, undefined)
+    return err(`the file details script printed '${kindLine}' instead of what is at the path`, undefined)
 
   if (kind === "absent") return { kind: "new", path }
   if (kind === "link") return err(`'${path}' is a symlink, so file won't replace it`, undefined)
@@ -104,11 +104,11 @@ export const parseFileDetailsOutput = (stdout: string, path: string): Result<Hos
 
   const hash = hashLineSchema(hashLine)
   if (hash instanceof type.errors)
-    return err(`the file details command printed '${hashLine}' instead of the file's sha256 hash`, undefined)
+    return err(`the file details script printed '${hashLine}' instead of the file's sha256 hash`, undefined)
 
   const fileStat = statLineSchema(statLine)
   if (fileStat instanceof type.errors)
-    return err(`the file details command printed '${statLine}' instead of the file's mode, owner, and size`, undefined)
+    return err(`the file details script printed '${statLine}' instead of the file's mode, owner, and size`, undefined)
 
   const { attributes, size } = fileStat
   return { kind: "existing", path, content: { hash, size }, attributes }
@@ -119,7 +119,7 @@ export const parseFileDetailsOutput = (stdout: string, path: string): Result<Hos
  * non-zero exit means it broke.
  */
 export const getHostFileDetails = async (shell: Shell, path: string): Promise<Result<HostFileDetails>> => {
-  const stdout = await shell.exec(buildFileDetailsCommand(path), { label: "file details command" })
+  const stdout = await shell.exec(buildFileDetailsScript(path), { label: "file details script" })
   if (isErr(stdout)) return err(`failed to read the details of '${path}'`, stdout)
 
   return parseFileDetailsOutput(stdout, path)

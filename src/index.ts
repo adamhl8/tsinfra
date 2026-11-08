@@ -1,4 +1,4 @@
-export type { HostDefinition, HostFunction } from "#hosts/host.ts"
+export type { HostDefinition, HostFunction, HostOptions } from "#hosts/host.ts"
 export { host } from "#hosts/host.ts"
 export type { EnsureOptions } from "#session/handlers/ensure.ts"
 export type { FileMode, OctalMode, SymbolicMode } from "#session/handlers/shared/filesystem/mode.ts"

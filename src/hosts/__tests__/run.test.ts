@@ -6,7 +6,7 @@ import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
-import { prepareAndRunHost } from "#__tests__/session.ts"
+import { prepareAndRunHost, toLoadedHost } from "#__tests__/session.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
 import { getExitCode, hasDrift, prepareHosts } from "#hosts/run.ts"
@@ -29,13 +29,16 @@ const readTwice = async (h: Host) => {
   await h.read("exit 1")
 }
 
-const runHostA = async (fn: HostFunction) => prepareAndRunHost({ name: "a", ...host("@local", fn) }, "apply")
+const runHostA = async (fn: HostFunction) => prepareAndRunHost(toLoadedHost("a", host("@local", fn)), "apply")
 
 /** Plans a host 'a' with `fn` and reports whether it has drift. */
-const planHasDrift = async (fn: HostFunction) =>
-  hasDrift(await prepareAndRunHost({ name: "a", ...host("@local", fn) }, "plan"))
+const planHasDrift = async (fn: HostFunction) => {
+  const hostReport = await prepareAndRunHost(toLoadedHost("a", host("@local", fn)), "plan")
+  return hasDrift(hostReport)
+}
 
-const planReport = async (name: string, fn: HostFunction) => prepareAndRunHost({ name, ...host("@local", fn) }, "plan")
+const planReport = async (name: string, fn: HostFunction) =>
+  prepareAndRunHost(toLoadedHost(name, host("@local", fn)), "plan")
 
 const ensurePending = async (h: Host) => {
   await h.ensure("Pending", { check: "false", want: true, fix: "true" })
@@ -62,9 +65,9 @@ describe("prepareHosts", () => {
       await h.read(`touch '${marker}'`)
     }
     const preparedHosts = await prepareHosts([
-      { name: "a", ...host("@local", touchMarker) },
-      { name: "b", ...host("b.lan", touchMarker) },
-      { name: "c", ...host("@local", touchMarker) },
+      toLoadedHost("a", host("@local", touchMarker)),
+      toLoadedHost("b", host("b.lan", touchMarker)),
+      toLoadedHost("c", host("@local", touchMarker)),
     ])
 
     expect(preparedHosts.map(({ loadedHost, hostContext }) => [loadedHost.name, isErr(hostContext)])).toStrictEqual([
@@ -78,7 +81,7 @@ describe("prepareHosts", () => {
 
 describe("runHost", () => {
   it("should fail before the script runs when the host can't run commands", async () => {
-    const { failure, ...hostReport } = await prepareAndRunHost({ name: "a", ...host("a.lan", throwBoom) }, "apply")
+    const { failure, ...hostReport } = await prepareAndRunHost(toLoadedHost("a", host("a.lan", throwBoom)), "apply")
 
     expect({ ...hostReport, message: getMessage(failure) }).toStrictEqual({
       name: "a",

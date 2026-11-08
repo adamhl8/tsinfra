@@ -133,7 +133,7 @@ describe("h.link in apply", () => {
     const hostSession = await createSession("apply")
 
     expect(await linkOrMessage(hostSession.host, linkPath, target)).toMatchObject({ changed: false })
-    expect(getLabels(hostSession)).toStrictEqual(["link details command"])
+    expect(getLabels(hostSession)).toStrictEqual(["link details script"])
   })
 
   it("should label every command it runs, and write in the fix", async () => {
@@ -144,9 +144,9 @@ describe("h.link in apply", () => {
 
     const commands = hostSession.stepRecords[0]?.commands
     expect(commands?.map(({ label, phase }) => [label, phase])).toStrictEqual([
-      ["link details command", "before"],
-      ["link write", "fix"],
-      ["link details command", "after"],
+      ["link details script", "before"],
+      ["link write script", "fix"],
+      ["link details script", "after"],
     ])
   })
 
@@ -303,7 +303,7 @@ describe("h.link owner", () => {
     expect(await linkOrMessage(hostSession.host, linkPath, target, { user: "root" })).toBe(
       `${COMPARE_ERROR} -> user 'root' needs sudo: true, because only root can change a file's owner to another user`,
     )
-    expect(getLabels(hostSession)).toStrictEqual(["link details command", "user command"])
+    expect(getLabels(hostSession)).toStrictEqual(["link details script", "user command"])
   })
 
   it("should not read the user for a new link with no user", async () => {
@@ -312,7 +312,7 @@ describe("h.link owner", () => {
 
     await linkOrMessage(hostSession.host, linkPath, target)
 
-    expect(getLabels(hostSession)).toStrictEqual(["link details command"])
+    expect(getLabels(hostSession)).toStrictEqual(["link details script"])
   })
 
   it("should pass under sudo, because the command runs as root", async () => {

@@ -4,11 +4,11 @@ import { err, isErr } from "ts-explicit-errors"
 
 import type { HostOwner } from "#session/handlers/shared/filesystem/attributes.ts"
 import type { Shell } from "#session/shell.ts"
-import { quoteShellArg } from "#session/shell.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
+import { quoteShellArg } from "#transport/quote.ts"
 import { splitWords, stripOneTrailingNewline } from "#utils.ts"
 
-/** What the link details command found at a link's path, and whether the link's target exists. */
+/** What the link details script found at a link's path, and whether the link's target exists. */
 export type HostLinkDetails = ExistingLinkDetails | NewLinkDetails | ReplaceableLinkDetails
 
 interface NewLinkDetails {
@@ -37,7 +37,7 @@ interface ReplaceableLinkDetails {
 
 const KIND_PREFIX = "kind="
 
-// List what the link details command can say is at the path.
+// List what the link details script can say is at the path.
 const kindLineSchema = type("string")
   .narrow((line) => line.startsWith(KIND_PREFIX))
   .pipe((line) => line.slice(KIND_PREFIX.length))
@@ -55,7 +55,7 @@ const targetLineSchema = type("'target=exists' | 'target=missing'").pipe((line) 
  * exists. `stat` reads a link itself, not what it points to. A new link prints an empty line in place of the owner, so
  * every line keeps its place. `readlink` goes last, so a target with a newline still parses.
  */
-const buildLinkDetailsCommand = (path: string, target: string): string =>
+const buildLinkDetailsScript = (path: string, target: string): string =>
   [
     "set -e",
     `p=${quoteShellArg(path)}`,
@@ -80,7 +80,7 @@ const buildLinkDetailsCommand = (path: string, target: string): string =>
   ].join("\n")
 
 /**
- * Parses the link details command's output. Returns an error for something at `path` that no option lets the step
+ * Parses the link details script's output. Returns an error for something at `path` that no option lets the step
  * replace.
  */
 export const parseLinkDetailsOutput = (stdout: string, path: string): Result<HostLinkDetails> => {
@@ -88,20 +88,20 @@ export const parseLinkDetailsOutput = (stdout: string, path: string): Result<Hos
 
   const kind = kindLineSchema(kindLine)
   if (kind instanceof type.errors)
-    return err(`the link details command printed '${kindLine}' instead of what is at the path`, undefined)
+    return err(`the link details script printed '${kindLine}' instead of what is at the path`, undefined)
 
   if (kind === "directory") return err(`'${path}' is a directory with files in it, so link won't replace it`, undefined)
   if (kind === "other") return err(`'${path}' isn't a link or a regular file, so link won't replace it`, undefined)
 
   const targetExists = targetLineSchema(targetLine)
   if (targetExists instanceof type.errors)
-    return err(`the link details command printed '${targetLine}' instead of whether the target exists`, undefined)
+    return err(`the link details script printed '${targetLine}' instead of whether the target exists`, undefined)
 
   if (kind === "absent") return { kind: "new", path, targetExists }
 
   const owner = statLineSchema(statLine)
   if (owner instanceof type.errors)
-    return err(`the link details command printed '${statLine}' instead of the owner of the path`, undefined)
+    return err(`the link details script printed '${statLine}' instead of the owner of the path`, undefined)
 
   if (kind !== "link") return { kind, path, targetExists, owner }
 
@@ -119,7 +119,7 @@ export const getHostLinkDetails = async (
   path: string,
   target: string,
 ): Promise<Result<HostLinkDetails>> => {
-  const stdout = await shell.exec(buildLinkDetailsCommand(path, target), { label: "link details command" })
+  const stdout = await shell.exec(buildLinkDetailsScript(path, target), { label: "link details script" })
   if (isErr(stdout)) return err(`failed to read the details of '${path}'`, stdout)
 
   return parseLinkDetailsOutput(stdout, path)

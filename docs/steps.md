@@ -237,7 +237,7 @@ type FileOptions = {
   mode?: FileMode // "644", "rw-r--r--", or a constant like PUBLIC_FILE_MODE. Managed only when given
   user?: string | number // a name is compared with the user's name, a number with its uid
   group?: string | number // a name is compared with the group's name, a number with its gid
-  sudo?: boolean // run the file details command, the diff, and the write as root
+  sudo?: boolean // run the file details script, the diff, and the write as root
   secret?: boolean // never fetch or show the old content
   overwrite?: boolean // default true. false writes the content only when the file is missing
   validate?: (tempPath: string) => string // a command that checks the new content before it replaces the file
@@ -354,7 +354,7 @@ else
 fi
 ```
 
-- **The hash is sha256,** the default in Salt, Chef, and Puppet. POSIX has no sha256 command, so the file details command tries each
+- **The hash is sha256,** the default in Salt, Chef, and Puppet. POSIX has no sha256 command, so the file details script tries each
   common one: `sha256sum` (GNU coreutils, busybox, current macOS), `shasum -a 256` (older macOS), and `sha256` (FreeBSD,
   OpenBSD). This is the same chain pyinfra uses. It checks that each one exists first, so a missing one writes nothing
   to stderr. One that exists and fails keeps its stderr, and the next one still runs. The file goes in on stdin, because GNU `sha256sum` escapes odd
@@ -468,7 +468,7 @@ await h.file("/etc/sudoers.d/adam", sudoers, {
 | no `sudo`    | the SSH user, via `sh -s` | files the SSH user can write, like anything under `~`          |
 | `sudo: true` | root, via `sudo`          | files under `/etc`, root-only files, or another user as `user` |
 
-Under `sudo: true`, every part runs as root: the file details command, the `cat` for the diff, and the write. tsinfra writes all of
+Under `sudo: true`, every part runs as root: the file details script, the `cat` for the diff, and the write. tsinfra writes all of
 those commands, so there is nowhere for a script to add `sudo` itself. This means `plan` also needs sudo on a host that
 manages such a file, and a host whose sudo needs a password declares it on `host()` (see
 [Transport](./transport.md#sudo)).
@@ -484,7 +484,7 @@ passes, and they show in `plan` too:
   file's owner to another user`. Only root can `chown` a file to someone else.
 - **Someone else owns the file, and no `user` is given, without `sudo`,** like `'/etc/app.conf' is owned by 'sonarr', so
   writing it needs sudo: true`. A write keeps the file's owner with `chown`, which needs the same permission.
-- **The file details command can't read the file without `sudo`,** like `can't read '/etc/shadow' as the SSH user, so it needs sudo:
+- **The file details script can't read the file without `sudo`,** like `can't read '/etc/shadow' as the SSH user, so it needs sudo:
   true`. That way an unreadable file doesn't look missing.
 
 ## `link`
@@ -510,7 +510,7 @@ place on the control machine, so an edit in the repo shows up straight away. The
 follows the same rules as `file`'s (see [`file`](#file)).
 
 `link` is a step of its own, not a form of `file`, because the two share only the path and the owner. A link has no
-content, mode, or `secret`, and `force` means nothing for a regular file. Their details commands, output, and writes
+content, mode, or `secret`, and `force` means nothing for a regular file. Their details scripts, output, and writes
 differ too.
 
 The words are easy to mix up. In `ln -s TARGET LINK`, the target is the original file the link points to, and the link
@@ -531,7 +531,7 @@ manages first.
   link is still made, with a `warning: nothing exists at target -> <target>` line under it, so a typo in the repo path stands out.
   The warning shows even when the link is already right, without `--verbose`, and the summary counts it. It's not
   drift, so it doesn't change the exit code.
-- **The link details command** reads the existing link's target with `readlink` and compares it with `target` as an exact
+- **The link details script** reads the existing link's target with `readlink` and compares it with `target` as an exact
   string, after `~/` is resolved. It is in sync when `path` is a symlink that points there, with the right owner.
 - **An existing symlink is always updated** to point at `target`, because managing it is the point.
 - **A regular file at `path` is an error** unless `force: true`, like `'/home/adam/.config/fish/config.fish' is a
@@ -542,7 +542,7 @@ manages first.
 - **A directory with anything in it is always an error,** even with `force`, because replacing it would throw away
   everything in it. A hidden file counts. Anything else that isn't a link or a regular file, like a socket, is always
   an error too.
-- **`sudo` works as it does for `file`.** The link details command and the write both run as root.
+- **`sudo` works as it does for `file`.** The link details script and the write both run as root.
 - **The output** shows `target: new link to /home/adam/dotfiles/fish/config.fish` for a new link, and a changed target
   as an attribute line, like `target: /home/adam/old -> /home/adam/new`. Paths are absolute, because that's what
   `readlink` gives back. Forcing something out shows `replaces a file` or `replaces an empty directory`.

@@ -19,7 +19,7 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
    host so later calls are skipped.
 3. **`file`.** In seven parts, each reviewed before the next (the design is in [Steps](./docs/steps.md#file) and
    [Transport](./docs/transport.md#file-writes)):
-   1. **Reading the state and the plan output.** The GNU and BSD file details command, the local hash, the `file` comparison, the
+   1. **Reading the state and the plan output.** The GNU and BSD file details script, the local hash, the `file` comparison, the
       content diff and its notes (new, secret, binary, large), the `mode: 644 -> 600` attribute lines, path quoting, and
       `~/` resolved as the SSH user.
    2. **The write.** In six pieces, each reviewed before the next:
@@ -42,10 +42,23 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
    4. **Docs and preview.** The preview shows each way a file or a link can look, and the docs for both match the code.
    5. **Validation.** `validate` on `file`, run against the temp file before the rename, in a temp directory that keeps
       the destination's name (see [Steps](./docs/steps.md#the-write) and [Transport](./docs/transport.md#file-writes)).
-   6. **Sudo passwords.** Adding to the preflight in `prepareHosts`, which prepares every host before any script runs:
-      `sudo` declared on `host()` as `true` or `{ password }`, the `sudo -n true` probe, a prompt per host with three
-      tries, the no-TTY failure, the preamble's `sudo` function with an askpass helper on a host that declares it, and
-      `host() needs sudo: true` added to sudo's error on one that doesn't (see [Transport](./docs/transport.md#sudo)).
+   6. **Sudo passwords.** In three pieces, each reviewed before the next (the design is in
+      [Transport](./docs/transport.md#sudo)):
+      1. **The option, the check, and askpass for a password given in `host()`.** `sudo?: true | { password }` on
+         `host()`, the `sudo -k true` check in preflight, and the askpass preamble with `~/.tsinfra/askpass.sh` on a
+         host given a password.
+      2. **The prompt.** A host with `sudo: true` that needs a password prompts in preflight, one host at a time, like
+         `sudo password for adam on macbook:`, with the input hidden. Each try is checked with `sudo -k true` through the askpass function, which needs a new transport with the password, and
+         three wrong tries fail the host with `incorrect sudo password`. With no TTY, the host fails with the message from
+         piece 1. Read the hidden input with a small library like `@inquirer/password` (check what it pulls in first), or
+         about 30 lines of raw-mode stdin. Test it by running the CLI as a subprocess under a pty.
+      3. **The hint for a host that doesn't declare `sudo`.** Its `sudo` stays `sudo -n`, and a failure for want of a
+         password gets `host() needs sudo: true` added. Detect it by sudo's `a password is required` message, because a
+         `sudo -n true` probe before each call is wrong on hosts whose sudoers allow only some commands without a
+         password. A non-English locale doesn't get the hint.
+
+      SSH isn't built yet, so all three are tested against `@local` and in Docker. The flows are the same over SSH.
+
    7. **Content written only once.** `overwrite: false` on `file`: write a missing file, never read or compare an
       existing one's content, and still manage its attributes (see [Steps](./docs/steps.md#the-write)).
 
@@ -213,7 +226,7 @@ Decided, and wanted eventually, with no place in the order yet.
 - **Verbosity levels.** `-vv` lists each step's commands, with labels for tsinfra's own, and `-vvv` adds their output
   (see [CLI](./docs/cli.md#output)). A failure's note already tells people to run with `-vvv`, so `-vvv` has to show the
   stderr that note promises. A command that `sudo: true` ran as root gets a `sudo` boolean on `CommandRecord`, set where
-  `session.ts` builds `sudoShell`, because the record holds the script without the `sudo sh -s` around it. The report
+  `session.ts` builds `rootShell`, because the record holds the script without the `sudo sh -s` around it. The report
   shows it as a tag, not as the wrapped command.
 - **Ordering between hosts.** `needs` on `host()`, taking imported host scripts. The design is tentative, and it comes
   after `--parallel` and most of the rest of this file (see

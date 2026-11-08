@@ -24,7 +24,7 @@ tsinfra apply sonarr --verbose
 ## Hosts
 
 The CLI looks in `./hosts` (or `--hosts-dir <dir>`). Each `.ts` file there is one host, and its file name without `.ts`
-is the name used on the command line. The file's default export is `host(target, fn)`. Shared setup lives anywhere
+is the name used on the command line. The file's default export is `host(target, fn, options?)`. Shared setup lives anywhere
 else and is imported like any other module.
 
 With no host names, `plan` and `apply` run every host. An unknown name is an error that lists the names that exist.
@@ -86,8 +86,8 @@ and ssh. Every command is already recorded with its output (see [What a host rec
 only change what's printed:
 
 - **`-vv`** also lists each command a step ran, dimmed, under the step, like `$ systemctl is-active sonarr`. Commands
-  tsinfra writes itself, like `file`'s multi-line details command, show as a short label, like
-  `$ (file details command)`. The exact labels get settled when this is built. A command that `sudo: true` ran as root
+  tsinfra writes itself, like `file`'s multi-line details script, show as a short label, like
+  `$ (file details script)`. The exact labels get settled when this is built. A command that `sudo: true` ran as root
   gets a tag, and never shows the `sudo sh -s` around it. The tag's look gets settled at the same time.
 - **`-vvv`** also shows each command's exit code, stdout, and stderr, indented under it and cut off after some number
   of lines, and tsinfra's own commands in full.
@@ -238,7 +238,7 @@ The output is built from a record of each host's run. It is one list of steps, i
 - **A step's commands** are every command that ran while it was running, including those from reading its state and from its fix
   functions. A read or inspect has exactly one.
 - **A command** records the command, its stdout and stderr, and its exit code. A command that could not run at all
-  records the error instead. A command tsinfra wrote itself also records a short label, like `file details command`.
+  records the error instead. A command tsinfra wrote itself also records a short label, like `file details script`.
   A command in a step that compares the host's state records its phase: `before`, `fix`, or `after`.
 - **A step's comparisons** are what it found each time it compared the host with what it wants: a `before` comparison,
   and an `after` comparison when it compared again after the fix. Each holds the values it compared and whether they

@@ -58,7 +58,7 @@ describe("parseFileDetailsOutput", () => {
 
   it("should fail on a kind it doesn't know", () => {
     expect(toDetails("kind=socket\n")).toBe(
-      "the file details command printed 'kind=socket' instead of what is at the path",
+      "the file details script printed 'kind=socket' instead of what is at the path",
     )
   })
 
@@ -75,18 +75,18 @@ describe("parseFileDetailsOutput", () => {
     "04755 1000 1000 adam staff 15",
   ])("should fail on the stat line '%s'", (statLine) => {
     expect(toDetails(`kind=file\n${HASH}\n${statLine}\n`)).toBe(
-      `the file details command printed '${statLine}' instead of the file's mode, owner, and size`,
+      `the file details script printed '${statLine}' instead of the file's mode, owner, and size`,
     )
   })
 
   it("should fail on a line that isn't a hash", () => {
     expect(toDetails("kind=file\nnot a hash\n644 0 0 root root 3\n")).toBe(
-      "the file details command printed 'not a hash' instead of the file's sha256 hash",
+      "the file details script printed 'not a hash' instead of the file's sha256 hash",
     )
   })
 
   it("should fail when the command printed nothing", () => {
-    expect(toDetails("")).toBe("the file details command printed '' instead of what is at the path")
+    expect(toDetails("")).toBe("the file details script printed '' instead of what is at the path")
   })
 })
 

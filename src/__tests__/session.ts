@@ -6,7 +6,8 @@ import bun from "bun"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
-import { host } from "#hosts/host.ts"
+import type { HostDefinition, HostOptions } from "#hosts/host.ts"
+import { host, hostDefinitionSchema } from "#hosts/host.ts"
 import type { LoadedHost } from "#hosts/load.ts"
 import { prepareHost, runHost } from "#hosts/run.ts"
 import type { EnsureOptions } from "#session/handlers/ensure.ts"
@@ -32,9 +33,19 @@ export const throwBoom = () => {
   throw new Error("boom")
 }
 
+/** Validates `hostDefinition` the way loading a host script does, so it gets the same defaults. */
+export const toLoadedHost = (name: string, hostDefinition: HostDefinition): LoadedHost => ({
+  name,
+  ...hostDefinitionSchema.assert(hostDefinition),
+})
+
+/** Prepares a host 'a' on `@local`. */
+export const buildLocalHostContext = async (hostOptions?: HostOptions) =>
+  buildHostContext(toLoadedHost("a", host("@local", doNothing, hostOptions)))
+
 /** Creates a session for a host 'a' on `@local`. */
-export const createSession = async (mode: Mode = "apply") => {
-  const hostContext = await buildHostContext({ name: "a", ...host("@local", doNothing) })
+export const createSession = async (mode: Mode = "apply", hostOptions?: HostOptions) => {
+  const hostContext = await buildLocalHostContext(hostOptions)
   if (isErr(hostContext)) throw hostContext
 
   return createHostSession(hostContext, mode)
@@ -49,7 +60,7 @@ export const writeFakeTool = async (binDir: string, name: string, body: string) 
 
 /** Creates a session where the scripts in `binDir` come first on `PATH`. */
 const createSessionWithBinDir = async (mode: Mode, binDir: string) => {
-  const hostContext = await buildHostContext({ name: "a", ...host("@local", doNothing) })
+  const hostContext = await buildLocalHostContext()
   if (isErr(hostContext)) throw hostContext
 
   const transport: Transport = async (script) => hostContext.transport(`PATH='${binDir}':"$PATH"\n${script}`)
