@@ -1,7 +1,7 @@
 import type { Result } from "ts-explicit-errors"
-import { err } from "ts-explicit-errors"
 
 import { runLocal } from "#transport/local.ts"
+import { closeSshConnection, createSshTransport } from "#transport/ssh.ts"
 import { wrapCommand } from "#transport/wrap-command.ts"
 
 const LOCAL_TARGET = "@local"
@@ -18,12 +18,9 @@ export interface CommandOutput {
 
 export type Transport = (cmd: string) => Promise<Result<CommandOutput>>
 
-/** Returns how to reach `target`. An unsupported target fails at its first command, like an unreachable host. */
-const getTargetTransport = (target: string): Transport => {
-  if (target === LOCAL_TARGET) return runLocal
-  // oxlint-disable-next-line typescript/require-await - a `Transport` returns a promise, and this one has nothing to await
-  return async () => err(`target '${target}' isn't supported yet (only '${LOCAL_TARGET}')`, undefined)
-}
+/** Returns how to reach `target`: `@local` is the control machine, and any other target goes through ssh. */
+const getTargetTransport = (target: string): Transport =>
+  target === LOCAL_TARGET ? runLocal : createSshTransport(target)
 
 /**
  * Returns how to run commands on `target`. Wrap each command here, because every target runs it in an `sh -s` that
@@ -32,4 +29,11 @@ const getTargetTransport = (target: string): Transport => {
 export const getTransport = (target: string): Transport => {
   const targetTransport = getTargetTransport(target)
   return async (cmd) => targetTransport(wrapCommand(cmd))
+}
+
+/** Closes the connection to each of `targets` that has one, once per target, at the end of a run. */
+export const closeConnections = async (targets: string[]) => {
+  const sshTargets = new Set(targets.filter((target) => target !== LOCAL_TARGET))
+  const pendingCloses = Array.from(sshTargets, async (target) => closeSshConnection(target))
+  await Promise.all(pendingCloses)
 }

@@ -7,8 +7,8 @@ import type { HostSudo } from "#hosts/host.ts"
 import { styleAside, styleValue, styleWarning } from "#report/format/styles.ts"
 import { readHiddenLine } from "#session/host-details/read-hidden-line.ts"
 import type { Shell } from "#session/shell.ts"
-import { createCommandExitError } from "#session/shell.ts"
 import { quoteShellArg } from "#transport/quote.ts"
+import { createCommandExitError } from "#utils.ts"
 
 // Use `-n`, so sudo fails instead of asking, and `-k`, so it ignores cached credentials.
 const CHECK_PASSWORDLESS_SUDO_COMMAND = "sudo -n -k true"

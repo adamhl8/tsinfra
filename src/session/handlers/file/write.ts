@@ -20,8 +20,8 @@ import {
   buildTempDirectoryLines,
   toWriteScriptPaths,
 } from "#session/handlers/shared/filesystem/write-script.ts"
-import { createCommandExitError } from "#session/shell.ts"
 import type { StepContext } from "#session/step.ts"
+import { createCommandExitError } from "#utils.ts"
 
 const HEREDOC_DELIMITER = "__TSINFRA_EOF__"
 // Stand in for the content in the record, because it may be a secret and it can be large.

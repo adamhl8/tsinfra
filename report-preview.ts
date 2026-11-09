@@ -291,8 +291,9 @@ const createScenarios = (dir: string): Scenario[] => {
     },
     {
       // A host that couldn't be prepared, as `(host)` and its target in the value color, because its script never ran.
+      // Give it a target with a space, because ssh rejects one before it reads any config or connects.
       name: "unreachable",
-      target: "web.lan",
+      target: "web lan",
       fn: async (h) => {
         await h.read("true")
       },

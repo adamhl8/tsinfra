@@ -21,6 +21,9 @@ import type { Transport } from "#transport/transport.ts"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
+/** A target that can't be prepared, because ssh rejects the space in it before it reads any config or connects. */
+export const UNREACHABLE_TARGET = "unreachable host"
+
 const doNothing = async () => {
   /* empty */
 }

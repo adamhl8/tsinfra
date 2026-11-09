@@ -14,6 +14,7 @@ import packageJson from "#package.json" with { type: "json" }
 import { ERROR_THEME, printTsinfraError } from "#report/errors.ts"
 import { formatHostBlock } from "#report/format.ts"
 import { formatSummary } from "#report/format/summary.ts"
+import { closeConnections } from "#transport/transport.ts"
 
 /** Runs the hosts, prints each one's host block and then the summary, and returns the exit code. */
 const runTsinfra = async (): Promise<Result<number>> => {
@@ -37,6 +38,8 @@ const runTsinfra = async (): Promise<Result<number>> => {
     const hostBlock = formatHostBlock(hostReport, { verbose: config.verbose })
     if (hostBlock) console.log(`${hostBlock}\n`)
   }
+
+  await closeConnections(loadedHosts.map(({ target }) => target))
 
   console.log(formatSummary(hostReports, config.mode))
 

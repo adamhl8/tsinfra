@@ -7,7 +7,13 @@ import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
 import { attempt, isErr } from "ts-explicit-errors"
 
-import { createFakeSudoSession, prepareAndRunHost, prepareHostContext, toLoadedHost } from "#__tests__/session.ts"
+import {
+  UNREACHABLE_TARGET,
+  createFakeSudoSession,
+  prepareAndRunHost,
+  prepareHostContext,
+  toLoadedHost,
+} from "#__tests__/session.ts"
 import type { Mode } from "#cli/program.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
@@ -194,12 +200,12 @@ describe("formatHostBlock", () => {
   })
 
   it("should name a host that couldn't be prepared after its target, and count it as failed", async () => {
-    const hostReport = await prepareAndRunHost(toLoadedHost("a", host("a.lan", changeThenThrow)), "plan")
+    const hostReport = await prepareAndRunHost(toLoadedHost("a", host(UNREACHABLE_TARGET, changeThenThrow)), "plan")
     const startError =
-      "failed to prepare the host -> failed to read the SSH user's home directory -> target 'a.lan' isn't supported yet (only '@local')"
+      "failed to prepare the host -> failed to read the SSH user's home directory -> failed to run the command over ssh -> exited with code 255: hostname contains invalid characters"
 
     expect([formatHostBlock(hostReport), formatSummary([hostReport], "plan")]).toStrictEqual([
-      `a\n  ! failed: (host) a.lan\n      ${startError}`,
+      `a\n  ! failed: (host) ${UNREACHABLE_TARGET}\n      ${startError}`,
       "a   failed",
     ])
   })

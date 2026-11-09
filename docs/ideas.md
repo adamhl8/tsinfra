@@ -86,6 +86,15 @@ Opt-in features with no real case yet:
   `docker`, doesn't get it in commands that reuse the ControlMaster connection that logged in before the change. A
   rerun within `ControlPersist` reuses it too. Dropping the master makes the next command log in again. `h.reboot`
   already drops it, so the two can share that code. Until then, use `sudo`, or `sg <group> -c '...'`.
+- **Log in with an SSH password,** like Ansible's `--ask-pass`. Today `BatchMode=yes` stops ssh from prompting, so a
+  host that only takes a password fails in preflight with ssh's `Permission denied (publickey,password)`. ssh can ask a
+  helper instead of the terminal, with `SSH_ASKPASS` and `SSH_ASKPASS_REQUIRE=force` (OpenSSH 8.4 and later), the same
+  way sudo's askpass works. The helper runs on the control machine and prints a variable, so it holds no secret. Only
+  the connection that opens the ControlMaster logs in, so a host needs the password once per run. It fits the sudo
+  prompt's flow: `buildHostDetails` stops a host whose `Permission denied` lists `password`, then `finishHostDetails`
+  prompts for it, opens the connection, and goes straight on to sudo, prompting for that too if needed. Each host's
+  prompts come together, one host at a time. A key's passphrase would come through the same helper, and ssh's prompt
+  text tells the two apart.
 - **A manual step,** for work no command can do: pressing a pairing button, a login URL from `tailscale up`, an App
   Store sign-in for `mas`, or a macOS permission like Full Disk Access. It's shaped like `ensure` with instructions in
   place of a fix, like `h.manual(name, { check, want, instructions })`. `plan` shows the instructions under `~ change`.

@@ -10,6 +10,7 @@ the remote shell.
 - [File writes](#file-writes)
   - [How other tools write files](#how-other-tools-write-files)
 - [SSH and ControlMaster](#ssh-and-controlmaster)
+  - [How other tools reach hosts](#how-other-tools-reach-hosts)
 - [Link writes](#link-writes)
 - [sudo](#sudo)
 
@@ -22,6 +23,9 @@ export default host("caddy.lan", async (h) => { ... }, { shell: "bash -l" })
 ```
 
 `"@local"` is the same magic name pyinfra uses, and the one `~/homelab/pyinfra/inventory.py` already uses.
+
+Any other target goes to `ssh` exactly as written, so it can name a user, like `adam@incus.lan`. Without one, ssh logs
+in as the `User` that `~/.ssh/config` gives the host, or else as the local user. Each user gets its own connection.
 
 ## Commands travel on stdin
 
@@ -44,7 +48,8 @@ with stdin from `/dev/null`. Without that wrapper, a command in the script that 
 nested `ssh`) would read the rest of the script as its input.
 
 Output comes back as stdout, stderr, and an exit code. `ssh` itself exits 255 when the connection fails, so a 255
-always gets the connection error from ssh's stderr rather than being treated as the command's exit code.
+always gets the connection error from ssh's stderr rather than being treated as the command's exit code (see
+[SSH and ControlMaster](#ssh-and-controlmaster)).
 
 ## Login shells
 
@@ -163,21 +168,36 @@ tsinfra runs the system `ssh` binary. That means `~/.ssh/config`, `ProxyJump`, `
 Every `ssh` call passes:
 
 ```sh
--o ControlMaster=auto -o ControlPath=~/.ssh/tsinfra-%C -o ControlPersist=60 -o BatchMode=yes
+ssh -T -o ControlMaster=auto -o ControlPath=~/.ssh/tsinfra-%C -o ControlPersist=60 -o BatchMode=yes -- <target> sh -s
 ```
 
+- **`-T`** never gives the session a terminal, even when `~/.ssh/config` sets `RequestTTY`. A terminal would merge
+  stderr into stdout and echo the script on stdin back as output.
 - **ControlMaster** makes the first `ssh` to a host open a connection and leave a socket on the control machine. Every
   later `ssh` to that host goes through the socket and skips the TCP connect, key exchange, and authentication, so a
   command starts in milliseconds.
 - **ControlPath** uses `%C`, a hash of the connection details, which keeps the socket path short. Unix socket paths
-  are limited to about 104 bytes on macOS. The `tsinfra-` prefix keeps these sockets apart from any the user configures.
+  are limited to 104 bytes on macOS, and ssh adds 17 characters to the path for a temporary name while it sets the
+  socket up. That leaves room for a home directory of about 33 characters, and a longer one fails with ssh's
+  `too long for Unix domain socket`. The `tsinfra-` prefix keeps these sockets apart from any the user configures.
 - **ControlPersist** keeps the connection open for 60 seconds after the last command. That is a safety net, because the
-  CLI closes each connection at the end of the run with `ssh -O exit`.
+  CLI closes each connection at the end of the run with `ssh -O stop`. `stop` lets sessions already on the connection
+  finish, where `exit` would kill them. Two tsinfra runs to the same host share one socket, so one run's `exit` would
+  kill the other's commands.
 - **BatchMode** makes ssh fail instead of prompting. Hosts run in parallel, and a password or host-key prompt from one
   of them would hang the run. The error says to run `ssh <host>` once by hand.
+- **`--`** ends ssh's options, so a target can't be read as one.
 
 The first command to a host, the home read when it's prepared, opens the connection. An unreachable host fails
 there, before its script runs, with ssh's error.
+
+**Exit 255 is ssh's own failure.** A 255 fails the host with ssh's stderr, because a lost connection must never read as
+a check that came back false. A command that itself exits 255, like a nested `ssh` that failed, reads as a lost
+connection too. Ansible has the same limit. One 255 gets a single retry: `mux_client_hello_exchange: write packet:
+Broken pipe` means the connection closed at its 60 idle seconds just as the command tried to join it. The command never
+started, so running it again is safe. The retry waits 100 ms first, because the closing connection removes its socket
+as it exits, and a retry before that would join it again. A host that sits idle while earlier hosts run can hit it. Ansible retries this
+case too.
 
 **Host keys and timeouts follow `~/.ssh/config`, with defaults where it says nothing.** A command-line `-o` always beats
 the config file, so tsinfra reads the host's effective settings first, with `ssh -G <host>`. That runs locally, with no
@@ -199,6 +219,40 @@ network, once per host in preflight. Then it fills in only what ssh would otherw
 - **`ConnectTimeout=10`** is passed when `-G` shows `connecttimeout none`, ssh's default, which leaves it to the OS and
   can take about 75 seconds. A timeout the user set is kept.
 - **Connect retries are left to ssh.** `ConnectionAttempts` defaults to 1, and `-G` can't tell that from an explicit 1.
+- **`LogLevel=ERROR`** is passed when `-G` shows `loglevel INFO`, ssh's default. At `INFO`, ssh prints a server's login
+  banner and `accept-new`'s `Permanently added ... to the list of known hosts` on stderr, mixed into a command's own. A
+  level the user set is kept.
+
+### How other tools reach hosts
+
+Researched from the source of each tool in November 2026:
+
+| Tool                        | Reaches the host with                                | Reuses connections                               | Closes them                      |
+| --------------------------- | ---------------------------------------------------- | ------------------------------------------------ | -------------------------------- |
+| Ansible                     | the `ssh` binary, command as an argument or on stdin | `ControlPersist=60s`, in `~/.ansible/cp`         | never, except `reset_connection` |
+| Mitogen                     | one `ssh` process per host for the whole run         | the one process                                  | at the end                       |
+| Salt SSH                    | the `ssh` and `scp` binaries, under a terminal       | no                                               | no                               |
+| nixos-rebuild               | the `ssh` binary, `--` before the command            | `ControlPersist=60`, in a temp directory per run | `-O exit` at exit                |
+| colmena, Docker, git, rsync | the `ssh` binary                                     | no                                               | no                               |
+| pyinfra, Fabric             | Paramiko, a Python library                           | no                                               | no                               |
+| Chef, Kamal, Bolt           | net-ssh, a Ruby library (Bolt can run `ssh` instead) | no                                               | no                               |
+
+What tsinfra takes from them, and where it differs:
+
+- **The system `ssh` binary** is what Ansible, Salt SSH, nixos-rebuild, and colmena run, and what Ansible now runs
+  only. The library tools keep catching up with ssh: pyinfra's issues cover the 1Password agent, `ProxyJump` edge
+  cases, host certificates, and FIDO keys. Fabric and Train, Chef's library, skip host key checks by default. Bolt added
+  a mode that runs `ssh`, because net-ssh lacked algorithms.
+- **Defaults only where the config says nothing** is stricter than the others. Ansible always passes
+  `ConnectTimeout`, colmena always passes `accept-new`, and pyinfra's `accept-new` default overrides the config's.
+- **`-T`** comes from colmena and Docker. **`--`** comes from nixos-rebuild and Docker.
+- **The retry on a closing connection** comes from Ansible. So does the limit on a command's own 255.
+- **`-O stop` at the end** is between the two tools that close. nixos-rebuild runs `-O exit` on sockets that are its
+  own, in a temp directory per run. A temp directory under macOS's `$TMPDIR` is too long for a socket path, so
+  tsinfra shares `~/.ssh` between runs and stops instead.
+- **The script on stdin** is Ansible's pipelining, which Ansible leaves off by default because sudo's `requiretty`
+  needs a terminal. tsinfra's sudo gets its password through askpass, so it needs no terminal. A host with
+  `requiretty` refuses sudo, and that setting has been off by default on RHEL since 7.
 
 ## Link writes
 

@@ -5,9 +5,8 @@ import { err } from "ts-explicit-errors"
 import type { Want } from "#session/handlers/ensure/check.ts"
 import type { HostCheckDetails } from "#session/handlers/ensure/host-check-details.ts"
 import type { Comparison } from "#session/handlers/shared/converge.ts"
-import { createCommandExitError } from "#session/shell.ts"
 import type { CommandOutput } from "#transport/transport.ts"
-import { stripTrailingNewlines } from "#utils.ts"
+import { createCommandExitError, stripTrailingNewlines } from "#utils.ts"
 
 /** What the check gave and what it wanted, as raw values. `kind` says how the output shows them. */
 export type EnsureComparisonValues =

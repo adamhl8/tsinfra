@@ -7,12 +7,14 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
 
 1. **SSH transport.** The local transport, the `{ ... } </dev/null` wrapper, and the `sudo` preamble are done. The rest
    comes in four pieces, each reviewed before the next (see [Transport](./docs/transport.md#ssh-and-controlmaster)):
-   1. **Plain SSH.** `ssh` with commands on stdin to `sh -s`, the ControlMaster options with `BatchMode`, ssh's own exit
-      255 as a failure to run, and `ssh -O exit` at the end of the run. Integration tests against a real sshd in
-      `bask test-docker`. Test a command that can't run after the session starts, like sshd going away mid-run: it
-      fails the host, and the step's record keeps the command and its error.
-   2. **`ssh -G` defaults.** Preflight reads the host's effective settings, then passes `accept-new` and
-      `ConnectTimeout=10` only where ssh would otherwise be unworkable, with the hints for a new host and a changed key.
+   1. **Plain SSH.** `ssh -T` with commands on stdin to `sh -s`, the ControlMaster options with `BatchMode`, ssh's own
+      exit 255 as a failure to run, one retry on a connection closing as a command joins it, and `ssh -O stop` at the
+      end of the run. Integration tests against a real sshd in `bask test-docker`. Test a command that can't run after
+      the session starts, like sshd going away mid-run: it fails the host, and the step's record keeps the command and
+      its error.
+   2. **`ssh -G` defaults.** Preflight reads the host's effective settings, then passes `accept-new`,
+      `ConnectTimeout=10`, and `LogLevel=ERROR` only where the config says nothing, with the hints for a new host and a
+      changed key.
    3. **The `shell` host option.** `{ shell: "bash -l" }` starts `bash -l -s` in place of `sh -s`, on both transports.
    4. **The cross-shell tests.** The file write rule on dash, bash, and busybox sh over SSH, and on macOS `/bin/sh`,
       which runs only on darwin, so it is local only. The sudo password flows already work over any transport, so they
@@ -52,6 +54,9 @@ Decided, and wanted eventually, with no place in the order yet.
 
 ## Follow-ups
 
+- **Stop remote commands on Ctrl-C.** Without a terminal, Ctrl-C ends the local `ssh`, but the command on the host
+  keeps running. nixos-rebuild runs a remote `pkill -SIGINT` when it's interrupted. tsinfra needs the same, with the
+  process to stop known, and the run's connections still closed.
 - **Fail a tool saved for later.** A script can keep the `read` or `exec` a step function was given and call it after
   that step finished. At the top level its command goes unrecorded, and during a later step it is recorded under the
   wrong step. `callStep` already builds a fresh set of tools for each step. What's left is to bind them to the step's

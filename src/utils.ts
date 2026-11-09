@@ -1,4 +1,7 @@
 import { stringWidth } from "bun"
+import { err } from "ts-explicit-errors"
+
+import type { CommandOutput } from "#transport/transport.ts"
 
 /** What failed, or `undefined` when nothing did. */
 export type Failure = Error | undefined
@@ -33,3 +36,11 @@ export const splitWords = (text: string): string[] => text.trim().split(WHITESPA
 
 /** Wraps each name in single quotes and joins them into a list, like `'a', 'b'`. */
 export const quoteNames = (names: Iterable<string>): string => Array.from(names, (name) => `'${name}'`).join(", ")
+
+/** Describes a non-zero exit as an error, with the exit code and stderr in its message. */
+export const createCommandExitError = (commandOutput: CommandOutput) => {
+  const { stderr, exitCode } = commandOutput
+  let trimmedStderr = stderr.trim()
+  trimmedStderr &&= `: ${trimmedStderr}`
+  return err(`exited with code ${exitCode}${trimmedStderr}`, undefined)
+}

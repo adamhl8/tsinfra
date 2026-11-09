@@ -6,7 +6,7 @@ import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
 import { attempt, messageChain } from "ts-explicit-errors"
 
-import { prepareAndRunHost, toLoadedHost } from "#__tests__/session.ts"
+import { UNREACHABLE_TARGET, prepareAndRunHost, toLoadedHost } from "#__tests__/session.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
 import { getExitCode, hasDrift, prepareHosts } from "#hosts/run.ts"
@@ -67,7 +67,7 @@ describe("prepareHosts", () => {
     }
     const hostEntries = await prepareHosts([
       toLoadedHost("a", host("@local", touchMarker)),
-      toLoadedHost("b", host("b.lan", touchMarker)),
+      toLoadedHost("b", host(UNREACHABLE_TARGET, touchMarker)),
       toLoadedHost("c", host("@local", touchMarker)),
     ])
 
@@ -82,14 +82,17 @@ describe("prepareHosts", () => {
 
 describe("runHost", () => {
   it("should fail before the script runs when the host can't run commands", async () => {
-    const { failure, ...hostReport } = await prepareAndRunHost(toLoadedHost("a", host("a.lan", throwBoom)), "apply")
+    const { failure, ...hostReport } = await prepareAndRunHost(
+      toLoadedHost("a", host(UNREACHABLE_TARGET, throwBoom)),
+      "apply",
+    )
 
     expect({ ...hostReport, message: getMessage(failure) }).toStrictEqual({
       name: "a",
-      target: "a.lan",
+      target: UNREACHABLE_TARGET,
       started: false,
       message:
-        "failed to prepare the host -> failed to read the SSH user's home directory -> target 'a.lan' isn't supported yet (only '@local')",
+        "failed to prepare the host -> failed to read the SSH user's home directory -> failed to run the command over ssh -> exited with code 255: hostname contains invalid characters",
     })
   })
 
