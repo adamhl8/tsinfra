@@ -18,6 +18,7 @@ import {
   styleLabel,
   styleNote,
   styleValue,
+  styleHint,
   styleWarning,
 } from "#report/format/styles.ts"
 import type { StepWarning } from "#report/warnings.ts"
@@ -73,6 +74,7 @@ const toDetailRows = (detail: Detail, formatOptions: FormatOptions): DetailRows 
   if (detail.kind === "diff") return { kind: "unaligned", rows: formatDiff(detail.got, detail.want, formatOptions) }
   if (detail.kind === "note") return { kind: "unaligned", rows: [styleNote(detail.text)] }
   if (detail.kind === "warning") return { kind: "unaligned", rows: [formatWarning(detail.warning)] }
+  if (detail.kind === "hint") return { kind: "unaligned", rows: [styleHint(detail.text)] }
   if (detail.kind === "ensureComparisonValues") return { kind: "aligned", rows: toEnsureRows(detail.values) }
   if (detail.kind === "fileComparisonValues") return { kind: "aligned", rows: toFileRows(detail.values) }
   if (detail.kind === "linkComparisonValues") return { kind: "aligned", rows: toLinkRows(detail.values) }
@@ -99,7 +101,7 @@ const formatAlignedRows = (alignedRows: AlignedRow[], valueColumn: number): stri
  * details read as belonging to it.
  */
 const formatStepEntryBody = (stepEntry: StepEntry, formatOptions: FormatOptions): string[] => {
-  const { error, details = [] } = stepEntry
+  const { error, details } = stepEntry
   const detailRows = details.map((detail) => toDetailRows(detail, formatOptions))
 
   const labels = detailRows.flatMap(({ kind, rows }) =>

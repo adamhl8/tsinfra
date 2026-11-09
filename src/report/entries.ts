@@ -42,7 +42,7 @@ export interface StepEntry {
   /** Why a failed step entry failed. */
   error?: Error
   /** How a value would change, or for a failure, what the step last found on the host. */
-  details?: Detail[]
+  details: Detail[]
 }
 
 /** What a step entry shows under its head line. */
@@ -58,6 +58,8 @@ export type Detail =
   | { kind: "note"; text: string }
   // Something that worked, but needs a look, like a link to a path where nothing exists.
   | { kind: "warning"; warning: StepWarning }
+  // How to fix a failure, like setting the host's `sudo` option.
+  | { kind: "hint"; text: string }
 
 // Treat a read's or an inspect's name as a value, because it's the command itself, and a file's or a link's, because it's a path.
 const STEP_NAME_KINDS: Record<StepKind, NameKind> = {
@@ -193,7 +195,7 @@ const toStepEntry = (stepRecord: StepRecord, formatOptions: FormatOptions): Step
   const isShown = SHOWN_BY_DEFAULT[status] || verbose || warningDetails.length > 0
   if (!isShown) return
 
-  if (status === "waiting") return { status, kind, name, needs: waitingOn }
+  if (status === "waiting") return { status, kind, name, needs: waitingOn, details: [] }
 
   if (status === "changed") {
     const values = comparisons.before?.values
@@ -210,13 +212,30 @@ export const toStepEntries = (hostReport: HostReport, formatOptions: FormatOptio
   // Name a host that couldn't be prepared after its target, because that's what failed, and the script never ran.
   if (!hostReport.started) {
     return [
-      { status: "failed", kind: "host", name: { text: hostReport.target, kind: "value" }, error: hostReport.failure },
+      {
+        status: "failed",
+        kind: "host",
+        name: { text: hostReport.target, kind: "value" },
+        error: hostReport.failure,
+        details: [],
+      },
     ]
   }
 
-  const { name, stepRecords, failure } = hostReport
+  const { name, stepRecords, failure, failureHints } = hostReport
+
+  // Add the hints under the entry that shows the host's failure, whichever step or script it came from.
+  const failureDetails: Detail[] = failureHints.map((text) => ({ kind: "hint", text }))
+
   const stepEntries = stepRecords
-    .map((stepRecord) => toStepEntry(stepRecord, formatOptions))
+    .map((stepRecord) => {
+      const stepEntry = toStepEntry(stepRecord, formatOptions)
+      if (!stepEntry) return stepEntry
+      if (stepRecord.status !== failure) return stepEntry
+
+      stepEntry.details.push(...failureDetails)
+      return stepEntry
+    })
     .filter((stepEntry) => stepEntry !== undefined)
 
   // Show a failure that no step owns, like the script throwing, after the steps.
@@ -228,6 +247,7 @@ export const toStepEntries = (hostReport: HostReport, formatOptions: FormatOptio
       kind: "host",
       name: { text: `${name}${HOST_SCRIPT_EXTENSION}`, kind: "hostScript" },
       error: failure,
+      details: failureDetails,
     })
   }
 

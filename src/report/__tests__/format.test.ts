@@ -346,6 +346,7 @@ describe("formatHostBlock for a file step", () => {
       started: true,
       failure: hostSession.getFailure(),
       stepRecords: hostSession.stepRecords,
+      failureHints: [],
     })
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
@@ -409,6 +410,7 @@ describe("formatHostBlock for a file step", () => {
       started: true,
       failure: hostSession.getFailure(),
       stepRecords: hostSession.stepRecords,
+      failureHints: [],
     })
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
@@ -661,6 +663,7 @@ describe("formatHostBlock for the stderr of a step that still differs", () => {
       started: true,
       failure: hostSession.getFailure(),
       stepRecords: hostSession.stepRecords,
+      failureHints: [],
     })
 
     expect(hostBlock).toContain("the host's state still differs after the fix")
@@ -727,6 +730,61 @@ const createBrokenLink = async () => {
   await symlink(target, linkPath)
   return { directory, linkPath, target }
 }
+
+// Print sudo's own line for a missing password, because the hint only reads the command's stderr.
+const NEEDS_PASSWORD_CMD = "echo 'sudo: a password is required' >&2; exit 1"
+const SUDO_OPTION_HINT = "        sudo needs a password on this host, so set the sudo option on host()"
+
+describe("formatHostBlock for a sudo that needed a password", () => {
+  it("should hint at the sudo option under the failed step, on a host that doesn't declare sudo", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.read(NEEDS_PASSWORD_CMD)
+    }, "apply")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
+      `      failed to read '${NEEDS_PASSWORD_CMD}' -> exited with code 1: sudo: a password is required`,
+      SUDO_OPTION_HINT,
+    ])
+  })
+
+  it("should not hint at a failure the script throws, even after a sudo failed", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.inspect(NEEDS_PASSWORD_CMD)
+      throw new Error("the service didn't start")
+    }, "apply")
+
+    expect(hostBlock?.split("\n").slice(1)).toStrictEqual(["  ! failed: (host) a.ts", "      the service didn't start"])
+  })
+
+  it("should not hint when sudo failed in an earlier step than the one that failed", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.inspect(NEEDS_PASSWORD_CMD)
+      await h.read("echo 'permission denied' >&2; exit 1")
+    }, "apply")
+
+    expect(hostBlock).not.toContain("sudo option")
+  })
+
+  it("should not hint for a failure with other stderr", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.read("echo 'permission denied' >&2; exit 1")
+    }, "apply")
+
+    expect(hostBlock).not.toContain("sudo option")
+  })
+
+  it("should not hint on a host that didn't fail", async () => {
+    const hostReport = await runNamedHost(
+      "a",
+      async (h) => {
+        await h.inspect(NEEDS_PASSWORD_CMD)
+      },
+      "apply",
+    )
+
+    expect(hostReport).toMatchObject({ failure: undefined, failureHints: [] })
+  })
+})
 
 describe("formatHostBlock and formatSummary for a warning", () => {
   it("should show a link to a missing path that's already right without --verbose, and count it", async () => {

@@ -1,5 +1,8 @@
 import { stringWidth } from "bun"
 
+/** What failed, or `undefined` when nothing did. */
+export type Failure = Error | undefined
+
 const TRAILING_NEWLINES = /\n+$/v
 const TRAILING_NEWLINE = /\n$/v
 const WHITESPACE = /\s+/v

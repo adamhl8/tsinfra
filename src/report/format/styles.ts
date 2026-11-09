@@ -66,6 +66,9 @@ export const styleGotExitCode = pipeStyles(styleGot, pc.italic)
  */
 export const styleWantExitCode = pipeStyles(styleWant, pc.italic)
 
+/** Colors a hint like a warning, and italicizes it, because it has no label to set it apart. */
+export const styleHint = pipeStyles(pc.yellowBright, pc.italic)
+
 /** Styles tsinfra's own aside, like "no steps" or a note in place of a diff. */
 export const styleNote = pipeStyles(pc.dim, pc.italic)
 

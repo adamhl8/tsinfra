@@ -11,6 +11,7 @@ import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
 import { getExitCode, hasDrift, prepareHosts } from "#hosts/run.ts"
 import type { Host } from "#session/session.ts"
+import type { Failure } from "#utils.ts"
 
 const throwBoom = () => {
   throw new Error("boom")
@@ -53,7 +54,7 @@ const failCheck = async (h: Host) => {
   await h.ensure("Broken", { check: throwBoom, want: true, fix: "true" })
 }
 
-const getMessage = (failure: Error | undefined) => failure && messageChain(failure)
+const getMessage = (failure: Failure) => failure && messageChain(failure)
 
 /** Runs a host 'a' with `fn` and returns its failure's message chain, if any. */
 const runAndGetMessage = async (fn: HostFunction) => getMessage((await runHostA(fn)).failure)

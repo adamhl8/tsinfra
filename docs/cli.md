@@ -155,7 +155,9 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   doesn't read as a step, with its error under it the same way. The block's header already names the host, so the error
   is not wrapped in "failed to run host". A host that couldn't be prepared, like an unreachable one, never ran its
   script, so its block has one `!` line named after its target (like `web.lan`), with an error that starts with
-  "failed to prepare the host".
+  "failed to prepare the host". A failure can have a hint under it, in italic yellow, with no label, saying how to fix
+  it. A host that leaves `sudo` off and fails in a step whose own `sudo` needed a password gets "sudo needs a
+  password on this host, so set the sudo option on host()" under that step (see [Transport](./transport.md#sudo)).
 - **Failure details.** A failure that still differs after its fix shows its `after` values, then any stderr that can
   explain it, from its `fix` and `after` phases. A phase that ran one command, which wrote to stderr, gets a
   `stderr: <command> -> <stderr>` row. It's clear what that stderr relates to, because that command is all the phase ran.

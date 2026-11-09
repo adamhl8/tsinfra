@@ -27,6 +27,7 @@ import { createStepRecorder } from "#session/step-recorder.ts"
 import type { HandlerReturn, StepContext, StepKind } from "#session/step.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
 import type { Transport } from "#transport/transport.ts"
+import type { Failure } from "#utils.ts"
 
 /** What a host's session needs, set up before any script runs. */
 export interface HostContext {
@@ -97,8 +98,6 @@ const STEP_NAME_LABELS: Record<StepKind, string> = {
   ensure: "name",
   run: "name",
 }
-
-type Failure = Error | undefined
 
 // Keep the first failure, because calls made at once with `Promise.all` can each fail.
 // Replace it only with an error that wraps it, which adds context such as the step's name.

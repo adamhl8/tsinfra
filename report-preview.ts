@@ -306,6 +306,15 @@ const createScenarios = (dir: string): Scenario[] => {
       fn: readTrue,
     },
     {
+      // A command's `sudo` that needs a password, on a host that doesn't declare `sudo`, with the hint under it.
+      name: "undeclared-sudo",
+      target: "@local",
+      pass: "sudo",
+      fn: async (h) => {
+        await h.read("sudo true")
+      },
+    },
+    {
       // A sudo that fails for another reason, which shows sudo's own output in the error chain.
       name: "not-in-sudoers",
       target: "@local",

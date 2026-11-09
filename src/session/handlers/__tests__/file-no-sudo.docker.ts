@@ -4,7 +4,9 @@ import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
 
-import { createSession, fileOrMessage } from "#__tests__/session.ts"
+import { createSession, fileOrMessage, prepareAndRunHost, toLoadedHost } from "#__tests__/session.ts"
+import { host } from "#hosts/host.ts"
+import { formatHostBlock } from "#report/format.ts"
 
 describe("a user with no sudo rule", () => {
   it("should fail straight away when a step needs sudo", async () => {
@@ -12,6 +14,22 @@ describe("a user with no sudo rule", () => {
 
     expect(await fileOrMessage(h, "/etc/tsinfra-docker-x", "a\n", { sudo: true })).toBe(
       "failed to compare the host with what the step wants -> failed to read the details of '/etc/tsinfra-docker-x' -> exited with code 1: sudo: a password is required",
+    )
+  })
+
+  it("should hint at the sudo option when a step's sudo needs a password", async () => {
+    const hostReport = await prepareAndRunHost(
+      toLoadedHost(
+        "a",
+        host("@local", async (h) => {
+          await h.file("/etc/tsinfra-docker-x", "a\n", { sudo: true })
+        }),
+      ),
+      "plan",
+    )
+
+    expect(formatHostBlock(hostReport)).toContain(
+      "sudo needs a password on this host, so set the sudo option on host()",
     )
   })
 

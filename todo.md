@@ -50,42 +50,11 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
       2. **The prompt.** A `sudo: true` host whose sudo needs a password prompts for it in preflight, after every host
          is prepared, one host at a time in the hosts' order. Every password is checked with `sudo -k -S`, so a wrong
          one logs one failed try, and `readHiddenLine` reads it with `node:readline` muted.
-      3. **The hint for a host that doesn't declare `sudo`.** Its `sudo` stays `sudo -n`, and a failure for want of a
-         password gets `host() needs sudo: true` added. Detect it by sudo's `a password is required` message, because a
-         `sudo -n true` probe before each call is wrong on hosts whose sudoers allow only some commands without a
-         password. A non-English locale doesn't get the hint. The rundown, not yet approved:
-         - **When it applies.** A command's own `sudo`, or a `file` or `link` step with `sudo: true` (`sudo sh -s`), on
-           a host whose `sudo` option is `false`. The fix in both cases is `sudo: true` on `host()`.
-         - **Where it goes: a note in the report, not text in the error.** Adding it in `createCommandExitError` in
-           `shell.ts` needs no plumbing, but it doesn't know the host's option, so it's wrong in two cases. Every
-           preflight failure of a `sudo: true` host with no terminal has the same message, so the chain would end in
-           `so host() needs sudo: true` on a host that declares it. A `sudo: true` host whose sudoers let `true` skip
-           the password but not some other command is wrong too, though rare. Fixing both would mean passing the option
-           to every shell and every `createCommandExitError` call (`ensure/comparison.ts`, `file/write.ts`), and giving
-           preflight its own error path.
-         - **The note.** `runHost` has the host's option (`loadedHost.options`) and every command's output (the step
-           records). When the host failed, its `sudo` option is `false`, and a command exited non-zero with stderr
-           holding the line `sudo: a password is required`, the host report gets a flag. The report adds a note to the
-           entry that shows the failure, like the "some commands during the fix wrote to stderr" note: `sudo needed a
-           password, so host() needs sudo: true`. Errors and records stay as sudo made them, so `-vvv` shows the real
-           stderr.
-         - **Edge cases.** Match the whole line, so a command's own output that happens to say "a password is
-           required" doesn't count. Only a failed host gets the note, so a script that catches the failure and finishes
-           gets none. A user with no sudo rule at all gets the same message from `sudo -n`, because sudo asks for the
-           password before checking the rules. The note is still the right next step, because with `sudo: true`
-           preflight prompts, and sudo's own `not in the sudoers file` then says what's wrong. A host with `{ password }`
-           or a prompted one uses askpass, so sudo never prints the message there.
-         - **Tests.** Report tests in `format.test.ts`, with the fake-sudo session (a fake `sudo` that prints the
-           message and exits 1): a host without `sudo` whose `h.read("sudo true")` fails shows the note under that
-           step's failure, and other stderr shows none. Test the check directly for a host that declares `sudo`,
-           because a real run would need `sudo: true` to pass preflight with a fake `sudo`. In Docker,
-           `file-no-sudo.docker.ts` (the user with no sudo rule) checks that the host report has the note. The preview
-           gets a scenario that shows it.
-         - **Docs.** `docs/transport.md`'s bullet about a host without a password says the hint is a note under the
-           failure. `docs/cli.md`'s failures section mentions the note.
-         - **Open calls.** The wording, `sudo needed a password, so host() needs sudo: true`, or just
-           `host() needs sudo: true`. The trade-off: the hint isn't in the error's message chain, so code that reads the
-           error, not the report, doesn't see it.
+      3. **The hint for a host that doesn't declare `sudo`.** Its `sudo` stays `sudo -n`. A host that leaves `sudo`
+         off and fails after sudo's `a password is required` gets a hint under its failure in the report:
+         `sudo needs a password on this host, so set the sudo option on host()`. `runHost` decides it from the host's
+         option and the failed step's commands, so errors and records keep sudo's own words. A non-English locale
+         doesn't get the hint.
 
       SSH isn't built yet, so all three are tested against `@local` and in Docker. The flows are the same over SSH.
 

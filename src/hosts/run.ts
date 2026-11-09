@@ -7,7 +7,8 @@ import type { HostDetails, ReadyHostDetails } from "#session/host-details.ts"
 import { buildHostDetails, finishHostDetails } from "#session/host-details.ts"
 import type { HostContext } from "#session/session.ts"
 import { createHostSession } from "#session/session.ts"
-import type { StepRecord } from "#session/step-recorder.ts"
+import type { CommandRecord, StepRecord } from "#session/step-recorder.ts"
+import type { Failure } from "#utils.ts"
 
 /** A host whose script ran. A failed host still has the records of the steps that ran before the failure. */
 interface StartedHostReport {
@@ -15,7 +16,9 @@ interface StartedHostReport {
   started: true
   stepRecords: StepRecord[]
   /** Set when a step failed or the script threw. */
-  failure: Error | undefined
+  failure: Failure
+  /** How to fix the failure, which the report shows under it. Empty when there's no failure or no hint for it. */
+  failureHints: string[]
 }
 
 /** A host that couldn't be prepared, like an unreachable one, so its script never ran. */
@@ -91,6 +94,33 @@ export const prepareHosts = async (loadedHosts: LoadedHost[]): Promise<HostEntry
   return hostEntries
 }
 
+/** Reports whether a command exited non-zero with `stderrText` in its stderr. */
+const hasFailedWithStderr = (commandRecords: CommandRecord[], stderrText: string) => {
+  const outputs = commandRecords.map(({ output }) => output)
+  return outputs.some(
+    (output) => output !== undefined && !isErr(output) && output.exitCode !== 0 && output.stderr.includes(stderrText),
+  )
+}
+
+// Name both fixes, because `sudo: true` and `sudo: { password }` each give sudo what it needs.
+const SUDO_OPTION_HINT = "sudo needs a password on this host, so set the sudo option on host()"
+
+/** Returns the hints for a host's failure, when a step owns it, each guarded by the failure it fixes. */
+const getFailureHints = (loadedHost: LoadedHost, stepRecords: StepRecord[], failure: Failure): string[] => {
+  // Hint only at a step's own failure, from its own commands, so a hint never lands under an unrelated failure.
+  // A command in another step, like an `inspect`, can fail without failing the host, and a script can throw for any reason.
+  const failedStep = failure && stepRecords.find(({ status }) => status === failure)
+  if (!failedStep) return []
+  const { commands } = failedStep
+
+  // Hint at the `sudo` option only on a host that leaves it off, because a host that sets it already did the fix.
+  // Match the line `sudo -n` prints when it needs a password. It's English only, so another locale gets no hint.
+  if (loadedHost.options.sudo === false && hasFailedWithStderr(commands, "sudo: a password is required"))
+    return [SUDO_OPTION_HINT]
+
+  return []
+}
+
 /** Calls the script's host function with its `Host`, catches what it throws, and reports what the host did. */
 export const runHost = async (hostEntry: HostEntry, mode: Mode): Promise<HostReport> => {
   const { name, target, fn: hostFunction } = hostEntry.loadedHost
@@ -103,5 +133,7 @@ export const runHost = async (hostEntry: HostEntry, mode: Mode): Promise<HostRep
   // Report the failure recorded in the session first, because a script that catches it can go on to throw something else.
   const failure = getFailure() ?? (isErr(fnResult) ? fnResult : undefined)
 
-  return { name, started: true, stepRecords, failure }
+  const failureHints = getFailureHints(hostEntry.loadedHost, stepRecords, failure)
+
+  return { name, started: true, stepRecords, failure, failureHints }
 }
