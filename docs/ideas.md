@@ -76,7 +76,32 @@ Opt-in features with no real case yet:
   Commands run as root, so `~/` means `/root`. Incus containers can just be reached over SSH, and Docker app containers
   are usually replaced rather than configured, so neither needs it yet. Deferred.
 - **Run something before a change, only when the change will happen,** like Salt's `prereq`, which drains a load
-  balancer before a deploy.
+  balancer before a deploy, and Chef's `notifies ... :before`. The likely shape is a `before` option on `file`, and maybe
+  `link`, taking a command or a function given `exec`, like a fix. It runs only in `apply`, only when the comparison
+  shows a change, and right before the write, and `plan` lists it under the change. The case is an app that writes its
+  config when it stops, like qBittorrent: stop it in `before`, and start it with a `run` whose `after` names the
+  `file`. A `run` with `after` already covers the half after the change, and an `ensure`'s fix can start with the
+  stop, so neither needs a hook.
+- **Reset the connection,** like Ansible's `meta: reset_connection`. A user added to a group, like `incus-admin` or
+  `docker`, doesn't get it in commands that reuse the ControlMaster connection that logged in before the change. A
+  rerun within `ControlPersist` reuses it too. Dropping the master makes the next command log in again. `h.reboot`
+  already drops it, so the two can share that code. Until then, use `sudo`, or `sg <group> -c '...'`.
+- **A manual step,** for work no command can do: pressing a pairing button, a login URL from `tailscale up`, an App
+  Store sign-in for `mas`, or a macOS permission like Full Disk Access. It's shaped like `ensure` with instructions in
+  place of a fix, like `h.manual(name, { check, want, instructions })`. `plan` shows the instructions under `~ change`.
+  `apply` prints them, waits for Enter, then checks again. A step with a check stops prompting once the work is done,
+  which an unconditional pause like Ansible's `pause` can't do. An unconditional pause also makes a second `apply`
+  stop again, and hangs an unattended run. Today an `ensure` whose fix fails with the instructions does the same job
+  with a rerun, because every earlier step is already right.
+- **A prompt step that returns a value,** a `read` answered by the user, like `h.prompt(name, { secret: true })`, for
+  values that only exist at run time, like a Plex claim token or a 2FA code. The script decides when to ask, like only
+  when a `read` shows the server isn't claimed yet. It prompts in `plan` too, so later steps can show a real diff.
+  Ansible's `pause` saves its answer the same way.
+
+  Both steps reuse the sudo prompt's pieces: `readHiddenLine`, Ctrl-D to skip the host, Ctrl-C to cancel the run, and
+  failing the host without a TTY. A host script can't prompt by itself, because tsinfra owns the terminal once hosts
+  run in parallel. The cost is that these prompts come mid-run, not in preflight, so prompts from parallel hosts take
+  turns and the live progress area pauses while one is open.
 
 ## Decided
 
@@ -89,8 +114,8 @@ Ideas moved into the design, with where they now live:
   `_sudo_password`. It became a preflight phase, `sudo` declared on `host()`, and a prompt per host (see
   [Transport](./transport.md#sudo)).
 - **A reboot step,** from Ansible's `reboot` and pyinfra's `server.reboot`. It's `h.reboot({ after, timeout })`, which
-  works like a run and checks the boot id changed (see [Steps](./steps.md#reboot)), built as step 6 in `todo.md`.
-- **Seed a file once,** from Puppet's and Salt's `replace: false`. It's `file`'s `overwrite: false` (see
+  works like a run and checks the boot id changed (see [Steps](./steps.md#reboot)), under Later in `todo.md`.
+- **Seed a file once,** from Chef's `:create_if_missing`. It's `file`'s `overwrite: false` (see
   [Steps](./steps.md#the-write)), built as part 7 of `file`.
 - **SSH defaults for new hosts,** from pyinfra's `accept-new` default. tsinfra reads `ssh -G` and passes `accept-new`
   only over the default `ask`, and `ConnectTimeout=10` only when none is set (see
@@ -102,7 +127,7 @@ Ideas moved into the design, with where they now live:
 - **Versioned JSON,** from Terraform's machine-readable output. Readers ignore unknown fields and refuse an unsupported
   major version, folded into [JSON output](./open-questions.md#json-output).
 - **Verbosity levels,** from pyinfra's `-vv` and `-vvv`. `-vv` lists commands, labeling tsinfra's own, and `-vvv` adds
-  their output (see [CLI](./cli.md#output)), under Later in `todo.md`.
+  their output (see [CLI](./cli.md#output)), next in `todo.md`.
 
 ## Rejected
 

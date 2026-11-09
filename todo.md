@@ -1,76 +1,54 @@
 # todo
 
-Build order for the design in `docs/`. Each stage is usable on its own, and the ports at the end are what decide the
-[open questions](./docs/open-questions.md).
+What's left before tsinfra can run the homelab, in order, then the ports that decide the
+[open questions](./docs/open-questions.md). Each stage is usable on its own.
 
-## Housekeeping
+## Next
 
-- Make an initial commit. Nothing in the repo is committed yet.
+1. **SSH transport.** The local transport, the `{ ... } </dev/null` wrapper, and the `sudo` preamble are done. The rest
+   comes in four pieces, each reviewed before the next (see [Transport](./docs/transport.md#ssh-and-controlmaster)):
+   1. **Plain SSH.** `ssh` with commands on stdin to `sh -s`, the ControlMaster options with `BatchMode`, ssh's own exit
+      255 as a failure to run, and `ssh -O exit` at the end of the run. Integration tests against a real sshd in
+      `bask test-docker`. Test a command that can't run after the session starts, like sshd going away mid-run: it
+      fails the host, and the step's record keeps the command and its error.
+   2. **`ssh -G` defaults.** Preflight reads the host's effective settings, then passes `accept-new` and
+      `ConnectTimeout=10` only where ssh would otherwise be unworkable, with the hints for a new host and a changed key.
+   3. **The `shell` host option.** `{ shell: "bash -l" }` starts `bash -l -s` in place of `sh -s`, on both transports.
+   4. **The cross-shell tests.** The file write rule on dash, bash, and busybox sh over SSH, and on macOS `/bin/sh`,
+      which runs only on darwin, so it is local only. The sudo password flows already work over any transport, so they
+      need only a test over SSH.
+2. **Verbosity levels.** `-vv` lists each step's commands, with labels for tsinfra's own, and `-vvv` adds their output
+   (see [CLI](./docs/cli.md#output)). A failure's note already tells people to run with `-vvv`, so `-vvv` has to show the
+   stderr that note promises. A command that `sudo: true` ran as root gets a `sudo` boolean on `CommandRecord`, set in
+   `createStepShell`, because the record holds the script without the `sudo sh -s` around it. The report shows it as a
+   tag, not as the wrapped command.
 
-## Build
+## Port
 
-1. **Transport.** Local and SSH, commands on stdin to `sh -s`, the `{ ... } </dev/null` wrapper, ControlMaster options,
-   the `sudo` preamble, the `shell` host option, and `ssh -G` deciding `accept-new` and `ConnectTimeout`. Integration tests against a real local shell and a real sshd. Test the file
-   write rule on dash, bash, busybox sh, and macOS `/bin/sh`. `bask test-docker` already covers dash and busybox, and the sshd joins it. The sshd and Linux shells run in Docker containers, and
-   those tests skip when Docker is not available. The macOS `/bin/sh` case runs only on darwin, so it is local only.
-   Test a command that can't run after the session starts, like sshd going away mid-run: it fails the host, and the
-   step's record keeps the command and its error.
-2. **Steps.** `step` (both check kinds), `run`, `read`, plan and apply modes, verification, and failure marking the
-   host so later calls are skipped.
-3. **`file`.** In seven parts, each reviewed before the next (the design is in [Steps](./docs/steps.md#file) and
-   [Transport](./docs/transport.md#file-writes)):
-   1. **Reading the state and the plan output.** The GNU and BSD file details script, the local hash, the `file` comparison, the
-      content diff and its notes (new, secret, binary, large), the `mode: 644 -> 600` attribute lines, path quoting, and
-      `~/` resolved as the SSH user.
-   2. **The write.** In six pieces, each reviewed before the next:
-      1. **The signature.** `content` as `file`'s second argument, with every option optional, and a `Blob` like
-         `Bun.file(...)` accepted as content, read inside the step.
-      2. **The write script and verification.** The write script in its tested order, and verification after it. Now that
-         `file` can fail with "still differs", replace the hand-built record in `format.test.ts` that checks labelled
-         commands stay out of the stderr rule with a real run.
-      3. **Sudo.** `sudo` in the shell and transport for tsinfra's own commands.
-      4. **The size limit.** Content over 10 MB fails before anything is sent.
-      5. **The symlink refusal.** The file details parser already refuses a symlink in `plan` and `apply`. What's left is a
-         test that `apply` refuses one without writing.
-      6. **The errors without `sudo`.** An error for `user` naming another user. The error for an unreadable file is
-         already built.
-   3. **Links.** In two pieces, each reviewed before the next:
-      1. **The `link` step** (see [Steps](./docs/steps.md#link) and [Transport](./docs/transport.md#link-writes)).
-      2. **Warnings.** A `warning:` line under a step that worked but needs a look, which shows it even when it's
-         already right, and a count in the summary (see [CLI](./docs/cli.md#how-the-report-is-built)). It starts with a
-         link to a missing path.
-   4. **Docs and preview.** The preview shows each way a file or a link can look, and the docs for both match the code.
-   5. **Validation.** `validate` on `file`, run against the temp file before the rename, in a temp directory that keeps
-      the destination's name (see [Steps](./docs/steps.md#the-write) and [Transport](./docs/transport.md#file-writes)).
-   6. **Sudo passwords.** In three pieces, each reviewed before the next (the design is in
-      [Transport](./docs/transport.md#sudo)):
-      1. **The option, the check, and askpass for a password given in `host()`.** `sudo?: true | { password }` on
-         `host()`, the `sudo -n -k true` check in preflight, and the askpass preamble with `~/.tsinfra/askpass.sh` on a
-         host given a password.
-      2. **The prompt.** A `sudo: true` host whose sudo needs a password prompts for it in preflight, after every host
-         is prepared, one host at a time in the hosts' order. Every password is checked with `sudo -k -S`, so a wrong
-         one logs one failed try, and `readHiddenLine` reads it with `node:readline` muted.
-      3. **The hint for a host that doesn't declare `sudo`.** Its `sudo` stays `sudo -n`. A host that leaves `sudo`
-         off and fails after sudo's `a password is required` gets a hint under its failure in the report:
-         `sudo needs a password on this host, so set the sudo option on host()`. The session decides it when the step
-         fails, from the step's own commands and the host's option, and records it on the step, so errors keep sudo's
-         own words. A non-English locale
-         doesn't get the hint.
+3. **The Mac.** Port `~/homelab/pyinfra/macbook` to `hosts/macbook.ts`, with its helpers in `~/homelab/lib`. Compare
+   `tsinfra plan` against `just plan macbook` on the same machine. This settles the plan output question, and
+   tries the sudo prompt from `file` part 6 on a host without passwordless sudo.
+4. **Two simple containers.** flaresolverr and byparr, the ones the homelab todo already marks as the place to start.
+   Then sonarr, which needs a systemd unit and a `needs`.
+5. **Revisit the open questions** with those ports as evidence, and decide which helpers move into tsinfra.
 
-      SSH isn't built yet, so all three are tested against `@local` and in Docker. The flows are the same over SSH.
+## Later
 
-   7. **Content written only once.** `overwrite: false` on `file`: write a missing file, never read or compare an
-      existing one's content, and still manage its attributes (see [Steps](./docs/steps.md#the-write)).
+Decided, and wanted eventually, with no place in the order yet.
 
-   The tests run on the platform they run on, so macOS covers the BSD paths. `bask test-docker` covers the GNU and
-   busybox paths, and real `sudo` and root, in containers. Real SELinux labels need a VM with it enforcing.
-
-4. **Needs.** `needs` on `ensure` and `file`, `name` and `kind` on `ChangeStepResult`, and waiting in plan.
-5. **CLI.** Discover `hosts/`, run hosts in parallel, hold output per host, the summary, and exit codes.
-6. **Reboot.** `h.reboot({ after, timeout })`: the boot id read before and after, `sudo reboot` started in the background,
-   the ControlMaster socket dropped, polling until the host answers, and `@local` refused (see
-   [Steps](./docs/steps.md#reboot)). It needs SSH, and lands before the Incus host's port, which needs it after a kernel
-   change.
+- **Reboot.** `h.reboot({ after, timeout })`: the boot id read before and after, `sudo reboot` started in the
+  background, the ControlMaster socket dropped, polling until the host answers, and `@local` refused (see
+  [Steps](./docs/steps.md#reboot)). It needs SSH. The Incus host needs it after a kernel change, and until then it
+  reboots by hand.
+- **Running hosts in parallel.** Up to `--parallel <n>` at once, with each host's output held until it finishes, and the
+  live progress area under the finished blocks (see [CLI](./docs/cli.md#live-progress)).
+- **Diagnostic logs.** LogTape on stderr, with `@optique/logtape` adding its options to the CLI (see
+  [CLI](./docs/cli.md#diagnostic-logs)).
+- **Tasks.** `task(name, fn)`, registered with `host(target, fn, { tasks: [...] })`, and `--task <name>` on `plan` and
+  `apply`, running only hosts that have it (see [CLI](./docs/cli.md#tasks)).
+- **Ordering between hosts.** `needs` on `host()`, taking imported host scripts. The design is tentative, and it comes
+  after `--parallel` and most of the rest of this file (see
+  [Open questions](./docs/open-questions.md#ordering-between-hosts)).
 
 ## Follow-ups
 
@@ -193,6 +171,74 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
       fix: "docker compose up -d",
     })
     ```
+
+  - **A reboot before `h.reboot` exists,** as an `ensure` after the steps that need it. The check reads the state only
+    a reboot brings, and the fix schedules the reboot and fails the host on purpose:
+
+    ```ts
+    await h.ensure("Reboot to load ZFS", {
+      check: "test -e /sys/module/zfs",
+      want: true,
+      fix: "sudo systemd-run --on-active=5 systemctl reboot && echo 'rebooting, rerun in a minute' >&2 && exit 1",
+    })
+    ```
+
+    `systemd-run` delays the reboot, so the command returns before the connection drops. The failure skips the rest of
+    the host's steps, and the next run starts past this one, because the check passes after the reboot. `plan` shows
+    it as a change, which a bare `throw` in the script wouldn't. For a kernel update, compare `uname -r` with the
+    newest `/boot/vmlinuz-*`. The same shape works as a pause for a manual login, with a fix that only fails with
+    the instructions, like `ssh in and run 'ob login'`.
+
+  - **A config file an app owns,** like Sonarr's `config.xml`, which it creates on first start and rewrites when a
+    setting changes in its UI. Seed it before the first start with `overwrite: false`, so the app starts with your
+    values, then manage each value you care about with its own `ensure`:
+
+    ```ts
+    const configPath = "/home/adam/.sonarr/config.xml"
+    await h.file(configPath, `<Config><Port>8000</Port><ApiKey>${sonarrApiKey}</ApiKey></Config>\n`, {
+      secret: true,
+      overwrite: false,
+    })
+    await h.ensure("Set Sonarr's port", {
+      check: `grep -o '<Port>[0-9]*</Port>' ${configPath}`,
+      want: "<Port>8000</Port>",
+      fix: `sed -i 's|<Port>[0-9]*</Port>|<Port>8000</Port>|' ${configPath} && sudo systemctl restart sonarr`,
+    })
+    ```
+
+    The seed avoids waiting for the app to create the file, and puts an API key from sops in place before anything
+    reads it. An app that writes its whole config when it stops, like qBittorrent, needs the fix to stop it, edit,
+    then start it, or the app's copy overwrites the edit.
+
+  - **A directory of files,** like a built static site, as one `file` step per file, from a loop over the local
+    directory:
+
+    ```ts
+    import path from "node:path"
+
+    import { Glob } from "bun"
+
+    const siteDir = path.join(import.meta.dir, "../site/dist")
+    for await (const relativePath of new Glob("**/*").scan({ cwd: siteDir })) {
+      await h.file(`~/dist/${relativePath}`, Bun.file(path.join(siteDir, relativePath)))
+    }
+    ```
+
+    `file` creates missing parent directories, and an `ensure` sets a directory's mode when it matters (see the
+    directory recipe above). A file removed from the local directory stays on the host, so remove it with its own step,
+    or rebuild the directory.
+
+  - **A value from your own environment in a `sudo` command.** `sudo` resets the environment, and Debian's
+    `secure_path` replaces `PATH` even with `sudo -E`. Read the value as yourself first, and put `sudo` only on the part
+    that needs root:
+
+    ```ts
+    fix: 'fish_path="$(command -v fish)" && echo "$fish_path" | sudo tee -a /etc/shells && sudo chsh -s "$fish_path" "$USER"'
+    ```
+
+    `command -v fish` runs with your `PATH`, and the variable expands before `sudo` sees it, so root's `PATH` never
+    matters.
+
 - **A comparison table in the user docs.** When the full docs get written, add a table of how tsinfra compares with other
   config tools, led by its strengths. What the survey in [Ideas](./docs/ideas.md) found so far:
 
@@ -209,26 +255,56 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
 - **Hint on a failed triggered run.** When a run with `after` fails, end its error with a hint that the steps it follows
   won't show as changed on the next apply, so it needs a manual rerun once fixed (see [Steps](./docs/steps.md#run)).
 
-## Port
+## Done
 
-7. **The Mac.** Port `~/homelab/pyinfra/macbook` to `hosts/macbook.ts`, with its helpers in `~/homelab/lib`. Compare
-   `tsinfra plan` against `just plan macbook` on the same machine. This settles the plan output question, and
-   tries the sudo prompt from `file` part 6 on a host without passwordless sudo.
-8. **Two simple containers.** flaresolverr and byparr, the ones the homelab todo already marks as the place to start.
-   Then sonarr, which needs a systemd unit and a `needs`.
-9. **Revisit the open questions** with those ports as evidence, and decide which helpers move into tsinfra.
+- **Steps.** `ensure` (both check kinds), `run`, `read`, plan and apply modes, verification, and failure marking the
+  host so later calls are skipped.
+- **`file` parts 1 to 7,** each reviewed before the next (the design is in [Steps](./docs/steps.md#file) and
+  [Transport](./docs/transport.md#file-writes)):
+  1.  **Reading the state and the plan output.** The GNU and BSD file details script, the local hash, the `file` comparison, the
+      content diff and its notes (new, secret, binary, large), the `mode: 644 -> 600` attribute lines, path quoting, and
+      `~/` resolved as the SSH user.
+  2.  **The write.** In six pieces, each reviewed before the next:
+      1. **The signature.** `content` as `file`'s second argument, with every option optional, and a `Blob` like
+         `Bun.file(...)` accepted as content, read inside the step.
+      2. **The write script and verification.** The write script in its tested order, and verification after it. Now that
+         `file` can fail with "still differs", replace the hand-built record in `format.test.ts` that checks labelled
+         commands stay out of the stderr rule with a real run.
+      3. **Sudo.** `sudo` in the shell and transport for tsinfra's own commands.
+      4. **The size limit.** Content over 10 MB fails before anything is sent.
+      5. **The symlink refusal.** The file details parser already refuses a symlink in `plan` and `apply`. What's left is a
+         test that `apply` refuses one without writing.
+      6. **The errors without `sudo`.** An error for `user` naming another user. The error for an unreadable file is
+         already built.
+  3.  **Links.** In two pieces, each reviewed before the next:
+      1. **The `link` step** (see [Steps](./docs/steps.md#link) and [Transport](./docs/transport.md#link-writes)).
+      2. **Warnings.** A `warning:` line under a step that worked but needs a look, which shows it even when it's
+         already right, and a count in the summary (see [CLI](./docs/cli.md#how-the-report-is-built)). It starts with a
+         link to a missing path.
+  4.  **Docs and preview.** The preview shows each way a file or a link can look, and the docs for both match the code.
+  5.  **Validation.** `validate` on `file`, run against the temp file before the rename, in a temp directory that keeps
+      the destination's name (see [Steps](./docs/steps.md#the-write) and [Transport](./docs/transport.md#file-writes)).
+  6.  **Sudo passwords.** In three pieces, each reviewed before the next (the design is in
+      [Transport](./docs/transport.md#sudo)):
+      1. **The option, the check, and askpass for a password given in `host()`.** `sudo?: true | { password }` on
+         `host()`, the `sudo -n -k true` check in preflight, and the askpass preamble with `~/.tsinfra/askpass.sh` on a
+         host given a password.
+      2. **The prompt.** A `sudo: true` host whose sudo needs a password prompts for it in preflight, after every host
+         is prepared, one host at a time in the hosts' order. Every password is checked with `sudo -k -S`, so a wrong
+         one logs one failed try, and `readHiddenLine` reads it with `node:readline` muted.
+      3. **The hint for a host that doesn't declare `sudo`.** Its `sudo` stays `sudo -n`. A host that leaves `sudo`
+         off and fails after sudo's `a password is required` gets a hint under its failure in the report:
+         `sudo needs a password on this host, so set the sudo option on host()`. The session decides it when the step
+         fails, from the step's own commands and the host's option, and records it on the step, so errors keep sudo's
+         own words. A non-English locale doesn't get the hint.
 
-## Later
+      SSH isn't built yet, so all three are tested against `@local` and in Docker. The flows are the same over SSH.
 
-Decided, and wanted eventually, with no place in the order yet.
+  7.  **Content written only once.** `overwrite: false` writes a missing file, and leaves an existing one alone, its
+      mode and owner included. The comparison returns in sync for an existing file, so nothing else changes.
 
-- **Tasks.** `task(name, fn)`, registered with `host(target, fn, { tasks: [...] })`, and `--task <name>` on `plan` and
-  `apply`, running only hosts that have it (see [CLI](./docs/cli.md#tasks)).
-- **Verbosity levels.** `-vv` lists each step's commands, with labels for tsinfra's own, and `-vvv` adds their output
-  (see [CLI](./docs/cli.md#output)). A failure's note already tells people to run with `-vvv`, so `-vvv` has to show the
-  stderr that note promises. A command that `sudo: true` ran as root gets a `sudo` boolean on `CommandRecord`,
-  set in `createStepShell`, because the record holds the script without the `sudo sh -s` around it. The report
-  shows it as a tag, not as the wrapped command.
-- **Ordering between hosts.** `needs` on `host()`, taking imported host scripts. The design is tentative, and it comes
-  after `--parallel` and most of the rest of this file (see
-  [Open questions](./docs/open-questions.md#ordering-between-hosts)).
+  The tests run on the platform they run on, so macOS covers the BSD paths. `bask test-docker` covers the GNU and
+  busybox paths, and real `sudo` and root, in containers. Real SELinux labels need a VM with it enforcing.
+
+- **Needs.** `needs` on `ensure`, `file`, and `link`, `name` and `kind` on `ChangeStepResult`, and waiting in plan.
+- **CLI.** Discovering `hosts/`, the summary, and exit codes.

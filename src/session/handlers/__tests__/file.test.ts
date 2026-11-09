@@ -829,6 +829,50 @@ describe("h.file validate", () => {
   })
 })
 
+describe("h.file with overwrite: false", () => {
+  it("should write a missing file with the options it was given", async () => {
+    const filePath = await createFilePath()
+    const { host: h } = await createSession("apply")
+
+    expect(await fileOrMessage(h, filePath, "a\n", { mode: "600", overwrite: false })).toMatchObject({ changed: true })
+    expect(await bun.file(filePath).text()).toBe("a\n")
+    expect(await getMode(filePath)).toBe(0o600)
+  })
+
+  it("should leave an existing file's content and mode alone, and run no write", async () => {
+    const filePath = await createFilePath()
+    await bun.write(filePath, "changed by the app\n")
+    await chmod(filePath, 0o644)
+    const hostSession = await createSession("apply")
+    const result = await fileOrMessage(hostSession.host, filePath, "a\n", { mode: "600", overwrite: false })
+
+    expect(result).toMatchObject({ changed: false })
+    expect(await bun.file(filePath).text()).toBe("changed by the app\n")
+    expect(await getMode(filePath)).toBe(0o644)
+    expect(hostSession.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual(["file details script"])
+  })
+
+  it("should show no diff in plan for an existing file", async () => {
+    const filePath = await createFilePath()
+    await bun.write(filePath, "changed by the app\n")
+    const hostSession = await createSession("plan")
+    await fileOrMessage(hostSession.host, filePath, "a\n", { overwrite: false })
+
+    expect(hostSession.stepRecords[0]?.comparisons.before).toMatchObject({
+      inSync: true,
+      values: { content: { kind: "same" }, attributeChanges: [] },
+    })
+  })
+
+  it("should fail an overwrite that isn't a boolean", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(await fileOrMessage(h, "/tmp/x", "a\n", castInvalid({ overwrite: "no" }))).toStartWith(
+      "failed to validate the options given to 'file' -> overwrite must be boolean",
+    )
+  })
+})
+
 describe("handleFile", () => {
   // Call the handler directly, because `h.file` rejects this path first, when it validates the step's name.
   it("should fail a path that isn't a string", async () => {

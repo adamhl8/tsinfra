@@ -419,7 +419,7 @@ with its owner and mode.
 shell holds the whole script in memory, and base64 adds a third, so the heredoc suits config files, not large binaries.
 A streaming path for large files is open (see [Open questions](./open-questions.md#files-over-10-mb)).
 
-**Content written only once.** `overwrite: false` creates a missing file, and never rewrites its content after that.
+**Content written only once.** `overwrite: false` creates a missing file, and never touches it after that.
 It's for a file an app rewrites itself, like Sonarr's `config.xml`, which changes whenever a setting changes in its web
 UI. Managed normally, every `plan` would show that as drift, and every `apply` would undo the UI's changes:
 
@@ -427,9 +427,12 @@ UI. Managed normally, every `plan` would show that as drift, and every `apply` w
 await h.file("/var/lib/sonarr/config.xml", sonarrConfig, { user: "sonarr", mode: "600", overwrite: false })
 ```
 
-- **An existing file's content is never read or compared,** so it shows no diff and never counts as drift.
-- **A missing file** shows as `content: new file` in `plan`, and gets written in `apply`, as usual.
-- **`mode`, `user`, and `group` are still managed** every run, like Puppet's and Salt's `replace: false`.
+- **An existing file is left alone,** so it shows no diff and never counts as drift. Its content is never compared.
+- **A missing file** shows as `content: new file` in `plan`, and gets written in `apply`, as usual. `mode`, `user`,
+  `group`, and `validate` apply to that write.
+- **`mode`, `user`, and `group` aren't managed after that,** like Chef's `:create_if_missing`. An app that rewrites its
+  file sets them too, often by renaming a new file over the old one. To keep one of them, add an `ensure`, like a
+  check of `stat -c %a` that wants `600` and a fix that runs `chmod 600`.
 - **The name** is fs-extra's `overwrite`, the usual JavaScript word for it. "Replace" already means swapping one kind
   of thing for another in `file`'s refusals.
 

@@ -39,6 +39,11 @@ export interface FileOptions extends FileAttributeOptions, SudoOptions, NeedsOpt
   /** Never fetches or shows the old content, because it may hold a secret. */
   secret?: boolean
   /**
+   * Writes the file only when it's missing. `false` leaves an existing file alone, its mode and owner included, because
+   * an app that rewrites its own file sets those too.
+   */
+  overwrite?: boolean
+  /**
    * Checks the new content before it replaces the file, with a command run against the temp file, like `sshd -t -f`. A
    * non-zero exit fails the step and leaves the old file as it was. It runs only in `apply`, as the write does.
    */
@@ -50,11 +55,13 @@ export interface FileOptions extends FileAttributeOptions, SudoOptions, NeedsOpt
 const fileOptionsSchema = type
   .declare<HandlerOptions<FileOptions>>()
   .type(
-    fileAttributeOptionsSchema
-      .merge(needsOptionsSchema)
-      .merge({ "secret?": "boolean", "validate?": type("Function").as<ValidateFunction>() }),
+    fileAttributeOptionsSchema.merge(needsOptionsSchema).merge({
+      "secret?": "boolean",
+      "overwrite?": "boolean",
+      "validate?": type("Function").as<ValidateFunction>(),
+    }),
   )
-  .pipe((options) => ({ secret: false, needs: NO_NEEDS, ...options }))
+  .pipe((options) => ({ secret: false, overwrite: true, needs: NO_NEEDS, ...options }))
 
 /** The options after validation, with their defaults set. */
 export type ValidFileOptions = typeof fileOptionsSchema.infer

@@ -28,6 +28,10 @@ export const compareFile = async (
 ): Promise<Result<Comparison>> => {
   const { shell } = ctx
   const { path } = hostFileDetails
+  const { overwrite } = options
+
+  if (hostFileDetails.kind === "existing" && !overwrite)
+    return { inSync: true, values: { kind: "file", content: { kind: "same" }, attributeChanges: [] } }
 
   const content = await compareContent(shell, hostFileDetails, resolvedContent, options)
   if (isErr(content)) return content

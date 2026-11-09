@@ -272,7 +272,7 @@ report.
 - **`@optique/logtape`** adds the logging options to the existing Optique parser, like `-v`/`-vv` or `--log-level`, and
   `--log-output`.
 
-Nothing logs yet. Add LogTape with the SSH transport, which is the first code worth diagnosing.
+Nothing logs yet. LogTape is its own feature, added on its own.
 
 ## Exit codes
 
