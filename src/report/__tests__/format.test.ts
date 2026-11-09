@@ -498,6 +498,21 @@ describe("formatHostBlock for a host state that still differs after the fix", ()
     ])
   })
 
+  it("should leave the empty lines out of a multi-line stderr", async () => {
+    const lines = await formatFailedCheck({
+      check: "echo one >&2; echo >&2; echo two >&2; false",
+      want: true,
+      fix: "true",
+    })
+
+    expect(lines).toStrictEqual([
+      "        got:    exit code 1",
+      "        want:   exit code 0",
+      "        stderr: echo one >&2; echo >&2; echo two >&2; false -> one",
+      "                two",
+    ])
+  })
+
   it("should show a multi-line value as a diff, with stderr after it", async () => {
     const check = String.raw`printf 'a\nb\n'; echo warn >&2`
     const lines = await formatFailedCheck({ check, want: "a\nc", fix: "true" })
@@ -690,6 +705,17 @@ describe("formatHostBlock for a step that failed before it could compare again",
     expect(hostBlock).toBe(
       ["a", "  ! failed: (ensure) Make it", "      failed to run 'exit 1' -> exited with code 1"].join("\n"),
     )
+  })
+
+  it("should leave the empty lines out of a multi-line error", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Make it", { check: "false", want: true, fix: "echo one >&2; echo >&2; echo two >&2; exit 1" })
+    }, "apply")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
+      "      failed to run the fix -> exited with code 1: one",
+      "      two",
+    ])
   })
 })
 

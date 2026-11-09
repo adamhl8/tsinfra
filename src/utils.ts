@@ -22,6 +22,9 @@ export const stripOneTrailingNewline = (text: string): string => text.replace(TR
 /** Adds a newline to the end of `text`, unless it already ends with one. */
 export const endWithNewline = (text: string): string => (text.endsWith("\n") ? text : `${text}\n`)
 
+/** Splits `text` into its lines, leaving out the ones that are empty or only whitespace. */
+export const splitNonEmptyLines = (text: string): string[] => text.split("\n").filter((line) => line.trim() !== "")
+
 /** Splits `text` into its words, ignoring leading and trailing whitespace. */
 export const splitWords = (text: string): string[] => text.trim().split(WHITESPACE)
 

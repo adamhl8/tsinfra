@@ -5,28 +5,36 @@ import process from "node:process"
 
 // Prints the report for one example host per way a block can look, to inspect the output by eye.
 // It runs `plan` for what only shows in `plan` or without `--verbose`, then `apply --verbose` for the rest.
+// Then it runs the sudo cases against a fake `sudo`, which accepts only the password `tsinfra`.
 // Run it with `bask report-preview`, and with `NO_COLOR=1` to see it without colors.
-import bun from "bun"
+// Run `bun report-preview.ts --sudo-prompt` to also get the sudo password prompt, and type at it.
+import bun, { spawn } from "bun"
 import pc from "picocolors"
-import { err } from "ts-explicit-errors"
+import { err, isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
-import type { HostFunction } from "#hosts/host.ts"
+import type { HostFunction, HostSudo } from "#hosts/host.ts"
 import type { HostReport } from "#hosts/run.ts"
 import { hasDrift, prepareHosts, runHost } from "#hosts/run.ts"
 import { printTsinfraError } from "#report/errors.ts"
 import { formatHostBlock } from "#report/format.ts"
 import { formatSummary } from "#report/format/summary.ts"
 import { PUBLIC_FILE_MODE } from "#session/handlers/shared/filesystem/mode.ts"
+import { runLocal } from "#transport/local.ts"
 
-/** One run of the preview: `plan` shows what only it and a run without `--verbose` show, and `applyVerbose` the rest. */
-type PreviewPass = "plan" | "applyVerbose"
+/**
+ * One run of the preview: `plan` shows what only it and a run without `--verbose` show, and `applyVerbose` the rest.
+ * `sudo` shows the sudo cases that need no typing, and `sudoPrompt` the ones that prompt.
+ */
+type PreviewPass = "plan" | "applyVerbose" | "sudo" | "sudoPrompt"
 
 interface Scenario {
   name: string
   target: string
   /** The pass the case shows up in. Defaults to `applyVerbose`, which shows the most. */
   pass?: PreviewPass
+  /** The host's `sudo` option. Defaults to `false`. */
+  sudo?: HostSudo
   fn: HostFunction
 }
 
@@ -49,6 +57,11 @@ const WANTED_SITE_CONFIG = SITE_CONFIG.flatMap((line, index) => {
 
 // Pick a group the user is in besides their own, so a `group:` row can change in `apply` without root.
 const OTHER_GROUP_ID = process.getgroups?.().find((gid) => gid !== os.userInfo().gid) ?? os.userInfo().gid
+
+// Give a sudo case a script that does nothing visible, because what it shows is its preparation.
+const readTrue: HostFunction = async (h) => {
+  await h.read("true")
+}
 
 const BIG_VALUE_LINE_COUNT = 2000
 const numberedLines = (prefix: string) =>
@@ -285,6 +298,37 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
+      // A wrong password from `host()`, which fails with only its own message.
+      name: "wrong-sudo-password",
+      target: "@local",
+      pass: "sudo",
+      sudo: { password: "wrong" },
+      fn: readTrue,
+    },
+    {
+      // A sudo that fails for another reason, which shows sudo's own output in the error chain.
+      name: "not-in-sudoers",
+      target: "@local",
+      pass: "sudo",
+      sudo: { password: "not-in-sudoers" },
+      fn: readTrue,
+    },
+    {
+      // Two hosts that prompt one after the other, to try the right password, a wrong one, three wrong ones, and Ctrl-D.
+      name: "first-prompt",
+      target: "@local",
+      pass: "sudoPrompt",
+      sudo: true,
+      fn: readTrue,
+    },
+    {
+      name: "second-prompt",
+      target: "@local",
+      pass: "sudoPrompt",
+      sudo: true,
+      fn: readTrue,
+    },
+    {
       // A failure no step owns, as `(host)` and the host's script, after a step that changed.
       name: "script-error",
       target: "@local",
@@ -301,24 +345,40 @@ const getExitCode = (hostReports: HostReport[], mode: Mode) => {
   return mode === "plan" && hostReports.some((hostReport) => hasDrift(hostReport)) ? 2 : 0
 }
 
-const PASS_RUNS: Record<PreviewPass, { mode: Mode; verbose: boolean }> = {
-  plan: { mode: "plan", verbose: false },
-  applyVerbose: { mode: "apply", verbose: true },
+const PASS_RUNS: Record<PreviewPass, { mode: Mode; verbose: boolean; fakeSudo: boolean }> = {
+  plan: { mode: "plan", verbose: false, fakeSudo: false },
+  applyVerbose: { mode: "apply", verbose: true, fakeSudo: false },
+  sudo: { mode: "apply", verbose: false, fakeSudo: true },
+  sudoPrompt: { mode: "apply", verbose: false, fakeSudo: true },
 }
+
+// Fail `-n`, and with `-S` accept only `tsinfra`, printing what real sudo prints for one wrong try.
+// Answer the password `not-in-sudoers` the way sudo answers a user with no sudo rule.
+const FAKE_SUDO = [
+  "#!/bin/sh",
+  "if [ \"$1\" = -n ]; then echo 'sudo: a password is required' >&2; exit 1; fi",
+  "read -r password",
+  '[ "$password" = tsinfra ] && exit 0',
+  '[ "$password" = not-in-sudoers ] && { echo "$USER is not in the sudoers file." >&2; exit 1; }',
+  String.raw`printf 'Sorry, try again.\n\nsudo: no password was provided\nsudo: 1 incorrect password attempt\n' >&2`,
+  "exit 1",
+].join("\n")
 
 /** Runs the scenarios of one pass and prints each block, the summary, and the exit code the CLI would return. */
 const previewPass = async (pass: PreviewPass) => {
-  const { mode, verbose } = PASS_RUNS[pass]
+  const { mode, verbose, fakeSudo } = PASS_RUNS[pass]
   const dir = await mkdtemp(path.join(os.tmpdir(), "tsinfra-preview-"))
   try {
-    console.log(pc.cyan(pc.bold(`==== tsinfra ${mode}${verbose ? " --verbose" : ""} ====`)))
+    const sudoNote = fakeSudo ? " (fake sudo, password 'tsinfra')" : ""
+    console.log(pc.cyan(pc.bold(`==== tsinfra ${mode}${verbose ? " --verbose" : ""}${sudoNote} ====`)))
     console.log()
 
     const hostReports: HostReport[] = []
     const scenarios = createScenarios(dir).filter((scenario) => (scenario.pass ?? "applyVerbose") === pass)
-    const hostEntries = await prepareHosts(
-      scenarios.map((scenario) => Object.assign(scenario, { options: { sudo: false } })),
+    const loadedHosts = scenarios.map((scenario) =>
+      Object.assign(scenario, { options: { sudo: scenario.sudo ?? false } }),
     )
+    const hostEntries = await prepareHosts(loadedHosts)
     for (const hostEntry of hostEntries) {
       // oxlint-disable-next-line no-await-in-loop - hosts run one at a time, the same as the CLI
       const hostReport = await runHost(hostEntry, mode)
@@ -337,6 +397,56 @@ const previewPass = async (pass: PreviewPass) => {
   }
 }
 
+const SUDO_PROMPT_FLAG = "--sudo-prompt"
+
+// Set this variable only in the child, so it tells the child that it runs the sudo passes, and where its fake `sudo` is.
+const FAKE_SUDO_PATH_VARIABLE = "TSINFRA_PREVIEW_FAKE_SUDO"
+
+/**
+ * Runs the sudo passes in a child process, with a fake `sudo` first on `PATH` and a temp `HOME` for the askpass helper.
+ * Set them when the child starts, because a command gets the environment tsinfra started with. Returns the child's exit
+ * code.
+ */
+const previewSudoPasses = async (): Promise<number> => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "tsinfra-preview-sudo-"))
+  try {
+    const fakeSudoPath = path.join(dir, "bin", "sudo")
+    await bun.write(fakeSudoPath, `${FAKE_SUDO}\n`)
+    await chmod(fakeSudoPath, 0o755)
+
+    const promptFlags = process.argv.includes(SUDO_PROMPT_FLAG) ? [SUDO_PROMPT_FLAG] : []
+    const child = spawn([process.execPath, import.meta.path, ...promptFlags], {
+      env: {
+        ...process.env,
+        PATH: `${path.dirname(fakeSudoPath)}:${process.env["PATH"]}`,
+        HOME: dir,
+        [FAKE_SUDO_PATH_VARIABLE]: fakeSudoPath,
+      },
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    })
+    return await child.exited
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
+/** Runs the sudo passes, in the child that `previewSudoPasses` starts. Stops before any case if the fake isn't found. */
+const runSudoPasses = async (): Promise<number> => {
+  const foundSudo = await runLocal("command -v sudo")
+  if (isErr(foundSudo) || foundSudo.stdout.trim() !== process.env[FAKE_SUDO_PATH_VARIABLE]) {
+    printTsinfraError(
+      err("the preview's fake sudo isn't first on PATH, so it stopped before running real sudo", undefined),
+    )
+    return 1
+  }
+
+  await previewPass("sudo")
+  if (process.argv.includes(SUDO_PROMPT_FLAG)) await previewPass("sudoPrompt")
+  return 0
+}
+
 /** Prints the kind of error tsinfra itself reports on stderr, outside any host's block. */
 const previewOwnErrors = () => {
   console.log(pc.cyan(pc.bold("==== tsinfra's own errors (stderr) ====")))
@@ -348,10 +458,13 @@ const previewOwnErrors = () => {
 }
 
 const main = async (): Promise<number> => {
+  if (process.env[FAKE_SUDO_PATH_VARIABLE] !== undefined) return runSudoPasses()
+
   await previewPass("plan")
   await previewPass("applyVerbose")
+  const sudoExitCode = await previewSudoPasses()
   previewOwnErrors()
-  return 0
+  return sudoExitCode
 }
 
 process.exitCode = await main()

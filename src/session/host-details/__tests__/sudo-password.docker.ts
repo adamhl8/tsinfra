@@ -31,11 +31,8 @@ describe("a user whose sudo needs a password", () => {
     expect(JSON.stringify(hostSession.stepRecords)).not.toContain(PASSWORD)
   })
 
-  it("should fail in preflight with a wrong password from host(), after one try", async () => {
-    const message = await prepareOrMessage({ sudo: { password: "wrong" } })
-
-    expect(message).toStartWith("incorrect sudo password -> exited with code 1: ")
-    expect(message).toEndWith("sudo: 1 incorrect password attempt")
+  it("should fail in preflight with only its own message for a wrong password from host()", async () => {
+    expect(await prepareOrMessage({ sudo: { password: "wrong" } })).toBe("incorrect sudo password")
   })
 
   it("should fail in preflight with sudo: true and no password", async () => {

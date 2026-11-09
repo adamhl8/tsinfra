@@ -21,7 +21,7 @@ import {
   styleWarning,
 } from "#report/format/styles.ts"
 import type { StepWarning } from "#report/warnings.ts"
-import { getMaxWidth, padToWidth, quoteNames } from "#utils.ts"
+import { getMaxWidth, padToWidth, quoteNames, splitNonEmptyLines } from "#utils.ts"
 
 const INDENT = "  "
 const DETAIL_INDENT = INDENT.repeat(3)
@@ -80,7 +80,7 @@ const toDetailRows = (detail: Detail, formatOptions: FormatOptions): DetailRows 
   // Color stderr like an error, so it stands apart from its command, and leave the arrow between them uncolored.
   const { command, stderr } = detail
   const valueText = `${styleLines(command, styleValue)} -> ${styleLines(stderr, styleError)}`
-  return { kind: "aligned", rows: [{ label: "stderr", valueLines: valueText.split("\n") }] }
+  return { kind: "aligned", rows: [{ label: "stderr", valueLines: splitNonEmptyLines(valueText) }] }
 }
 
 /** Formats aligned rows as `label: value` lines, with each value starting at `valueColumn`. */
@@ -112,9 +112,8 @@ const formatStepEntryBody = (stepEntry: StepEntry, formatOptions: FormatOptions)
   )
   if (!error) return detailLines
 
-  const errorLines = messageChain(error)
-    .split("\n")
-    .map((errorLine) => styleError(errorLine))
+  // Leave out empty lines, like the one sudo prints after an empty prompt, because they only open a gap in the error.
+  const errorLines = splitNonEmptyLines(messageChain(error)).map((errorLine) => styleError(errorLine))
   return [...errorLines, ...detailLines.map((detailLine) => `${INDENT}${detailLine}`)]
 }
 

@@ -41,13 +41,22 @@ describe("resolveHostSudo", () => {
     })
   })
 
-  it("should fail with a password from host() that sudo rejects", async () => {
+  it("should fail with only its own message for a password from host() that sudo rejects", async () => {
     const { result } = await resolveWithFakeSudo(
       { password: PASSWORD },
-      "echo 'sudo: 1 incorrect password attempt' >&2\nexit 1",
+      "printf 'Sorry, try again.\\nsudo: 1 incorrect password attempt\\n' >&2\nexit 1",
     )
 
-    expect(result).toBe("incorrect sudo password -> exited with code 1: sudo: 1 incorrect password attempt")
+    expect(result).toBe("incorrect sudo password")
+  })
+
+  it("should fail with sudo's output when sudo fails for another reason", async () => {
+    const { result } = await resolveWithFakeSudo(
+      { password: PASSWORD },
+      "echo 'adam is not in the sudoers file.' >&2\nexit 1",
+    )
+
+    expect(result).toBe("failed to check the sudo password -> exited with code 1: adam is not in the sudoers file.")
   })
 
   it("should find that a sudo: true host needs no password when passwordless sudo works", async () => {

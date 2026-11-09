@@ -280,19 +280,29 @@ because of this: by the time its script runs, it's too late to ask.
   With `-S`, sudo makes one try and stops at the end of stdin, so a wrong password logs one failed try. Through the
   askpass helper, sudo would ask three times and log three, which can lock an account that `pam_faillock` guards.
   `printf` is a shell builtin, so the password still never goes into a command line. It works when sudo accepts the
-  password or needs none.
+  password or needs none. A wrong password ends sudo's output with a line like `sudo: 1 incorrect password attempt`,
+  so the host fails with just `incorrect sudo password`, and sudo's lines add nothing. Any other failure, like a user
+  who isn't in sudoers, fails with `failed to check the sudo password` and sudo's output under it, because then the
+  password may well be right. The match is on English text, so another locale gets the second form.
 
 - **`sudo: true` without passwordless sudo needs a password,** so preflight prompts for it, naming the SSH user from
   `id -un`:
 
   ```
-  To run host 'macbook', enter the sudo password for 'adam' (press Ctrl-D to skip this host, or Ctrl-C to cancel the entire run):
+  Ctrl-D to skip this host · Ctrl-C to cancel the entire run
+  To run host 'macbook', enter the sudo password for user 'adam'.
+  Password:
   ```
 
-  Each password is checked the same way. A wrong one prints `Sorry, try again.` and prompts again, up to three tries
-  like sudo itself. Then the host fails with `incorrect sudo password`. Ctrl-D, anywhere in the line, fails the host
-  with `skipped sudo password prompt`, and Ctrl-C ends the run. A wrong password from `host()` fails without a
-  prompt, after the wait sudo adds to a failed try where it's set up to (about 2 seconds on Debian, none on Alpine).
+  The first line is dim, like the plan reminder, and the host and user are in the value color. Each password is
+  checked the same way. A wrong one prints `Sorry, try again.` and asks again with only `Password:`, like sudo's own
+  prompt, up to three tries like sudo itself. Then a warning says `incorrect sudo password, skipping host`, in the
+  words of the error the host fails with, and a blank line comes before the next host's prompt, as it does after a
+  right password. Any other failure stops at once, because typing again won't help, with the warning
+  `failed to check the sudo password, skipping host`. Ctrl-D, anywhere in the line, warns `skipping host` the same
+  way, and fails the host with `skipped sudo password prompt`. Ctrl-C ends the run. A wrong password from `host()`
+  fails without a prompt, after the wait sudo adds to a failed try where it's set up to (about 2 seconds on Debian,
+  none on Alpine).
 
 - **The prompt goes to stderr,** because stdout is the report. sudo itself prompts on `/dev/tty`, which still works
   when stdout and stderr are redirected, but Bun can't read from it. The input is read from stdin with `node:readline`,
