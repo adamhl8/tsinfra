@@ -46,6 +46,8 @@ export interface StepRecord {
   comparisons: StepComparisons
   /** The names of the needed steps this step waited on. */
   waitingOn: string[]
+  /** How to fix the step's failure, which the report shows under it. Empty unless the step failed with a hint. */
+  failureHints: string[]
 }
 
 /** What `converge` uses to record what it does, so a step's handler never records anything itself. */
@@ -65,8 +67,8 @@ export interface StepRecorder {
   recordCommands: (transport: Transport) => RecordingTransport
   /** Records a new step and marks it running, or fails when another step is running. */
   startStep: (stepName: string, kind: StepKind) => Result<StepRecord>
-  /** Records the step's status or error, and marks no step as running. */
-  finishStep: (stepRecord: StepRecord, status: Result<StepStatus>) => void
+  /** Records the step's status or error, and any hints for its failure, and marks no step as running. */
+  finishStep: (stepRecord: StepRecord, status: Result<StepStatus>, failureHints?: string[]) => void
   convergeRecorder: ConvergeRecorder
 }
 
@@ -101,14 +103,22 @@ export const createStepRecorder = (): StepRecorder => {
       return err(`'${kind}' can't run while ${runningKind} step '${name}' is running`, undefined)
     }
 
-    const stepRecord: StepRecord = { name: stepName, kind, commands: [], comparisons: {}, waitingOn: [] }
+    const stepRecord: StepRecord = {
+      name: stepName,
+      kind,
+      commands: [],
+      comparisons: {},
+      waitingOn: [],
+      failureHints: [],
+    }
     stepRecords.push(stepRecord)
     currentStep = stepRecord
     return stepRecord
   }
 
-  const finishStep = (stepRecord: StepRecord, status: Result<StepStatus>) => {
+  const finishStep = (stepRecord: StepRecord, status: Result<StepStatus>, failureHints: string[] = []) => {
     stepRecord.status = status
+    stepRecord.failureHints = failureHints
     currentStep = undefined
     currentPhase = undefined
   }

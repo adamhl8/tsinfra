@@ -38,6 +38,6 @@ describe("a user with passwordless sudo", () => {
       "apply",
     )
 
-    expect(hostReport).toMatchObject({ started: true, failureHints: [] })
+    expect(hostReport).toMatchObject({ started: true, stepRecords: [{ failureHints: [] }] })
   })
 })

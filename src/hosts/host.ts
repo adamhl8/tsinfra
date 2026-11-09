@@ -40,6 +40,9 @@ export const hostDefinitionSchema = type
 
 export type ValidHostDefinition = typeof hostDefinitionSchema.infer
 
+/** A host's options once they're validated, with their defaults filled in. */
+export type ValidHostOptions = ValidHostDefinition["options"]
+
 /** Defines a host. A host script must `export default` what this function returns. */
 export const host = (target: string, fn: HostFunction, options: HostOptions = {}): HostDefinition => ({
   target,

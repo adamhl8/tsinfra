@@ -175,17 +175,18 @@ const toFailureDetails = (stepRecord: StepRecord, formatOptions: FormatOptions):
 
 /** Returns the step entry a host block shows for a step, or nothing for a step that's hidden or never finished. */
 const toStepEntry = (stepRecord: StepRecord, formatOptions: FormatOptions): StepEntry | undefined => {
-  const { name: stepName, kind, status, comparisons, waitingOn } = stepRecord
+  const { name: stepName, kind, status, comparisons, waitingOn, failureHints } = stepRecord
   const { verbose = false } = formatOptions
   const name: StepEntryName = { text: stepName, kind: STEP_NAME_KINDS[kind] }
 
   if (isErr(status)) {
+    const hintDetails = failureHints.map((text): Detail => ({ kind: "hint", text }))
     return {
       status: "failed",
       kind,
       name,
       error: status,
-      details: toFailureDetails(stepRecord, formatOptions),
+      details: [...toFailureDetails(stepRecord, formatOptions), ...hintDetails],
     }
   }
   if (status === undefined) return
@@ -222,20 +223,9 @@ export const toStepEntries = (hostReport: HostReport, formatOptions: FormatOptio
     ]
   }
 
-  const { name, stepRecords, failure, failureHints } = hostReport
-
-  // Add the hints under the entry that shows the host's failure, whichever step or script it came from.
-  const failureDetails: Detail[] = failureHints.map((text) => ({ kind: "hint", text }))
-
+  const { name, stepRecords, failure } = hostReport
   const stepEntries = stepRecords
-    .map((stepRecord) => {
-      const stepEntry = toStepEntry(stepRecord, formatOptions)
-      if (!stepEntry) return stepEntry
-      if (stepRecord.status !== failure) return stepEntry
-
-      stepEntry.details.push(...failureDetails)
-      return stepEntry
-    })
+    .map((stepRecord) => toStepEntry(stepRecord, formatOptions))
     .filter((stepEntry) => stepEntry !== undefined)
 
   // Show a failure that no step owns, like the script throwing, after the steps.
@@ -247,7 +237,7 @@ export const toStepEntries = (hostReport: HostReport, formatOptions: FormatOptio
       kind: "host",
       name: { text: `${name}${HOST_SCRIPT_EXTENSION}`, kind: "hostScript" },
       error: failure,
-      details: failureDetails,
+      details: [],
     })
   }
 

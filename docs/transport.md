@@ -351,9 +351,10 @@ that defines `sudo` as `sudo -n`. On a passwordless host that's all it needs. Wh
 `sudo` over SSH fails anyway, with no terminal to prompt on, but locally it could open the real terminal and prompt in
 the middle of the report. With `-n` it fails straight away with sudo's `a password is required`. When a host that
 leaves `sudo` off fails in a step whose own command printed that line, the report adds a hint under that step's
-failure, in italic yellow: `sudo needs a password on this host, so set the sudo option on host()`. It's a hint in the
-report, not part of the error, because only the run knows the host's `sudo` option. The error and the record keep
-sudo's own words. The match is on English text, so another locale gets no hint.
+failure, in italic yellow: `sudo needs a password on this host, so set the sudo option on host()`. The session works
+it out when the step fails, from the step's own commands and the host's `sudo` option, and records it on the step. It's
+a hint, not part of the error, so the error keeps sudo's own words. The match is on English text, so another locale
+gets no hint.
 
 On `file`, `sudo: true` covers the whole operation: the file details script, the diff, and the write. A root-only file under
 `/etc` could not be hashed or read otherwise, so `plan` needs sudo too, which preflight provides. Content travels on

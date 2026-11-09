@@ -346,7 +346,6 @@ describe("formatHostBlock for a file step", () => {
       started: true,
       failure: hostSession.getFailure(),
       stepRecords: hostSession.stepRecords,
-      failureHints: [],
     })
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
@@ -410,7 +409,6 @@ describe("formatHostBlock for a file step", () => {
       started: true,
       failure: hostSession.getFailure(),
       stepRecords: hostSession.stepRecords,
-      failureHints: [],
     })
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
@@ -663,7 +661,6 @@ describe("formatHostBlock for the stderr of a step that still differs", () => {
       started: true,
       failure: hostSession.getFailure(),
       stepRecords: hostSession.stepRecords,
-      failureHints: [],
     })
 
     expect(hostBlock).toContain("the host's state still differs after the fix")
@@ -782,7 +779,7 @@ describe("formatHostBlock for a sudo that needed a password", () => {
       "apply",
     )
 
-    expect(hostReport).toMatchObject({ failure: undefined, failureHints: [] })
+    expect(hostReport).toMatchObject({ failure: undefined, stepRecords: [{ failureHints: [] }] })
   })
 })
 

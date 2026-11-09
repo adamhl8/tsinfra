@@ -52,8 +52,9 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
          one logs one failed try, and `readHiddenLine` reads it with `node:readline` muted.
       3. **The hint for a host that doesn't declare `sudo`.** Its `sudo` stays `sudo -n`. A host that leaves `sudo`
          off and fails after sudo's `a password is required` gets a hint under its failure in the report:
-         `sudo needs a password on this host, so set the sudo option on host()`. `runHost` decides it from the host's
-         option and the failed step's commands, so errors and records keep sudo's own words. A non-English locale
+         `sudo needs a password on this host, so set the sudo option on host()`. The session decides it when the step
+         fails, from the step's own commands and the host's option, and records it on the step, so errors keep sudo's
+         own words. A non-English locale
          doesn't get the hint.
 
       SSH isn't built yet, so all three are tested against `@local` and in Docker. The flows are the same over SSH.
@@ -77,7 +78,8 @@ Build order for the design in `docs/`. Each stage is usable on its own, and the 
   that step finished. At the top level its command goes unrecorded, and during a later step it is recorded under the
   wrong step. `callStep` already builds a fresh set of tools for each step. What's left is to bind them to the step's
   record, and fail the host through `callOrFail` when that step is no longer the running one. Do not throw in
-  `recordCommands`, because only `session.ts` throws, and a throw there would skip `fail()`.
+  `recordCommands`, because only `session.ts` throws, and a throw there would skip recording the failure in
+  `callOrFail`.
 - **A recipes section in the user docs.** When the full docs get written, add a cookbook of patterns that need no
   tsinfra feature. Start with these:
   - **A template is a function** in its own `.ts` file, which gives typed parameters, plain loops and conditionals, and

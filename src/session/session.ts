@@ -2,6 +2,8 @@ import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#cli/program.ts"
+import type { ValidHostOptions } from "#hosts/host.ts"
+import { getFailureHints } from "#session/failure-hints.ts"
 import type { EnsureOptions } from "#session/handlers/ensure.ts"
 import { handleEnsure } from "#session/handlers/ensure.ts"
 import type { Want } from "#session/handlers/ensure/check.ts"
@@ -35,6 +37,7 @@ export interface HostContext {
   transport: Transport
   /** The SSH user's home directory. It's empty when `$HOME` isn't set. */
   home: string
+  options: ValidHostOptions
 }
 
 // Extend `Record<StepKind, unknown>` so a step kind with no method fails to compile.
@@ -119,23 +122,20 @@ export interface HostSession {
  * as values.
  */
 export const createHostSession = (hostContext: HostContext, mode: Mode): HostSession => {
-  const { name, transport, home } = hostContext
+  const { name, transport, home, options: hostOptions } = hostContext
   let failure: Failure
-
-  // Throw the failure on every later call, so a script that catches it still can't use the host.
-  // Type `fail` itself, not just its return, so TypeScript knows nothing runs after a call to it.
-  const fail: (error: Error) => never = (error) => {
-    failure = keepFailure(failure, error)
-    throw failure
-  }
 
   // oxlint-disable-next-line promise/prefer-await-to-callbacks - `callback` is awaited, and the rule only matches its name
   const callOrFail = async <T>(callback: () => Promise<Result<T>>) => {
+    // Throw the failure on every later call, so a script that catches it still can't use the host.
     if (failure) throw failure
 
     // oxlint-disable-next-line promise/prefer-await-to-callbacks - `callback` is awaited, and the rule only matches its name
     const value = await callback()
-    if (isErr(value)) fail(value)
+    if (isErr(value)) {
+      failure = keepFailure(failure, value)
+      throw failure
+    }
 
     // Throw a failure recorded during `callback`, because a function in the script may have caught it and returned normally.
     // Widen `failure` with `as`, because TypeScript keeps the narrowing to `undefined` from the `if` above.
@@ -177,10 +177,16 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
       const stepRecord = startStep(validName, kind)
       if (isErr(stepRecord)) return stepRecord
 
+      // Fail the step with the failure the host ends up with, because a function in the script may have caught an
+      // earlier one. Work out the hints from the step's own commands, so they stay with the step that failed.
+      const failStep = (error: Error) => {
+        finishStep(stepRecord, keepFailure(failure, error), getFailureHints(hostOptions, stepRecord.commands))
+      }
+
       // Validate `options` after recording the step, so a bad one fails under the step like the step's other inputs.
       const validOptions = validateInput(options, sudoOptionsSchema, { inputLabel: "options", givenTo: kind })
       if (isErr(validOptions)) {
-        finishStep(stepRecord, keepFailure(failure, validOptions))
+        failStep(validOptions)
         return validOptions
       }
 
@@ -199,12 +205,12 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
 
       const handlerReturn = await handler(ctx)
 
-      // Record the failure the host ends up with, because a function in the script may have caught an earlier one.
       if (isErr(handlerReturn)) {
-        finishStep(stepRecord, keepFailure(failure, handlerReturn))
+        failStep(handlerReturn)
         return handlerReturn
       }
 
+      // Record a failure the step's handler caught, like a failed `exec` in a fix, because it still fails the host.
       finishStep(stepRecord, failure ?? handlerReturn.status)
       return handlerReturn.value
     })
