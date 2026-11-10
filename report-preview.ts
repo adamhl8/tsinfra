@@ -340,7 +340,7 @@ const createScenarios = (dir: string): Scenario[] => {
       fn: readTrue,
     },
     {
-      // A failure no step owns, as `(host)` and the host's script, after a step that changed.
+      // A failure no step owns, as `(host fn)` and the host's script, after a step that changed.
       name: "script-error",
       target: "@local",
       fn: async (h) => {

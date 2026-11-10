@@ -1,4 +1,4 @@
-import { attempt, err, isErr } from "ts-explicit-errors"
+import { attempt, isErr } from "ts-explicit-errors"
 
 import type { HostEntry } from "#hosts/prepare/prepare.ts"
 import type { Mode } from "#mode.ts"
@@ -48,7 +48,7 @@ export const runHost = async (hostEntry: HostEntry, mode: Mode): Promise<HostRep
   const { name, target, fn: hostFunction } = hostEntry.loadedHost
   if ("failure" in hostEntry) {
     const { failure, failureHints } = hostEntry
-    return { name, target, started: false, failure: err("failed to prepare the host", failure), failureHints }
+    return { name, target, started: false, failure, failureHints }
   }
 
   const { host, stepRecords, getFailure } = createHostSession(hostEntry.hostContext, mode)

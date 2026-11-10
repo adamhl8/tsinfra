@@ -9,6 +9,7 @@
   - [How the report is built](#how-the-report-is-built)
   - [Live progress](#live-progress)
   - [What a host records](#what-a-host-records)
+  - [Kinds of failure](#kinds-of-failure)
   - [Diagnostic logs](#diagnostic-logs)
 - [Exit codes](#exit-codes)
 
@@ -141,8 +142,8 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
 - **Step lines.** A line starts with the step's status, as a symbol and a word in the status's color, then an uncolored colon, like `~ change:`.
   Then comes the step's kind in dim parentheses, like `(file)`, and then its name. The status and the kind are each
   padded to the widest in the block, so every kind and every name starts in one column. The parentheses keep the kind
-  apart from the name without color. A failure no step owns shows `(host)` in place of a kind, also in italics, so it
-  doesn't read as a kind of step. That's a failure of the host's script, or a host that couldn't be prepared. A `changed` step from `ensure`, `file`, or `link` is `~ change`, and a `ran` step from `run` is
+  apart from the name without color. A failure no step owns shows `(host)` or `(host fn)` in place of a kind, also in
+  italics, so it doesn't read as a kind of step (see [Kinds of failure](#kinds-of-failure)). A `changed` step from `ensure`, `file`, or `link` is `~ change`, and a `ran` step from `run` is
   `> triggered`, because a step it follows changed. Any failed step is `! failed`, because the status matters more than the kind once
   something broke, and the error already says what failed. In `--verbose`, every step that was already right is `= unchanged`,
   whatever its kind, so it doesn't rely on color to tell it from a change. A run whose trigger didn't fire is `= unchanged` too,
@@ -150,12 +151,11 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
 - **Failures.** A failed step shows its error's message chain on indented lines under it, in bright red, so it stands
   apart from a red `got:` value. Its `!` and the host's `failed` in the summary are bright red too. That includes a
   failure the script caught inside the step, because the step still fails. The details a step found, like `got:` and
-  `want:`, are indented further and are not red, because they are not the error. A failure that is not any step's, like
-  the script throwing, is the block's last `!` line, named after the host's script in italics (like `sonarr.ts`), so it
-  doesn't read as a step, with its error under it the same way. The block's header already names the host, so the error
-  is not wrapped in "failed to run host". A host that couldn't be prepared, like an unreachable one, never ran its
-  script, so its block has one `!` line named after its target (like `web.lan`), with an error that starts with
-  "failed to prepare the host". A failure can have a hint under it, in italic yellow, with no label, saying how to fix
+  `want:`, are indented further and are not red, because they are not the error. A host function failure is the
+  block's last `!` line, `(host fn)` and the host's script in italics (like `(host fn) sonarr.ts`), with its error under
+  it the same way. A host failure never ran the script, so its block has one `!` line, `(host)` and its target (like
+  `(host) web.lan`). Neither error is wrapped in "failed to run host" or "failed to prepare the host", because the
+  block's header names the host and the kind says where it failed. A failure can have a hint under it, in italic yellow, with no label, saying how to fix
   it. A host that leaves `sudo` off and fails in a step whose own `sudo` needed a password gets "sudo needs a
   password on this host, so set the sudo option on host()" under that step (see [Transport](./transport.md#sudo)).
 - **Failure details.** A failure that still differs after its fix shows its `after` values, then any stderr that can
@@ -258,7 +258,23 @@ or inspect is always `observed`. The record is the same in `plan` and `apply`, a
 step's details come from its `before` comparison, so `apply` can show what a step changed too.
 
 A failed step records its error. Steps called after the host failed throw without running, so they are not recorded. A
-failure that is not a step's, like a bug in the script, is the host's own failure.
+failure that is not a step's, like a bug in the script, is a host function failure.
+
+### Kinds of failure
+
+A failure is one of four kinds, named after what it stops.
+
+- **A startup failure** stops the run before any host exists, like a bad flag, no `hosts/` directory, or a host script
+  that won't load. It prints to stderr as tsinfra's own error, and there's no report (see
+  [How the report is built](#how-the-report-is-built)).
+- **A host failure** stops one host in preflight, before its script runs, like an unreachable host or a sudo password
+  prompt that was skipped. Its block shows `(host)` and the host's target, like `(host) web.lan`.
+- **A host function failure** is anything thrown during the host function that no step owns, like a bug in the script.
+  It's the block's last line, `(host fn)` and the host's script, like `(host fn) sonarr.ts`.
+- **A step failure** belongs to the step that was running, and shows on that step's line. That includes a failure the
+  script caught inside the step.
+
+Every kind but a startup failure fails only its own host, so the other hosts still run, and the run exits 1.
 
 ### Diagnostic logs
 

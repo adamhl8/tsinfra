@@ -64,7 +64,7 @@ describe("tsinfra", () => {
         "  ~ change: (ensure) Pending",
         "",
         "b",
-        "  ! failed: (host) b.ts",
+        "  ! failed: (host fn) b.ts",
         "      boom",
         "",
         PLAN_REMINDER,

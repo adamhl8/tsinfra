@@ -195,14 +195,14 @@ describe("formatHostBlock", () => {
 
   it("should show a failure that isn't any step's after the steps", async () => {
     expect(await formatBlock(changeThenThrow, "plan")).toBe(
-      "a\n  ~ change: (ensure) Pending\n  ! failed: (host)   a.ts\n      boom",
+      "a\n  ~ change: (ensure)  Pending\n  ! failed: (host fn) a.ts\n      boom",
     )
   })
 
   it("should name a host that couldn't be prepared after its target, and count it as failed", async () => {
     const hostReport = await prepareAndRunHost(toLoadedHost("a", host(UNREACHABLE_TARGET, changeThenThrow)), "plan")
     const startError =
-      "failed to prepare the host -> failed to read the ssh config for 'unreachable host' -> exited with code 255: hostname contains invalid characters"
+      "failed to read the ssh config for 'unreachable host' -> exited with code 255: hostname contains invalid characters"
 
     expect([formatHostBlock(hostReport), formatSummary([hostReport], "plan")]).toStrictEqual([
       `a\n  ! failed: (host) ${UNREACHABLE_TARGET}\n      ${startError}`,
@@ -215,7 +215,7 @@ describe("formatHostBlock", () => {
       name: "a",
       target: "a.lan",
       started: false,
-      failure: new Error("failed to prepare the host"),
+      failure: new Error("Host key verification failed."),
       failureHints: ["run 'ssh a.lan' once to check the host's key and save it"],
     })
 
@@ -223,7 +223,7 @@ describe("formatHostBlock", () => {
       [
         "a",
         "  ! failed: (host) a.lan",
-        "      failed to prepare the host",
+        "      Host key verification failed.",
         "        run 'ssh a.lan' once to check the host's key and save it",
       ].join("\n"),
     )
@@ -775,7 +775,10 @@ describe("formatHostBlock for a sudo that needed a password", () => {
       throw new Error("the service didn't start")
     }, "apply")
 
-    expect(hostBlock?.split("\n").slice(1)).toStrictEqual(["  ! failed: (host) a.ts", "      the service didn't start"])
+    expect(hostBlock?.split("\n").slice(1)).toStrictEqual([
+      "  ! failed: (host fn) a.ts",
+      "      the service didn't start",
+    ])
   })
 
   it("should not hint when sudo failed in an earlier step than the one that failed", async () => {

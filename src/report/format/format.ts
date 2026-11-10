@@ -1,8 +1,8 @@
 import { messageChain } from "ts-explicit-errors"
 
 import type { HostReport } from "#hosts/hosts.ts"
-import type { Detail, StepEntryKind, StepEntryStatus, NameKind, StepEntry } from "#report/entries.ts"
-import { toStepEntries } from "#report/entries.ts"
+import type { Detail, HostBlockEntryKind, HostBlockEntryStatus, NameKind, HostBlockEntry } from "#report/entries.ts"
+import { toHostBlockEntries } from "#report/entries.ts"
 import { formatDiff } from "#report/format/diff.ts"
 import { toEnsureRows } from "#report/format/ensure.ts"
 import { toFileRows } from "#report/format/file.ts"
@@ -96,12 +96,12 @@ const formatAlignedRows = (alignedRows: AlignedRow[], valueColumn: number): stri
 }
 
 /**
- * Formats the lines under a step entry's head line: its error in red, if any, then its details. Lines up the values of
- * every aligned row in the entry in one column. Indents the details under an error, so an error stands apart and its
- * details read as belonging to it.
+ * Formats the lines under a host block entry's head line: its error in red, if any, then its details. Lines up the
+ * values of every aligned row in the entry in one column. Indents the details under an error, so an error stands apart
+ * and its details read as belonging to it.
  */
-const formatStepEntryBody = (stepEntry: StepEntry, formatOptions: FormatOptions): string[] => {
-  const { error, details } = stepEntry
+const formatHostBlockEntryBody = (hostBlockEntry: HostBlockEntry, formatOptions: FormatOptions): string[] => {
+  const { error, details } = hostBlockEntry
   const detailRows = details.map((detail) => toDetailRows(detail, formatOptions))
 
   const labels = detailRows.flatMap(({ kind, rows }) =>
@@ -122,39 +122,41 @@ const formatStepEntryBody = (stepEntry: StepEntry, formatOptions: FormatOptions)
 /** Formats a waiting step's step note, like `needs 'A', 'B'`. */
 const formatNeedsNote = (needs: string[]): string => `needs ${quoteNames(needs)}`
 
-/** Formats a step entry's status as its symbol and its word, like `~ change`. */
-const formatStatus = (status: StepEntryStatus): string => {
+/** Formats a host block entry's status as its symbol and its word, like `~ change`. */
+const formatStatus = (status: HostBlockEntryStatus): string => {
   const { symbol, word } = STATUS_STYLES[status]
   return `${symbol} ${word}`
 }
 
-/** Formats a step entry's kind, like `(file)`, so it reads apart from the name even without color. */
-const formatStepEntryKind = (stepEntryKind: StepEntryKind): string => `(${stepEntryKind})`
+/** Formats a host block entry's kind, like `(file)`, in parentheses so it reads apart from the name even without color. */
+const formatKind = (kind: HostBlockEntryKind): string => {
+  const text = `(${kind})`
+  return kind === "host" || kind === "host fn" ? styleHostKind(text) : styleLabel(text)
+}
 
-const styleStepEntryKind = (stepEntryKind: StepEntryKind, text: string): string =>
-  stepEntryKind === "host" ? styleHostKind(text) : styleLabel(text)
-
-const formatStepEntries = (stepEntries: StepEntry[], formatOptions: FormatOptions): string[] => {
+const formatHostBlockEntries = (hostBlockEntries: HostBlockEntry[], formatOptions: FormatOptions): string[] => {
   // Pad each status and each kind to the widest in the block, so every kind and every name starts in one column.
-  const statusColumn = getMaxWidth(stepEntries.map(({ status }) => `${formatStatus(status)}:`))
-  const stepEntryKindColumn = getMaxWidth(stepEntries.map(({ kind }) => formatStepEntryKind(kind)))
+  const statusColumn = getMaxWidth(hostBlockEntries.map(({ status }) => `${formatStatus(status)}:`))
+  const kindColumn = getMaxWidth(hostBlockEntries.map(({ kind }) => formatKind(kind)))
   // Line up every step note in a block in one column, past the longest name that has one.
-  const stepNoteColumn = getMaxWidth(stepEntries.filter(({ needs }) => needs).map(({ name }) => name.text))
+  const stepNoteColumn = getMaxWidth(hostBlockEntries.filter(({ needs }) => needs).map(({ name }) => name.text))
 
-  return stepEntries.flatMap((stepEntry) => {
-    const { status, kind, name, needs } = stepEntry
+  return hostBlockEntries.flatMap((hostBlockEntry) => {
+    const { status, kind, name, needs } = hostBlockEntry
     const { color } = STATUS_STYLES[status]
     const stepNote = needs ? formatNeedsNote(needs) : undefined
 
-    const stepEntryKindText = styleStepEntryKind(kind, padToWidth(formatStepEntryKind(kind), stepEntryKindColumn))
+    const kindText = padToWidth(formatKind(kind), kindColumn)
 
     const styledName = NAME_STYLES[name.kind](name.text)
     const nameText = stepNote ? padToWidth(styledName, stepNoteColumn) : styledName
     const stepNoteText = stepNote ? `${COLUMN_GAP}${styleAside(stepNote)}` : ""
     // Leave the colon uncolored, so it reads as punctuation between the status and the kind.
     const statusText = padToWidth(`${color(formatStatus(status))}:`, statusColumn)
-    const headLine = `${INDENT}${statusText} ${stepEntryKindText} ${nameText}${stepNoteText}`
-    const bodyLines = formatStepEntryBody(stepEntry, formatOptions).map((bodyLine) => `${DETAIL_INDENT}${bodyLine}`)
+    const headLine = `${INDENT}${statusText} ${kindText} ${nameText}${stepNoteText}`
+    const bodyLines = formatHostBlockEntryBody(hostBlockEntry, formatOptions).map(
+      (bodyLine) => `${DETAIL_INDENT}${bodyLine}`,
+    )
 
     return [headLine, ...bodyLines]
   })
@@ -167,10 +169,11 @@ const formatStepEntries = (stepEntries: StepEntry[], formatOptions: FormatOption
 export const formatHostBlock = (hostReport: HostReport, formatOptions: FormatOptions = {}): string | undefined => {
   const { name } = hostReport
   const { verbose = false } = formatOptions
-  const stepEntries = toStepEntries(hostReport, formatOptions)
+  const hostBlockEntries = toHostBlockEntries(hostReport, formatOptions)
 
-  if (stepEntries.length === 0 && verbose) return [styleHostName(name), `${INDENT}${styleNote("no steps")}`].join("\n")
-  if (stepEntries.length === 0) return
+  if (hostBlockEntries.length === 0 && verbose)
+    return [styleHostName(name), `${INDENT}${styleNote("no steps")}`].join("\n")
+  if (hostBlockEntries.length === 0) return
 
-  return [styleHostName(name), ...formatStepEntries(stepEntries, formatOptions)].join("\n")
+  return [styleHostName(name), ...formatHostBlockEntries(hostBlockEntries, formatOptions)].join("\n")
 }

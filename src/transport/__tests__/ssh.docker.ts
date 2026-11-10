@@ -123,7 +123,7 @@ describe("the ssh transport against a real sshd", () => {
       started: false,
       failureHints: [],
       message:
-        "failed to prepare the host -> failed to read the SSH user's home directory -> failed to run the command over ssh -> exited with code 255: ssh: connect to host 127.0.0.1 port 2223: Connection refused",
+        "failed to read the SSH user's home directory -> failed to run the command over ssh -> exited with code 255: ssh: connect to host 127.0.0.1 port 2223: Connection refused",
     })
   })
 

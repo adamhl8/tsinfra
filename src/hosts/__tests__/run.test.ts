@@ -71,7 +71,7 @@ describe("runHost", () => {
       started: false,
       failureHints: [],
       message:
-        "failed to prepare the host -> failed to read the ssh config for 'unreachable host' -> exited with code 255: hostname contains invalid characters",
+        "failed to read the ssh config for 'unreachable host' -> exited with code 255: hostname contains invalid characters",
     })
   })
 

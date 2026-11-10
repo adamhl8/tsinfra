@@ -1,6 +1,6 @@
 import pc from "picocolors"
 
-import type { StepEntryStatus } from "#report/report.ts"
+import type { HostBlockEntryStatus } from "#report/report.ts"
 
 /** Styles a piece of text, like `styleGot` or a color from picocolors. */
 export type Style = (text: string) => string
@@ -9,7 +9,7 @@ export type Style = (text: string) => string
  * Gives each status its color, symbol, and word. One color per status keeps a step's symbol and its count in the
  * summary matching. The words have no tense, because a line reads the same in `plan`, where nothing has changed yet.
  */
-export const STATUS_STYLES: Record<StepEntryStatus, { color: Style; symbol: string; word: string }> = {
+export const STATUS_STYLES: Record<HostBlockEntryStatus, { color: Style; symbol: string; word: string }> = {
   unchanged: { color: pc.green, symbol: "=", word: "unchanged" },
   observed: { color: pc.gray, symbol: "·", word: "observed" },
   changed: { color: pc.yellow, symbol: "~", word: "change" },
@@ -75,7 +75,10 @@ export const styleNote = pipeStyles(pc.dim, pc.italic)
 /** Dims a row's label or a step's kind, because each names what follows, and the value is what should stand out. */
 export const styleLabel = (text: string): string => pc.dim(text)
 
-/** Styles the `(host)` kind like a label in italics, so a failure no step owns doesn't read as a kind of step. */
+/**
+ * Styles the `(host)` and `(host fn)` kinds like a label in italics, so a failure no step owns doesn't read as a kind
+ * of step.
+ */
 export const styleHostKind = pipeStyles(styleLabel, pc.italic)
 
 /** Dims a waiting step's note or the plan reminder, so the steps and the hosts stay the main thing on their lines. */

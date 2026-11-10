@@ -18,13 +18,16 @@ import type {
 } from "#session/session.ts"
 import { isMultiLine } from "#utils.ts"
 
-export type StepEntryStatus = StepStatus | "failed"
+export type HostBlockEntryStatus = StepStatus | "failed"
 
-/** What a step entry is about: a kind of step, or the host, for a failure no step owns. */
-export type StepEntryKind = StepKind | "host"
+/** What a host block entry is about: a kind of step, or a failure no step owns. */
+export type HostBlockEntryKind = StepKind | HostFailureKind
 
-/** A step entry's name, and what kind of name it is, which decides how it's styled. */
-interface StepEntryName {
+/** Where a failure no step owns happened: in preflight, for `host`, or in the host function, for `host fn`. */
+type HostFailureKind = "host" | "host fn"
+
+/** A host block entry's name, and what kind of name it is, which decides how it's styled. */
+interface HostBlockEntryName {
   text: string
   kind: NameKind
 }
@@ -38,20 +41,20 @@ export type NameKind =
   | "hostScript"
 
 /** One step's part of a host block, as data. */
-export interface StepEntry {
-  status: StepEntryStatus
-  /** What the step entry is about, which the head line shows before the name. */
-  kind: StepEntryKind
-  name: StepEntryName
+export interface HostBlockEntry {
+  status: HostBlockEntryStatus
+  /** What the host block entry is about, which the head line shows before the name. */
+  kind: HostBlockEntryKind
+  name: HostBlockEntryName
   /** The names of the steps a waiting step needs. */
   needs?: string[]
-  /** Why a failed step entry failed. */
+  /** Why a failed host block entry failed. */
   error?: Error
   /** How a value would change, or for a failure, what the step last found on the host. */
   details: Detail[]
 }
 
-/** What a step entry shows under its head line. */
+/** What a host block entry shows under its head line. */
 export type Detail =
   | { kind: "diff"; got: string; want: string }
   // Holds everything about a file but a text diff, which is a detail of its own.
@@ -179,11 +182,11 @@ const toFailureDetails = (stepRecord: StepRecord, formatOptions: FormatOptions):
   return []
 }
 
-/** Returns the step entry a host block shows for a step, or nothing for a step that's hidden or never finished. */
-const toStepEntry = (stepRecord: StepRecord, formatOptions: FormatOptions): StepEntry | undefined => {
+/** Returns the entry a host block shows for a step, or nothing for a step that's hidden or never finished. */
+const toHostBlockEntry = (stepRecord: StepRecord, formatOptions: FormatOptions): HostBlockEntry | undefined => {
   const { name: stepName, kind, status, comparisons, waitingOn, failureHints } = stepRecord
   const { verbose = false } = formatOptions
-  const name: StepEntryName = { text: stepName, kind: STEP_NAME_KINDS[kind] }
+  const name: HostBlockEntryName = { text: stepName, kind: STEP_NAME_KINDS[kind] }
 
   if (isErr(status)) {
     const hintDetails = failureHints.map((text): Detail => ({ kind: "hint", text }))
@@ -215,8 +218,8 @@ const toStepEntry = (stepRecord: StepRecord, formatOptions: FormatOptions): Step
   return { status, kind, name, details: warningDetails }
 }
 
-/** Returns the step entries a host block shows: one per step that shows, then a failure no step owns. */
-export const toStepEntries = (hostReport: HostReport, formatOptions: FormatOptions): StepEntry[] => {
+/** Returns the entries a host block shows: one per step that shows, then a failure no step owns. */
+export const toHostBlockEntries = (hostReport: HostReport, formatOptions: FormatOptions): HostBlockEntry[] => {
   // Name a host that couldn't be prepared after its target, because that's what failed, and the script never ran.
   if (!hostReport.started) {
     const hostHintDetails = hostReport.failureHints.map((text): Detail => ({ kind: "hint", text }))
@@ -233,22 +236,22 @@ export const toStepEntries = (hostReport: HostReport, formatOptions: FormatOptio
   }
 
   const { name, stepRecords, failure } = hostReport
-  const stepEntries = stepRecords
-    .map((stepRecord) => toStepEntry(stepRecord, formatOptions))
-    .filter((stepEntry) => stepEntry !== undefined)
+  const hostBlockEntries = stepRecords
+    .map((stepRecord) => toHostBlockEntry(stepRecord, formatOptions))
+    .filter((hostBlockEntry) => hostBlockEntry !== undefined)
 
   // Show a failure that no step owns, like the script throwing, after the steps.
-  // Name it after the host's script, because it comes from the script, not a step.
+  // Name it after the host's script, because it comes from the host function, not a step.
   const isStepFailure = stepRecords.some(({ status }) => status === failure)
   if (failure && !isStepFailure) {
-    stepEntries.push({
+    hostBlockEntries.push({
       status: "failed",
-      kind: "host",
+      kind: "host fn",
       name: { text: `${name}${HOST_SCRIPT_EXTENSION}`, kind: "hostScript" },
       error: failure,
       details: [],
     })
   }
 
-  return stepEntries
+  return hostBlockEntries
 }
