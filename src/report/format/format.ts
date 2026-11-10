@@ -13,7 +13,7 @@ import {
   STATUS_STYLES,
   styleAside,
   styleError,
-  styleHostKind,
+  styleUnownedKind,
   styleHostName,
   styleLabel,
   styleNote,
@@ -129,7 +129,7 @@ const formatStatus = (status: HostBlockEntryStatus): string => {
 /** Formats a host block entry's kind, like `(file)`, in parentheses so it reads apart from the name even without color. */
 const formatKind = (kind: HostBlockEntryKind): string => {
   const text = `(${kind})`
-  return kind === "host" || kind === "host fn" ? styleHostKind(text) : styleLabel(text)
+  return kind === "preparation" || kind === "host fn" ? styleUnownedKind(text) : styleLabel(text)
 }
 
 const formatHostBlockEntries = (hostBlockEntries: HostBlockEntry[], formatOptions: FormatOptions): string[] => {

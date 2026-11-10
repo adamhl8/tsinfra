@@ -1,4 +1,4 @@
-import { hasDrift, hasFailed } from "#hosts/hosts.ts"
+import { hasDrift } from "#hosts/hosts.ts"
 import type { Mode } from "#mode.ts"
 import { COLUMN_GAP } from "#report/format/format.ts"
 import { getStepWarnings } from "#report/warnings.ts"
@@ -9,7 +9,7 @@ import { getMaxWidth, padToWidth } from "#utils.ts"
 const PLAN_REMINDER = "Steps after a change were checked without that change, so apply may differ."
 
 const formatHostStatus = (hostRecord: HostRecord): string => {
-  if (hasFailed(hostRecord)) return STATUS_STYLES.failed.color("failed")
+  if (hostRecord.failure) return STATUS_STYLES.failed.color("failed")
 
   const { stepRecords } = hostRecord
 

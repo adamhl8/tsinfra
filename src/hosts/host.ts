@@ -6,15 +6,16 @@ export type HostFunction = (h: Host) => Promise<void>
 
 /**
  * Declares the host's sudo with `true`, or with `{ password }` to also give tsinfra the password sudo asks for.
- * `false`, the default, means preflight doesn't check sudo.
+ * `false`, the default, means preparation doesn't check sudo.
  */
 export type HostSudo = boolean | { password: string }
 
 /** What a host script can set besides its target and function. */
 export interface HostOptions {
   /**
-   * Declares that the host's script uses sudo, so preflight makes sure sudo works before any host changes anything. Set
-   * it even with passwordless sudo, and give `{ password }` only when the run can't prompt (see `docs/transport.md`).
+   * Declares that the host's script uses sudo, so preparation makes sure sudo works before any host changes anything.
+   * Set it even with passwordless sudo, and give `{ password }` only when the run can't prompt (see
+   * `docs/transport.md`).
    */
   sudo?: HostSudo
 }

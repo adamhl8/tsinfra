@@ -10,6 +10,8 @@ import type {
   CommandRecord,
   ConvergePhase,
   HostRecord,
+  RecordedStepFailure,
+  RecordedUnownedFailure,
   StepRecord,
   ComparisonValues,
   StepKind,
@@ -20,10 +22,10 @@ import { isMultiLine } from "#utils.ts"
 export type HostBlockEntryStatus = StepStatus | "failed"
 
 /** What a host block entry is about: a kind of step, or a failure no step owns. */
-export type HostBlockEntryKind = StepKind | HostFailureKind
+export type HostBlockEntryKind = StepKind | UnownedFailureKind
 
-/** Where a failure no step owns happened: in preflight, for `host`, or in the host function, for `host fn`. */
-type HostFailureKind = "host" | "host fn"
+/** Where a failure no step owns happened: in preparation, or in the host function, for `host fn`. */
+type UnownedFailureKind = RecordedUnownedFailure["kind"]
 
 /** A host block entry's name, and what kind of name it is, which decides how it's styled. */
 interface HostBlockEntryName {
@@ -180,24 +182,24 @@ const toFailureDetails = (stepRecord: StepRecord, formatOptions: FormatOptions):
   return []
 }
 
-/** Returns the entry a host block shows for a step, or nothing for a step that's hidden or never finished. */
-const toHostBlockEntry = (stepRecord: StepRecord, formatOptions: FormatOptions): HostBlockEntry | undefined => {
-  const { name: stepName, kind, status, comparisons, waitingOn, failureHints } = stepRecord
-  const { verbose = false } = formatOptions
-  const name: HostBlockEntryName = { text: stepName, kind: STEP_NAME_KINDS[kind] }
+const toHintDetails = (hints: string[]): Detail[] => hints.map((text) => ({ kind: "hint", text }))
 
-  if (isErr(status)) {
-    const hintDetails = failureHints.map((text): Detail => ({ kind: "hint", text }))
+/** Returns the name a step's entry shows, and what kind of name it is. */
+const toStepEntryName = ({ name, kind }: StepRecord): HostBlockEntryName => ({
+  text: name,
+  kind: STEP_NAME_KINDS[kind],
+})
 
-    return {
-      status: "failed",
-      kind,
-      name,
-      error: status,
-      details: [...toFailureDetails(stepRecord, formatOptions), ...hintDetails],
-    }
-  }
+/**
+ * Returns the entry a host block shows for a step, or nothing for a step that's hidden or has no status, like the step
+ * that failed.
+ */
+const toStepEntry = (stepRecord: StepRecord, formatOptions: FormatOptions): HostBlockEntry | undefined => {
+  const { kind, status, comparisons, waitingOn } = stepRecord
   if (status === undefined) return
+
+  const { verbose = false } = formatOptions
+  const name = toStepEntryName(stepRecord)
 
   // Show a step with a warning, even one that was already right, so the warning can't be missed.
   const warningDetails: Detail[] = getStepWarnings(stepRecord).map((warning) => ({ kind: "warning", warning }))
@@ -216,31 +218,38 @@ const toHostBlockEntry = (stepRecord: StepRecord, formatOptions: FormatOptions):
   return { status, kind, name, details: warningDetails }
 }
 
-/** Returns the entries a host block shows: one per step that shows, then a failure no step owns. */
+/** Returns the entry for the step that failed, with the host's failure, which the step owns. */
+const toFailedStepEntry = (stepFailure: RecordedStepFailure, formatOptions: FormatOptions): HostBlockEntry => {
+  const { stepRecord, error, hints } = stepFailure
+  const details = [...toFailureDetails(stepRecord, formatOptions), ...toHintDetails(hints)]
+  return { status: "failed", kind: stepRecord.kind, name: toStepEntryName(stepRecord), error, details }
+}
+
+/**
+ * Returns the entry for a failure no step owns, named after the host's target, because the kind already says where it
+ * failed.
+ */
+const toUnownedFailureEntry = (unownedFailure: RecordedUnownedFailure, target: string): HostBlockEntry => {
+  const { kind, error, hints } = unownedFailure
+  // Add a note to a host function failure, because `host fn` alone doesn't say it came from the script and not the host.
+  const noteDetails: Detail[] = kind === "host fn" ? [{ kind: "note", text: HOST_FUNCTION_FAILURE_NOTE }] : []
+  const details = [...noteDetails, ...toHintDetails(hints)]
+  return { status: "failed", kind, name: { text: target, kind: "value" }, error, details }
+}
+
+/** Returns the entries a host block shows: one per step that shows, then the host's failure, if it failed. */
 export const toHostBlockEntries = (hostRecord: HostRecord, formatOptions: FormatOptions): HostBlockEntry[] => {
-  const { target, preparation, stepRecords, failure } = hostRecord
-  const hostName: HostBlockEntryName = { text: target, kind: "value" }
-
-  if (isErr(preparation.status)) {
-    const hostHintDetails = preparation.failureHints.map((text): Detail => ({ kind: "hint", text }))
-    return [{ status: "failed", kind: "host", name: hostName, error: preparation.status, details: hostHintDetails }]
-  }
-
+  const { target, stepRecords, failure } = hostRecord
   const hostBlockEntries = stepRecords
-    .map((stepRecord) => toHostBlockEntry(stepRecord, formatOptions))
+    .map((stepRecord) => toStepEntry(stepRecord, formatOptions))
     .filter((hostBlockEntry) => hostBlockEntry !== undefined)
 
-  // Show a failure that no step owns, like the script throwing, after the steps.
-  // Add a note, because `host fn` alone doesn't say the failure came from the script and not the host.
-  const isStepFailure = stepRecords.some(({ status }) => status === failure)
-  if (failure && !isStepFailure) {
-    hostBlockEntries.push({
-      status: "failed",
-      kind: "host fn",
-      name: hostName,
-      error: failure,
-      details: [{ kind: "note", text: HOST_FUNCTION_FAILURE_NOTE }],
-    })
+  // Show the failure after the steps, even a step's, because nothing runs once the host has failed.
+  // That makes the step that failed the last one.
+  if (failure) {
+    const failureEntry =
+      failure.kind === "step" ? toFailedStepEntry(failure, formatOptions) : toUnownedFailureEntry(failure, target)
+    hostBlockEntries.push(failureEntry)
   }
 
   return hostBlockEntries

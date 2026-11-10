@@ -17,7 +17,7 @@ const ASKPASS_HELPER_PATH = `${ASKPASS_DIRECTORY}/askpass.sh`
 
 /**
  * Writes the askpass helper, replacing the one from an earlier run. Write it under a temp name and rename it into
- * place, because another host on the same machine can be running it while preflight writes it.
+ * place, because another host on the same machine can be running it while preparation writes it.
  */
 export const WRITE_ASKPASS_HELPER_SCRIPT = [
   "set -eu",

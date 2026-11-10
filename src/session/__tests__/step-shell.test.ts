@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 
-import { createStepRecorder } from "#session/recorder/step-recorder.ts"
+import { createHostRecorder } from "#session/recorder/recorder.ts"
 import { createStepShell } from "#session/step-shell.ts"
 import { runLocal } from "#transport/local.ts"
 import type { Transport } from "#transport/transport.ts"
@@ -10,10 +10,10 @@ const transport: Transport = async (cmd) => runLocal(`sudo() { echo "sudo $*"; "
 
 /** Runs `echo hi` in a step on the shell for `sudo`, and returns its stdout and the commands the step recorded. */
 const runInStep = async (sudo: boolean) => {
-  const { stepRecords, recordCommands, startStep } = createStepRecorder()
-  startStep("a", "file")
-  const stdout = await createStepShell(transport, recordCommands, sudo).exec("echo hi")
-  return { stdout, recordedCmds: stepRecords[0]?.commands.map(({ cmd }) => cmd) }
+  const { hostRecord, stepRecorder } = createHostRecorder("a", "@local", { sudo: false })
+  stepRecorder.startStep("a", "file")
+  const stdout = await createStepShell(transport, stepRecorder.recordCommands, sudo).exec("echo hi")
+  return { stdout, recordedCmds: hostRecord.stepRecords[0]?.commands.map(({ cmd }) => cmd) }
 }
 
 describe("createStepShell", () => {

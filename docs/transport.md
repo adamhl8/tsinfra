@@ -201,7 +201,7 @@ case too.
 
 **Host keys and timeouts follow `~/.ssh/config`, with defaults where it says nothing.** A command-line `-o` always beats
 the config file, so tsinfra reads the host's effective settings first, with `ssh -G -T <host>`. That runs locally, with
-no network, once per host in preflight. `-T` stops `-G` warning that it won't allocate a terminal. A config `-G` can't
+no network, once per host in preparation. `-T` stops `-G` warning that it won't allocate a terminal. A config `-G` can't
 read fails the host there, with ssh's error. Then tsinfra fills in only what ssh would otherwise leave unworkable:
 
 | `StrictHostKeyChecking` | tsinfra passes | Why                                                                     |
@@ -313,8 +313,8 @@ export default host("macbook", fn, { sudo: true }) // prompts when passwordless 
 export default host("incus.lan", fn, { sudo: { password: incusSudo } }) // a password the script decrypted, never prompts
 ```
 
-- **Declare `sudo: true` even with passwordless sudo.** There it only adds a check in preflight, with no prompt and no
-  password. A broken sudo then fails in preflight, before any host changes anything. Without it, the host fails at the
+- **Declare `sudo: true` even with passwordless sudo.** There it only adds a check in preparation, with no prompt and no
+  password. A broken sudo then fails in preparation, before any host changes anything. Without it, the host fails at the
   first `sudo` that needs a password, after the steps before it have run.
 - **Give `{ password }` only when the run can't prompt,** like in CI or a cron job. A password already implies sudo, so
   one option has both forms.
@@ -322,7 +322,7 @@ export default host("incus.lan", fn, { sudo: { password: incusSudo } }) // a pas
 The Incus containers have passwordless sudo through cloud-init, so `sudo: true` only checks it there. The Mac and the
 first run on the Incus host need a password.
 
-**Preflight.** Every host is prepared before any script runs: connect, read `$HOME`, and for a host that declares
+**Preparation.** Every host is prepared before any script runs: connect, read `$HOME`, and for a host that declares
 `sudo`, check it. That happens for every host at once. Then the hosts that need a password prompt, one at a time, in the
 hosts' order. Then the scripts run, one after another or in parallel, so a prompt never mixes with a running host's
 output. A host that can't be reached fails here, before any other host changes anything. A host has to declare `sudo`
@@ -344,7 +344,7 @@ because of this: by the time its script runs, it's too late to ask.
   who isn't in sudoers, fails with `failed to check the sudo password` and sudo's output under it, because then the
   password may well be right. The match is on English text, so another locale gets the second form.
 
-- **`sudo: true` without passwordless sudo needs a password,** so preflight prompts for it, naming the SSH user from
+- **`sudo: true` without passwordless sudo needs a password,** so preparation prompts for it, naming the SSH user from
   `id -un`:
 
   ```
@@ -368,17 +368,17 @@ because of this: by the time its script runs, it's too late to ask.
   whose output is muted so nothing typed is echoed. The prompt prints only once readline has the terminal in raw mode,
   because the terminal echoes anything typed before that.
 - **No terminal, no prompt.** When stdin or stderr isn't a TTY, like in CI or with `2>file`, a host that needs a prompt
-  fails in preflight with `needs a sudo password: set up passwordless sudo, or pass sudo: { password } to host()`.
+  fails in preparation with `needs a sudo password: set up passwordless sudo, or pass sudo: { password } to host()`.
   stderr counts too, because a redirected prompt would leave the run waiting on a prompt nobody sees.
 
-**How a command's `sudo` gets the password.** On a host with a password, preflight writes an askpass helper to
+**How a command's `sudo` gets the password.** On a host with a password, preparation writes an askpass helper to
 `~/.tsinfra/askpass.sh`, and every script tsinfra sends starts with a preamble that defines `sudo` as a shell function:
 
 ```sh
 sudo() { TSINFRA_SUDO_PASSWORD='...' SUDO_ASKPASS="$HOME"/.tsinfra/askpass.sh command sudo -A "$@"; }
 ```
 
-- **The helper stays between runs.** It only prints `$TSINFRA_SUDO_PASSWORD`, so it holds no secret. Preflight writes
+- **The helper stays between runs.** It only prints `$TSINFRA_SUDO_PASSWORD`, so it holds no secret. Preparation writes
   it again on every run, so a deleted or changed helper comes back as it should be. It's written under a temp name and
   renamed into place, because another host on the same machine can be running it at that moment.
 - **It lives in the home directory, not `/tmp`,** because sudo can't run a helper from a `/tmp` mounted `noexec`, which
@@ -416,6 +416,6 @@ a hint, not part of the error, so the error keeps sudo's own words. The match is
 gets no hint.
 
 On `file`, `sudo: true` covers the whole operation: the file details script, the diff, and the write. A root-only file under
-`/etc` could not be hashed or read otherwise, so `plan` needs sudo too, which preflight provides. Content travels on
+`/etc` could not be hashed or read otherwise, so `plan` needs sudo too, which preparation provides. Content travels on
 stdin, inside the script, so it never shows up in `ps` or in the sudo log, unless sudoers sets `log_input`, which
 records stdin.

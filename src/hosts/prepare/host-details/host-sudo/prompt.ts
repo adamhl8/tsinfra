@@ -17,7 +17,7 @@ const PASSWORD_PROMPT = "Password: "
 const SKIPPED_SUDO_PASSWORD_PROMPT_MESSAGE = "skipped sudo password prompt"
 const SKIPPING_HOST = "skipping host"
 
-/** Warns that preflight moves on to the next host, with a blank line before that host's prompt. */
+/** Warns that preparation moves on to the next host, with a blank line before that host's prompt. */
 const warnSkippingHost = (warning: string) => {
   process.stderr.write(`${styleWarning(warning)}\n\n`)
 }

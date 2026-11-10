@@ -76,10 +76,10 @@ export const styleNote = pipeStyles(pc.dim, pc.italic)
 export const styleLabel = (text: string): string => pc.dim(text)
 
 /**
- * Styles the `(host)` and `(host fn)` kinds like a label in italics, so a failure no step owns doesn't read as a kind
- * of step.
+ * Styles the `(preparation)` and `(host fn)` kinds like a label in italics, so a failure no step owns doesn't read as a
+ * kind of step.
  */
-export const styleHostKind = pipeStyles(styleLabel, pc.italic)
+export const styleUnownedKind = pipeStyles(styleLabel, pc.italic)
 
 /** Dims a waiting step's note or the plan reminder, so the steps and the hosts stay the main thing on their lines. */
 export const styleAside = (text: string): string => pc.dim(text)

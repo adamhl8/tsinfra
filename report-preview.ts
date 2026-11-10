@@ -14,7 +14,7 @@ import { err, isErr } from "ts-explicit-errors"
 
 import type { HostFunction, HostSudo } from "#hosts/host.ts"
 import { prepareHosts } from "#hosts/prepare/prepare.ts"
-import { hasDrift, hasFailed, runHost } from "#hosts/run.ts"
+import { hasDrift, runHost } from "#hosts/run.ts"
 import type { Mode } from "#mode.ts"
 import { printTsinfraError } from "#report/errors.ts"
 import { formatHostBlock } from "#report/format/format.ts"
@@ -291,7 +291,7 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      // A host that couldn't be prepared, as `(host)` and its target in the value color, because its script never ran.
+      // A host whose preparation failed, as `(preparation)` and its target in the value color, because its script never ran.
       // Give it a target with a space, because ssh rejects one before it reads any config or connects.
       name: "unreachable",
       target: "web lan",
@@ -352,7 +352,7 @@ const createScenarios = (dir: string): Scenario[] => {
 }
 
 const getExitCode = (hostRecords: HostRecord[], mode: Mode) => {
-  if (hostRecords.some((hostRecord) => hasFailed(hostRecord))) return 1
+  if (hostRecords.some(({ failure }) => failure)) return 1
   return mode === "plan" && hostRecords.some((hostRecord) => hasDrift(hostRecord)) ? 2 : 0
 }
 

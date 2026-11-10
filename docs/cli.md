@@ -142,8 +142,8 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
 - **Step lines.** A line starts with the step's status, as a symbol and a word in the status's color, then an uncolored colon, like `~ change:`.
   Then comes the step's kind in dim parentheses, like `(file)`, and then its name. The status and the kind are each
   padded to the widest in the block, so every kind and every name starts in one column. The parentheses keep the kind
-  apart from the name without color. A failure no step owns shows `(host)` or `(host fn)` in place of a kind, also in
-  italics, so it doesn't read as a kind of step (see [Kinds of failure](#kinds-of-failure)). A `changed` step from `ensure`, `file`, or `link` is `~ change`, and a `ran` step from `run` is
+  apart from the name without color. A failure no step owns shows `(preparation)` or `(host fn)` in place of a kind,
+  also in italics, so it doesn't read as a kind of step (see [Kinds of failure](#kinds-of-failure)). A `changed` step from `ensure`, `file`, or `link` is `~ change`, and a `ran` step from `run` is
   `> triggered`, because a step it follows changed. Any failed step is `! failed`, because the status matters more than the kind once
   something broke, and the error already says what failed. In `--verbose`, every step that was already right is `= unchanged`,
   whatever its kind, so it doesn't rely on color to tell it from a change. A run whose trigger didn't fire is `= unchanged` too,
@@ -154,8 +154,8 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   `want:`, are indented further and are not red, because they are not the error. A host function failure is the
   block's last `!` line, `(host fn)` and the host's target (like `(host fn) web.lan`), with its error under it the same
   way, then the note "thrown in the host function, outside any step", because `host fn` alone doesn't say the failure
-  came from the script and not the host. A host failure never ran the script, so its block has one `!` line, `(host)`
-  and its target (like `(host) web.lan`). Both name the target, because the kind already says where it failed. Neither error is wrapped in "failed to run host" or "failed to prepare the host", because the
+  came from the script and not the host. A preparation failure never ran the script, so its block has one `!` line,
+  `(preparation)` and its target (like `(preparation) web.lan`). Both name the target, because the kind already says where it failed. Neither error is wrapped in "failed to run host" or "failed to prepare the host", because the
   block's header names the host and the kind says where it failed. A failure can have a hint under it, in italic yellow, with no label, saying how to fix
   it. A host that leaves `sudo` off and fails in a step whose own `sudo` needed a password gets "sudo needs a
   password on this host, so set the sudo option on host()" under that step (see [Transport](./transport.md#sudo)).
@@ -235,13 +235,15 @@ for progress to matter. Until then the blocks print directly as each host finish
 
 ### What a host records
 
-The output is built from a record of each host's run. It holds how preflight ended, then one list of steps, in the
-order the script called them.
+The output is built from a record of each host's run. It holds one list of steps, in the order the script called them,
+and the host's failure, if it failed.
 
-- **Preflight** records its error if it failed, with any hints for it. A host whose preflight failed has no steps.
-
-- **A step** records its kind (`read`, `inspect`, `ensure`, `run`, `file`, or `link`), its name, its status, and its error if it
-  failed. A read or inspect has no name, so it records its command.
+- **The failure** is the host's only one, because nothing runs on a host once it has failed. It records its error, its
+  kind (see [Kinds of failure](#kinds-of-failure)), and any hints for it. The kind comes from where the host was when it
+  failed: in preparation, in a step, or in the host function outside any step. A host whose preparation failed has no
+  steps.
+- **A step** records its kind (`read`, `inspect`, `ensure`, `run`, `file`, or `link`), its name, and its status. A read
+  or inspect has no name, so it records its command.
 - **A step's commands** are every command that ran while it was running, including those from reading its state and from its fix
   functions. A read or inspect has exactly one.
 - **A command** records the command, its stdout and stderr, and its exit code. A command that could not run at all
@@ -261,8 +263,10 @@ A step's status is `unchanged`, `changed`, `ran`, `waiting`, or `observed`. `cha
 or inspect is always `observed`. The record is the same in `plan` and `apply`, and so is each step's line. A changed
 step's details come from its `before` comparison, so `apply` can show what a step changed too.
 
-A failed step records its error. Steps called after the host failed throw without running, so they are not recorded. A
-failure that is not a step's, like a bug in the script, is a host function failure.
+A failed step has no status. The host's failure holds its error and the step it belongs to, and the report shows it
+after the other steps. That includes a failure the script caught inside the step. Steps called after the host failed
+throw without running, so they are not recorded, and the step that failed is always the last one. A failure that is
+not a step's, like a bug in the script, is a host function failure.
 
 ### Kinds of failure
 
@@ -271,8 +275,9 @@ A failure is one of four kinds, named after what it stops.
 - **A startup failure** stops the run before any host exists, like a bad flag, no `hosts/` directory, or a host script
   that won't load. It prints to stderr as tsinfra's own error, and there's no report (see
   [How the report is built](#how-the-report-is-built)).
-- **A host failure** stops one host in preflight, before its script runs, like an unreachable host or a sudo password
-  prompt that was skipped. Its block shows `(host)` and the host's target, like `(host) web.lan`.
+- **A preparation failure** stops one host while it's prepared, before its script runs, like an unreachable host or a
+  sudo password prompt that was skipped. Its block shows `(preparation)` and the host's target, like
+  `(preparation) web.lan`.
 - **A host function failure** is anything thrown during the host function that no step owns, like a bug in the script.
   It's the block's last line, `(host fn)` and the host's target, like `(host fn) web.lan`, with a note that it was
   thrown in the host function.

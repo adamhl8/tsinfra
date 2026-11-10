@@ -1,7 +1,7 @@
 import { isErr, messageChain } from "ts-explicit-errors"
 
 import type { ValidHostOptions } from "#hosts/hosts.ts"
-import type { CommandRecord } from "#session/recorder/recorder.ts"
+import type { CommandRecord } from "#session/recorder/records.ts"
 
 /** Reports whether a command exited non-zero with `stderrText` in its stderr. */
 const hasFailedWithStderr = (commandRecords: CommandRecord[], stderrText: string) => {
@@ -15,7 +15,7 @@ const hasFailedWithStderr = (commandRecords: CommandRecord[], stderrText: string
 const SUDO_OPTION_HINT = "sudo needs a password on this host, so set the sudo option on host()"
 
 /** Returns the hints for a step that failed, from its own commands, each guarded by the failure it fixes. */
-export const getFailureHints = (hostOptions: ValidHostOptions, commandRecords: CommandRecord[]): string[] => {
+export const getStepFailureHints = (hostOptions: ValidHostOptions, commandRecords: CommandRecord[]): string[] => {
   // Hint at the `sudo` option only on a host that leaves it off, because a host that sets it already did the fix.
   // Match the line `sudo -n` prints when it needs a password. It's English only, so another locale gets no hint.
   if (hostOptions.sudo === false && hasFailedWithStderr(commandRecords, "sudo: a password is required"))

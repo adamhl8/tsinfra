@@ -13,23 +13,30 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
       end of the run. Integration tests against a real sshd in `bask test-docker`. Test a command that can't run after
       the session starts, like sshd going away mid-run: it fails the host, and the step's record keeps the command and
       its error.
-   2. **`ssh -G` defaults.** Preflight reads the host's effective settings, then passes `accept-new`,
+   2. **`ssh -G` defaults.** Preparation reads the host's effective settings, then passes `accept-new`,
       `ConnectTimeout=10`, and `LogLevel=ERROR` only where the config says nothing, with the hints for a new host and a
       changed key.
    3. **The failure kinds in the report.** Four kinds: a startup failure stops the run before any host exists (a bad
-      flag, no `hosts/` directory, a host script that won't load), a host failure stops one host in preflight, a host
-      function failure is anything thrown during the host function that no step owns, and a step failure belongs to a
-      step. A host failure shows as `(host) <target>`, and a host function failure as `(host fn) a.ts`, in place of
-      today's `(host) a.ts`. Write the four kinds down in the docs.
+      flag, no `hosts/` directory, a host script that won't load), a preparation failure stops one host while it's
+      prepared, a host function failure is anything thrown during the host function that no step owns, and a step
+      failure belongs to a step. A preparation failure shows as `(preparation) <target>`, and a host function failure as
+      `(host fn) <target>` with a note, in place of today's `(host) a.ts`. Write the four kinds down in the docs.
    4. **The host recorder.** One recorder per host, not one per run, because it tracks the running step, and hosts
       will run in parallel. It holds the host record, which preparation, the session, and `runHost` fill in, and the
       report reads. It's built in three steps, each reviewed before the next.
-      1. **The recorder and the record (built).** The package `session/recorder/` holds `host-recorder.ts`,
-         `step-recorder.ts`, and `commands.ts` (`CommandRecord`), with `recorder.ts` re-exporting them. `HostRecord` is
-         `{ name, target, preparation, stepRecords, failure }`, and `runHost` returns it in place of `HostReport`.
-         `preparation` is `{ commands, status?: Result<PreparationStatus>, failureHints }`, so a failed preparation is a
-         `(host)` failure, and `failure` holds a step's or the host function's. `callOrFail` keeps the first failure on
-         the record, in place of the session's own variable. `HostContext` carries the recorder.
+      1. **The recorder and the record (built).** The package `session/recorder/` holds `records.ts` (every record
+         type), `host-recorder.ts`, `step-recorder.ts`, and `failure-hints.ts`, with `recorder.ts` re-exporting them.
+         `HostRecord` is `{ name, target, preparationCommands, stepRecords, failure? }`, and `runHost` returns it in
+         place of `HostReport`. The host recorder creates the record and builds the step recorder, which closes over
+         the record and the host recorder's `recordFailure`, and pushes onto `stepRecords`. `failure` is the host's one
+         `RecordedFailure`: a `RecordedUnownedFailure { kind: "preparation" | "host fn", error, hints }`, or a
+         `RecordedStepFailure { kind: "step", stepRecord, error, hints }`. `recordFailure` gives a new failure
+         `preparation` while the host is preparing and `host fn` after. The step recorder gets `recordStepFailure(stepRecord,
+         error)` from the host recorder, and nothing else does. It records a step failure with the step's record and
+         hints from its commands, under the same keep-the-first-error rule as `recordFailure`. `failStep(error)` calls
+         it, and so does `finishStep(status)` when the host failed while the step ran. A failed step has no
+         status, and the report shows the failure after the steps, because the step that failed is always the last.
+         `failPreparation(error)` records the preparation's failure with its hints, and `finishPreparation()` ends it. `HostContext` carries the recorder.
       2. **Shells, in two stages, and no transport in the context.** During preparation, the recorder's
          `createShell(transport)` gives a recording shell on any transport: the local shell for `ssh -G`, and the target
          shell once `baseTransport` exists. When preparation ends, `prepareHosts` builds the session's
@@ -37,26 +44,23 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
          transport. The host context carries the recorder and `getShell`, and no transport, so nothing in the session
          can run a command that isn't recorded. The helpers that put fake tools on `PATH` wrap the transport before
          building `getShell`, with the same function `prepareHosts` uses, in place of swapping `hostContext.transport`.
-      3. **Recording preparation.** One `recordCommands`, moved into `commands.ts`, sends each command to the running
-         step, or to the preparation while its `status` is unset. `buildHostDetails` gets a per-host context with the
+      3. **Recording preparation.** One `recordCommands`, moved up to the host recorder, sends each command to the
+         running step, or to `preparationCommands` while the host is preparing. `buildHostDetails` gets a per-host context with the
          local shell and the recorder's `createShell`, in place of making its own shells. `prepareBaseTransport` and
          `readSshDefaultOptions` take the local shell from it. `finishHostDetails` takes the target shell from the
          details, in place of calling `createShell(baseTransport)` again. The sudo password check records a stand-in
          through `recordedCmd`, so the password never reaches the record. It lands here, not in piece 5, because this
          is where preparation's commands start being recorded. The password docker test already checks the whole
          record.
-   5. **Preflight commands on the host record.** Preparation already records through the host recorder's shells, so
+   5. **Preparation commands on the host record.** Preparation already records through the host recorder's shells, so
       this gives each command a label: `ssh -G`, the home and user reads, the sudo checks, and the askpass helper
       write. Record the end of the run's `ssh -O stop` on the record of each host that used that target. The
       transport's own mechanics stay off the record, because they belong in the diagnostic log: the
       `{ ... } </dev/null` wrapper, the `sudo` function line, the `ssh` process around each command, and the retry when
       a connection closes.
-      - **Hints from the recorder.** Step hints and preparation hints come from one function over command records,
-        which also matches the message of a command that failed to run, because ssh's stderr lives in that error. The
-        recorder calls it itself, so `finishStep(status)` and `finishPreparation(status)` take only the status, and
-        `failStep` stops passing hints. The recorder is created with the host's options, and `failure-hints.ts` moves
-        into `session/recorder/`. `callStep` then needs nothing from `startStep` but whether it failed, so `startStep`
-        returns a plain `Result` and `callStep` stops holding the step's record.
+      - **One hint function.** The recorder already works out the hints when a step or the preparation fails, from
+        `getStepFailureHints` and `getPreparationFailureHints`. Merge them into one function over command records, which
+        also matches the message of a command that failed to run, because ssh's stderr lives in that error.
    6. **The `shell` host option.** `{ shell: "bash -l" }` starts `bash -l -s` in place of `sh -s`, on both transports.
    7. **The cross-shell tests.** The file write rule on dash, bash, and busybox sh over SSH, and on macOS `/bin/sh`,
       which runs only on darwin, so it is local only. The sudo password flows already work over any transport, so they
@@ -334,9 +338,9 @@ Decided, and wanted eventually, with no place in the order yet.
   6.  **Sudo passwords.** In three pieces, each reviewed before the next (the design is in
       [Transport](./docs/transport.md#sudo)):
       1. **The option, the check, and askpass for a password given in `host()`.** `sudo?: true | { password }` on
-         `host()`, the `sudo -n -k true` check in preflight, and the askpass preamble with `~/.tsinfra/askpass.sh` on a
+         `host()`, the `sudo -n -k true` check in preparation, and the askpass preamble with `~/.tsinfra/askpass.sh` on a
          host given a password.
-      2. **The prompt.** A `sudo: true` host whose sudo needs a password prompts for it in preflight, after every host
+      2. **The prompt.** A `sudo: true` host whose sudo needs a password prompts for it in preparation, after every host
          is prepared, one host at a time in the hosts' order. Every password is checked with `sudo -k -S`, so a wrong
          one logs one failed try, and `readHiddenLine` reads it with `node:readline` muted.
       3. **The hint for a host that doesn't declare `sudo`.** Its `sudo` stays `sudo -n`. A host that leaves `sudo`

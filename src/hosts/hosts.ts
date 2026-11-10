@@ -3,4 +3,4 @@ export type { HostDefinition, HostFunction, HostOptions, ValidHostOptions } from
 export { host } from "#hosts/host.ts"
 export { loadHosts } from "#hosts/load.ts"
 export { prepareHosts } from "#hosts/prepare/prepare.ts"
-export { getExitCode, hasDrift, hasFailed, runHost } from "#hosts/run.ts"
+export { getExitCode, hasDrift, runHost } from "#hosts/run.ts"

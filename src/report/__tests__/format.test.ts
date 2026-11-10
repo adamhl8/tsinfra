@@ -205,7 +205,7 @@ describe("formatHostBlock", () => {
       "failed to read the ssh config for 'unreachable host' -> exited with code 255: hostname contains invalid characters"
 
     expect([formatHostBlock(hostRecord), formatSummary([hostRecord], "plan")]).toStrictEqual([
-      `a\n  ! failed: (host) ${UNREACHABLE_TARGET}\n      ${startError}`,
+      `a\n  ! failed: (preparation) ${UNREACHABLE_TARGET}\n      ${startError}`,
       "a   failed",
     ])
   })
@@ -214,19 +214,19 @@ describe("formatHostBlock", () => {
     const hostBlock = formatHostBlock({
       name: "a",
       target: "a.lan",
-      preparation: {
-        commands: [],
-        status: new Error("Host key verification failed."),
-        failureHints: ["run 'ssh a.lan' once to check the host's key and save it"],
-      },
+      preparationCommands: [],
       stepRecords: [],
-      failure: undefined,
+      failure: {
+        kind: "preparation",
+        error: new Error("Host key verification failed."),
+        hints: ["run 'ssh a.lan' once to check the host's key and save it"],
+      },
     })
 
     expect(hostBlock).toBe(
       [
         "a",
-        "  ! failed: (host) a.lan",
+        "  ! failed: (preparation) a.lan",
         "      Host key verification failed.",
         "        run 'ssh a.lan' once to check the host's key and save it",
       ].join("\n"),
@@ -797,7 +797,7 @@ describe("formatHostBlock for a sudo that needed a password", () => {
       "apply",
     )
 
-    expect(hostRecord).toMatchObject({ failure: undefined, stepRecords: [{ failureHints: [] }] })
+    expect(hostRecord.failure).toBeUndefined()
   })
 })
 

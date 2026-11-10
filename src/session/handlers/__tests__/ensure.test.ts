@@ -474,6 +474,8 @@ describe("h.ensure with invalid input", () => {
     await attempt(async () => hostSession.host.ensure("", { check: "true", want: true, fix: "true" }))
 
     expect(getFailureMessage(hostSession)).toBe("failed to validate the name given to 'ensure' -> must be non-empty")
+    // Record it as the host function's failure, because the step never started, so the report has no step to show it under.
+    expect(hostSession.hostRecord.failure?.kind).toBe("host fn")
   })
 
   it("should fail a fix that execs an empty command", async () => {

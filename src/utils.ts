@@ -3,9 +3,6 @@ import { err } from "ts-explicit-errors"
 
 import type { CommandOutput } from "#transport/transport.ts"
 
-/** What failed, or `undefined` when nothing did. */
-export type Failure = Error | undefined
-
 const TRAILING_NEWLINES = /\n+$/v
 const TRAILING_NEWLINE = /\n$/v
 const WHITESPACE = /\s+/v

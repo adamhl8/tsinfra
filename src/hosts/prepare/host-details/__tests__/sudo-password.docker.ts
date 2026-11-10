@@ -31,11 +31,11 @@ describe("a user whose sudo needs a password", () => {
     expect(JSON.stringify(hostSession.hostRecord)).not.toContain(PASSWORD)
   })
 
-  it("should fail in preflight with only its own message for a wrong password from host()", async () => {
+  it("should fail in preparation with only its own message for a wrong password from host()", async () => {
     expect(await prepareOrMessage({ sudo: { password: "wrong" } })).toBe("incorrect sudo password")
   })
 
-  it("should fail in preflight with sudo: true and no password", async () => {
+  it("should fail in preparation with sudo: true and no password", async () => {
     expect(await prepareOrMessage({ sudo: true })).toBe(
       "needs a sudo password: set up passwordless sudo, or pass sudo: { password } to host() -> exited with code 1: sudo: a password is required",
     )

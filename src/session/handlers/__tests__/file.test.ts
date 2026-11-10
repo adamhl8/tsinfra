@@ -732,7 +732,10 @@ describe("h.file with sudo", () => {
     )
 
     expect(hostSession.hostRecord.stepRecords[0]?.commands).toStrictEqual([])
-    expect(hostSession.hostRecord.stepRecords[0]?.status).toBeInstanceOf(Error)
+    expect(hostSession.hostRecord.failure).toMatchObject({
+      kind: "step",
+      stepRecord: hostSession.hostRecord.stepRecords[0],
+    })
     expect(await readSudoCalls()).toStrictEqual([])
   })
 

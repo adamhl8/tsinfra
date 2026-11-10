@@ -15,7 +15,7 @@ import {
 } from "#transport/transport.ts"
 import type { Transport } from "#transport/transport.ts"
 
-/** What preflight reads from a host before its transport is built. */
+/** What preparation reads from a host before its transport is built. */
 export interface HostDetails {
   /** The SSH user's home directory. It's empty when `$HOME` isn't set. */
   home: string

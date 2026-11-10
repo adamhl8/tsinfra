@@ -9,8 +9,7 @@ import { UNREACHABLE_TARGET, getPreparationFailure, prepareAndRunHost, toLoadedH
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
 import { getExitCode, hasDrift } from "#hosts/run.ts"
-import type { Host } from "#session/session.ts"
-import type { Failure } from "#utils.ts"
+import type { Host, HostRecord } from "#session/session.ts"
 
 const throwBoom = () => {
   throw new Error("boom")
@@ -53,7 +52,7 @@ const failCheck = async (h: Host) => {
   await h.ensure("Broken", { check: throwBoom, want: true, fix: "true" })
 }
 
-const getMessage = (failure: Failure) => failure && messageChain(failure)
+const getMessage = (failure: HostRecord["failure"]) => failure && messageChain(failure.error)
 
 /** Runs a host 'a' with `fn` and returns its failure's message chain, if any. */
 const runAndGetMessage = async (fn: HostFunction) => getMessage((await runHostA(fn)).failure)
@@ -65,9 +64,8 @@ describe("runHost", () => {
     expect(hostRecord).toMatchObject({
       name: "a",
       target: UNREACHABLE_TARGET,
-      preparation: { failureHints: [] },
       stepRecords: [],
-      failure: undefined,
+      failure: { kind: "preparation", hints: [] },
     })
     expect(messageChain(getPreparationFailure(hostRecord))).toBe(
       "failed to read the ssh config for 'unreachable host' -> exited with code 255: hostname contains invalid characters",
@@ -81,12 +79,18 @@ describe("runHost", () => {
   it("should return the records of the steps that ran, even when the host fails", async () => {
     const hostRecord = await runHostA(readTwice)
 
-    expect(hostRecord).toMatchObject({ stepRecords: [{ name: "echo hi" }, { name: "exit 1" }] })
+    expect(hostRecord).toMatchObject({
+      stepRecords: [{ name: "echo hi" }, { name: "exit 1" }],
+      failure: { kind: "step", stepRecord: { name: "exit 1" } },
+    })
     expect(getMessage(hostRecord.failure)).toBe("failed to read 'exit 1' -> exited with code 1")
   })
 
-  it("should report the error when the host function throws", async () => {
-    expect(await runAndGetMessage(throwBoom)).toBe("boom")
+  it("should report the error when the host function throws, as the host function's failure", async () => {
+    const { failure } = await runHostA(throwBoom)
+
+    expect(failure).toMatchObject({ kind: "host fn" })
+    expect(getMessage(failure)).toBe("boom")
   })
 
   it("should pass the host's name to its function", async () => {

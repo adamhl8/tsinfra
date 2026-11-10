@@ -50,11 +50,11 @@ const prepareHostEntry = async (loadedHost: LoadedHost) => {
   return hostEntry
 }
 
-/** Returns why preflight couldn't prepare a host, which the record of an unprepared host always holds. */
+/** Returns why preparation failed on a host, which the record of an unprepared host always holds. */
 export const getPreparationFailure = (hostRecord: HostRecord): Error => {
-  const { status } = hostRecord.preparation
-  if (!isErr(status)) throw new Error("the host's record has no preparation failure")
-  return status
+  const { failure } = hostRecord
+  if (failure?.kind !== "preparation") throw new Error("the host's record has no preparation failure")
+  return failure.error
 }
 
 /** Prepares one host the way a run does, and returns its context, or why it couldn't be prepared. */
@@ -150,5 +150,5 @@ export const runOrMessage = async (h: Host, cmd: Change, options: RunOptions) =>
 /** Returns the message chain of the host's recorded failure, if any. */
 export const getFailureMessage = (hostSession: Awaited<ReturnType<typeof createSession>>) => {
   const { failure } = hostSession.hostRecord
-  return failure && messageChain(failure)
+  return failure && messageChain(failure.error)
 }

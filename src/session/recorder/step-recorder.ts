@@ -2,31 +2,12 @@ import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
 import type { Comparison } from "#session/handlers/handlers.ts"
-import type { CommandRecord, ConvergePhase } from "#session/recorder/commands.ts"
+import type { CommandRecord, ConvergePhase, HostRecord, StepRecord } from "#session/recorder/records.ts"
 import type { StepKind, StepStatus } from "#session/step.ts"
 import type { RecordingTransport, Transport } from "#transport/transport.ts"
 
 /** The phases of `converge` that compare the host with what the step wants. */
 export type ComparePhase = Exclude<ConvergePhase, "fix">
-
-interface StepComparisons {
-  before?: Comparison
-  after?: Comparison
-}
-
-export interface StepRecord {
-  /** The name the script gave the step, or a read step's command. */
-  name: string
-  kind: StepKind
-  /** Unset until the step finishes, and an error if it failed. */
-  status?: Result<StepStatus>
-  commands: CommandRecord[]
-  comparisons: StepComparisons
-  /** The names of the needed steps this step waited on. */
-  waitingOn: string[]
-  /** How to fix the step's failure, which the report shows under it. Empty unless the step failed with a hint. */
-  failureHints: string[]
-}
 
 /** What `converge` uses to record what it does, so a step's handler never records anything itself. */
 export interface ConvergeRecorder {
@@ -39,20 +20,32 @@ export interface ConvergeRecorder {
 }
 
 export interface StepRecorder {
-  /** Every step that started, in the order the script called them. */
-  stepRecords: StepRecord[]
   /** Wraps `transport` so each command is recorded under the running step. */
   recordCommands: (transport: Transport) => RecordingTransport
   /** Records a new step and marks it running, or fails when another step is running. */
-  startStep: (stepName: string, kind: StepKind) => Result<StepRecord>
-  /** Records the running step's status or error, and any hints for its failure, and marks no step as running. */
-  finishStep: (status: Result<StepStatus>, failureHints?: string[]) => void
+  startStep: (stepName: string, kind: StepKind) => Result
+  /**
+   * Records the running step's status, and marks no step as running. Fails the step instead when the host failed while
+   * it ran.
+   */
+  finishStep: (status: StepStatus) => void
+  /** Fails the running step with `error`, and marks no step as running. */
+  failStep: (error: Error) => void
   convergeRecorder: ConvergeRecorder
 }
 
-/** Tracks the running step for one host, and records each step and what happens during it. */
-export const createStepRecorder = (): StepRecorder => {
-  const stepRecords: StepRecord[] = []
+/** What a step recorder needs from its host's recorder. */
+interface StepRecorderContext {
+  hostRecord: HostRecord
+  /**
+   * Records `error` as the step's failure, with hints from its commands. Keeps an earlier failure's error instead,
+   * unless `error` wraps it.
+   */
+  recordStepFailure: (stepRecord: StepRecord, error: Error) => void
+}
+
+/** Tracks the running step for one host, and records each step and what happens during it on the host's record. */
+export const createStepRecorder = ({ hostRecord, recordStepFailure }: StepRecorderContext): StepRecorder => {
   let currentStep: StepRecord | undefined
   let currentPhase: ConvergePhase | undefined
 
@@ -75,7 +68,7 @@ export const createStepRecorder = (): StepRecorder => {
 
   // Fail a step that starts while another is running, because a step's functions use the tools they are given.
   // This also catches steps run at once with `Promise.all`.
-  const startStep = (stepName: string, kind: StepKind): Result<StepRecord> => {
+  const startStep = (stepName: string, kind: StepKind): Result => {
     if (currentStep) {
       const { name, kind: runningKind } = currentStep
       return err(`'${kind}' can't run while ${runningKind} step '${name}' is running`, undefined)
@@ -87,20 +80,33 @@ export const createStepRecorder = (): StepRecorder => {
       commands: [],
       comparisons: {},
       waitingOn: [],
-      failureHints: [],
     }
-    stepRecords.push(stepRecord)
+    hostRecord.stepRecords.push(stepRecord)
     currentStep = stepRecord
+  }
+
+  /** Marks no step as running, and returns the record of the step that was. */
+  const endStep = () => {
+    const stepRecord = currentStep
+    currentStep = undefined
+    currentPhase = undefined
     return stepRecord
   }
 
-  const finishStep = (status: Result<StepStatus>, failureHints: string[] = []) => {
-    if (currentStep) {
-      currentStep.status = status
-      currentStep.failureHints = failureHints
-    }
-    currentStep = undefined
-    currentPhase = undefined
+  const finishStep = (status: StepStatus) => {
+    const stepRecord = endStep()
+    if (!stepRecord) return
+
+    // Fail the step when the host failed while it ran, because the script may have caught the failure, like a failed
+    // `exec` in a fix. It still fails the host, and it belongs to this step.
+    // Pass the host's own error, because there's no new one, and the keep rule leaves it as it is.
+    if (hostRecord.failure) recordStepFailure(stepRecord, hostRecord.failure.error)
+    else stepRecord.status = status
+  }
+
+  const failStep = (error: Error) => {
+    const stepRecord = endStep()
+    if (stepRecord) recordStepFailure(stepRecord, error)
   }
 
   const startPhase = (phase: ConvergePhase) => {
@@ -117,5 +123,5 @@ export const createStepRecorder = (): StepRecorder => {
 
   const convergeRecorder: ConvergeRecorder = { startPhase, recordComparison, recordWaitingOn }
 
-  return { stepRecords, recordCommands, startStep, finishStep, convergeRecorder }
+  return { recordCommands, startStep, finishStep, failStep, convergeRecorder }
 }

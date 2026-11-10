@@ -87,7 +87,7 @@ Opt-in features with no real case yet:
   rerun within `ControlPersist` reuses it too. Dropping the master makes the next command log in again. `h.reboot`
   already drops it, so the two can share that code. Until then, use `sudo`, or `sg <group> -c '...'`.
 - **Log in with an SSH password,** like Ansible's `--ask-pass`. Today `BatchMode=yes` stops ssh from prompting, so a
-  host that only takes a password fails in preflight with ssh's `Permission denied (publickey,password)`. ssh can ask a
+  host that only takes a password fails in preparation with ssh's `Permission denied (publickey,password)`. ssh can ask a
   helper instead of the terminal, with `SSH_ASKPASS` and `SSH_ASKPASS_REQUIRE=force` (OpenSSH 8.4 and later), the same
   way sudo's askpass works. The helper runs on the control machine and prints a variable, so it holds no secret. Only
   the connection that opens the ControlMaster logs in, so a host needs the password once per run. It fits the sudo
@@ -109,7 +109,7 @@ Opt-in features with no real case yet:
 
   Both steps reuse the sudo prompt's pieces: `readHiddenLine`, Ctrl-D to skip the host, Ctrl-C to cancel the run, and
   failing the host without a TTY. A host script can't prompt by itself, because tsinfra owns the terminal once hosts
-  run in parallel. The cost is that these prompts come mid-run, not in preflight, so prompts from parallel hosts take
+  run in parallel. The cost is that these prompts come mid-run, not in preparation, so prompts from parallel hosts take
   turns and the live progress area pauses while one is open.
 
 ## Decided
@@ -120,7 +120,7 @@ Ideas moved into the design, with where they now live:
   and Puppet's `validate_cmd`. It's `file`'s `validate` option (see [Steps](./steps.md#the-write)), built as part 5 of
   `file` in `todo.md`.
 - **Ask for the sudo password once,** from Ansible's `-K`, Fabric's `--prompt-for-sudo-password`, and pyinfra's
-  `_sudo_password`. It became a preflight phase, `sudo` declared on `host()`, and a prompt per host (see
+  `_sudo_password`. It became a preparation phase, `sudo` declared on `host()`, and a prompt per host (see
   [Transport](./transport.md#sudo)).
 - **A reboot step,** from Ansible's `reboot` and pyinfra's `server.reboot`. It's `h.reboot({ after, timeout })`, which
   works like a run and checks the boot id changed (see [Steps](./steps.md#reboot)), under Later in `todo.md`.

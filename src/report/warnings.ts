@@ -1,5 +1,3 @@
-import { isErr } from "ts-explicit-errors"
-
 import type { StepRecord } from "#session/session.ts"
 
 /** Something that worked but needs a look, with the value it's about, like a path, when there is one. */
@@ -17,7 +15,7 @@ const MISSING_TARGET_TEXT = "nothing exists at target ->"
  */
 export const getStepWarnings = (stepRecord: StepRecord): StepWarning[] => {
   const { status, comparisons } = stepRecord
-  if (status === undefined || isErr(status)) return []
+  if (status === undefined) return []
 
   const values = (comparisons.after ?? comparisons.before)?.values
   if (values?.kind === "link" && !values.targetExists) return [{ text: MISSING_TARGET_TEXT, value: values.target }]

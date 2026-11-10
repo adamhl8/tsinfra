@@ -16,7 +16,7 @@ const CHECK_PASSWORDLESS_SUDO_COMMAND = "sudo -n -k true"
 const NEEDS_SUDO_PASSWORD_MESSAGE =
   "needs a sudo password: set up passwordless sudo, or pass sudo: { password } to host()"
 
-/** What preflight found out about the host's sudo. */
+/** What preparation found out about the host's sudo. */
 export type ResolvedHostSudo =
   | { kind: "passwordless" }
   | { kind: "password"; password: string }

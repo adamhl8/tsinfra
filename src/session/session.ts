@@ -1,9 +1,7 @@
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
-import type { ValidHostOptions } from "#hosts/hosts.ts"
 import type { Mode } from "#mode.ts"
-import { getFailureHints } from "#session/failure-hints.ts"
 import type {
   EnsureOptions,
   Want,
@@ -33,14 +31,12 @@ import {
   execCommand,
   inspectCommand,
 } from "#session/handlers/handlers.ts"
-import type { HostRecord, HostRecorder } from "#session/recorder/recorder.ts"
+import type { HostRecord, HostRecorder, RecordedFailure } from "#session/recorder/recorder.ts"
 import { createStepShell } from "#session/step-shell.ts"
 import type { HandlerReturn, StepContext, StepKind } from "#session/step.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
 import type { Transport } from "#transport/transport.ts"
-import type { Failure } from "#utils.ts"
 
-export { getPreparationFailureHints } from "#session/failure-hints.ts"
 export type {
   AttributeChange,
   Bytes,
@@ -84,7 +80,15 @@ export {
   toOctalMode,
   toSymbolicMode,
 } from "#session/handlers/handlers.ts"
-export type { CommandRecord, ConvergePhase, HostRecord, HostRecorder, StepRecord } from "#session/recorder/recorder.ts"
+export type {
+  CommandRecord,
+  ConvergePhase,
+  HostRecord,
+  HostRecorder,
+  RecordedStepFailure,
+  RecordedUnownedFailure,
+  StepRecord,
+} from "#session/recorder/recorder.ts"
 export { createHostRecorder } from "#session/recorder/recorder.ts"
 export type { ComparisonValues, StepKind, StepStatus } from "#session/step.ts"
 
@@ -94,7 +98,6 @@ export interface HostContext {
   transport: Transport
   /** The SSH user's home directory. It's empty when `$HOME` isn't set. */
   home: string
-  options: ValidHostOptions
   hostRecorder: HostRecorder
 }
 
@@ -160,11 +163,6 @@ const STEP_NAME_LABELS: Record<StepKind, string> = {
   run: "name",
 }
 
-// Keep the first failure, because calls made at once with `Promise.all` can each fail.
-// Replace it only with an error that wraps it, which adds context such as the step's name.
-const keepFailure = (failure: Failure, error: Error) =>
-  failure === undefined || error.cause === failure ? error : failure
-
 export interface HostSession {
   host: Host
   hostRecord: HostRecord
@@ -179,30 +177,26 @@ export interface HostSession {
  * as values.
  */
 export const createHostSession = (hostContext: HostContext, mode: Mode): HostSession => {
-  const { name, transport, home, options: hostOptions, hostRecorder } = hostContext
-  const { hostRecord, stepRecorder } = hostRecorder
+  const { name, transport, home, hostRecorder } = hostContext
+  const { hostRecord, recordFailure, stepRecorder } = hostRecorder
+  const { recordCommands, startStep, finishStep, failStep, convergeRecorder } = stepRecorder
 
   // oxlint-disable-next-line promise/prefer-await-to-callbacks - `callback` is awaited, and the rule only matches its name
   const callOrFail = async <T>(callback: () => Promise<Result<T>>) => {
     // Throw the failure on every later call, so a script that catches it still can't use the host.
-    if (hostRecord.failure) throw hostRecord.failure
+    if (hostRecord.failure) throw hostRecord.failure.error
 
     // oxlint-disable-next-line promise/prefer-await-to-callbacks - `callback` is awaited, and the rule only matches its name
     const value = await callback()
-    if (isErr(value)) {
-      hostRecord.failure = keepFailure(hostRecord.failure, value)
-      throw hostRecord.failure
-    }
+    if (isErr(value)) throw recordFailure(value).error
 
     // Throw a failure recorded during `callback`, because a function in the script may have caught it and returned normally.
     // Widen `hostRecord.failure` with `as`, because TypeScript keeps the narrowing to `undefined` from the `if` above.
     // TypeScript can't know that `callback` may have set it again.
-    const callbackFailure = hostRecord.failure as Failure
-    if (callbackFailure) throw callbackFailure
+    const callbackFailure = hostRecord.failure as RecordedFailure | undefined
+    if (callbackFailure) throw callbackFailure.error
     return value
   }
-
-  const { recordCommands, startStep, finishStep, convergeRecorder } = stepRecorder
 
   // Leave the tools on a shell without sudo, because no tool takes a `sudo` option.
   const toolShell = createStepShell(transport, recordCommands, false)
@@ -231,14 +225,8 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
       })
       if (isErr(validName)) return validName
 
-      const stepRecord = startStep(validName, kind)
-      if (isErr(stepRecord)) return stepRecord
-
-      // Fail the step with the failure the host ends up with, because a function in the script may have caught an
-      // earlier one. Work out the hints from the step's own commands, so they stay with the step that failed.
-      const failStep = (error: Error) => {
-        finishStep(keepFailure(hostRecord.failure, error), getFailureHints(hostOptions, stepRecord.commands))
-      }
+      const stepStart = startStep(validName, kind)
+      if (isErr(stepStart)) return stepStart
 
       // Validate `options` after recording the step, so a bad one fails under the step like the step's other inputs.
       const validOptions = validateInput(options, sudoOptionsSchema, { inputLabel: "options", givenTo: kind })
@@ -261,14 +249,12 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
       }
 
       const handlerReturn = await handler(ctx)
-
       if (isErr(handlerReturn)) {
         failStep(handlerReturn)
         return handlerReturn
       }
 
-      // Record a failure the step's handler caught, like a failed `exec` in a fix, because it still fails the host.
-      finishStep(hostRecord.failure ?? handlerReturn.status)
+      finishStep(handlerReturn.status)
       return handlerReturn.value
     })
 
