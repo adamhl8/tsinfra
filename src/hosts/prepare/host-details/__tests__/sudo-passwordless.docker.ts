@@ -24,7 +24,7 @@ describe("a user with passwordless sudo", () => {
 
   it("should not hint at the sudo option on a host that sets it", async () => {
     // Print sudo's own line for a missing password, because the hint only reads the command's stderr.
-    const hostReport = await prepareAndRunHost(
+    const hostRecord = await prepareAndRunHost(
       toLoadedHost(
         "a",
         host(
@@ -38,6 +38,6 @@ describe("a user with passwordless sudo", () => {
       "apply",
     )
 
-    expect(hostReport).toMatchObject({ started: true, stepRecords: [{ failureHints: [] }] })
+    expect(hostRecord).toMatchObject({ stepRecords: [{ failureHints: [] }] })
   })
 })

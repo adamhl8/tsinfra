@@ -14,13 +14,13 @@ import { err, isErr } from "ts-explicit-errors"
 
 import type { HostFunction, HostSudo } from "#hosts/host.ts"
 import { prepareHosts } from "#hosts/prepare/prepare.ts"
-import type { HostReport } from "#hosts/run.ts"
-import { hasDrift, runHost } from "#hosts/run.ts"
+import { hasDrift, hasFailed, runHost } from "#hosts/run.ts"
 import type { Mode } from "#mode.ts"
 import { printTsinfraError } from "#report/errors.ts"
 import { formatHostBlock } from "#report/format/format.ts"
 import { formatSummary } from "#report/summary.ts"
 import { PUBLIC_FILE_MODE } from "#session/handlers/shared/filesystem/mode.ts"
+import type { HostRecord } from "#session/session.ts"
 import { runLocal } from "#transport/local.ts"
 
 /**
@@ -340,7 +340,7 @@ const createScenarios = (dir: string): Scenario[] => {
       fn: readTrue,
     },
     {
-      // A failure no step owns, as `(host fn)` and the host's script, after a step that changed.
+      // A failure no step owns, as `(host fn)` and the host's target with a note, after a step that changed.
       name: "script-error",
       target: "@local",
       fn: async (h) => {
@@ -351,9 +351,9 @@ const createScenarios = (dir: string): Scenario[] => {
   ]
 }
 
-const getExitCode = (hostReports: HostReport[], mode: Mode) => {
-  if (hostReports.some(({ failure }) => failure)) return 1
-  return mode === "plan" && hostReports.some((hostReport) => hasDrift(hostReport)) ? 2 : 0
+const getExitCode = (hostRecords: HostRecord[], mode: Mode) => {
+  if (hostRecords.some((hostRecord) => hasFailed(hostRecord))) return 1
+  return mode === "plan" && hostRecords.some((hostRecord) => hasDrift(hostRecord)) ? 2 : 0
 }
 
 const PASS_RUNS: Record<PreviewPass, { mode: Mode; verbose: boolean; fakeSudo: boolean }> = {
@@ -384,7 +384,7 @@ const previewPass = async (pass: PreviewPass) => {
     console.log(pc.cyan(pc.bold(`==== tsinfra ${mode}${verbose ? " --verbose" : ""}${sudoNote} ====`)))
     console.log()
 
-    const hostReports: HostReport[] = []
+    const hostRecords: HostRecord[] = []
     const scenarios = createScenarios(dir).filter((scenario) => (scenario.pass ?? "applyVerbose") === pass)
     const loadedHosts = scenarios.map((scenario) =>
       Object.assign(scenario, { options: { sudo: scenario.sudo ?? false } }),
@@ -392,16 +392,16 @@ const previewPass = async (pass: PreviewPass) => {
     const hostEntries = await prepareHosts(loadedHosts)
     for (const hostEntry of hostEntries) {
       // oxlint-disable-next-line no-await-in-loop - hosts run one at a time, the same as the CLI
-      const hostReport = await runHost(hostEntry, mode)
-      hostReports.push(hostReport)
+      const hostRecord = await runHost(hostEntry, mode)
+      hostRecords.push(hostRecord)
 
-      const block = formatHostBlock(hostReport, { verbose })
+      const block = formatHostBlock(hostRecord, { verbose })
       if (block) console.log(`${block}\n`)
     }
 
-    console.log(formatSummary(hostReports, mode))
+    console.log(formatSummary(hostRecords, mode))
 
-    console.log(pc.dim(`\nexit code ${getExitCode(hostReports, mode)}`))
+    console.log(pc.dim(`\nexit code ${getExitCode(hostRecords, mode)}`))
     console.log()
   } finally {
     await rm(dir, { recursive: true, force: true })

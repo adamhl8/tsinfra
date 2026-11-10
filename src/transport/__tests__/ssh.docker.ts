@@ -63,7 +63,7 @@ const toMessage = (value: unknown) => (value instanceof Error ? messageChain(val
 /** Reports whether `known_hosts` has a key for `name`. Use `ssh-keygen -F`, because Debian's ssh hashes the names. */
 const findKnownHost = async (name: string) => (await $`ssh-keygen -F ${name}`.nothrow().quiet()).exitCode === 0
 
-/** Prepares and runs a host 'a' on `target` the way a run does, and returns its report. */
+/** Prepares and runs a host 'a' on `target` the way a run does, and returns its record. */
 const runHostOn = async (target: string) => prepareAndRunHost(toLoadedHost("a", host(target, doNothing)), "apply")
 
 /** Prepares a host 'a' on the sshd the way a run does, and creates its session. */
@@ -115,16 +115,18 @@ describe("the ssh transport against a real sshd", () => {
   })
 
   it("should fail a host that can't be reached in preflight, with ssh's error", async () => {
-    const { failure, ...hostReport } = await runHostOn(NO_SSHD_TARGET)
+    const hostRecord = await runHostOn(NO_SSHD_TARGET)
 
-    expect({ ...hostReport, message: toMessage(failure) }).toStrictEqual({
+    expect(hostRecord).toMatchObject({
       name: "a",
       target: NO_SSHD_TARGET,
-      started: false,
-      failureHints: [],
-      message:
-        "failed to read the SSH user's home directory -> failed to run the command over ssh -> exited with code 255: ssh: connect to host 127.0.0.1 port 2223: Connection refused",
+      preparation: { failureHints: [] },
+      stepRecords: [],
+      failure: undefined,
     })
+    expect(toMessage(hostRecord.preparation.status)).toBe(
+      "failed to read the SSH user's home directory -> failed to run the command over ssh -> exited with code 255: ssh: connect to host 127.0.0.1 port 2223: Connection refused",
+    )
   })
 
   it("should take a new host's key, and keep ssh's notice about it off stderr", async () => {
@@ -136,24 +138,22 @@ describe("the ssh transport against a real sshd", () => {
   })
 
   it("should fail a new host the config checks strictly, with a hint to ssh to it once", async () => {
-    const hostReport = await runHostOn(STRICT_TARGET)
+    const hostRecord = await runHostOn(STRICT_TARGET)
 
-    expect(toMessage(hostReport.failure)).toEndWith("Host key verification failed.")
-    expect(hostReport).toMatchObject({
-      started: false,
-      failureHints: [`run 'ssh ${STRICT_TARGET}' once to check the host's key and save it`],
-    })
+    expect(toMessage(hostRecord.preparation.status)).toEndWith("Host key verification failed.")
+    expect(hostRecord.preparation.failureHints).toStrictEqual([
+      `run 'ssh ${STRICT_TARGET}' once to check the host's key and save it`,
+    ])
   })
 
   it("should fail a host whose key changed, with the line of the old key and a hint to remove it", async () => {
     const knownHosts = await bun.file(KNOWN_HOSTS_PATH).text()
-    const hostReport = await runHostOn(CHANGED_KEY_TARGET)
+    const hostRecord = await runHostOn(CHANGED_KEY_TARGET)
 
-    expect(toMessage(hostReport.failure)).toContain(`Offending ED25519 key in ${KNOWN_HOSTS_PATH}:1`)
-    expect(hostReport).toMatchObject({
-      started: false,
-      failureHints: ["if the host was recreated, remove its old key from the known_hosts line named above"],
-    })
+    expect(toMessage(hostRecord.preparation.status)).toContain(`Offending ED25519 key in ${KNOWN_HOSTS_PATH}:1`)
+    expect(hostRecord.preparation.failureHints).toStrictEqual([
+      "if the host was recreated, remove its old key from the known_hosts line named above",
+    ])
     expect(await bun.file(KNOWN_HOSTS_PATH).text()).toBe(knownHosts)
   })
 
@@ -167,7 +167,7 @@ describe("the ssh transport against a real sshd", () => {
     expect(await readOrMessage(hostSession.host, "echo hi")).toBe(`failed to read 'echo hi' -> ${sshError}`)
 
     expect(
-      hostSession.stepRecords[0]?.commands.map(({ cmd, output }) => ({ cmd, output: toMessage(output) })),
+      hostSession.hostRecord.stepRecords[0]?.commands.map(({ cmd, output }) => ({ cmd, output: toMessage(output) })),
     ).toStrictEqual([{ cmd: "echo hi", output: sshError }])
   })
 

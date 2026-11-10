@@ -1,17 +1,17 @@
-import type { HostReport } from "#hosts/hosts.ts"
-import { hasDrift } from "#hosts/hosts.ts"
+import { hasDrift, hasFailed } from "#hosts/hosts.ts"
 import type { Mode } from "#mode.ts"
 import { COLUMN_GAP } from "#report/format/format.ts"
 import { getStepWarnings } from "#report/warnings.ts"
+import type { HostRecord } from "#session/session.ts"
 import { STATUS_STYLES, styleAside, styleWarning } from "#styles.ts"
 import { getMaxWidth, padToWidth } from "#utils.ts"
 
 const PLAN_REMINDER = "Steps after a change were checked without that change, so apply may differ."
 
-const formatHostStatus = (hostReport: HostReport): string => {
-  if (!hostReport.started || hostReport.failure) return STATUS_STYLES.failed.color("failed")
+const formatHostStatus = (hostRecord: HostRecord): string => {
+  if (hasFailed(hostRecord)) return STATUS_STYLES.failed.color("failed")
 
-  const { stepRecords } = hostReport
+  const { stepRecords } = hostRecord
 
   const statuses = stepRecords.map(({ status }) => status)
   // Count `ran` steps too, so the count matches the `~` and `>` lines in the block.
@@ -31,12 +31,12 @@ const formatHostStatus = (hostReport: HostReport): string => {
 }
 
 /** Formats one line per host, with the plan reminder first when anything would change. */
-export const formatSummary = (hostReports: HostReport[], mode: Mode): string => {
-  const nameWidth = getMaxWidth(hostReports.map(({ name }) => name))
-  const hostLines = hostReports.map(
-    (hostReport) => `${padToWidth(hostReport.name, nameWidth)}${COLUMN_GAP}${formatHostStatus(hostReport)}`,
+export const formatSummary = (hostRecords: HostRecord[], mode: Mode): string => {
+  const nameWidth = getMaxWidth(hostRecords.map(({ name }) => name))
+  const hostLines = hostRecords.map(
+    (hostRecord) => `${padToWidth(hostRecord.name, nameWidth)}${COLUMN_GAP}${formatHostStatus(hostRecord)}`,
   )
 
-  const hasAnyDrift = mode === "plan" && hostReports.some((hostReport) => hasDrift(hostReport))
+  const hasAnyDrift = mode === "plan" && hostRecords.some((hostRecord) => hasDrift(hostRecord))
   return [...(hasAnyDrift ? [styleAside(PLAN_REMINDER), ""] : []), ...hostLines].join("\n")
 }

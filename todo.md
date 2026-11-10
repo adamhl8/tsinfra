@@ -23,31 +23,40 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
       today's `(host) a.ts`. Write the four kinds down in the docs.
    4. **The host recorder.** One recorder per host, not one per run, because it tracks the running step, and hosts
       will run in parallel. It holds the host record, which preparation, the session, and `runHost` fill in, and the
-      report reads. The step recorder moves inside it.
-      - **The record.** A failed preparation records its failure and hints on it, in place of `UnpreparedHostEntry`
-        carrying them. `callOrFail` keeps the first failure on it, in place of the session's own variable. Its
-        discriminant says whether the host was prepared, which replaces `started`.
-      - **Shells, in two stages.** During preparation, the recorder's `createShell(transport)` gives a recording shell
-        on any transport: the local shell for `ssh -G`, and the target shell once `baseTransport` exists. When
-        preparation ends, `prepareHosts` builds the session's `getShell({ sudo })` from the final transport, which is
-        today's `createStepShell`, recording above the root transport. The host context carries the recorder and
-        `getShell`, and no transport, so nothing in the session can run a command that isn't recorded.
-      - **Where commands go.** One `recordCommands` sends each command to the running step, or to the preparation while
-        the host is preparing.
-      - **Preparation.** `buildHostDetails` gets a per-host context with the local shell and the recorder's
-        `createShell`, in place of making its own shells. `prepareBaseTransport` and `readSshDefaultOptions` take the
-        local shell from it. `finishHostDetails` takes the target shell from the details, in place of calling
-        `createShell(baseTransport)` again.
-      - **Tests.** The helpers that put fake tools on `PATH` wrap the transport before building `getShell`, with the
-        same function `prepareHosts` uses, in place of swapping `hostContext.transport`.
+      report reads. It's built in three steps, each reviewed before the next.
+      1. **The recorder and the record (built).** The package `session/recorder/` holds `host-recorder.ts`,
+         `step-recorder.ts`, and `commands.ts` (`CommandRecord`), with `recorder.ts` re-exporting them. `HostRecord` is
+         `{ name, target, preparation, stepRecords, failure }`, and `runHost` returns it in place of `HostReport`.
+         `preparation` is `{ commands, status?: Result<PreparationStatus>, failureHints }`, so a failed preparation is a
+         `(host)` failure, and `failure` holds a step's or the host function's. `callOrFail` keeps the first failure on
+         the record, in place of the session's own variable. `HostContext` carries the recorder.
+      2. **Shells, in two stages, and no transport in the context.** During preparation, the recorder's
+         `createShell(transport)` gives a recording shell on any transport: the local shell for `ssh -G`, and the target
+         shell once `baseTransport` exists. When preparation ends, `prepareHosts` builds the session's
+         `getShell({ sudo })` from the final transport, which is today's `createStepShell`, recording above the root
+         transport. The host context carries the recorder and `getShell`, and no transport, so nothing in the session
+         can run a command that isn't recorded. The helpers that put fake tools on `PATH` wrap the transport before
+         building `getShell`, with the same function `prepareHosts` uses, in place of swapping `hostContext.transport`.
+      3. **Recording preparation.** One `recordCommands`, moved into `commands.ts`, sends each command to the running
+         step, or to the preparation while its `status` is unset. `buildHostDetails` gets a per-host context with the
+         local shell and the recorder's `createShell`, in place of making its own shells. `prepareBaseTransport` and
+         `readSshDefaultOptions` take the local shell from it. `finishHostDetails` takes the target shell from the
+         details, in place of calling `createShell(baseTransport)` again. The sudo password check records a stand-in
+         through `recordedCmd`, so the password never reaches the record. It lands here, not in piece 5, because this
+         is where preparation's commands start being recorded. The password docker test already checks the whole
+         record.
    5. **Preflight commands on the host record.** Preparation already records through the host recorder's shells, so
       this gives each command a label: `ssh -G`, the home and user reads, the sudo checks, and the askpass helper
       write. Record the end of the run's `ssh -O stop` on the record of each host that used that target. The
       transport's own mechanics stay off the record, because they belong in the diagnostic log: the
       `{ ... } </dev/null` wrapper, the `sudo` function line, the `ssh` process around each command, and the retry when
-      a connection closes. The sudo password check records a stand-in, so the password never reaches the record, with a
-      test that checks it. Step hints and preparation hints then come from one function over command records, which also
-      matches the message of a command that failed to run, because ssh's stderr lives in that error.
+      a connection closes.
+      - **Hints from the recorder.** Step hints and preparation hints come from one function over command records,
+        which also matches the message of a command that failed to run, because ssh's stderr lives in that error. The
+        recorder calls it itself, so `finishStep(status)` and `finishPreparation(status)` take only the status, and
+        `failStep` stops passing hints. The recorder is created with the host's options, and `failure-hints.ts` moves
+        into `session/recorder/`. `callStep` then needs nothing from `startStep` but whether it failed, so `startStep`
+        returns a plain `Result` and `callStep` stops holding the step's record.
    6. **The `shell` host option.** `{ shell: "bash -l" }` starts `bash -l -s` in place of `sh -s`, on both transports.
    7. **The cross-shell tests.** The file write rule on dash, bash, and busybox sh over SSH, and on macOS `/bin/sh`,
       which runs only on darwin, so it is local only. The sudo password flows already work over any transport, so they

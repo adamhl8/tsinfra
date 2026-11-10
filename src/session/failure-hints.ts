@@ -1,7 +1,7 @@
 import { isErr, messageChain } from "ts-explicit-errors"
 
 import type { ValidHostOptions } from "#hosts/hosts.ts"
-import type { CommandRecord } from "#session/step-recorder.ts"
+import type { CommandRecord } from "#session/recorder/recorder.ts"
 
 /** Reports whether a command exited non-zero with `stderrText` in its stderr. */
 const hasFailedWithStderr = (commandRecords: CommandRecord[], stderrText: string) => {

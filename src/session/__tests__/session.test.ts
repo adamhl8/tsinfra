@@ -7,8 +7,8 @@ import type { Result } from "ts-explicit-errors"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
 import { createSession, ensureOrMessage, getFailureMessage, readOrMessage, runOrMessage } from "#__tests__/session.ts"
+import type { StepRecord } from "#session/recorder/recorder.ts"
 import type { Host } from "#session/session.ts"
-import type { StepRecord } from "#session/step-recorder.ts"
 
 const toPlainResult = <T>(result: Result<T> | undefined) => (isErr(result) ? messageChain(result) : result)
 
@@ -56,7 +56,7 @@ describe("step results", () => {
       { name: "Change", kind: "ensure", changed: true },
       { name: "Follow up", kind: "run", changed: true },
     ])
-    expect(hostSession.stepRecords[0]?.status).toBe("changed")
+    expect(hostSession.hostRecord.stepRecords[0]?.status).toBe("changed")
   })
 })
 
@@ -185,7 +185,7 @@ describe("step records", () => {
     const hostSession = await createSession("apply")
     await ensureOrMessage(hostSession.host, { check: `test -f '${marker}'`, want: true, fix: `touch '${marker}'` })
 
-    expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
+    expect(toPlainRecords(hostSession.hostRecord.stepRecords)).toStrictEqual([
       {
         name: "Make marker",
         kind: "ensure",
@@ -193,14 +193,18 @@ describe("step records", () => {
         commands: [`test -f '${marker}'`, `touch '${marker}'`, `test -f '${marker}'`],
       },
     ])
-    expect(hostSession.stepRecords[0]?.comparisons.before?.values).toStrictEqual({ kind: "exit", got: 1, want: true })
+    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toStrictEqual({
+      kind: "exit",
+      got: 1,
+      want: true,
+    })
   })
 
   it("should record only the check in plan", async () => {
     const hostSession = await createSession("plan")
     await ensureOrMessage(hostSession.host, { check: "false", want: true, fix: "true" })
 
-    expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
+    expect(toPlainRecords(hostSession.hostRecord.stepRecords)).toStrictEqual([
       {
         name: "Make marker",
         kind: "ensure",
@@ -208,14 +212,18 @@ describe("step records", () => {
         commands: ["false"],
       },
     ])
-    expect(hostSession.stepRecords[0]?.comparisons.before?.values).toStrictEqual({ kind: "exit", got: 1, want: true })
+    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toStrictEqual({
+      kind: "exit",
+      got: 1,
+      want: true,
+    })
   })
 
   it("should record the values a string check compared", async () => {
     const hostSession = await createSession("plan")
     await ensureOrMessage(hostSession.host, { check: "echo old", want: "new", fix: "true" })
 
-    expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
+    expect(toPlainRecords(hostSession.hostRecord.stepRecords)).toStrictEqual([
       {
         name: "Make marker",
         kind: "ensure",
@@ -223,7 +231,7 @@ describe("step records", () => {
         commands: ["echo old"],
       },
     ])
-    expect(hostSession.stepRecords[0]?.comparisons.before?.values).toStrictEqual({
+    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toStrictEqual({
       kind: "string",
       got: "old",
       want: "new",
@@ -235,7 +243,7 @@ describe("step records", () => {
     const hostSession = await createSession()
     await hostSession.host.inspect(cmd)
 
-    expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
+    expect(toPlainRecords(hostSession.hostRecord.stepRecords)).toStrictEqual([
       { name: cmd, kind: "inspect", status: "observed", commands: [cmd] },
     ])
   })
@@ -245,10 +253,10 @@ describe("step records", () => {
     const hostSession = await createSession()
     await readOrMessage(hostSession.host, cmd)
 
-    expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
+    expect(toPlainRecords(hostSession.hostRecord.stepRecords)).toStrictEqual([
       { name: cmd, kind: "read", status: "observed", commands: [cmd] },
     ])
-    expect(toPlainResult(hostSession.stepRecords[0]?.commands[0]?.output)).toStrictEqual({
+    expect(toPlainResult(hostSession.hostRecord.stepRecords[0]?.commands[0]?.output)).toStrictEqual({
       stdout: "out\n",
       stderr: "err\n",
       exitCode: 0,
@@ -259,7 +267,7 @@ describe("step records", () => {
     const hostSession = await createSession()
     await runOrMessage(hostSession.host, "true", { after: [{ name: "Stay right", kind: "ensure", changed: false }] })
 
-    expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
+    expect(toPlainRecords(hostSession.hostRecord.stepRecords)).toStrictEqual([
       { name: "Make marker", kind: "run", status: "unchanged", commands: [] },
     ])
   })
@@ -268,7 +276,7 @@ describe("step records", () => {
     const hostSession = await createSession("plan")
     await runOrMessage(hostSession.host, "true", { after: "always" })
 
-    expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
+    expect(toPlainRecords(hostSession.hostRecord.stepRecords)).toStrictEqual([
       { name: "Make marker", kind: "run", status: "ran", commands: [] },
     ])
   })
@@ -277,7 +285,7 @@ describe("step records", () => {
     const hostSession = await createSession()
     await ensureOrMessage(hostSession.host, { check: "false", want: true, fix: "echo nope >&2; exit 2" })
 
-    expect(toPlainRecords(hostSession.stepRecords)).toStrictEqual([
+    expect(toPlainRecords(hostSession.hostRecord.stepRecords)).toStrictEqual([
       {
         name: "Make marker",
         kind: "ensure",
@@ -285,7 +293,7 @@ describe("step records", () => {
         commands: ["false", "echo nope >&2; exit 2"],
       },
     ])
-    expect(toPlainResult(hostSession.stepRecords[0]?.commands[1]?.output)).toStrictEqual({
+    expect(toPlainResult(hostSession.hostRecord.stepRecords[0]?.commands[1]?.output)).toStrictEqual({
       stdout: "",
       stderr: "nope\n",
       exitCode: 2,
@@ -302,7 +310,9 @@ describe("step records", () => {
       },
     })
 
-    expect(toPlainRecords(hostSession.stepRecords)[0]?.status).toBe("failed to run 'exit 1' -> exited with code 1")
+    expect(toPlainRecords(hostSession.hostRecord.stepRecords)[0]?.status).toBe(
+      "failed to run 'exit 1' -> exited with code 1",
+    )
   })
 
   it("should record commands from the given read and exec under their step", async () => {
@@ -316,7 +326,7 @@ describe("step records", () => {
       },
     })
 
-    expect(toPlainRecords(hostSession.stepRecords)[0]?.commands).toStrictEqual([
+    expect(toPlainRecords(hostSession.hostRecord.stepRecords)[0]?.commands).toStrictEqual([
       `cat '${file}' 2>/dev/null || true`,
       `echo done > '${file}'`,
       `cat '${file}' 2>/dev/null || true`,
@@ -333,7 +343,10 @@ describe("step records", () => {
       { after: "always" },
     )
 
-    expect(toPlainRecords(hostSession.stepRecords)[0]?.commands).toStrictEqual(["sleep 0.1; echo a", "echo b"])
+    expect(toPlainRecords(hostSession.hostRecord.stepRecords)[0]?.commands).toStrictEqual([
+      "sleep 0.1; echo a",
+      "echo b",
+    ])
   })
 
   it("should stamp a command with the phase running when it was called, not when it finished", async () => {
@@ -349,7 +362,7 @@ describe("step records", () => {
       verify: false,
     })
 
-    expect(hostSession.stepRecords[0]?.commands).toMatchObject([
+    expect(hostSession.hostRecord.stepRecords[0]?.commands).toMatchObject([
       { cmd: "sleep 0.1", phase: "before" },
       { cmd: "echo old", phase: "before" },
       { cmd: "true", phase: "fix" },
@@ -361,7 +374,7 @@ describe("step records", () => {
     await readOrMessage(hostSession.host, "echo hi")
     await ensureOrMessage(hostSession.host, { check: "true", want: true, fix: "true" })
 
-    expect(toPlainRecords(hostSession.stepRecords).map(({ kind }) => kind)).toStrictEqual(["read", "ensure"])
+    expect(toPlainRecords(hostSession.hostRecord.stepRecords).map(({ kind }) => kind)).toStrictEqual(["read", "ensure"])
   })
 
   it("should not record a nested step, or a step after the host failed", async () => {
@@ -376,13 +389,13 @@ describe("step records", () => {
     })
     await attempt(async () => h.read("echo after"))
 
-    expect(toPlainRecords(hostSession.stepRecords).map(({ name }) => name)).toStrictEqual(["Make marker"])
+    expect(toPlainRecords(hostSession.hostRecord.stepRecords).map(({ name }) => name)).toStrictEqual(["Make marker"])
   })
 })
 
 /** Returns what a step recorded, with each comparison as whether it was in sync, and each command as its phase. */
 const toConvergeRecord = (hostSession: Awaited<ReturnType<typeof createSession>>) => {
-  const { status, commands, comparisons } = hostSession.stepRecords[0] ?? {}
+  const { status, commands, comparisons } = hostSession.hostRecord.stepRecords[0] ?? {}
   return {
     status: toPlainResult(status),
     before: comparisons?.before?.inSync,
@@ -492,7 +505,7 @@ describe("what a converging step records", () => {
     const brew = await h.ensure("Install brew packages", { check: "false", want: true, fix: "true" })
     await h.ensure("Install fish plugins", { needs: [brew], check: "true", want: true, fix: "true" })
 
-    expect(hostSession.stepRecords[1]).toMatchObject({
+    expect(hostSession.hostRecord.stepRecords[1]).toMatchObject({
       status: "waiting",
       waitingOn: ["Install brew packages"],
       comparisons: {},
@@ -508,7 +521,7 @@ describe("what a converging step records", () => {
     const hostSession = await createSession()
     await callStep(hostSession.host)
 
-    expect(hostSession.stepRecords[0]?.comparisons).toStrictEqual({})
-    expect(hostSession.stepRecords[0]?.commands[0]).not.toHaveProperty("phase")
+    expect(hostSession.hostRecord.stepRecords[0]?.comparisons).toStrictEqual({})
+    expect(hostSession.hostRecord.stepRecords[0]?.commands[0]).not.toHaveProperty("phase")
   })
 })

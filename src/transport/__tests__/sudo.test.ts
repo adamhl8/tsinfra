@@ -22,7 +22,7 @@ describe("createPasswordlessSudoTransport", () => {
 
     expect(await readOrMessage(hostSession.host, "sudo echo hi")).toBe("hi")
     expect(await readSudoCalls()).toStrictEqual(["-n echo hi"])
-    expect(hostSession.stepRecords[0]?.commands[0]?.cmd).toBe("sudo echo hi")
+    expect(hostSession.hostRecord.stepRecords[0]?.commands[0]?.cmd).toBe("sudo echo hi")
   })
 })
 

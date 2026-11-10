@@ -152,9 +152,10 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   apart from a red `got:` value. Its `!` and the host's `failed` in the summary are bright red too. That includes a
   failure the script caught inside the step, because the step still fails. The details a step found, like `got:` and
   `want:`, are indented further and are not red, because they are not the error. A host function failure is the
-  block's last `!` line, `(host fn)` and the host's script in italics (like `(host fn) sonarr.ts`), with its error under
-  it the same way. A host failure never ran the script, so its block has one `!` line, `(host)` and its target (like
-  `(host) web.lan`). Neither error is wrapped in "failed to run host" or "failed to prepare the host", because the
+  block's last `!` line, `(host fn)` and the host's target (like `(host fn) web.lan`), with its error under it the same
+  way, then the note "thrown in the host function, outside any step", because `host fn` alone doesn't say the failure
+  came from the script and not the host. A host failure never ran the script, so its block has one `!` line, `(host)`
+  and its target (like `(host) web.lan`). Both name the target, because the kind already says where it failed. Neither error is wrapped in "failed to run host" or "failed to prepare the host", because the
   block's header names the host and the kind says where it failed. A failure can have a hint under it, in italic yellow, with no label, saying how to fix
   it. A host that leaves `sudo` off and fails in a step whose own `sudo` needed a password gets "sudo needs a
   password on this host, so set the sudo option on host()" under that step (see [Transport](./transport.md#sudo)).
@@ -234,7 +235,10 @@ for progress to matter. Until then the blocks print directly as each host finish
 
 ### What a host records
 
-The output is built from a record of each host's run. It is one list of steps, in the order the script called them.
+The output is built from a record of each host's run. It holds how preflight ended, then one list of steps, in the
+order the script called them.
+
+- **Preflight** records its error if it failed, with any hints for it. A host whose preflight failed has no steps.
 
 - **A step** records its kind (`read`, `inspect`, `ensure`, `run`, `file`, or `link`), its name, its status, and its error if it
   failed. A read or inspect has no name, so it records its command.
@@ -270,7 +274,8 @@ A failure is one of four kinds, named after what it stops.
 - **A host failure** stops one host in preflight, before its script runs, like an unreachable host or a sudo password
   prompt that was skipped. Its block shows `(host)` and the host's target, like `(host) web.lan`.
 - **A host function failure** is anything thrown during the host function that no step owns, like a bug in the script.
-  It's the block's last line, `(host fn)` and the host's script, like `(host fn) sonarr.ts`.
+  It's the block's last line, `(host fn)` and the host's target, like `(host fn) web.lan`, with a note that it was
+  thrown in the host function.
 - **A step failure** belongs to the step that was running, and shows on that step's line. That includes a failure the
   script caught inside the step.
 

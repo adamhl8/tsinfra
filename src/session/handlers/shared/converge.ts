@@ -3,7 +3,7 @@ import { err, isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#mode.ts"
 import type { StepNeeds } from "#session/handlers/shared/step-options.ts"
-import type { ComparePhase, ConvergeRecorder } from "#session/step-recorder.ts"
+import type { ComparePhase, ConvergeRecorder } from "#session/recorder/recorder.ts"
 import type { ComparisonValues, StepStatus } from "#session/step.ts"
 
 /** How the part of the host one step manages compared with what the step wants, and the values it compared. */

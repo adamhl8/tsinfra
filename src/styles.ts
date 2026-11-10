@@ -90,8 +90,5 @@ export const styleDiffFrame = (text: string): string => pc.dim(text)
 /** Italicizes words that describe a change, like `new file`, because they don't show a value. */
 export const styleDescription = (text: string): string => pc.italic(text)
 
-/** Italicizes the host script's name, because it isn't a step. */
-export const styleHostScript = (text: string): string => pc.italic(text)
-
 /** Bolds a block's host name, so each block starts clearly. */
 export const styleHostName = (text: string): string => pc.bold(text)

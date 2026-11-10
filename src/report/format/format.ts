@@ -1,6 +1,5 @@
 import { messageChain } from "ts-explicit-errors"
 
-import type { HostReport } from "#hosts/hosts.ts"
 import type { Detail, HostBlockEntryKind, HostBlockEntryStatus, NameKind, HostBlockEntry } from "#report/entries.ts"
 import { toHostBlockEntries } from "#report/entries.ts"
 import { formatDiff } from "#report/format/diff.ts"
@@ -8,6 +7,7 @@ import { toEnsureRows } from "#report/format/ensure.ts"
 import { toFileRows } from "#report/format/file.ts"
 import { toLinkRows } from "#report/format/link.ts"
 import type { StepWarning } from "#report/warnings.ts"
+import type { HostRecord } from "#session/session.ts"
 import type { Style } from "#styles.ts"
 import {
   STATUS_STYLES,
@@ -15,7 +15,6 @@ import {
   styleError,
   styleHostKind,
   styleHostName,
-  styleHostScript,
   styleLabel,
   styleNote,
   styleValue,
@@ -43,7 +42,6 @@ export interface AlignedRow {
 const NAME_STYLES: Record<NameKind, Style> = {
   step: (name) => name,
   value: styleValue,
-  hostScript: styleHostScript,
 }
 
 /** Styles each line of `text` on its own, so a continuation line starts in the color too. */
@@ -166,10 +164,10 @@ const formatHostBlockEntries = (hostBlockEntries: HostBlockEntry[], formatOption
  * Formats a host's block: its name, then an entry for each step that changed, ran, waits, or failed. With `verbose`,
  * every step gets an entry, and a host with no steps still gets a block, so it's clear the host ran.
  */
-export const formatHostBlock = (hostReport: HostReport, formatOptions: FormatOptions = {}): string | undefined => {
-  const { name } = hostReport
+export const formatHostBlock = (hostRecord: HostRecord, formatOptions: FormatOptions = {}): string | undefined => {
+  const { name } = hostRecord
   const { verbose = false } = formatOptions
-  const hostBlockEntries = toHostBlockEntries(hostReport, formatOptions)
+  const hostBlockEntries = toHostBlockEntries(hostRecord, formatOptions)
 
   if (hostBlockEntries.length === 0 && verbose)
     return [styleHostName(name), `${INDENT}${styleNote("no steps")}`].join("\n")

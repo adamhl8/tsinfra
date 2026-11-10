@@ -16,7 +16,7 @@ import type { Want } from "#session/handlers/ensure/check.ts"
 import type { EnsureOptions } from "#session/handlers/ensure/ensure.ts"
 import type { RunOptions } from "#session/handlers/run.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
-import type { Host, HostContext } from "#session/session.ts"
+import type { Host, HostContext, HostRecord } from "#session/session.ts"
 import { createHostSession } from "#session/session.ts"
 import type { Transport } from "#transport/transport.ts"
 
@@ -50,10 +50,17 @@ const prepareHostEntry = async (loadedHost: LoadedHost) => {
   return hostEntry
 }
 
+/** Returns why preflight couldn't prepare a host, which the record of an unprepared host always holds. */
+export const getPreparationFailure = (hostRecord: HostRecord): Error => {
+  const { status } = hostRecord.preparation
+  if (!isErr(status)) throw new Error("the host's record has no preparation failure")
+  return status
+}
+
 /** Prepares one host the way a run does, and returns its context, or why it couldn't be prepared. */
 export const prepareHostContext = async (loadedHost: LoadedHost): Promise<Result<HostContext>> => {
   const hostEntry = await prepareHostEntry(loadedHost)
-  return "failure" in hostEntry ? hostEntry.failure : hostEntry.hostContext
+  return "hostContext" in hostEntry ? hostEntry.hostContext : getPreparationFailure(hostEntry.hostRecorder.hostRecord)
 }
 
 /** Prepares a host 'a' on `@local`. */
@@ -142,6 +149,6 @@ export const runOrMessage = async (h: Host, cmd: Change, options: RunOptions) =>
 
 /** Returns the message chain of the host's recorded failure, if any. */
 export const getFailureMessage = (hostSession: Awaited<ReturnType<typeof createSession>>) => {
-  const failure = hostSession.getFailure()
+  const { failure } = hostSession.hostRecord
   return failure && messageChain(failure)
 }

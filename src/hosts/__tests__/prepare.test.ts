@@ -21,10 +21,10 @@ describe("prepareHosts", () => {
       toLoadedHost("c", host("@local", touchMarker)),
     ])
 
-    expect(hostEntries.map((hostEntry) => [hostEntry.loadedHost.name, "failure" in hostEntry])).toStrictEqual([
-      ["a", false],
-      ["b", true],
-      ["c", false],
+    expect(hostEntries.map((hostEntry) => [hostEntry.loadedHost.name, "hostContext" in hostEntry])).toStrictEqual([
+      ["a", true],
+      ["b", false],
+      ["c", true],
     ])
     expect(await bun.file(marker).exists()).toBe(false)
   })

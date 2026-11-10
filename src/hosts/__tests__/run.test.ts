@@ -5,7 +5,7 @@ import path from "node:path"
 import { makeTempDir } from "@adamhl8/configs/test"
 import { attempt, messageChain } from "ts-explicit-errors"
 
-import { UNREACHABLE_TARGET, prepareAndRunHost, toLoadedHost } from "#__tests__/session.ts"
+import { UNREACHABLE_TARGET, getPreparationFailure, prepareAndRunHost, toLoadedHost } from "#__tests__/session.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
 import { getExitCode, hasDrift } from "#hosts/run.ts"
@@ -33,8 +33,8 @@ const runHostA = async (fn: HostFunction) => prepareAndRunHost(toLoadedHost("a",
 
 /** Plans a host 'a' with `fn` and reports whether it has drift. */
 const planHasDrift = async (fn: HostFunction) => {
-  const hostReport = await prepareAndRunHost(toLoadedHost("a", host("@local", fn)), "plan")
-  return hasDrift(hostReport)
+  const hostRecord = await prepareAndRunHost(toLoadedHost("a", host("@local", fn)), "plan")
+  return hasDrift(hostRecord)
 }
 
 const planReport = async (name: string, fn: HostFunction) =>
@@ -60,19 +60,18 @@ const runAndGetMessage = async (fn: HostFunction) => getMessage((await runHostA(
 
 describe("runHost", () => {
   it("should fail before the script runs when the host can't run commands", async () => {
-    const { failure, ...hostReport } = await prepareAndRunHost(
-      toLoadedHost("a", host(UNREACHABLE_TARGET, throwBoom)),
-      "apply",
-    )
+    const hostRecord = await prepareAndRunHost(toLoadedHost("a", host(UNREACHABLE_TARGET, throwBoom)), "apply")
 
-    expect({ ...hostReport, message: getMessage(failure) }).toStrictEqual({
+    expect(hostRecord).toMatchObject({
       name: "a",
       target: UNREACHABLE_TARGET,
-      started: false,
-      failureHints: [],
-      message:
-        "failed to read the ssh config for 'unreachable host' -> exited with code 255: hostname contains invalid characters",
+      preparation: { failureHints: [] },
+      stepRecords: [],
+      failure: undefined,
     })
+    expect(messageChain(getPreparationFailure(hostRecord))).toBe(
+      "failed to read the ssh config for 'unreachable host' -> exited with code 255: hostname contains invalid characters",
+    )
   })
 
   it("should report no failure when the host succeeds", async () => {
@@ -80,10 +79,10 @@ describe("runHost", () => {
   })
 
   it("should return the records of the steps that ran, even when the host fails", async () => {
-    const hostReport = await runHostA(readTwice)
+    const hostRecord = await runHostA(readTwice)
 
-    expect(hostReport).toMatchObject({ started: true, stepRecords: [{ name: "echo hi" }, { name: "exit 1" }] })
-    expect(getMessage(hostReport.failure)).toBe("failed to read 'exit 1' -> exited with code 1")
+    expect(hostRecord).toMatchObject({ stepRecords: [{ name: "echo hi" }, { name: "exit 1" }] })
+    expect(getMessage(hostRecord.failure)).toBe("failed to read 'exit 1' -> exited with code 1")
   })
 
   it("should report the error when the host function throws", async () => {
@@ -149,16 +148,16 @@ describe("getExitCode", () => {
     const target = path.join(directory, "missing")
     await symlink(target, linkPath)
 
-    const hostReport = await planReport("a", async (h) => {
+    const hostRecord = await planReport("a", async (h) => {
       await h.link(linkPath, target)
     })
 
-    expect(getExitCode([hostReport], "plan")).toBe(0)
+    expect(getExitCode([hostRecord], "plan")).toBe(0)
   })
 
   it("should be 1 when a host fails, even with drift on another", async () => {
-    const hostReports = [await planReport("a", ensurePending), await planReport("b", failCheck)]
+    const hostRecords = [await planReport("a", ensurePending), await planReport("b", failCheck)]
 
-    expect(getExitCode(hostReports, "plan")).toBe(1)
+    expect(getExitCode(hostRecords, "plan")).toBe(1)
   })
 })

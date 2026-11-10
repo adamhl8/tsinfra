@@ -28,7 +28,7 @@ describe("a user whose sudo needs a password", () => {
     expect((await $`stat -c %U ${filePath}`.text()).trim()).toBe("root")
     expect(await readOrMessage(hostSession.host, "sudo id -u")).toBe("0")
     expect(existsSync(ASKPASS_HELPER_PATH)).toBe(true)
-    expect(JSON.stringify(hostSession.stepRecords)).not.toContain(PASSWORD)
+    expect(JSON.stringify(hostSession.hostRecord)).not.toContain(PASSWORD)
   })
 
   it("should fail in preflight with only its own message for a wrong password from host()", async () => {

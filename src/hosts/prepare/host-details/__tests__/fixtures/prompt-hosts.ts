@@ -2,7 +2,7 @@ import process from "node:process"
 
 import { messageChain } from "ts-explicit-errors"
 
-import { toLoadedHost } from "#__tests__/session.ts"
+import { getPreparationFailure, toLoadedHost } from "#__tests__/session.ts"
 import { host } from "#hosts/host.ts"
 import { prepareHosts } from "#hosts/prepare/prepare.ts"
 
@@ -17,6 +17,6 @@ const hostEntries = await prepareHosts(
 )
 const results = hostEntries.map((hostEntry) => [
   hostEntry.loadedHost.name,
-  "failure" in hostEntry ? messageChain(hostEntry.failure) : "prepared",
+  "hostContext" in hostEntry ? "prepared" : messageChain(getPreparationFailure(hostEntry.hostRecorder.hostRecord)),
 ])
 console.log(JSON.stringify(results))

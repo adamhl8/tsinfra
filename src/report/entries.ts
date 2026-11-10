@@ -1,7 +1,5 @@
 import { isErr } from "ts-explicit-errors"
 
-import { HOST_SCRIPT_EXTENSION } from "#hosts/hosts.ts"
-import type { HostReport } from "#hosts/hosts.ts"
 import type { FormatOptions } from "#report/format/format.ts"
 import type { StepWarning } from "#report/warnings.ts"
 import { getStepWarnings } from "#report/warnings.ts"
@@ -11,6 +9,7 @@ import type {
   LinkComparisonValues,
   CommandRecord,
   ConvergePhase,
+  HostRecord,
   StepRecord,
   ComparisonValues,
   StepKind,
@@ -37,8 +36,6 @@ export type NameKind =
   | "step"
   // A name that's a value: a read's or an inspect's command, a file's or a link's path, or a target.
   | "value"
-  // The host's script, for a failure no step owns.
-  | "hostScript"
 
 /** One step's part of a host block, as data. */
 export interface HostBlockEntry {
@@ -90,6 +87,7 @@ const SHOWN_BY_DEFAULT: Record<StepStatus, boolean> = {
 }
 
 const BEFORE_FIX_NOTE = "values before the fix"
+const HOST_FUNCTION_FAILURE_NOTE = "thrown in the host function, outside any step"
 
 // Look at what the fix did and what the last compare saw, because the failure is about the state after the fix.
 // Leave out `before`, because it ran earlier, so it can't explain that state.
@@ -219,37 +217,29 @@ const toHostBlockEntry = (stepRecord: StepRecord, formatOptions: FormatOptions):
 }
 
 /** Returns the entries a host block shows: one per step that shows, then a failure no step owns. */
-export const toHostBlockEntries = (hostReport: HostReport, formatOptions: FormatOptions): HostBlockEntry[] => {
-  // Name a host that couldn't be prepared after its target, because that's what failed, and the script never ran.
-  if (!hostReport.started) {
-    const hostHintDetails = hostReport.failureHints.map((text): Detail => ({ kind: "hint", text }))
+export const toHostBlockEntries = (hostRecord: HostRecord, formatOptions: FormatOptions): HostBlockEntry[] => {
+  const { target, preparation, stepRecords, failure } = hostRecord
+  const hostName: HostBlockEntryName = { text: target, kind: "value" }
 
-    return [
-      {
-        status: "failed",
-        kind: "host",
-        name: { text: hostReport.target, kind: "value" },
-        error: hostReport.failure,
-        details: hostHintDetails,
-      },
-    ]
+  if (isErr(preparation.status)) {
+    const hostHintDetails = preparation.failureHints.map((text): Detail => ({ kind: "hint", text }))
+    return [{ status: "failed", kind: "host", name: hostName, error: preparation.status, details: hostHintDetails }]
   }
 
-  const { name, stepRecords, failure } = hostReport
   const hostBlockEntries = stepRecords
     .map((stepRecord) => toHostBlockEntry(stepRecord, formatOptions))
     .filter((hostBlockEntry) => hostBlockEntry !== undefined)
 
   // Show a failure that no step owns, like the script throwing, after the steps.
-  // Name it after the host's script, because it comes from the host function, not a step.
+  // Add a note, because `host fn` alone doesn't say the failure came from the script and not the host.
   const isStepFailure = stepRecords.some(({ status }) => status === failure)
   if (failure && !isStepFailure) {
     hostBlockEntries.push({
       status: "failed",
       kind: "host fn",
-      name: { text: `${name}${HOST_SCRIPT_EXTENSION}`, kind: "hostScript" },
+      name: hostName,
       error: failure,
-      details: [],
+      details: [{ kind: "note", text: HOST_FUNCTION_FAILURE_NOTE }],
     })
   }
 

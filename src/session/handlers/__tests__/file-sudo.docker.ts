@@ -77,7 +77,7 @@ describe("h.file with real sudo", () => {
 
     await fileOrMessage(hostSession.host, filePath, "new\n", { sudo: true })
 
-    expect(hostSession.stepRecords[0]?.comparisons.before?.values).toStrictEqual({
+    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toStrictEqual({
       kind: "file",
       content: { kind: "text", got: "old\n", want: "new\n" },
       attributeChanges: [],

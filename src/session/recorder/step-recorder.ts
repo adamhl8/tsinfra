@@ -2,24 +2,12 @@ import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
 import type { Comparison } from "#session/handlers/handlers.ts"
+import type { CommandRecord, ConvergePhase } from "#session/recorder/commands.ts"
 import type { StepKind, StepStatus } from "#session/step.ts"
-import type { RecordingTransport, CommandOutput, Transport } from "#transport/transport.ts"
-
-/** The parts of `converge` that run commands, in order. */
-export type ConvergePhase = "before" | "fix" | "after"
+import type { RecordingTransport, Transport } from "#transport/transport.ts"
 
 /** The phases of `converge` that compare the host with what the step wants. */
 export type ComparePhase = Exclude<ConvergePhase, "fix">
-
-export interface CommandRecord {
-  cmd: string
-  /** A short name for a command tsinfra wrote itself. Unset for a script's command. */
-  label?: string
-  /** The part of `converge` that ran the command. Unset for a step that doesn't converge. */
-  phase?: ConvergePhase
-  /** Unset until the command finishes. */
-  output?: Result<CommandOutput>
-}
 
 interface StepComparisons {
   before?: Comparison
@@ -57,8 +45,8 @@ export interface StepRecorder {
   recordCommands: (transport: Transport) => RecordingTransport
   /** Records a new step and marks it running, or fails when another step is running. */
   startStep: (stepName: string, kind: StepKind) => Result<StepRecord>
-  /** Records the step's status or error, and any hints for its failure, and marks no step as running. */
-  finishStep: (stepRecord: StepRecord, status: Result<StepStatus>, failureHints?: string[]) => void
+  /** Records the running step's status or error, and any hints for its failure, and marks no step as running. */
+  finishStep: (status: Result<StepStatus>, failureHints?: string[]) => void
   convergeRecorder: ConvergeRecorder
 }
 
@@ -106,9 +94,11 @@ export const createStepRecorder = (): StepRecorder => {
     return stepRecord
   }
 
-  const finishStep = (stepRecord: StepRecord, status: Result<StepStatus>, failureHints: string[] = []) => {
-    stepRecord.status = status
-    stepRecord.failureHints = failureHints
+  const finishStep = (status: Result<StepStatus>, failureHints: string[] = []) => {
+    if (currentStep) {
+      currentStep.status = status
+      currentStep.failureHints = failureHints
+    }
     currentStep = undefined
     currentPhase = undefined
   }

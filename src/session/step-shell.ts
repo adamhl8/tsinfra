@@ -1,4 +1,4 @@
-import type { StepRecorder } from "#session/step-recorder.ts"
+import type { StepRecorder } from "#session/recorder/recorder.ts"
 import type { Shell, Transport } from "#transport/transport.ts"
 import { createShell, createRootTransport } from "#transport/transport.ts"
 

@@ -18,7 +18,7 @@ describe("a user with no sudo rule", () => {
   })
 
   it("should hint at the sudo option when a step's sudo needs a password", async () => {
-    const hostReport = await prepareAndRunHost(
+    const hostRecord = await prepareAndRunHost(
       toLoadedHost(
         "a",
         host("@local", async (h) => {
@@ -28,7 +28,7 @@ describe("a user with no sudo rule", () => {
       "plan",
     )
 
-    expect(formatHostBlock(hostReport)).toContain(
+    expect(formatHostBlock(hostRecord)).toContain(
       "sudo needs a password on this host, so set the sudo option on host()",
     )
   })
