@@ -1,8 +1,8 @@
 import type { StructuredPatchHunk } from "diff"
 import { structuredPatch } from "diff"
 
-import type { FormatOptions } from "#report/format.ts"
-import { styleDiffFrame, styleGot, styleNote, styleWant } from "#report/format/styles.ts"
+import type { FormatOptions } from "#report/format/format.ts"
+import { styleDiffFrame, styleGot, styleNote, styleWant } from "#styles.ts"
 import { endWithNewline, getMaxWidth } from "#utils.ts"
 
 // Show one unchanged line around each change, so a plan stays short.

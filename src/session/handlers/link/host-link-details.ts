@@ -2,11 +2,10 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { HostOwner } from "#session/handlers/shared/filesystem/attributes.ts"
-import type { Shell } from "#session/shell.ts"
+import type { HostOwner } from "#session/handlers/shared/shared.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
-import { quoteShellArg } from "#transport/quote.ts"
-import { splitWords, stripOneTrailingNewline } from "#utils.ts"
+import type { Shell } from "#transport/transport.ts"
+import { quoteShellArg, splitWords, stripOneTrailingNewline } from "#utils.ts"
 
 /** What the link details script found at a link's path, and whether the link's target exists. */
 export type HostLinkDetails = ExistingLinkDetails | NewLinkDetails | ReplaceableLinkDetails

@@ -5,15 +5,18 @@ import { isErr } from "ts-explicit-errors"
 import { compareLink } from "#session/handlers/link/comparison.ts"
 import { getHostLinkDetails } from "#session/handlers/link/host-link-details.ts"
 import { writeLink } from "#session/handlers/link/write.ts"
-import type { ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
-import { withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
-import type { OwnerOptions } from "#session/handlers/shared/filesystem/attributes.ts"
-import { ownerOptionsSchema } from "#session/handlers/shared/filesystem/attributes.ts"
-import { validateHostPath } from "#session/handlers/shared/filesystem/path.ts"
-import type { NeedsOptions, SudoOptions } from "#session/handlers/shared/step-options.ts"
-import { NO_NEEDS, needsOptionsSchema } from "#session/handlers/shared/step-options.ts"
-import { validateInput } from "#session/handlers/shared/validate-input.ts"
+import type { ChangeStepResult, OwnerOptions, NeedsOptions, SudoOptions } from "#session/handlers/shared/shared.ts"
+import {
+  withChangeStepResult,
+  ownerOptionsSchema,
+  validateHostPath,
+  NO_NEEDS,
+  needsOptionsSchema,
+  validateInput,
+} from "#session/handlers/shared/shared.ts"
 import type { HandlerOptions, HandlerReturn, StepContext } from "#session/step.ts"
+
+export type { LinkChange, LinkComparisonValues } from "#session/handlers/link/comparison.ts"
 
 export interface LinkOptions extends OwnerOptions, SudoOptions, NeedsOptions {
   /** Replaces a regular file or an empty directory at the path. A directory with files in it is an error. */

@@ -6,14 +6,19 @@ import type { Check, Want } from "#session/handlers/ensure/check.ts"
 import { checkSchema, wantSchema } from "#session/handlers/ensure/check.ts"
 import { compareCheck } from "#session/handlers/ensure/comparison.ts"
 import { getHostCheckDetails } from "#session/handlers/ensure/host-check-details.ts"
-import type { ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
-import { withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
-import type { Change } from "#session/handlers/shared/change.ts"
-import { changeSchema, runChange } from "#session/handlers/shared/change.ts"
-import type { NeedsOptions } from "#session/handlers/shared/step-options.ts"
-import { NO_NEEDS, needsOptionsSchema } from "#session/handlers/shared/step-options.ts"
-import { validateInput } from "#session/handlers/shared/validate-input.ts"
+import type { ChangeStepResult, Change, NeedsOptions } from "#session/handlers/shared/shared.ts"
+import {
+  withChangeStepResult,
+  changeSchema,
+  runChange,
+  NO_NEEDS,
+  needsOptionsSchema,
+  validateInput,
+} from "#session/handlers/shared/shared.ts"
 import type { HandlerReturn, StepContext } from "#session/step.ts"
+
+export type { Check, Want } from "#session/handlers/ensure/check.ts"
+export type { EnsureComparisonValues } from "#session/handlers/ensure/comparison.ts"
 
 /** `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string. */
 export interface EnsureOptions<T extends Want> extends NeedsOptions {

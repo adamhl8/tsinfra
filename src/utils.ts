@@ -44,3 +44,6 @@ export const createCommandExitError = (commandOutput: CommandOutput) => {
   trimmedStderr &&= `: ${trimmedStderr}`
   return err(`exited with code ${exitCode}${trimmedStderr}`, undefined)
 }
+
+/** Quotes `text` for a POSIX shell, so a space or a quote in it can't break the command. */
+export const quoteShellArg = (text: string): string => `'${text.replaceAll("'", String.raw`'\''`)}'`

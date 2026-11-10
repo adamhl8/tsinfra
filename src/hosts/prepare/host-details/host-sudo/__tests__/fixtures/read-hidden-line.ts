@@ -1,6 +1,6 @@
 import process from "node:process"
 
-import { readHiddenLine } from "#session/host-details/read-hidden-line.ts"
+import { readHiddenLine } from "#hosts/prepare/host-details/host-sudo/read-hidden-line.ts"
 
 // Print what came back, and whether stdin was left as it was found.
 const line = await readHiddenLine("password: ")

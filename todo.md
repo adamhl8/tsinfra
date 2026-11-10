@@ -6,7 +6,8 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
 ## Next
 
 1. **SSH transport.** The local transport, the `{ ... } </dev/null` wrapper, and the `sudo` preamble are done. The rest
-   comes in four pieces, each reviewed before the next (see [Transport](./docs/transport.md#ssh-and-controlmaster)):
+   comes in seven pieces, each reviewed before the next (see [Transport](./docs/transport.md#ssh-and-controlmaster)).
+   Pieces 3 to 5 clean up how a host's failures are recorded and reported, before SSH goes further:
    1. **Plain SSH.** `ssh -T` with commands on stdin to `sh -s`, the ControlMaster options with `BatchMode`, ssh's own
       exit 255 as a failure to run, one retry on a connection closing as a command joins it, and `ssh -O stop` at the
       end of the run. Integration tests against a real sshd in `bask test-docker`. Test a command that can't run after
@@ -15,8 +16,40 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
    2. **`ssh -G` defaults.** Preflight reads the host's effective settings, then passes `accept-new`,
       `ConnectTimeout=10`, and `LogLevel=ERROR` only where the config says nothing, with the hints for a new host and a
       changed key.
-   3. **The `shell` host option.** `{ shell: "bash -l" }` starts `bash -l -s` in place of `sh -s`, on both transports.
-   4. **The cross-shell tests.** The file write rule on dash, bash, and busybox sh over SSH, and on macOS `/bin/sh`,
+   3. **The failure kinds in the report.** Four kinds: a startup failure stops the run before any host exists (a bad
+      flag, no `hosts/` directory, a host script that won't load), a host failure stops one host in preflight, a host
+      function failure is anything thrown during the host function that no step owns, and a step failure belongs to a
+      step. A host failure shows as `(host) <target>`, and a host function failure as `(host fn) a.ts`, in place of
+      today's `(host) a.ts`. Write the four kinds down in the docs.
+   4. **The host recorder.** One recorder per host, not one per run, because it tracks the running step, and hosts
+      will run in parallel. It holds the host record, which preparation, the session, and `runHost` fill in, and the
+      report reads. The step recorder moves inside it.
+      - **The record.** A failed preparation records its failure and hints on it, in place of `UnpreparedHostEntry`
+        carrying them. `callOrFail` keeps the first failure on it, in place of the session's own variable. Its
+        discriminant says whether the host was prepared, which replaces `started`.
+      - **Shells, in two stages.** During preparation, the recorder's `createShell(transport)` gives a recording shell
+        on any transport: the local shell for `ssh -G`, and the target shell once `baseTransport` exists. When
+        preparation ends, `prepareHosts` builds the session's `getShell({ sudo })` from the final transport, which is
+        today's `createStepShell`, recording above the root transport. The host context carries the recorder and
+        `getShell`, and no transport, so nothing in the session can run a command that isn't recorded.
+      - **Where commands go.** One `recordCommands` sends each command to the running step, or to the preparation while
+        the host is preparing.
+      - **Preparation.** `buildHostDetails` gets a per-host context with the local shell and the recorder's
+        `createShell`, in place of making its own shells. `prepareBaseTransport` and `readSshDefaultOptions` take the
+        local shell from it. `finishHostDetails` takes the target shell from the details, in place of calling
+        `createShell(baseTransport)` again.
+      - **Tests.** The helpers that put fake tools on `PATH` wrap the transport before building `getShell`, with the
+        same function `prepareHosts` uses, in place of swapping `hostContext.transport`.
+   5. **Preflight commands on the host record.** Preparation already records through the host recorder's shells, so
+      this gives each command a label: `ssh -G`, the home and user reads, the sudo checks, and the askpass helper
+      write. Record the end of the run's `ssh -O stop` on the record of each host that used that target. The
+      transport's own mechanics stay off the record, because they belong in the diagnostic log: the
+      `{ ... } </dev/null` wrapper, the `sudo` function line, the `ssh` process around each command, and the retry when
+      a connection closes. The sudo password check records a stand-in, so the password never reaches the record, with a
+      test that checks it. Step hints and preparation hints then come from one function over command records, which also
+      matches the message of a command that failed to run, because ssh's stderr lives in that error.
+   6. **The `shell` host option.** `{ shell: "bash -l" }` starts `bash -l -s` in place of `sh -s`, on both transports.
+   7. **The cross-shell tests.** The file write rule on dash, bash, and busybox sh over SSH, and on macOS `/bin/sh`,
       which runs only on darwin, so it is local only. The sudo password flows already work over any transport, so they
       need only a test over SSH.
 2. **Verbosity levels.** `-vv` lists each step's commands, with labels for tsinfra's own, and `-vvv` adds their output

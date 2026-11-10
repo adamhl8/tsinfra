@@ -17,7 +17,7 @@ import {
   createSession,
   fileOrMessage,
 } from "#__tests__/session.ts"
-import { handleFile } from "#session/handlers/file.ts"
+import { handleFile } from "#session/handlers/file/file.ts"
 import { PUBLIC_FILE_MODE } from "#session/handlers/shared/filesystem/mode.ts"
 
 const CLOSED_FILE_DESCRIPTOR = 9999

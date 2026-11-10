@@ -3,23 +3,21 @@ import { Buffer } from "node:buffer"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { ValidFileOptions } from "#session/handlers/file.ts"
+import type { ValidFileOptions } from "#session/handlers/file/file.ts"
 import type { HostFileDetails } from "#session/handlers/file/host-file-details.ts"
 import type { ResolvedFileContent } from "#session/handlers/file/resolved-content.ts"
-import type { HostFileAttributeDetails } from "#session/handlers/shared/filesystem/attributes.ts"
+import type { HostFileAttributeDetails } from "#session/handlers/shared/shared.ts"
 import {
   PRIVATE_FILE_MODE,
   PUBLIC_FILE_MODE,
   parseFileMode,
   toOctalMode,
-} from "#session/handlers/shared/filesystem/mode.ts"
-import {
   REMOVE_TEMP_DIRECTORY_LINES,
   TEMP_PATH_ARG,
   buildChownLines,
   buildTempDirectoryLines,
   toWriteScriptPaths,
-} from "#session/handlers/shared/filesystem/write-script.ts"
+} from "#session/handlers/shared/shared.ts"
 import type { StepContext } from "#session/step.ts"
 import { createCommandExitError } from "#utils.ts"
 

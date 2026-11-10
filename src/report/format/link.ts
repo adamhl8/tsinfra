@@ -1,7 +1,7 @@
-import type { AlignedRow } from "#report/format.ts"
+import type { AlignedRow } from "#report/format/format.ts"
 import { toOwnerRow } from "#report/format/owner.ts"
-import { styleDescription, styleGot, styleWant } from "#report/format/styles.ts"
-import type { LinkComparisonValues, LinkChange } from "#session/handlers/link/comparison.ts"
+import type { LinkComparisonValues, LinkChange } from "#session/session.ts"
+import { styleDescription, styleGot, styleWant } from "#styles.ts"
 
 // Give each way of making a link its words.
 const REPLACEMENT_WORDS: Record<Exclude<LinkChange["kind"], "same" | "changed">, string> = {

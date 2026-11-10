@@ -1,25 +1,15 @@
 import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
-import type { Comparison } from "#session/handlers/shared/converge.ts"
+import type { Comparison } from "#session/handlers/handlers.ts"
 import type { StepKind, StepStatus } from "#session/step.ts"
-import type { CommandOutput, Transport } from "#transport/transport.ts"
+import type { RecordingTransport, CommandOutput, Transport } from "#transport/transport.ts"
 
 /** The parts of `converge` that run commands, in order. */
 export type ConvergePhase = "before" | "fix" | "after"
 
 /** The phases of `converge` that compare the host with what the step wants. */
 export type ComparePhase = Exclude<ConvergePhase, "fix">
-
-export interface CommandOptions {
-  /** A short name for a command tsinfra wrote itself. */
-  label?: string
-  /** The text to record in place of the command, for one that holds content. */
-  recordedCmd?: string
-}
-
-/** Runs a command like a `Transport`, and also takes what the recorder needs to know about it. */
-export type RecordingTransport = (cmd: string, options?: CommandOptions) => Promise<Result<CommandOutput>>
 
 export interface CommandRecord {
   cmd: string

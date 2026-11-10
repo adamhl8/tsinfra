@@ -1,8 +1,8 @@
 import crypto from "node:crypto"
 
-import { quoteShellArg } from "#transport/quote.ts"
 import type { Transport } from "#transport/transport.ts"
-import { wrapCommand } from "#transport/wrap-command.ts"
+import { wrapCommand } from "#transport/utils.ts"
+import { quoteShellArg } from "#utils.ts"
 
 const SUDO_PASSWORD_VARIABLE = "TSINFRA_SUDO_PASSWORD"
 

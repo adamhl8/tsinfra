@@ -1,35 +1,92 @@
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
-import type { Mode } from "#cli/program.ts"
-import type { ValidHostOptions } from "#hosts/host.ts"
+import type { ValidHostOptions } from "#hosts/hosts.ts"
+import type { Mode } from "#mode.ts"
 import { getFailureHints } from "#session/failure-hints.ts"
-import type { EnsureOptions } from "#session/handlers/ensure.ts"
-import { handleEnsure } from "#session/handlers/ensure.ts"
-import type { Want } from "#session/handlers/ensure/check.ts"
-import type { FileContent, FileOptions } from "#session/handlers/file.ts"
-import { handleFile } from "#session/handlers/file.ts"
-import { handleInspect } from "#session/handlers/inspect.ts"
-import type { LinkOptions } from "#session/handlers/link.ts"
-import { handleLink } from "#session/handlers/link.ts"
-import { handleRead } from "#session/handlers/read.ts"
-import type { RunOptions } from "#session/handlers/run.ts"
-import { handleRun } from "#session/handlers/run.ts"
-import type { ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
-import type { Change } from "#session/handlers/shared/change.ts"
-import { createConverge } from "#session/handlers/shared/converge.ts"
-import type { SudoOptions } from "#session/handlers/shared/step-options.ts"
-import { sudoOptionsSchema } from "#session/handlers/shared/step-options.ts"
-import { validateInput } from "#session/handlers/shared/validate-input.ts"
-import type { ChangeTools, Exec, Inspect, InspectResult, ReadTools } from "#session/handlers/tools.ts"
-import { execCommand, inspectCommand } from "#session/handlers/tools.ts"
-import { createStepShell } from "#session/shell.ts"
+import type {
+  EnsureOptions,
+  Want,
+  FileContent,
+  FileOptions,
+  LinkOptions,
+  RunOptions,
+  ChangeStepResult,
+  Change,
+  SudoOptions,
+  ChangeTools,
+  Exec,
+  Inspect,
+  InspectResult,
+  ReadTools,
+} from "#session/handlers/handlers.ts"
+import {
+  handleEnsure,
+  handleFile,
+  handleInspect,
+  handleLink,
+  handleRead,
+  handleRun,
+  createConverge,
+  sudoOptionsSchema,
+  validateInput,
+  execCommand,
+  inspectCommand,
+} from "#session/handlers/handlers.ts"
 import type { StepRecord } from "#session/step-recorder.ts"
 import { createStepRecorder } from "#session/step-recorder.ts"
+import { createStepShell } from "#session/step-shell.ts"
 import type { HandlerReturn, StepContext, StepKind } from "#session/step.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
 import type { Transport } from "#transport/transport.ts"
 import type { Failure } from "#utils.ts"
+
+export { getPreparationFailureHints } from "#session/failure-hints.ts"
+export type {
+  AttributeChange,
+  Bytes,
+  Change,
+  ChangeStepResult,
+  ChangeTools,
+  Check,
+  ContentComparison,
+  EnsureComparisonValues,
+  EnsureOptions,
+  Exec,
+  FileAttributeOptions,
+  FileComparisonValues,
+  FileContent,
+  FileMode,
+  FileOptions,
+  FileOwner,
+  Inspect,
+  InspectResult,
+  LinkChange,
+  LinkComparisonValues,
+  LinkOptions,
+  ModeBits,
+  OctalMode,
+  OwnerChange,
+  ReadTools,
+  RunOptions,
+  RunTrigger,
+  SizeComparison,
+  StepNeeds,
+  SymbolicMode,
+  Want,
+} from "#session/handlers/handlers.ts"
+export {
+  GROUP_EXECUTABLE_MODE,
+  GROUP_FILE_MODE,
+  PRIVATE_EXECUTABLE_MODE,
+  PRIVATE_FILE_MODE,
+  PUBLIC_EXECUTABLE_MODE,
+  PUBLIC_FILE_MODE,
+  toOctalMode,
+  toSymbolicMode,
+} from "#session/handlers/handlers.ts"
+export type { CommandRecord, ConvergePhase, StepRecord } from "#session/step-recorder.ts"
+export type { ComparisonValues, StepKind, StepStatus } from "#session/step.ts"
 
 /** What a host's session needs, set up before any script runs. */
 export interface HostContext {

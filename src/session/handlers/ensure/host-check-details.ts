@@ -3,8 +3,7 @@ import { attempt, isErr } from "ts-explicit-errors"
 
 import type { Check } from "#session/handlers/ensure/check.ts"
 import type { ReadTools } from "#session/handlers/tools.ts"
-import type { Shell } from "#session/shell.ts"
-import type { CommandOutput } from "#transport/transport.ts"
+import type { Shell, CommandOutput } from "#transport/transport.ts"
 
 /** What the check found on the host: what a check function returned, or a check command's output. */
 export type HostCheckDetails = { kind: "function"; value: unknown } | { kind: "command"; commandOutput: CommandOutput }

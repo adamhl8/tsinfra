@@ -3,13 +3,12 @@ import { symlink } from "node:fs/promises"
 import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
-import bun from "bun"
 import { attempt, messageChain } from "ts-explicit-errors"
 
 import { UNREACHABLE_TARGET, prepareAndRunHost, toLoadedHost } from "#__tests__/session.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
-import { getExitCode, hasDrift, prepareHosts } from "#hosts/run.ts"
+import { getExitCode, hasDrift } from "#hosts/run.ts"
 import type { Host } from "#session/session.ts"
 import type { Failure } from "#utils.ts"
 
@@ -59,27 +58,6 @@ const getMessage = (failure: Failure) => failure && messageChain(failure)
 /** Runs a host 'a' with `fn` and returns its failure's message chain, if any. */
 const runAndGetMessage = async (fn: HostFunction) => getMessage((await runHostA(fn)).failure)
 
-describe("prepareHosts", () => {
-  it("should prepare every host in order without running a script", async () => {
-    const marker = path.join(await makeTempDir(), "ran")
-    const touchMarker = async (h: Host) => {
-      await h.read(`touch '${marker}'`)
-    }
-    const hostEntries = await prepareHosts([
-      toLoadedHost("a", host("@local", touchMarker)),
-      toLoadedHost("b", host(UNREACHABLE_TARGET, touchMarker)),
-      toLoadedHost("c", host("@local", touchMarker)),
-    ])
-
-    expect(hostEntries.map((hostEntry) => [hostEntry.loadedHost.name, "failure" in hostEntry])).toStrictEqual([
-      ["a", false],
-      ["b", true],
-      ["c", false],
-    ])
-    expect(await bun.file(marker).exists()).toBe(false)
-  })
-})
-
 describe("runHost", () => {
   it("should fail before the script runs when the host can't run commands", async () => {
     const { failure, ...hostReport } = await prepareAndRunHost(
@@ -91,8 +69,9 @@ describe("runHost", () => {
       name: "a",
       target: UNREACHABLE_TARGET,
       started: false,
+      failureHints: [],
       message:
-        "failed to prepare the host -> failed to read the SSH user's home directory -> failed to run the command over ssh -> exited with code 255: hostname contains invalid characters",
+        "failed to prepare the host -> failed to read the ssh config for 'unreachable host' -> exited with code 255: hostname contains invalid characters",
     })
   })
 

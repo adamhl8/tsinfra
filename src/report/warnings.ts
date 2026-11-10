@@ -1,6 +1,6 @@
 import { isErr } from "ts-explicit-errors"
 
-import type { StepRecord } from "#session/step-recorder.ts"
+import type { StepRecord } from "#session/session.ts"
 
 /** Something that worked but needs a look, with the value it's about, like a path, when there is one. */
 export interface StepWarning {

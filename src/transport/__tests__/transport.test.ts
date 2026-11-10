@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test"
 
-import { getTransport } from "#transport/transport.ts"
+import { getLocalTransport } from "#transport/transport.ts"
 
-const localTransport = getTransport("@local")
+const localTransport = getLocalTransport()
 
-describe("getTransport", () => {
+describe("getLocalTransport", () => {
   it("should give commands /dev/null as stdin instead of the rest of the script", async () => {
     expect(await localTransport("cat\necho after")).toStrictEqual({ stdout: "after\n", stderr: "", exitCode: 0 })
   })

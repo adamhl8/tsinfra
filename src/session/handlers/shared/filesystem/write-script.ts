@@ -1,7 +1,7 @@
 import nodePath from "node:path"
 
 import type { HostOwner, OwnerOptions } from "#session/handlers/shared/filesystem/attributes.ts"
-import { quoteShellArg } from "#transport/quote.ts"
+import { quoteShellArg } from "#utils.ts"
 
 /** The temp path, inside the temp directory, as both write scripts name it, quoted for the shell. */
 export const TEMP_PATH_ARG = '"$tmppath"'

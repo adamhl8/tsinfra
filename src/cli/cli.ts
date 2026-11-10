@@ -6,14 +6,10 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import { program } from "#cli/program.ts"
-import { discoverHosts } from "#hosts/discover.ts"
-import { loadHosts } from "#hosts/load.ts"
-import type { HostReport } from "#hosts/run.ts"
-import { getExitCode, prepareHosts, runHost } from "#hosts/run.ts"
+import { discoverHosts, loadHosts, prepareHosts, getExitCode, runHost } from "#hosts/hosts.ts"
+import type { HostReport } from "#hosts/hosts.ts"
 import packageJson from "#package.json" with { type: "json" }
-import { ERROR_THEME, printTsinfraError } from "#report/errors.ts"
-import { formatHostBlock } from "#report/format.ts"
-import { formatSummary } from "#report/format/summary.ts"
+import { ERROR_THEME, printTsinfraError, formatHostBlock, formatSummary } from "#report/report.ts"
 import { closeConnections } from "#transport/transport.ts"
 
 /** Runs the hosts, prints each one's host block and then the summary, and returns the exit code. */

@@ -1,15 +1,21 @@
 import { isErr } from "ts-explicit-errors"
 
-import { HOST_SCRIPT_EXTENSION } from "#hosts/discover.ts"
-import type { HostReport } from "#hosts/run.ts"
-import type { FormatOptions } from "#report/format.ts"
+import { HOST_SCRIPT_EXTENSION } from "#hosts/hosts.ts"
+import type { HostReport } from "#hosts/hosts.ts"
+import type { FormatOptions } from "#report/format/format.ts"
 import type { StepWarning } from "#report/warnings.ts"
 import { getStepWarnings } from "#report/warnings.ts"
-import type { EnsureComparisonValues } from "#session/handlers/ensure/comparison.ts"
-import type { FileComparisonValues } from "#session/handlers/file/comparison.ts"
-import type { LinkComparisonValues } from "#session/handlers/link/comparison.ts"
-import type { CommandRecord, ConvergePhase, StepRecord } from "#session/step-recorder.ts"
-import type { ComparisonValues, StepKind, StepStatus } from "#session/step.ts"
+import type {
+  EnsureComparisonValues,
+  FileComparisonValues,
+  LinkComparisonValues,
+  CommandRecord,
+  ConvergePhase,
+  StepRecord,
+  ComparisonValues,
+  StepKind,
+  StepStatus,
+} from "#session/session.ts"
 import { isMultiLine } from "#utils.ts"
 
 export type StepEntryStatus = StepStatus | "failed"
@@ -181,6 +187,7 @@ const toStepEntry = (stepRecord: StepRecord, formatOptions: FormatOptions): Step
 
   if (isErr(status)) {
     const hintDetails = failureHints.map((text): Detail => ({ kind: "hint", text }))
+
     return {
       status: "failed",
       kind,
@@ -212,13 +219,15 @@ const toStepEntry = (stepRecord: StepRecord, formatOptions: FormatOptions): Step
 export const toStepEntries = (hostReport: HostReport, formatOptions: FormatOptions): StepEntry[] => {
   // Name a host that couldn't be prepared after its target, because that's what failed, and the script never ran.
   if (!hostReport.started) {
+    const hostHintDetails = hostReport.failureHints.map((text): Detail => ({ kind: "hint", text }))
+
     return [
       {
         status: "failed",
         kind: "host",
         name: { text: hostReport.target, kind: "value" },
         error: hostReport.failure,
-        details: [],
+        details: hostHintDetails,
       },
     ]
   }

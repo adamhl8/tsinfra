@@ -9,17 +9,34 @@ import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
 import { prepareAndRunHost, prepareHostContext, readOrMessage, toLoadedHost } from "#__tests__/session.ts"
 import { host } from "#hosts/host.ts"
+import { prepareBaseTransport } from "#hosts/prepare/host-details/host-details.ts"
 import { createHostSession } from "#session/session.ts"
-import { closeConnections, getTransport } from "#transport/transport.ts"
+import { closeConnections } from "#transport/transport.ts"
 
-// `setup.sh` points `tsinfra-sshd` at the sshd this file starts, and `tsinfra-no-sshd` at a port nothing listens on.
+// `setup.sh` points each of these at the sshd this file starts, except `tsinfra-no-sshd`, at a port nothing listens on.
+// Each host-key target has a `known_hosts` entry of its own: none for the new and the strict host, and a wrong key for
+// the changed one.
 const TARGET = "tsinfra-sshd"
+const NEW_HOST_TARGET = "tsinfra-new"
+const STRICT_TARGET = "tsinfra-strict"
+const CHANGED_KEY_TARGET = "tsinfra-changed"
 const NO_SSHD_TARGET = "tsinfra-no-sshd"
+const ALL_TARGETS = [TARGET, NEW_HOST_TARGET, STRICT_TARGET, CHANGED_KEY_TARGET, NO_SSHD_TARGET]
+
 const SSHD_DIR = path.join(os.homedir(), "sshd")
 const SSHD_PID_PATH = path.join(SSHD_DIR, "sshd.pid")
 const SSH_DIR = path.join(os.homedir(), ".ssh")
+const KNOWN_HOSTS_PATH = path.join(SSH_DIR, "known_hosts")
 
-const transport = getTransport(TARGET)
+/** Prepares the transport to `target`, or throws why it couldn't. */
+const prepareOrThrow = async (target: string) => {
+  const targetTransport = await prepareBaseTransport(target)
+  if (isErr(targetTransport)) throw targetTransport
+
+  return targetTransport
+}
+
+const transport = await prepareOrThrow(TARGET)
 
 const doNothing = async () => {
   /* empty */
@@ -43,6 +60,12 @@ const stopSshd = async () => {
 /** Returns an error's message chain, or anything else as it is, so a test can compare either. */
 const toMessage = (value: unknown) => (value instanceof Error ? messageChain(value) : value)
 
+/** Reports whether `known_hosts` has a key for `name`. Use `ssh-keygen -F`, because Debian's ssh hashes the names. */
+const findKnownHost = async (name: string) => (await $`ssh-keygen -F ${name}`.nothrow().quiet()).exitCode === 0
+
+/** Prepares and runs a host 'a' on `target` the way a run does, and returns its report. */
+const runHostOn = async (target: string) => prepareAndRunHost(toLoadedHost("a", host(target, doNothing)), "apply")
+
 /** Prepares a host 'a' on the sshd the way a run does, and creates its session. */
 const createSshSession = async () => {
   const hostContext = await prepareHostContext(toLoadedHost("a", host(TARGET, doNothing)))
@@ -56,7 +79,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  await closeConnections([TARGET])
+  await closeConnections(ALL_TARGETS)
   await stopSshd()
 })
 
@@ -92,18 +115,46 @@ describe("the ssh transport against a real sshd", () => {
   })
 
   it("should fail a host that can't be reached in preflight, with ssh's error", async () => {
-    const { failure, ...hostReport } = await prepareAndRunHost(
-      toLoadedHost("a", host(NO_SSHD_TARGET, doNothing)),
-      "apply",
-    )
+    const { failure, ...hostReport } = await runHostOn(NO_SSHD_TARGET)
 
     expect({ ...hostReport, message: toMessage(failure) }).toStrictEqual({
       name: "a",
       target: NO_SSHD_TARGET,
       started: false,
+      failureHints: [],
       message:
         "failed to prepare the host -> failed to read the SSH user's home directory -> failed to run the command over ssh -> exited with code 255: ssh: connect to host 127.0.0.1 port 2223: Connection refused",
     })
+  })
+
+  it("should take a new host's key, and keep ssh's notice about it off stderr", async () => {
+    const newHostTransport = await prepareOrThrow(NEW_HOST_TARGET)
+
+    expect(await findKnownHost(NEW_HOST_TARGET)).toBe(false)
+    expect(await newHostTransport("echo hi")).toStrictEqual({ stdout: "hi\n", stderr: "", exitCode: 0 })
+    expect(await findKnownHost(NEW_HOST_TARGET)).toBe(true)
+  })
+
+  it("should fail a new host the config checks strictly, with a hint to ssh to it once", async () => {
+    const hostReport = await runHostOn(STRICT_TARGET)
+
+    expect(toMessage(hostReport.failure)).toEndWith("Host key verification failed.")
+    expect(hostReport).toMatchObject({
+      started: false,
+      failureHints: [`run 'ssh ${STRICT_TARGET}' once to check the host's key and save it`],
+    })
+  })
+
+  it("should fail a host whose key changed, with the line of the old key and a hint to remove it", async () => {
+    const knownHosts = await bun.file(KNOWN_HOSTS_PATH).text()
+    const hostReport = await runHostOn(CHANGED_KEY_TARGET)
+
+    expect(toMessage(hostReport.failure)).toContain(`Offending ED25519 key in ${KNOWN_HOSTS_PATH}:1`)
+    expect(hostReport).toMatchObject({
+      started: false,
+      failureHints: ["if the host was recreated, remove its old key from the known_hosts line named above"],
+    })
+    expect(await bun.file(KNOWN_HOSTS_PATH).text()).toBe(knownHosts)
   })
 
   it("should fail the host when the connection goes away mid-run, and keep the command and its error", async () => {

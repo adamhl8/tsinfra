@@ -1,13 +1,14 @@
 import { messageChain } from "ts-explicit-errors"
 
-import type { HostReport } from "#hosts/run.ts"
+import type { HostReport } from "#hosts/hosts.ts"
 import type { Detail, StepEntryKind, StepEntryStatus, NameKind, StepEntry } from "#report/entries.ts"
 import { toStepEntries } from "#report/entries.ts"
 import { formatDiff } from "#report/format/diff.ts"
 import { toEnsureRows } from "#report/format/ensure.ts"
 import { toFileRows } from "#report/format/file.ts"
 import { toLinkRows } from "#report/format/link.ts"
-import type { Style } from "#report/format/styles.ts"
+import type { StepWarning } from "#report/warnings.ts"
+import type { Style } from "#styles.ts"
 import {
   STATUS_STYLES,
   styleAside,
@@ -20,8 +21,7 @@ import {
   styleValue,
   styleHint,
   styleWarning,
-} from "#report/format/styles.ts"
-import type { StepWarning } from "#report/warnings.ts"
+} from "#styles.ts"
 import { getMaxWidth, padToWidth, quoteNames, splitNonEmptyLines } from "#utils.ts"
 
 const INDENT = "  "

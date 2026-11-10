@@ -1,11 +1,10 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { ValidLinkOptions } from "#session/handlers/link.ts"
 import type { HostLinkDetails } from "#session/handlers/link/host-link-details.ts"
-import type { Comparison } from "#session/handlers/shared/converge.ts"
-import type { OwnerChange } from "#session/handlers/shared/filesystem/attributes.ts"
-import { checkCanSetOwner, findOwnerChanges } from "#session/handlers/shared/filesystem/owner.ts"
+import type { ValidLinkOptions } from "#session/handlers/link/link.ts"
+import type { Comparison, OwnerChange } from "#session/handlers/shared/shared.ts"
+import { checkCanSetOwner, findOwnerChanges } from "#session/handlers/shared/shared.ts"
 import type { StepContext } from "#session/step.ts"
 
 /**

@@ -2,14 +2,11 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { HostFileAttributeDetails } from "#session/handlers/shared/filesystem/attributes.ts"
-import type { Bytes } from "#session/handlers/shared/filesystem/bytes.ts"
-import { toBytes } from "#session/handlers/shared/filesystem/bytes.ts"
-import { statModeSchema } from "#session/handlers/shared/filesystem/mode.ts"
-import type { Shell } from "#session/shell.ts"
+import type { HostFileAttributeDetails, Bytes } from "#session/handlers/shared/shared.ts"
+import { toBytes, statModeSchema } from "#session/handlers/shared/shared.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
-import { quoteShellArg } from "#transport/quote.ts"
-import { splitWords } from "#utils.ts"
+import type { Shell } from "#transport/transport.ts"
+import { quoteShellArg, splitWords } from "#utils.ts"
 
 // Read the first 64 hex characters, because GNU, busybox, and `shasum` print `<hash>  -`, and BSD prints the hash.
 const SHA256_PATTERN = /^[0-9a-f]{64}/v

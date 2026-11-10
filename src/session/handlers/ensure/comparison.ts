@@ -4,7 +4,7 @@ import { err } from "ts-explicit-errors"
 
 import type { Want } from "#session/handlers/ensure/check.ts"
 import type { HostCheckDetails } from "#session/handlers/ensure/host-check-details.ts"
-import type { Comparison } from "#session/handlers/shared/converge.ts"
+import type { Comparison } from "#session/handlers/shared/shared.ts"
 import type { CommandOutput } from "#transport/transport.ts"
 import { createCommandExitError, stripTrailingNewlines } from "#utils.ts"
 

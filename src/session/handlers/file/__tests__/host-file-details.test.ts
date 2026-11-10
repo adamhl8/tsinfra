@@ -11,8 +11,8 @@ import type { HostFileDetails } from "#session/handlers/file/host-file-details.t
 import { getHostFileDetails, parseFileDetailsOutput } from "#session/handlers/file/host-file-details.ts"
 import { toBytes } from "#session/handlers/shared/filesystem/bytes.ts"
 import { toModeBits } from "#session/handlers/shared/filesystem/mode.ts"
-import { createShell } from "#session/shell.ts"
 import { runLocal } from "#transport/local.ts"
+import { createShell } from "#transport/shell.ts"
 
 const HASH = "a".repeat(64)
 

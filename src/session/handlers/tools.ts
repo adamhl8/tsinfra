@@ -1,9 +1,9 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import { validateInput } from "#session/handlers/shared/validate-input.ts"
-import type { Shell } from "#session/shell.ts"
+import { validateInput } from "#session/handlers/shared/shared.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
+import type { Shell } from "#transport/transport.ts"
 
 /** Tools that only read the host. A check function gets these, because it also runs during `plan`. */
 export interface ReadTools {

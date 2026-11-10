@@ -2,21 +2,33 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
-import { compareFile } from "#session/handlers/file/comparison.ts"
+import { compareFile } from "#session/handlers/file/comparison/comparison.ts"
 import { getHostFileDetails } from "#session/handlers/file/host-file-details.ts"
 import { resolveContent } from "#session/handlers/file/resolved-content.ts"
 import { buildValidateCommand } from "#session/handlers/file/validate-command.ts"
 import type { FileWrite } from "#session/handlers/file/write.ts"
 import { writeFile } from "#session/handlers/file/write.ts"
-import type { ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
-import { withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
-import type { FileAttributeOptions } from "#session/handlers/shared/filesystem/attributes.ts"
-import { fileAttributeOptionsSchema } from "#session/handlers/shared/filesystem/attributes.ts"
-import { validateHostPath } from "#session/handlers/shared/filesystem/path.ts"
-import type { NeedsOptions, SudoOptions } from "#session/handlers/shared/step-options.ts"
-import { NO_NEEDS, needsOptionsSchema } from "#session/handlers/shared/step-options.ts"
-import { validateInput } from "#session/handlers/shared/validate-input.ts"
+import type {
+  ChangeStepResult,
+  FileAttributeOptions,
+  NeedsOptions,
+  SudoOptions,
+} from "#session/handlers/shared/shared.ts"
+import {
+  withChangeStepResult,
+  fileAttributeOptionsSchema,
+  validateHostPath,
+  NO_NEEDS,
+  needsOptionsSchema,
+  validateInput,
+} from "#session/handlers/shared/shared.ts"
 import type { HandlerOptions, HandlerReturn, StepContext } from "#session/step.ts"
+
+export type {
+  ContentComparison,
+  FileComparisonValues,
+  SizeComparison,
+} from "#session/handlers/file/comparison/comparison.ts"
 
 /**
  * What the file should hold: a string or bytes computed on the control machine, or a `Blob` like `bun.file(...)` for a

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test"
 
-import { createStepShell } from "#session/shell.ts"
 import { createStepRecorder } from "#session/step-recorder.ts"
+import { createStepShell } from "#session/step-shell.ts"
 import { runLocal } from "#transport/local.ts"
 import type { Transport } from "#transport/transport.ts"
 

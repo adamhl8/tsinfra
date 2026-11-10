@@ -1,13 +1,13 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { ValidFileOptions } from "#session/handlers/file.ts"
+import type { ValidFileOptions } from "#session/handlers/file/file.ts"
 import type { HostFileDetails } from "#session/handlers/file/host-file-details.ts"
 import type { ResolvedFileContent } from "#session/handlers/file/resolved-content.ts"
-import type { Bytes } from "#session/handlers/shared/filesystem/bytes.ts"
-import { toBytes } from "#session/handlers/shared/filesystem/bytes.ts"
-import type { Shell } from "#session/shell.ts"
-import { quoteShellArg } from "#transport/quote.ts"
+import type { Bytes } from "#session/handlers/shared/shared.ts"
+import { toBytes } from "#session/handlers/shared/shared.ts"
+import type { Shell } from "#transport/transport.ts"
+import { quoteShellArg } from "#utils.ts"
 
 /** How a managed file's content differs. `text` holds both sides for a diff. */
 export type ContentComparison = { kind: "same" } | { kind: "text"; got: string; want: string } | SizeComparison

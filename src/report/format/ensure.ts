@@ -1,14 +1,6 @@
-import type { AlignedRow } from "#report/format.ts"
-import {
-  styleGot,
-  styleGotExitCode,
-  styleGotString,
-  styleWant,
-  styleWantExitCode,
-  styleWantString,
-} from "#report/format/styles.ts"
-import type { Want } from "#session/handlers/ensure/check.ts"
-import type { EnsureComparisonValues } from "#session/handlers/ensure/comparison.ts"
+import type { AlignedRow } from "#report/format/format.ts"
+import type { Want, EnsureComparisonValues } from "#session/session.ts"
+import { styleGot, styleGotExitCode, styleGotString, styleWant, styleWantExitCode, styleWantString } from "#styles.ts"
 
 interface ValueKindRules {
   formatGot: (got: EnsureComparisonValues["got"]) => string

@@ -1,17 +1,17 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { ValidLinkOptions } from "#session/handlers/link.ts"
 import type { HostLinkDetails } from "#session/handlers/link/host-link-details.ts"
+import type { ValidLinkOptions } from "#session/handlers/link/link.ts"
 import {
   REMOVE_TEMP_DIRECTORY_LINES,
   TEMP_PATH_ARG,
   buildChownLines,
   buildTempDirectoryLines,
   toWriteScriptPaths,
-} from "#session/handlers/shared/filesystem/write-script.ts"
+} from "#session/handlers/shared/shared.ts"
 import type { StepContext } from "#session/step.ts"
-import { quoteShellArg } from "#transport/quote.ts"
+import { quoteShellArg } from "#utils.ts"
 
 /** Returns the script that makes the link under a temp name, then renames it into place (see `docs/transport.md`). */
 const buildLinkWriteScript = (hostLinkDetails: HostLinkDetails, target: string, options: ValidLinkOptions): string => {

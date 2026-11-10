@@ -14,13 +14,13 @@ import {
   prepareHostContext,
   toLoadedHost,
 } from "#__tests__/session.ts"
-import type { Mode } from "#cli/program.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
-import { formatHostBlock } from "#report/format.ts"
-import { formatSummary } from "#report/format/summary.ts"
-import type { EnsureOptions } from "#session/handlers/ensure.ts"
+import type { Mode } from "#mode.ts"
+import { formatHostBlock } from "#report/format/format.ts"
+import { formatSummary } from "#report/summary.ts"
 import type { Want } from "#session/handlers/ensure/check.ts"
+import type { EnsureOptions } from "#session/handlers/ensure/ensure.ts"
 import type { Host } from "#session/session.ts"
 import { createHostSession } from "#session/session.ts"
 import type { Transport } from "#transport/transport.ts"
@@ -202,12 +202,31 @@ describe("formatHostBlock", () => {
   it("should name a host that couldn't be prepared after its target, and count it as failed", async () => {
     const hostReport = await prepareAndRunHost(toLoadedHost("a", host(UNREACHABLE_TARGET, changeThenThrow)), "plan")
     const startError =
-      "failed to prepare the host -> failed to read the SSH user's home directory -> failed to run the command over ssh -> exited with code 255: hostname contains invalid characters"
+      "failed to prepare the host -> failed to read the ssh config for 'unreachable host' -> exited with code 255: hostname contains invalid characters"
 
     expect([formatHostBlock(hostReport), formatSummary([hostReport], "plan")]).toStrictEqual([
       `a\n  ! failed: (host) ${UNREACHABLE_TARGET}\n      ${startError}`,
       "a   failed",
     ])
+  })
+
+  it("should show a hint under a host that couldn't be prepared", () => {
+    const hostBlock = formatHostBlock({
+      name: "a",
+      target: "a.lan",
+      started: false,
+      failure: new Error("failed to prepare the host"),
+      failureHints: ["run 'ssh a.lan' once to check the host's key and save it"],
+    })
+
+    expect(hostBlock).toBe(
+      [
+        "a",
+        "  ! failed: (host) a.lan",
+        "      failed to prepare the host",
+        "        run 'ssh a.lan' once to check the host's key and save it",
+      ].join("\n"),
+    )
   })
 
   it("should show the error from steps run at once under the step that was running", async () => {

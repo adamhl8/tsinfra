@@ -7,9 +7,9 @@ import { isErr, messageChain } from "ts-explicit-errors"
 
 import { writeFakeTool } from "#__tests__/session.ts"
 import type { HostSudo } from "#hosts/host.ts"
-import { resolveHostSudo } from "#session/host-details/host-sudo.ts"
-import { createShell } from "#session/shell.ts"
+import { resolveHostSudo } from "#hosts/prepare/host-details/host-sudo/resolve.ts"
 import { runLocal } from "#transport/local.ts"
+import { createShell } from "#transport/shell.ts"
 
 const PASSWORD = `it's "a" $HOME`
 

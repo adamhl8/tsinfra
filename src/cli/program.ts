@@ -3,11 +3,10 @@ import { argument, command, constant, merge, message, object, option, or, string
 import { defineProgram } from "@optique/core/program"
 import { path } from "@optique/run"
 
-import { HOST_SCRIPT_EXTENSION } from "#hosts/discover.ts"
+import { HOST_SCRIPT_EXTENSION } from "#hosts/hosts.ts"
+import type { Mode } from "#mode.ts"
+import { MODES } from "#mode.ts"
 import packageJson from "#package.json" with { type: "json" }
-
-const MODES = ["plan", "apply"] as const
-export type Mode = (typeof MODES)[number]
 
 const DEFAULT_HOSTS_DIR = "hosts"
 

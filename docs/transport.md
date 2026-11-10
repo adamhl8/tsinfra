@@ -200,8 +200,9 @@ as it exits, and a retry before that would join it again. A host that sits idle 
 case too.
 
 **Host keys and timeouts follow `~/.ssh/config`, with defaults where it says nothing.** A command-line `-o` always beats
-the config file, so tsinfra reads the host's effective settings first, with `ssh -G <host>`. That runs locally, with no
-network, once per host in preflight. Then it fills in only what ssh would otherwise leave unworkable:
+the config file, so tsinfra reads the host's effective settings first, with `ssh -G -T <host>`. That runs locally, with
+no network, once per host in preflight. `-T` stops `-G` warning that it won't allocate a terminal. A config `-G` can't
+read fails the host there, with ssh's error. Then tsinfra fills in only what ssh would otherwise leave unworkable:
 
 | `StrictHostKeyChecking` | tsinfra passes | Why                                                                     |
 | ----------------------- | -------------- | ----------------------------------------------------------------------- |
@@ -214,14 +215,18 @@ network, once per host in preflight. Then it fills in only what ssh would otherw
   from the default, so an explicit `ask` gets upgraded too. It couldn't prompt anyway, and `yes` is the setting that
   keeps tsinfra strict.
 - **A changed key always fails,** because `accept-new` refuses one too, and a changed key can mean the host isn't the
-  one it was. tsinfra adds `if the host was recreated, remove its old key with ssh-keygen -R <host>`, and offers no way
-  around it. A homelab container recreated under the same name hits this, unless cloud-init gives it a stable key.
+  one it was. tsinfra adds `if the host was recreated, remove its old key from the known_hosts line named above`, and
+  offers no way around it. ssh names that line as `Offending ED25519 key in ~/.ssh/known_hosts:12`. At `LogLevel=ERROR`
+  it leaves out the `ssh-keygen -R` command it would otherwise print. A homelab container recreated under the same name hits this, unless cloud-init gives it a stable key.
 - **`ConnectTimeout=10`** is passed when `-G` shows `connecttimeout none`, ssh's default, which leaves it to the OS and
   can take about 75 seconds. A timeout the user set is kept.
 - **Connect retries are left to ssh.** `ConnectionAttempts` defaults to 1, and `-G` can't tell that from an explicit 1.
 - **`LogLevel=ERROR`** is passed when `-G` shows `loglevel INFO`, ssh's default. At `INFO`, ssh prints a server's login
   banner and `accept-new`'s `Permanently added ... to the list of known hosts` on stderr, mixed into a command's own. A
-  level the user set is kept.
+  level the user set is kept, except an explicit `INFO`, which `-G` can't tell from the default.
+- **The hints** show under a host that couldn't be prepared, like the sudo hint under a step. An unknown host under
+  `yes` gets `run 'ssh <target>' once to check the host's key and save it`. tsinfra finds both host-key failures from
+  ssh's own lines, `REMOTE HOST IDENTIFICATION HAS CHANGED` and `Host key verification failed`.
 
 ### How other tools reach hosts
 

@@ -1,16 +1,17 @@
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
-import type { ValidFileOptions } from "#session/handlers/file.ts"
 import { findAttributeChanges } from "#session/handlers/file/comparison/attributes.ts"
 import type { ContentComparison } from "#session/handlers/file/comparison/content.ts"
 import { compareContent } from "#session/handlers/file/comparison/content.ts"
+import type { ValidFileOptions } from "#session/handlers/file/file.ts"
 import type { HostFileDetails } from "#session/handlers/file/host-file-details.ts"
 import type { ResolvedFileContent } from "#session/handlers/file/resolved-content.ts"
-import type { Comparison } from "#session/handlers/shared/converge.ts"
-import type { AttributeChange } from "#session/handlers/shared/filesystem/attributes.ts"
-import { checkCanSetOwner } from "#session/handlers/shared/filesystem/owner.ts"
+import type { Comparison, AttributeChange } from "#session/handlers/shared/shared.ts"
+import { checkCanSetOwner } from "#session/handlers/shared/shared.ts"
 import type { StepContext } from "#session/step.ts"
+
+export type { ContentComparison, SizeComparison } from "#session/handlers/file/comparison/content.ts"
 
 /** How a file on the host differs from what the script wants: its content, and each managed attribute that differs. */
 export interface FileComparisonValues {

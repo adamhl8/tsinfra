@@ -13,7 +13,7 @@ const PROMPT_HEADER =
 const PASSWORD_PROMPT = "Password: "
 
 // Run the CLI from source, because this user can't write the `dist/` that packing would build.
-const CLI = path.resolve(import.meta.dir, "../../../cli/cli.ts")
+const CLI = path.resolve(import.meta.dir, "../../../../cli/cli.ts")
 const HOSTS_DIR = path.join(import.meta.dir, "fixtures", "sudo-prompt-hosts")
 
 // Give three wrong passwords time to fail, because sudo waits after each one.

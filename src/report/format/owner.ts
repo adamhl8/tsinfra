@@ -1,6 +1,6 @@
-import type { AlignedRow } from "#report/format.ts"
-import { styleGot, styleWant } from "#report/format/styles.ts"
-import type { OwnerChange } from "#session/handlers/shared/filesystem/attributes.ts"
+import type { AlignedRow } from "#report/format/format.ts"
+import type { OwnerChange } from "#session/session.ts"
+import { styleGot, styleWant } from "#styles.ts"
 
 /** Returns a row for an owner that changes, like `user alice -> bob`. */
 export const toOwnerRow = (ownerChange: OwnerChange): AlignedRow => {

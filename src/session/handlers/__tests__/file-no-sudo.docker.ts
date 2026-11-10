@@ -6,7 +6,7 @@ import { makeTempDir } from "@adamhl8/configs/test"
 
 import { createSession, fileOrMessage, prepareAndRunHost, toLoadedHost } from "#__tests__/session.ts"
 import { host } from "#hosts/host.ts"
-import { formatHostBlock } from "#report/format.ts"
+import { formatHostBlock } from "#report/format/format.ts"
 
 describe("a user with no sudo rule", () => {
   it("should fail straight away when a step needs sudo", async () => {

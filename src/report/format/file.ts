@@ -1,14 +1,17 @@
 import prettyBytes from "pretty-bytes"
 
-import type { AlignedRow } from "#report/format.ts"
+import type { AlignedRow } from "#report/format/format.ts"
 import { toOwnerRow } from "#report/format/owner.ts"
-import { styleDescription, styleGot, styleWant } from "#report/format/styles.ts"
-import type { FileComparisonValues } from "#session/handlers/file/comparison.ts"
-import type { ContentComparison, SizeComparison } from "#session/handlers/file/comparison/content.ts"
-import type { AttributeChange } from "#session/handlers/shared/filesystem/attributes.ts"
-import type { Bytes } from "#session/handlers/shared/filesystem/bytes.ts"
-import type { ModeBits } from "#session/handlers/shared/filesystem/mode.ts"
-import { toOctalMode, toSymbolicMode } from "#session/handlers/shared/filesystem/mode.ts"
+import type {
+  FileComparisonValues,
+  ContentComparison,
+  SizeComparison,
+  AttributeChange,
+  Bytes,
+  ModeBits,
+} from "#session/session.ts"
+import { toOctalMode, toSymbolicMode } from "#session/session.ts"
+import { styleDescription, styleGot, styleWant } from "#styles.ts"
 
 // Spell out a size in bytes, because a lone `B` reads like "billion".
 const BYTE_UNIT = / B$/v

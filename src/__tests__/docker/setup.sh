@@ -31,20 +31,29 @@ chmod 440 /etc/sudoers.d/sudopw
 
 # Give `tester` an sshd of its own, which `ssh.docker.ts` starts and stops, and a key and an ssh config that reach it.
 # Replace the `!` that marks a new account locked, because sshd refuses a locked account even with a key.
-# List the sshd's host key in `known_hosts`, because nothing passes `accept-new` yet.
+# Leave the sshd's key out of `known_hosts`, so the first connection takes it with `accept-new`.
 # Set `RequestTTY force`, so a test can check that tsinfra's `-T` wins over it.
+# Give each host-key alias its own `HostKeyAlias`, so its `known_hosts` entry is its own.
+# Save a different key for `tsinfra-changed`, so its real key reads as changed.
 sed -i 's/^tester:![^:]*:/tester:*:/' /etc/shadow
 sshd_dir=/home/tester/sshd
 mkdir -p "$sshd_dir" /home/tester/.ssh
 ssh-keygen -q -t ed25519 -N '' -f "$sshd_dir/host_ed25519"
+ssh-keygen -q -t ed25519 -N '' -f "$sshd_dir/other_host_ed25519"
 ssh-keygen -q -t ed25519 -N '' -f /home/tester/.ssh/id_ed25519
 cp /home/tester/.ssh/id_ed25519.pub /home/tester/.ssh/authorized_keys
-printf '[127.0.0.1]:2222 %s\n' "$(cat "$sshd_dir/host_ed25519.pub")" >/home/tester/.ssh/known_hosts
+printf 'tsinfra-changed %s\n' "$(cat "$sshd_dir/other_host_ed25519.pub")" >/home/tester/.ssh/known_hosts
 printf '%s\n' 'ListenAddress 127.0.0.1:2222' "HostKey $sshd_dir/host_ed25519" "PidFile $sshd_dir/sshd.pid" \
   'AuthorizedKeysFile .ssh/authorized_keys' 'PasswordAuthentication no' 'KbdInteractiveAuthentication no' \
   >"$sshd_dir/sshd_config"
-printf '%s\n' 'Host tsinfra-sshd' '  HostName 127.0.0.1' '  Port 2222' '  RequestTTY force' \
-  'Host tsinfra-no-sshd' '  HostName 127.0.0.1' '  Port 2223' >/home/tester/.ssh/config
+printf '%s\n' \
+  'Host tsinfra-sshd' '  RequestTTY force' \
+  'Host tsinfra-new' '  HostKeyAlias tsinfra-new' \
+  'Host tsinfra-strict' '  HostKeyAlias tsinfra-strict' '  StrictHostKeyChecking yes' \
+  'Host tsinfra-changed' '  HostKeyAlias tsinfra-changed' \
+  'Host tsinfra-no-sshd' '  HostName 127.0.0.1' '  Port 2223' \
+  'Host tsinfra-*' '  HostName 127.0.0.1' '  Port 2222' \
+  >/home/tester/.ssh/config
 chown -R tester /home/tester/.ssh "$sshd_dir"
 chmod 700 /home/tester/.ssh
 
@@ -70,8 +79,8 @@ run_tests() {
 
 run_tests "the test suite as a non-root user" tester
 run_tests "the test suite as root" root
-run_tests "real sudo and real root" tester ./src/session/handlers/__tests__/file-sudo.docker.ts ./src/session/handlers/__tests__/link-sudo.docker.ts ./src/session/host-details/__tests__/sudo-passwordless.docker.ts
-run_tests "a user whose sudo needs a password" sudopw ./src/session/host-details/__tests__/sudo-password.docker.ts ./src/session/host-details/__tests__/sudo-prompt.docker.ts
+run_tests "real sudo and real root" tester ./src/session/handlers/__tests__/file-sudo.docker.ts ./src/session/handlers/__tests__/link-sudo.docker.ts ./src/hosts/prepare/host-details/__tests__/sudo-passwordless.docker.ts
+run_tests "a user whose sudo needs a password" sudopw ./src/hosts/prepare/host-details/__tests__/sudo-password.docker.ts ./src/hosts/prepare/host-details/__tests__/sudo-prompt.docker.ts
 run_tests "a user with no sudo rule" nopass ./src/session/handlers/__tests__/file-no-sudo.docker.ts
 run_tests "ssh to a real sshd" tester ./src/transport/__tests__/ssh.docker.ts
 

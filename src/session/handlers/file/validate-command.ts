@@ -1,9 +1,8 @@
 import type { Result } from "ts-explicit-errors"
 import { attempt, err, isErr } from "ts-explicit-errors"
 
-import type { ValidateFunction } from "#session/handlers/file.ts"
-import { TEMP_PATH_ARG } from "#session/handlers/shared/filesystem/write-script.ts"
-import { validateInput } from "#session/handlers/shared/validate-input.ts"
+import type { ValidateFunction } from "#session/handlers/file/file.ts"
+import { TEMP_PATH_ARG, validateInput } from "#session/handlers/shared/shared.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
 
 /**

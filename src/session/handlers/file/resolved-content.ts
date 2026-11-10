@@ -3,9 +3,9 @@ import prettyBytes from "pretty-bytes"
 import type { Result } from "ts-explicit-errors"
 import { attempt, err, isErr } from "ts-explicit-errors"
 
-import type { FileContent } from "#session/handlers/file.ts"
-import type { Bytes } from "#session/handlers/shared/filesystem/bytes.ts"
-import { toBytes } from "#session/handlers/shared/filesystem/bytes.ts"
+import type { FileContent } from "#session/handlers/file/file.ts"
+import type { Bytes } from "#session/handlers/shared/shared.ts"
+import { toBytes } from "#session/handlers/shared/shared.ts"
 
 /** What the script's content is, worked out once before reading the host's state. */
 export interface ResolvedFileContent {

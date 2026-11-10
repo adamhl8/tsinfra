@@ -2,9 +2,19 @@ import type { Result } from "ts-explicit-errors"
 
 import { runLocal } from "#transport/local.ts"
 import { closeSshConnection, createSshTransport } from "#transport/ssh.ts"
-import { wrapCommand } from "#transport/wrap-command.ts"
+import { wrapCommand } from "#transport/utils.ts"
 
-const LOCAL_TARGET = "@local"
+export type { RecordingTransport, Shell } from "#transport/shell.ts"
+export { createShell } from "#transport/shell.ts"
+export {
+  createAskpassSudoTransport,
+  createPasswordlessSudoTransport,
+  createRootTransport,
+  WRITE_ASKPASS_HELPER_SCRIPT,
+} from "#transport/sudo.ts"
+
+/** The target that runs a host on the control machine itself, without ssh. */
+export const LOCAL_TARGET = "@local"
 
 /**
  * What a command produced on the host, exactly as it printed it. Only failing to run at all is an error, so a non-zero
@@ -18,18 +28,18 @@ export interface CommandOutput {
 
 export type Transport = (cmd: string) => Promise<Result<CommandOutput>>
 
-/** Returns how to reach `target`: `@local` is the control machine, and any other target goes through ssh. */
-const getTargetTransport = (target: string): Transport =>
-  target === LOCAL_TARGET ? runLocal : createSshTransport(target)
+/** Wraps each command, because every target runs it in an `sh -s` that reads it from stdin. */
+const wrapTransport =
+  (transport: Transport): Transport =>
+  async (cmd) =>
+    transport(wrapCommand(cmd))
 
-/**
- * Returns how to run commands on `target`. Wrap each command here, because every target runs it in an `sh -s` that
- * reads it from stdin.
- */
-export const getTransport = (target: string): Transport => {
-  const targetTransport = getTargetTransport(target)
-  return async (cmd) => targetTransport(wrapCommand(cmd))
-}
+/** Returns how to run commands on the control machine, for an `@local` host and for tsinfra's own commands. */
+export const getLocalTransport = (): Transport => wrapTransport(runLocal)
+
+/** Returns how to run commands on `target` over ssh, with `sshOptions` added to every call. */
+export const getSshTransport = (target: string, sshOptions: string[]): Transport =>
+  wrapTransport(createSshTransport(target, sshOptions))
 
 /** Closes the connection to each of `targets` that has one, once per target, at the end of a run. */
 export const closeConnections = async (targets: string[]) => {

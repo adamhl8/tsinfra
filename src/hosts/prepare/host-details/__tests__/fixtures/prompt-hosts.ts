@@ -4,7 +4,7 @@ import { messageChain } from "ts-explicit-errors"
 
 import { toLoadedHost } from "#__tests__/session.ts"
 import { host } from "#hosts/host.ts"
-import { prepareHosts } from "#hosts/run.ts"
+import { prepareHosts } from "#hosts/prepare/prepare.ts"
 
 const doNothing = async () => {
   /* empty */

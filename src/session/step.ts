@@ -1,13 +1,16 @@
 import { type } from "arktype"
 
-import type { Mode } from "#cli/program.ts"
-import type { EnsureComparisonValues } from "#session/handlers/ensure/comparison.ts"
-import type { FileComparisonValues } from "#session/handlers/file/comparison.ts"
-import type { LinkComparisonValues } from "#session/handlers/link/comparison.ts"
-import type { Converge } from "#session/handlers/shared/converge.ts"
-import type { SudoOptions } from "#session/handlers/shared/step-options.ts"
-import type { ChangeTools, ReadTools } from "#session/handlers/tools.ts"
-import type { Shell } from "#session/shell.ts"
+import type { Mode } from "#mode.ts"
+import type {
+  EnsureComparisonValues,
+  FileComparisonValues,
+  LinkComparisonValues,
+  Converge,
+  SudoOptions,
+  ChangeTools,
+  ReadTools,
+} from "#session/handlers/handlers.ts"
+import type { Shell } from "#transport/transport.ts"
 
 // Refuse an empty name, path, or command.
 // An empty command is a `sh` syntax error, and an empty name leaves a blank in the output.

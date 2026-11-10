@@ -2,10 +2,14 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
-import { changeStepResultSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
-import { changeSchema, runChange } from "#session/handlers/shared/change.ts"
-import { validateInput } from "#session/handlers/shared/validate-input.ts"
+import type { ChangeStepResult } from "#session/handlers/shared/shared.ts"
+import {
+  changeStepResultSchema,
+  withChangeStepResult,
+  changeSchema,
+  runChange,
+  validateInput,
+} from "#session/handlers/shared/shared.ts"
 import type { HandlerReturn, StepContext } from "#session/step.ts"
 
 /** What makes a run run: the steps it follows, or `"always"`. */
