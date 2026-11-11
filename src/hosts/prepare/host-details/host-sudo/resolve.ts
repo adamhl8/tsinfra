@@ -38,7 +38,7 @@ export const resolveHostSudo = async (shell: Shell, sudo: HostSudo): Promise<Res
   }
 
   if (sudo) {
-    const sudoCheck = await shell.exec(CHECK_PASSWORDLESS_SUDO_COMMAND)
+    const sudoCheck = await shell.exec(CHECK_PASSWORDLESS_SUDO_COMMAND, { label: "passwordless sudo check" })
     if (isErr(sudoCheck)) {
       // Check stderr too, because the prompt goes there, and a run with stderr redirected would wait on a prompt nobody
       // sees.

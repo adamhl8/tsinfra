@@ -6,7 +6,7 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
 ## Next
 
 1. **SSH transport.** The local transport, the `{ ... } </dev/null` wrapper, and the `sudo` preamble are done. The rest
-   comes in seven pieces, each reviewed before the next (see [Transport](./docs/transport.md#ssh-and-controlmaster)).
+   comes in six pieces, each reviewed before the next (see [Transport](./docs/transport.md#ssh-and-controlmaster)).
    Pieces 3 to 5 clean up how a host's failures are recorded and reported, before SSH goes further:
    1. **Plain SSH.** `ssh -T` with commands on stdin to `sh -s`, the ControlMaster options with `BatchMode`, ssh's own
       exit 255 as a failure to run, one retry on a connection closing as a command joins it, and `ssh -O stop` at the
@@ -49,9 +49,8 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
       - **Tests.** `createWrappedSession` gives a session a second session recorder on the same record, over a wrapped
         transport. Callers that prepare outside `prepareHosts` pass a plain, unrecorded shell, or a recorder of their
         own.
-   5. **Preparation commands on the host record.** Preparation already records through the preparation recorder's shells, so
-      this gives each command a label: `ssh -G`, the home and user reads, the sudo checks, and the askpass helper
-      write. The transport's own mechanics stay off the record, because they belong in the diagnostic log: the
+   5. **Preparation commands on the host record (built).** Each command preparation runs has a label: `ssh config`,
+      `home directory`, `user name`, `passwordless sudo check`, `askpass helper write`, and `sudo password check`. The transport's own mechanics stay off the record, because they belong in the diagnostic log: the
       `{ ... } </dev/null` wrapper, the `sudo` function line, the `ssh` process around each command, the retry when a
       connection closes, and the end of the run's `ssh -O stop` (decided 2026-11-10, in place of recording it on each
       host that used that target).
@@ -60,15 +59,37 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
         each that failed to run, which is where ssh's stderr lives. Both recorders call it: the preparation recorder
         with `preparationCommands`, and the session recorder with the failed step's commands. So the host-key hints and
         the sudo hint apply in either stage.
-   6. **The `shell` host option.** `{ shell: "bash -l" }` starts `bash -l -s` in place of `sh -s`, on both transports.
-   7. **The cross-shell tests.** The file write rule on dash, bash, and busybox sh over SSH, and on macOS `/bin/sh`,
-      which runs only on darwin, so it is local only. The sudo password flows already work over any transport, so they
-      need only a test over SSH.
-2. **Verbosity levels.** `-vv` lists each step's commands, with labels for tsinfra's own, and `-vvv` adds their output
-   (see [CLI](./docs/cli.md#output)). A failure's note already tells people to run with `-vvv`, so `-vvv` has to show the
-   stderr that note promises. A command that `sudo: true` ran as root gets a `sudo` boolean on `CommandRecord`, set in
-   `createStepShell`, because the record holds the script without the `sudo sh -s` around it. The report shows it as a
-   tag, not as the wrapped command.
+   6. **The cross-shell tests (built).** `file-ssh.docker.ts` writes 10 MB of binary over SSH, as the SSH user and with
+      `sudo: true`, on dash and busybox sh, and `file.test.ts` writes it locally, which reaches macOS `/bin/sh` on a
+      Mac. macOS `/bin/sh` is bash in POSIX mode. bash over SSH waits for the `shell` option (see Later), because
+      `/bin/sh` is dash on Debian and busybox on Alpine. `sudo-password.docker.ts` gives sudo the password from
+      `host()` over SSH, and checks a wrong one fails. The typed prompt stays local only, because it reads the control
+      machine's terminal. `setup.sh` gives `tester` and `sudopw` an sshd each through `setup_sshd`, and
+      `src/__tests__/sshd.ts` starts and stops the running user's.
+2. **Verbosity levels.** In four pieces, each reviewed before the next (the design is in [CLI](./docs/cli.md#output),
+   and piece 1's steps are in `docs/superpowers/plans/2026-11-11-verbosity-piece-1.md`):
+   1. **The levels and `-v`.** `-v` counted with Optique's `.multiple()`, which already parses `-vvv`, `-v -v`, and
+      `--verbose -vv`, capped at 3, and a `verbosity` level in place of `verbose: boolean` in `FormatOptions`. A host
+      with no steps gets its "no steps" block by default. Every piece of a block gets the level it shows from, and one
+      `keepShown` filter prunes them before any column is sized. A `sudo` boolean on `StepRecord`, because `sudo: true`
+      is a step option, and every command in the step runs as root. The session recorder's `getShell` splits in two:
+      `getStepShell({ sudo })` records `sudo` on the running step and returns its shell, and `getToolShell()` gives
+      the tools theirs, which never use sudo. `-v` shows it as `sudo` in the step note, before any `needs`.
+   2. **`secret` on commands.** The `secret` option [Steps](./docs/steps.md#commands) gives `read`, `exec`, `inspect`,
+      `ensure`, and `run` isn't built, and `-vv` prints the text of every command that ran, so it comes first. The
+      design is still to be settled.
+   3. **`-vv`.** Each step's commands under its details, tsinfra's own by their label, and the `file` write script's
+      label followed by its `validate` command. The write script records its `validate` command in a field next to
+      `label`, passed through `exec`'s options, because a labelled command never shows its text. Add that to
+      [What a host records](./docs/cli.md#what-a-host-records) with it. A preparation failure lists preparation's
+      commands by their labels.
+   4. **`-vvv`.** `exit:`, `stdout:`, and `stderr:` rows under each command, each stream cut off after 20 lines, and
+      the phase before each command in a step that compares. A read or inspect shows its rows right under its line.
+      A failure's note already tells people to run with `-vvv`, so `-vvv` has to show the stderr that note promises,
+      and the note itself goes away at `-vvv`, through an `until` level on it.
+
+   The preview gets a pass for each level. The `verbose` worktree from 2026-11-09 holds an earlier start on piece 1,
+   built before the recorder package, so piece 1 starts again on `main`.
 
 ## Port
 
@@ -89,10 +110,16 @@ Decided, and wanted eventually, with no place in the order yet.
   reboots by hand.
 - **Running hosts in parallel.** Up to `--parallel <n>` at once, with each host's output held until it finishes, and the
   live progress area under the finished blocks (see [CLI](./docs/cli.md#live-progress)).
-- **Diagnostic logs.** LogTape on stderr, with `@optique/logtape` adding its options to the CLI (see
+- **Diagnostic logs.** LogTape on stderr, with `@optique/logtape` adding `--log-level` and `--log-output`, but not its
+  `-v` form, because `-v` sets the report's level (see
   [CLI](./docs/cli.md#diagnostic-logs)).
 - **Tasks.** `task(name, fn)`, registered with `host(target, fn, { tasks: [...] })`, and `--task <name>` on `plan` and
   `apply`, running only hosts that have it (see [CLI](./docs/cli.md#tasks)).
+- **The `shell` host option.** `{ shell: ["bash", "-l", "-s"] }` replaces the whole `sh -s` on both transports, and
+  under `sudo: true`. tsinfra runs the array as it is locally, quotes each word over SSH, and checks nothing about
+  the shell (see [Login shells](./docs/transport.md#login-shells)). Skipped from the SSH pieces on 2026-11-11, because
+  nothing needs it yet. Its tests: a local `env` word that sets a variable the script reads, and over SSH a `sh -l`
+  that sees an export from the SSH user's `.profile`.
 - **Ordering between hosts.** `needs` on `host()`, taking imported host scripts. The design is tentative, and it comes
   after `--parallel` and most of the rest of this file (see
   [Open questions](./docs/open-questions.md#ordering-between-hosts)).

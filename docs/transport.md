@@ -19,7 +19,7 @@ the remote shell.
 ```ts
 export default host("sonarr.lan", async (h) => { ... }) // SSH, any target ssh accepts
 export default host("@local", async (h) => { ... }) // the control machine itself
-export default host("caddy.lan", async (h) => { ... }, { shell: "bash -l" })
+export default host("caddy.lan", async (h) => { ... }, { shell: ["bash", "-l", "-s"] }) // not built yet
 ```
 
 `"@local"` is the same magic name pyinfra uses, and the one `~/homelab/pyinfra/inventory.py` already uses.
@@ -29,8 +29,8 @@ in as the `User` that `~/.ssh/config` gives the host, or else as the local user.
 
 ## Commands travel on stdin
 
-Every command is sent as a script on stdin to a shell on the host. The command that starts that shell is always a
-fixed string:
+Every command is sent as a script on stdin to a shell on the host. The command that starts that shell is a fixed
+string, unless the host sets `shell` (see [Login shells](#login-shells)):
 
 ```sh
 ssh <options> sonarr.lan sh -s  # SSH
@@ -39,7 +39,7 @@ sh -s                           # local
 
 A command that escalates says `sudo` inside the script, so the shell itself never starts under sudo (see [sudo](#sudo)).
 
-The remote login shell only ever parses `sh -s`, so the content of a command never needs quoting for it. Whether that
+The remote login shell only ever parses the command that starts the shell, like `sh -s`, so the content of a command never needs quoting for it. Whether that
 login shell is bash or fish, nothing changes. This is the fix for the "three shells involved" quoting problem in
 `~/homelab/archive/incus-update/utils.ts`.
 
@@ -56,8 +56,32 @@ always gets the connection error from ssh's stderr rather than being treated as 
 `sh -s` is not a login shell, so PATH additions from `.bashrc` or `.profile` do not load. The archived Bun scripts used
 `bash -li` for exactly that (Go's path lives in `.bashrc` on the caddy container).
 
-The host option `shell` replaces `sh` in the starting command, so `{ shell: "bash -l" }` runs `bash -l -s`. Generated
-commands (`file`'s details script and write) are POSIX sh, so any `shell` must be POSIX compatible. fish is not.
+The host option `shell` replaces the whole command that starts the host's shell, as an array of words, like
+`{ shell: ["bash", "-l", "-s"] }`. The default is `["sh", "-s"]`. It isn't built yet, and it's under Later in
+`todo.md` (decided 2026-11-11). The control machine's own commands, like `ssh -G`, keep `sh -s`.
+
+- **The option is the whole command, `-s` included.** tsinfra adds no flag to it, because it can't know how another
+  shell reads its script. The one requirement is that the shell reads its script from stdin.
+- **Each word reaches the shell as written.** Locally, tsinfra runs the array as the process's arguments. Over SSH, ssh
+  joins its arguments into one string, and the user's login shell parses it, so tsinfra quotes each word with
+  `quoteShellArg` first. A single string would mean two things. Split locally, `bash -c 'x'` gives bash the quotes as
+  part of its script. Over SSH, the login shell removes them.
+- **`sudo: true` runs the same shell,** as `sudo <shell> <<'<delimiter>'`, with each word quoted. Under sudo, `-l`
+  loads root's profile, not the user's, because sudo sets `HOME` to root's.
+- **tsinfra checks nothing about the shell.** Picking one that works is the user's job. The commands tsinfra writes,
+  like the `{ ... } </dev/null` wrapper, the `sudo` function, and `file`'s scripts, are POSIX sh. So the shell must be
+  POSIX compatible, and fish is not. A shell that can't run them fails preparation's first command.
+
+A login shell has two pitfalls, which the user docs should warn about:
+
+- **Anything the profile prints lands in every command's stdout.** That breaks preparation's home directory read and
+  `file`'s details, so a profile that prints can't be used.
+- **`bash -l` may not load PATH set in `.bashrc`.** A login bash reads `.profile`, which on Debian sources `.bashrc`.
+  Debian's `.bashrc` stops early in a non-interactive shell, so a PATH line at its end never runs. Move the line into
+  `.profile`. Adding `-i` loads `.bashrc`, but an interactive bash reading a pipe writes prompts and job-control
+  warnings to stderr, which lands on the record.
+
+A `path` option may fit that case better (see [Ideas](./ideas.md#maybe-later)).
 
 ## File writes
 
@@ -129,8 +153,9 @@ The record never holds the content. It stores the script with `<content as base6
 because the content may be a secret, and it can be large.
 
 An earlier draft streamed the raw bytes after the script and let `cat` read them. dash and busybox sh both read ahead on
-stdin and swallow part of the content, so that only worked under bash and zsh. A 10 MB binary through the heredoc arrives
-intact under dash, bash, busybox sh, zsh, and macOS `/bin/sh`.
+stdin and swallow part of the content, so that only worked under bash and zsh. The tests check that 10 MB of binary
+through the heredoc arrives intact under dash and busybox sh, through a pipe and over SSH, and under macOS `/bin/sh`. A
+check by hand found the same under bash and zsh.
 
 ### How other tools write files
 
@@ -397,8 +422,8 @@ new session with no terminal.
   caller's environment, which the Docker tests check on Alpine and Debian. Root and the same user can still see it while
   the command runs, the same as Ansible's become password.
 - **The record shows the command as written,** like `sudo systemctl restart caddy`.
-- **tsinfra's own commands escalate the same way,** through the same function, so the command that starts the shell is
-  always plain `sh -s`. With `sudo: true`, the step's script runs in a nested `sudo sh -s`, sent in a heredoc with a
+- **tsinfra's own commands escalate the same way,** through the same function, so the command that starts the shell
+  never runs under sudo. With `sudo: true`, the step's script runs in a nested `sudo sh -s`, sent in a heredoc with a
   random delimiter, because a path in the script can hold any line. The record holds the step's script as tsinfra wrote
   it, without the nesting.
 - **A `sudo` inside a child process,** like a script file the command runs, or `xargs sudo`, doesn't see the function.

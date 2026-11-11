@@ -26,7 +26,7 @@ const CONFIG_DEFAULTS: ConfigDefault[] = [
  * allocate a terminal when stdin isn't one.
  */
 export const readSshDefaultOptions = async (localShell: Shell, target: string): Promise<Result<string[]>> => {
-  const stdout = await localShell.exec(`ssh -G -T -- ${quoteShellArg(target)}`)
+  const stdout = await localShell.exec(`ssh -G -T -- ${quoteShellArg(target)}`, { label: "ssh config" })
   if (isErr(stdout)) return err(`failed to read the ssh config for '${target}'`, stdout)
 
   // Join the rest of each line back up, because a value can hold spaces too.

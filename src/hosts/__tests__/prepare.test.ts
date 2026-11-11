@@ -46,9 +46,9 @@ describe("prepareHosts", () => {
       "apply",
     )
 
-    expect(hostRecord.preparationCommands.map(({ cmd, output }) => ({ cmd, output }))).toMatchObject([
-      { cmd: `printf '%s' "$HOME"`, output: { exitCode: 0 } },
-      { cmd: "id -un", output: { exitCode: 0 } },
+    expect(hostRecord.preparationCommands).toMatchObject([
+      { cmd: `printf '%s' "$HOME"`, label: "home directory", output: { exitCode: 0 } },
+      { cmd: "id -un", label: "user name", output: { exitCode: 0 } },
     ])
     expect(hostRecord.stepRecords.map(({ commands }) => commands.map(({ cmd }) => cmd))).toStrictEqual([["echo hi"]])
   })
@@ -57,7 +57,7 @@ describe("prepareHosts", () => {
     const hostRecord = await prepareAndRunHost(toLoadedHost("a", host(UNREACHABLE_TARGET, doNothing)), "apply")
 
     expect(hostRecord.preparationCommands).toMatchObject([
-      { cmd: `ssh -G -T -- '${UNREACHABLE_TARGET}'`, output: { exitCode: 255 } },
+      { cmd: `ssh -G -T -- '${UNREACHABLE_TARGET}'`, label: "ssh config", output: { exitCode: 255 } },
     ])
     expect(JSON.stringify(hostRecord.preparationCommands)).toContain("hostname contains invalid characters")
   })

@@ -77,25 +77,85 @@ order. A step that starts while another is running fails the host (see [Steps](.
 Each host's output is held until that host finishes, then printed as one block, so lines from different hosts never
 mix. A summary follows.
 
-By default a block lists only the steps that changed, would change, are waiting, or failed. `--verbose` (`-v`) adds the
-rest: steps that were already right as `=` lines, and each read or inspect as a `·` line named by its command. With
-`--verbose`, a host whose script made no steps still gets a block, with "no steps" under its name, so it's clear the
-host ran.
+By default a block lists only the steps that changed, would change, are waiting, or failed. A host whose script made
+no steps still gets a block, with "no steps" under its name, so it's clear the host ran.
 
-Two more levels show the commands behind each step, following the `-v`, `-vv`, `-vvv` convention of pyinfra, Ansible,
-and ssh. Every command is already recorded with its output (see [What a host records](#what-a-host-records)), so these
-only change what's printed:
+Three levels of `-v` show more, following the `-v`, `-vv`, `-vvv` convention of pyinfra, Ansible, and ssh. Each level
+shows everything the one before it does. `-vvv`, `-v -v`, and `--verbose -vv` all count, and more than three count as
+three. Every command is already recorded with its output (see [What a host records](#what-a-host-records)), so the
+levels only change what's printed:
 
-- **`-vv`** also lists each command a step ran, dimmed, under the step, like `$ systemctl is-active sonarr`. Commands
-  tsinfra writes itself, like `file`'s multi-line details script, show as a short label, like
-  `$ (file details script)`. The exact labels get settled when this is built. A command that `sudo: true` ran as root
-  gets a tag, and never shows the `sudo sh -s` around it. The tag's look gets settled at the same time.
-- **`-vvv`** also shows each command's exit code, stdout, and stderr, indented under it and cut off after some number
-  of lines, and tsinfra's own commands in full.
+- **`-v`** (`--verbose`) adds the rest of the steps: steps that were already right as `=` lines, and each read or
+  inspect as a `·` line named by its command. It also shows every diff in full, and a failed fix's values from before
+  the fix. A step given `sudo: true` gets `sudo` in its step note, because the option ran every command in the step as
+  root. A `sudo` the script writes inside a command needs no note, because it shows in the command at `-vv`.
+- **`-vv`** also lists each command a step ran, dimmed, under the step's details, like `$ systemctl is-active sonarr`,
+  in the order they ran. A read or inspect lists none, because its name is its command. A command tsinfra writes itself
+  shows as its label, like `$ (file details script)`, because its text is tsinfra's code, not the script's. The `file`
+  write script's label is followed by the script's `validate` command, like
+  `$ (file write script) validate: nginx -t -c "$tmp"`, because that command is the script's own. `plan` never runs the
+  write script, so the `validate` command only shows in `apply`. A step's commands never show the `sudo sh -s` that
+  `sudo: true` wraps them in. A preparation failure lists the commands preparation ran, by their labels, like
+  `$ (home directory)`, so it shows how far preparation got. A host that was prepared lists none, because the same
+  commands would repeat in every block.
+- **`-vvv`** also shows what each command printed, as `exit:`, `stdout:`, and `stderr:` rows under it, lined up like a
+  step's other details. A read or inspect, which lists no command, shows its rows right under its line. Every command
+  shows its exit code, even 0, and a command that couldn't run at all shows its error in place of the three rows.
+  stdout and stderr are each cut off after 20 lines, with a note saying how many lines were left out. In a step that
+  compares the host's state, each command starts with its phase, `before`, `fix`, or `after`, because the same check
+  runs before and after the fix, and its output can differ. tsinfra's own commands keep their label, so their text
+  never shows. It's in the source, and in the [diagnostic logs](#diagnostic-logs).
 - **Secrets never show.** A `secret` command keeps its text and output out of the record, and `shell.inspect` records
   every command, so it's the one place to enforce that. The sudo preamble is added below the recorder, so it's never
   recorded at all.
 - **A failure doesn't need them.** A failed step's error already names the command that failed and its stderr.
+
+The same host at each level, in `apply`, with a `sudo: true` file that changes, and the run it triggers:
+
+```
+sonarr                                                    # default
+  ~ change:    (file) /etc/systemd/system/sonarr.service
+      <diff>
+  > triggered: (run)  Reload systemd
+
+sonarr                                                    # -v
+  · observed:  (read)   uname -m
+  = unchanged: (ensure) Install sonarr
+  ~ change:    (file)   /etc/systemd/system/sonarr.service   sudo
+      <diff>
+  > triggered: (run)    Reload systemd
+
+sonarr                                                    # -vv
+  · observed:  (read)   uname -m
+  = unchanged: (ensure) Install sonarr
+      $ command -v sonarr
+  ~ change:    (file)   /etc/systemd/system/sonarr.service   sudo
+      <diff>
+      $ (file details script)
+      $ (file content)
+      $ (file write script)
+      $ (file details script)
+  > triggered: (run)    Reload systemd
+      $ sudo systemctl daemon-reload
+
+sonarr                                                    # -vvv
+  · observed:  (read)   uname -m
+      exit:   0
+      stdout: x86_64
+  = unchanged: (ensure) Install sonarr
+      before $ command -v sonarr
+               exit:   0
+               stdout: /usr/bin/sonarr
+  ~ change:    (file)   /etc/systemd/system/sonarr.service   sudo
+      <diff>
+      before $ (file details script)
+               exit:   0
+               stdout: <the file's details>
+      ...
+  > triggered: (run)    Reload systemd
+      $ sudo systemctl daemon-reload
+        exit: 0
+```
 
 ```
 sonarr
@@ -164,7 +224,8 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   `stderr: <command> -> <stderr>` row. It's clear what that stderr relates to, because that command is all the phase ran.
   A phase that ran several commands, any of which wrote to stderr, can't say which one matters, so it gets a note
   instead: "some commands during the fix wrote to stderr, run with -vvv to see them", or "after the fix" for the `after`
-  phase. Commands tsinfra wrote itself never count. The `before` phase never shows here, because it ran before the fix,
+  phase. `-vvv` leaves the note out, because each command's stderr already shows under it. Commands tsinfra wrote
+  itself never count. The `before` phase never shows here, because it ran before the fix,
   so it can't explain the state after it. A failed fix, or a compare after the fix that failed, shows only its error,
   which already holds its stderr. `--verbose` adds the values from before the fix under a "values before the fix" note,
   which is there because they may no longer be true.
@@ -175,14 +236,24 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   multi-line value's later lines line up under its first line's text. The labels, like `got:`, are dim, so the values
   stand out.
 - **Colors** follow the status: a summary's change count matches `~` and `>`, and its waiting count matches `?`. The
-  plan reminder is dim, so the host lines stay the main thing in the summary. In a block, the notes of waiting steps
-  line up in one column.
+  plan reminder is dim, so the host lines stay the main thing in the summary. In a block, the step notes line up in one
+  column. A waiting step's note is `needs 'A', 'B'`, and with `-v` a `sudo: true` step's note starts with `sudo`, like
+  `sudo, needs 'Install sonarr'`. A failed `sudo: true` step keeps its note on its line, above its error. A failure no
+  step owns never gets one.
 - **Warnings.** A step that worked but needs a look, like a link to a missing path, gets a `warning:` line under its
   details, with the label in bright yellow, so it stands apart from the plain yellow of a change. A warning makes its
   step show even when it was already right, without `--verbose`. The report decides what's a warning from the facts
   in the record, so no step records words. A failed step gets none, because its error is what needs fixing first. A
   warning isn't drift, so it doesn't change the exit code.
-- **A host with nothing to show** gets no block, only its line in the summary.
+- **Levels.** Every piece of a block has the lowest level it shows at: a step's own line, each part of its step note,
+  and each detail under it. A piece's level comes from what it is, like 1 for the line of a step that was already
+  right, 1 for a `sudo` note, and 0 for a warning. A piece shows once its own level is reached, or when anything inside
+  it shows, and a step that shows always prints its own line. So a warning, at 0, shows its step at the default level,
+  even when the step was already right. The report builds every piece for every step, then keeps the ones the level
+  shows, before it lines up the columns, so a hidden piece never widens one. A diff is the exception. It's one piece
+  at every level, and the level only sets its limits, because computing a full diff only to drop it would be slow.
+- **A host with nothing to show** gets no block, only its line in the summary. A host whose script made no steps
+  isn't one, because its "no steps" block shows that it ran.
 - **The summary** has one line per host: `unchanged`, `failed`, or a count of changes, where a count includes both
   `changed` and `ran` steps, so it matches the `~` lines in the blocks. A count of warnings follows, like
   `unchanged, 1 warning`, so one isn't lost once the blocks have scrolled away. In `plan`, when any step's state differed, it
@@ -247,7 +318,8 @@ in the order the script called them, and the host's failure, if it failed.
   failed: in preparation, in a step, or in the host function outside any step. A host whose preparation failed has no
   steps.
 - **A step** records its kind (`read`, `inspect`, `ensure`, `run`, `file`, or `link`), its name, and its status. A read
-  or inspect has no name, so it records its command.
+  or inspect has no name, so it records its command. A step given `sudo: true` records that, because its commands are
+  recorded without the `sudo sh -s` around them.
 - **A step's commands** are every command that ran while it was running, including those from reading its state and from its fix
   functions. A read or inspect has exactly one.
 - **A command** records the command, its stdout and stderr, and its exit code. A command that could not run at all
@@ -299,8 +371,9 @@ report.
 - **LogTape** has no dependencies and supports Bun. It stays silent until the application configures it, which matters
   because host scripts import tsinfra as a library. It ships a JSON Lines formatter, and `@logtape/pretty` for readable
   terminal output.
-- **`@optique/logtape`** adds the logging options to the existing Optique parser, like `-v`/`-vv` or `--log-level`, and
-  `--log-output`.
+- **`@optique/logtape`** adds the logging options to the existing Optique parser: `--log-level` and `--log-output`. It
+  can also add a `-v`/`-vv` form, which tsinfra leaves out, because `-v` already sets how much the report shows (see
+  [Output](#output)).
 
 Nothing logs yet. LogTape is its own feature, added on its own.
 

@@ -24,6 +24,7 @@ const buildCheckSudoPasswordScript = (passwordArg: string): string =>
  */
 export const checkSudoPassword = async (shell: Shell, password: string): Promise<Result<boolean>> => {
   const output = await shell.inspect(buildCheckSudoPasswordScript(quoteShellArg(password)), {
+    label: "sudo password check",
     recordedCmd: buildCheckSudoPasswordScript(RECORDED_PASSWORD),
   })
   if (isErr(output)) return err(SUDO_PASSWORD_CHECK_FAILED_MESSAGE, output)

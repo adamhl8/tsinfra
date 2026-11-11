@@ -1,16 +1,14 @@
 import { beforeAll, describe, expect, it } from "bun:test"
-import crypto from "node:crypto"
 import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
-import { $, CryptoHasher } from "bun"
+import { $ } from "bun"
 
+import { CONTENT_LIMIT_BYTES, createRandomBytes, hashBytes } from "#__tests__/content.ts"
 import { createSession, fileOrMessage } from "#__tests__/session.ts"
 import type { Host } from "#session/session.ts"
 
 const ROOT_OWNED_DIR = "/etc/tsinfra-docker"
-const CONTENT_LIMIT_BYTES = 10_000_000
-const RANDOM_CHUNK_BYTES = 65_536
 
 const getModeAndOwner = async (filePath: string) => (await $`sudo stat -c '%a %U %G' ${filePath}`.text()).trim()
 const readAsRoot = async (filePath: string) => $`sudo cat ${filePath}`.text()
@@ -27,14 +25,6 @@ const writeAsRoot = async (filePath: string, content: string, mode: string) =>
 const applyFile = async (...fileArgs: Parameters<Host["file"]>) => {
   const { host: h } = await createSession("apply")
   return fileOrMessage(h, ...fileArgs)
-}
-
-const createRandomBytes = (size: number) => {
-  const bytes = new Uint8Array(size)
-  for (let index = 0; index < size; index += RANDOM_CHUNK_BYTES)
-    crypto.getRandomValues(bytes.subarray(index, index + RANDOM_CHUNK_BYTES))
-
-  return bytes
 }
 
 beforeAll(async () => {
@@ -116,7 +106,7 @@ describe("h.file with real sudo", () => {
     expect(await applyFile(filePath, bytes, { sudo: true })).toMatchObject({ changed: true })
 
     const [hostHash] = (await $`sudo sha256sum ${filePath}`.text()).split(" ")
-    expect(hostHash).toBe(new CryptoHasher("sha256").update(bytes).digest("hex"))
+    expect(hostHash).toBe(hashBytes(bytes))
   })
 
   it("should write to a path with a quote and a newline", async () => {

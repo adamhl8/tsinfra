@@ -95,6 +95,17 @@ Opt-in features with no real case yet:
   prompts for it, opens the connection, and goes straight on to sudo, prompting for that too if needed. Each host's
   prompts come together, one host at a time. A key's passphrase would come through the same helper, and ssh's prompt
   text tells the two apart.
+- **A `path` host option,** a list of directories prepended to `PATH` in every command, like pyinfra's `_env` and
+  Ansible's `environment`, but only for PATH. It covers the case the `shell` option was for, a tool installed outside
+  the default PATH, like Go's. It has none of a login shell's pitfalls (see [Login shells](./transport.md#login-shells)).
+  - **How it works:** a transport wrapper, like the one that adds the `sudo` function, starts each script with
+    `PATH=<entries>:"$PATH"` and `export PATH`. It sits below the recorder, so the record shows the script as written.
+  - **Under sudo:** sudo resets PATH to its `secure_path`, so a `sudo: true` step gets the same line inside its nested
+    shell. A `sudo` command inside a script still gets sudo's own PATH.
+  - **Entries:** an entry must be absolute or start with `~/`. A `~/` entry resolves against the home directory that
+    preparation reads, like `file`'s paths. An entry can't hold `:`, because PATH splits on it.
+  - **Why not `env`:** a general `env` option can't prepend to a variable without expanding `$PATH`, so `path` comes
+    first.
 - **A manual step,** for work no command can do: pressing a pairing button, a login URL from `tailscale up`, an App
   Store sign-in for `mas`, or a macOS permission like Full Disk Access. It's shaped like `ensure` with instructions in
   place of a fix, like `h.manual(name, { check, want, instructions })`. `plan` shows the instructions under `~ change`.

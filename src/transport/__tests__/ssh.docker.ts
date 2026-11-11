@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test"
 import { readdir } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import process from "node:process"
 
 import bun, { $ } from "bun"
-import { attempt, isErr, messageChain } from "ts-explicit-errors"
+import { isErr, messageChain } from "ts-explicit-errors"
 
-import { prepareAndRunHost, prepareSession, readOrMessage, toLoadedHost } from "#__tests__/session.ts"
+import { createSessionOn, prepareAndRunHost, readOrMessage, toLoadedHost } from "#__tests__/session.ts"
+import { SSHD_TARGET, startSshd, stopSshd } from "#__tests__/sshd.ts"
 import { host } from "#hosts/host.ts"
 import { prepareBaseTransport } from "#hosts/prepare/host-details/host-details.ts"
 import { closeConnections, createShell, getLocalTransport } from "#transport/transport.ts"
@@ -15,15 +15,12 @@ import { closeConnections, createShell, getLocalTransport } from "#transport/tra
 // `setup.sh` points each of these at the sshd this file starts, except `tsinfra-no-sshd`, at a port nothing listens on.
 // Each host-key target has a `known_hosts` entry of its own: none for the new and the strict host, and a wrong key for
 // the changed one.
-const TARGET = "tsinfra-sshd"
 const NEW_HOST_TARGET = "tsinfra-new"
 const STRICT_TARGET = "tsinfra-strict"
 const CHANGED_KEY_TARGET = "tsinfra-changed"
 const NO_SSHD_TARGET = "tsinfra-no-sshd"
-const ALL_TARGETS = [TARGET, NEW_HOST_TARGET, STRICT_TARGET, CHANGED_KEY_TARGET, NO_SSHD_TARGET]
+const ALL_TARGETS = [SSHD_TARGET, NEW_HOST_TARGET, STRICT_TARGET, CHANGED_KEY_TARGET, NO_SSHD_TARGET]
 
-const SSHD_DIR = path.join(os.homedir(), "sshd")
-const SSHD_PID_PATH = path.join(SSHD_DIR, "sshd.pid")
 const SSH_DIR = path.join(os.homedir(), ".ssh")
 const KNOWN_HOSTS_PATH = path.join(SSH_DIR, "known_hosts")
 
@@ -39,22 +36,7 @@ const prepareOrThrow = async (target: string) => {
   return targetTransport
 }
 
-const transport = await prepareOrThrow(TARGET)
-
-// Start sshd without `-D`, so it forks once it's listening, and the command returns when a connection can succeed.
-const startSshd = async () => {
-  await $`/usr/sbin/sshd -f ${path.join(SSHD_DIR, "sshd_config")}`
-}
-
-// Stop only the listening sshd, because the sshd serving a connection stays until that connection closes.
-const stopSshd = async () => {
-  const pidFile = bun.file(SSHD_PID_PATH)
-  if (!(await pidFile.exists())) return
-
-  // Ignore a failure, because the test may have stopped this sshd already.
-  const pid = Number((await pidFile.text()).trim())
-  attempt(() => process.kill(pid))
-}
+const transport = await prepareOrThrow(SSHD_TARGET)
 
 /** Returns an error's message chain, or anything else as it is, so a test can compare either. */
 const toMessage = (value: unknown) => (value instanceof Error ? messageChain(value) : value)
@@ -66,7 +48,7 @@ const findKnownHost = async (name: string) => (await $`ssh-keygen -F ${name}`.no
 const runHostOn = async (target: string) => prepareAndRunHost(toLoadedHost("a", host(target, doNothing)), "apply")
 
 /** Prepares a host 'a' on the sshd the way a run does, and creates its session. */
-const createSshSession = async () => prepareSession(toLoadedHost("a", host(TARGET, doNothing)), "apply")
+const createSshSession = async () => createSessionOn(SSHD_TARGET, "apply")
 
 beforeEach(async () => {
   await startSshd()
@@ -152,7 +134,7 @@ describe("the ssh transport against a real sshd", () => {
 
   it("should fail the host when the connection goes away mid-run, and keep the command and its error", async () => {
     const hostSession = await createSshSession()
-    await closeConnections([TARGET])
+    await closeConnections([SSHD_TARGET])
     await stopSshd()
 
     const sshError =
@@ -166,9 +148,9 @@ describe("the ssh transport against a real sshd", () => {
 
   it("should leave no connection or socket behind once the run's connections close", async () => {
     await transport("true")
-    await closeConnections([TARGET])
+    await closeConnections([SSHD_TARGET])
 
-    const check = await $`ssh -o ControlPath=~/.ssh/tsinfra-%C -O check ${TARGET}`.nothrow().quiet()
+    const check = await $`ssh -o ControlPath=~/.ssh/tsinfra-%C -O check ${SSHD_TARGET}`.nothrow().quiet()
     expect(check.exitCode).toBe(255)
     expect((await readdir(SSH_DIR)).filter((name) => name.startsWith("tsinfra-"))).toStrictEqual([])
   })

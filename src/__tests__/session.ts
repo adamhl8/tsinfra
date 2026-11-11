@@ -25,6 +25,7 @@ import {
   createSessionRecorder,
 } from "#session/session.ts"
 import type { Transport } from "#transport/transport.ts"
+import { LOCAL_TARGET } from "#transport/transport.ts"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
@@ -69,9 +70,13 @@ const prepareSessionContext = async (loadedHost: LoadedHost): Promise<Result<Ses
   return hostEntry.sessionContext ?? getPreparationFailure(hostEntry.hostRecord)
 }
 
+/** Prepares a host 'a' on `target`, and returns its context, or why it couldn't be prepared. */
+export const buildSessionContextOn = async (target: string, hostOptions?: HostOptions) =>
+  prepareSessionContext(toLoadedHost("a", host(target, doNothing, hostOptions)))
+
 /** Prepares a host 'a' on `@local`. */
 export const buildLocalSessionContext = async (hostOptions?: HostOptions) =>
-  prepareSessionContext(toLoadedHost("a", host("@local", doNothing, hostOptions)))
+  buildSessionContextOn(LOCAL_TARGET, hostOptions)
 
 /** A test's view of a prepared host: the `Host` its function would get, and the record its session fills in. */
 interface TestSession {
@@ -87,14 +92,18 @@ const preparePreparedHostEntry = async (loadedHost: LoadedHost) => {
 }
 
 /** Prepares `loadedHost` the way a run does, and creates its session. */
-export const prepareSession = async (loadedHost: LoadedHost, mode: Mode): Promise<TestSession> => {
+const prepareSession = async (loadedHost: LoadedHost, mode: Mode): Promise<TestSession> => {
   const { sessionContext, hostRecord } = await preparePreparedHostEntry(loadedHost)
   return { host: createHostSession(sessionContext, mode), hostRecord }
 }
 
+/** Creates a session for a host 'a' on `target`. */
+export const createSessionOn = async (target: string, mode: Mode, hostOptions?: HostOptions) =>
+  prepareSession(toLoadedHost("a", host(target, doNothing, hostOptions)), mode)
+
 /** Creates a session for a host 'a' on `@local`. */
 export const createSession = async (mode: Mode = "apply", hostOptions?: HostOptions) =>
-  prepareSession(toLoadedHost("a", host("@local", doNothing, hostOptions)), mode)
+  createSessionOn(LOCAL_TARGET, mode, hostOptions)
 
 /** Writes a shell script named `name` into `binDir`, to stand in for a command on `PATH`. */
 export const writeFakeTool = async (binDir: string, name: string, body: string) => {

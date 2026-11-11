@@ -71,10 +71,10 @@ export const buildHostDetails = async (
 
   // Read the SSH user's home before the script runs, because a path that starts with `~/` needs it.
   // An unset `$HOME` comes back empty, so this fails only when the host can't run commands at all.
-  const home = await hostShell.exec(READ_HOME_COMMAND)
+  const home = await hostShell.exec(READ_HOME_COMMAND, { label: "home directory" })
   if (isErr(home)) return err("failed to read the SSH user's home directory", home)
 
-  const userOutput = await hostShell.exec(READ_USER_COMMAND)
+  const userOutput = await hostShell.exec(READ_USER_COMMAND, { label: "user name" })
   if (isErr(userOutput)) return err("failed to read the SSH user's name", userOutput)
   const user = userOutput.trim()
 
@@ -83,7 +83,7 @@ export const buildHostDetails = async (
 
   // Skip writing the askpass helper for hosts where passwordless sudo is enabled.
   if (resolvedSudo.kind !== "passwordless") {
-    const helperWrite = await hostShell.exec(WRITE_ASKPASS_HELPER_SCRIPT)
+    const helperWrite = await hostShell.exec(WRITE_ASKPASS_HELPER_SCRIPT, { label: "askpass helper write" })
     if (isErr(helperWrite)) return err("failed to write the sudo askpass helper", helperWrite)
   }
 
