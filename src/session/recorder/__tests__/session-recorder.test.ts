@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test"
 
-import { createHostRecorder } from "#session/recorder/recorder.ts"
-import { createStepShell } from "#session/step-shell.ts"
+import { createHostRecord, createSessionRecorder } from "#session/recorder/recorder.ts"
 import { runLocal } from "#transport/local.ts"
 import type { Transport } from "#transport/transport.ts"
 
@@ -10,13 +9,14 @@ const transport: Transport = async (cmd) => runLocal(`sudo() { echo "sudo $*"; "
 
 /** Runs `echo hi` in a step on the shell for `sudo`, and returns its stdout and the commands the step recorded. */
 const runInStep = async (sudo: boolean) => {
-  const { hostRecord, stepRecorder } = createHostRecorder("a", "@local", { sudo: false })
-  stepRecorder.startStep("a", "file")
-  const stdout = await createStepShell(transport, stepRecorder.recordCommands, sudo).exec("echo hi")
+  const hostRecord = createHostRecord("a", "@local")
+  const sessionRecorder = createSessionRecorder(hostRecord, { sudo: false }, transport)
+  sessionRecorder.startStep("a", "file")
+  const stdout = await sessionRecorder.getShell({ sudo }).exec("echo hi")
   return { stdout, recordedCmds: hostRecord.stepRecords[0]?.commands.map(({ cmd }) => cmd) }
 }
 
-describe("createStepShell", () => {
+describe("SessionRecorder.getShell", () => {
   it("should run a sudo: true step's script in sudo sh -s, and record the script without it", async () => {
     expect(await runInStep(true)).toStrictEqual({ stdout: "sudo sh -s\nhi\n", recordedCmds: ["echo hi"] })
   })

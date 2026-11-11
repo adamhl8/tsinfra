@@ -4,6 +4,14 @@ import type { Comparison } from "#session/handlers/handlers.ts"
 import type { StepKind, StepStatus } from "#session/step.ts"
 import type { CommandOutput } from "#transport/transport.ts"
 
+/** Returns a new, empty record for the host `name` on `target`, which preparation and the session both record on. */
+export const createHostRecord = (name: string, target: string): HostRecord => ({
+  name,
+  target,
+  preparationCommands: [],
+  stepRecords: [],
+})
+
 export interface HostRecord {
   name: string
   target: string
@@ -16,7 +24,7 @@ export interface HostRecord {
 }
 
 /** A host's failure: one that no step owns, or a step's. */
-export type RecordedFailure = RecordedUnownedFailure | RecordedStepFailure
+type RecordedFailure = RecordedUnownedFailure | RecordedStepFailure
 
 interface BaseRecordedFailure {
   error: Error

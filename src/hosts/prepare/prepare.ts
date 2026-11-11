@@ -4,35 +4,35 @@ import { isErr } from "ts-explicit-errors"
 import type { LoadedHost } from "#hosts/load.ts"
 import type { HostDetails, ReadyHostDetails } from "#hosts/prepare/host-details/host-details.ts"
 import { buildHostDetails, finishHostDetails } from "#hosts/prepare/host-details/host-details.ts"
-import { createHostRecorder } from "#session/session.ts"
-import type { HostContext, HostRecorder } from "#session/session.ts"
+import { createHostRecord, createPreparationRecorder, createSessionRecorder } from "#session/session.ts"
+import type { SessionContext, HostRecord } from "#session/session.ts"
 
-/** A prepared host, ready to run. Its context carries its recorder. */
-interface PreparedHostEntry {
+/** A host after preparation: what its script defines, the record of its run, and its context if it was prepared. */
+export interface HostEntry {
   loadedHost: LoadedHost
-  hostContext: HostContext
+  hostRecord: HostRecord
+  /**
+   * Unset on an entry `prepareHosts` returns when preparation failed, like for an unreachable host, so its script never
+   * runs. The record holds why. Unset too while `prepareHosts` is still preparing the host.
+   */
+  sessionContext?: SessionContext
 }
 
-/** A host whose preparation failed, like an unreachable one, so its script never runs. Its record holds why. */
-interface UnpreparedHostEntry {
-  loadedHost: LoadedHost
-  hostRecorder: HostRecorder
-}
-
-/** What preparing a host gave: a host ready to run, or one that couldn't be prepared. */
-export type HostEntry = PreparedHostEntry | UnpreparedHostEntry
-
-/** Finishes a host's details, prompting for its sudo password when it has no transport yet, and builds its context. */
-const buildHostContext = async (
-  loadedHost: LoadedHost,
+/**
+ * Finishes the details of `hostEntry`'s host, prompting for its sudo password when it has no transport yet, and builds
+ * its context. Hand the session a recorder on the host's final transport, which ends preparation's part of the record.
+ */
+const buildSessionContext = async (
+  hostEntry: HostEntry,
   hostDetails: HostDetails | ReadyHostDetails,
-  hostRecorder: HostRecorder,
-): Promise<Result<HostContext>> => {
+): Promise<Result<SessionContext>> => {
+  const { loadedHost, hostRecord } = hostEntry
   const readyHostDetails = "transport" in hostDetails ? hostDetails : await finishHostDetails(loadedHost, hostDetails)
   if (isErr(readyHostDetails)) return readyHostDetails
 
   const { home, transport } = readyHostDetails
-  return { name: loadedHost.name, transport, home, hostRecorder }
+  const sessionRecorder = createSessionRecorder(hostRecord, loadedHost.options, transport)
+  return { name: loadedHost.name, home, sessionRecorder }
 }
 
 /**
@@ -40,29 +40,31 @@ const buildHostContext = async (
  * host is prepared, one host at a time, so the prompts come in the hosts' order.
  */
 export const prepareHosts = async (loadedHosts: LoadedHost[]): Promise<HostEntry[]> => {
-  const builtHostDetails = await Promise.all(
-    loadedHosts.map(async (loadedHost) => ({
-      loadedHost,
-      hostRecorder: createHostRecorder(loadedHost.name, loadedHost.target, loadedHost.options),
-      hostDetails: await buildHostDetails(loadedHost),
-    })),
+  const preparedHosts = await Promise.all(
+    loadedHosts.map(async (loadedHost) => {
+      const hostRecord = createHostRecord(loadedHost.name, loadedHost.target)
+      const preparationRecorder = createPreparationRecorder(hostRecord)
+      const hostDetails = await buildHostDetails(loadedHost, preparationRecorder)
+      const hostEntry: HostEntry = { loadedHost, hostRecord }
+      return { hostEntry, preparationRecorder, hostDetails }
+    }),
   )
 
   const hostEntries: HostEntry[] = []
-  for (const { loadedHost, hostRecorder, hostDetails } of builtHostDetails) {
-    const hostContext = isErr(hostDetails)
+  for (const { hostEntry, preparationRecorder, hostDetails } of preparedHosts) {
+    const sessionContext = isErr(hostDetails)
       ? hostDetails
       : // oxlint-disable-next-line no-await-in-loop - prompts run one at a time
-        await buildHostContext(loadedHost, hostDetails, hostRecorder)
+        await buildSessionContext(hostEntry, hostDetails)
 
-    if (isErr(hostContext)) {
-      hostRecorder.failPreparation(hostContext)
-      hostEntries.push({ loadedHost, hostRecorder })
+    if (isErr(sessionContext)) {
+      preparationRecorder.recordFailure(sessionContext)
+      hostEntries.push(hostEntry)
       continue
     }
 
-    hostRecorder.finishPreparation()
-    hostEntries.push({ loadedHost, hostContext })
+    hostEntries.push({ ...hostEntry, sessionContext })
   }
+
   return hostEntries
 }

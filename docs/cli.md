@@ -235,8 +235,12 @@ for progress to matter. Until then the blocks print directly as each host finish
 
 ### What a host records
 
-The output is built from a record of each host's run. It holds one list of steps, in the order the script called them,
-and the host's failure, if it failed.
+The output is built from a record of each host's run. It holds the commands its preparation ran, one list of steps,
+in the order the script called them, and the host's failure, if it failed.
+
+- **Preparation's commands** are every command it ran for the host, on the control machine and on the host: `ssh -G`,
+  the reads of the home directory and the user, the sudo checks, and the askpass helper write. A sudo password check
+  records `<sudo password>` in place of the password, so the password never reaches the record.
 
 - **The failure** is the host's only one, because nothing runs on a host once it has failed. It records its error, its
   kind (see [Kinds of failure](#kinds-of-failure)), and any hints for it. The kind comes from where the host was when it

@@ -43,7 +43,7 @@ stdout is only the document. Add it when something needs to read the output.
 The design is settled (see [CLI](./cli.md#live-progress)). These details are not:
 
 - **What tells Ink to redraw.** A spinner redraws on a timer anyway, so the live lines could read the records on each
-  tick. The other option is a callback from the step recorder when a step starts or finishes.
+  tick. The other option is a callback from the session recorder when a step starts or finishes.
 - **How much a live line shows.** It could be only the step's name, or also the command running inside it.
 - **Long lines.** A failure's error can be wider than the terminal. The terminal wraps it, but the wrapped part loses
   its indent. `Bun.wrapAnsi` could wrap it to the terminal's width and keep the indent, but then the output depends on
@@ -108,7 +108,7 @@ await h.ensure("Install the arm build", { check: "...", want: true, fix: `... ${
   normalizing added, so it shows as its own `·` line in `--verbose`, the same as a helper a script writes itself. A step
   uses the fact through the closure, as above. Calling a helper inside a step's function fails the host with
   `'read' can't run while ensure step 'X' is running`, like any other call on `h` there.
-- **There's no hidden way to run commands.** A helper that reached the shell around `h` would skip the step recorder
+- **There's no hidden way to run commands.** A helper that reached the shell around `h` would skip the session recorder
   and the failed-host check, and would follow rules a script's own helpers can't.
 - **The value is in the normalizing.** `uname -m` prints `x86_64` or `aarch64` on Linux and `arm64` on macOS, and
   download URLs want `amd64` or `x64`. Node's names give the host the same vocabulary as the control machine. If a step

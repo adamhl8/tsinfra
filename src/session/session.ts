@@ -31,11 +31,9 @@ import {
   execCommand,
   inspectCommand,
 } from "#session/handlers/handlers.ts"
-import type { HostRecord, HostRecorder, RecordedFailure } from "#session/recorder/recorder.ts"
-import { createStepShell } from "#session/step-shell.ts"
+import type { SessionRecorder } from "#session/recorder/recorder.ts"
 import type { HandlerReturn, StepContext, StepKind } from "#session/step.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
-import type { Transport } from "#transport/transport.ts"
 
 export type {
   AttributeChange,
@@ -84,21 +82,20 @@ export type {
   CommandRecord,
   ConvergePhase,
   HostRecord,
-  HostRecorder,
+  PreparationRecorder,
   RecordedStepFailure,
   RecordedUnownedFailure,
   StepRecord,
 } from "#session/recorder/recorder.ts"
-export { createHostRecorder } from "#session/recorder/recorder.ts"
+export { createHostRecord, createPreparationRecorder, createSessionRecorder } from "#session/recorder/recorder.ts"
 export type { ComparisonValues, StepKind, StepStatus } from "#session/step.ts"
 
 /** What a host's session needs, set up before any script runs. */
-export interface HostContext {
+export interface SessionContext {
   name: string
-  transport: Transport
   /** The SSH user's home directory. It's empty when `$HOME` isn't set. */
   home: string
-  hostRecorder: HostRecorder
+  sessionRecorder: SessionRecorder
 }
 
 // Extend `Record<StepKind, unknown>` so a step kind with no method fails to compile.
@@ -163,43 +160,36 @@ const STEP_NAME_LABELS: Record<StepKind, string> = {
   run: "name",
 }
 
-export interface HostSession {
-  host: Host
-  hostRecord: HostRecord
-}
-
 /**
- * Builds the `Host` passed to a host's function, and keeps the run's failure on the host's record, where the script
- * can't see it.
+ * Builds the `Host` passed to a host's function, and keeps the run's failure on the host's record through
+ * `sessionRecorder`, where the script can't see it.
  *
  * This is the only code that throws, because throwing is the contract with the script. Every function the script can
  * call, on `h` or as a tool, goes through `callOrFail` around an internal function from `handlers/` that returns errors
  * as values.
  */
-export const createHostSession = (hostContext: HostContext, mode: Mode): HostSession => {
-  const { name, transport, home, hostRecorder } = hostContext
-  const { hostRecord, recordFailure, stepRecorder } = hostRecorder
-  const { recordCommands, startStep, finishStep, failStep, convergeRecorder } = stepRecorder
+export const createHostSession = (sessionContext: SessionContext, mode: Mode): Host => {
+  const { name, home, sessionRecorder } = sessionContext
+  const { getShell, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder } = sessionRecorder
 
   // oxlint-disable-next-line promise/prefer-await-to-callbacks - `callback` is awaited, and the rule only matches its name
   const callOrFail = async <T>(callback: () => Promise<Result<T>>) => {
     // Throw the failure on every later call, so a script that catches it still can't use the host.
-    if (hostRecord.failure) throw hostRecord.failure.error
+    const failure = getFailure()
+    if (failure) throw failure
 
     // oxlint-disable-next-line promise/prefer-await-to-callbacks - `callback` is awaited, and the rule only matches its name
     const value = await callback()
-    if (isErr(value)) throw recordFailure(value).error
+    if (isErr(value)) throw recordFailure(value)
 
     // Throw a failure recorded during `callback`, because a function in the script may have caught it and returned normally.
-    // Widen `hostRecord.failure` with `as`, because TypeScript keeps the narrowing to `undefined` from the `if` above.
-    // TypeScript can't know that `callback` may have set it again.
-    const callbackFailure = hostRecord.failure as RecordedFailure | undefined
-    if (callbackFailure) throw callbackFailure.error
+    const callbackFailure = getFailure()
+    if (callbackFailure) throw callbackFailure
     return value
   }
 
   // Leave the tools on a shell without sudo, because no tool takes a `sudo` option.
-  const toolShell = createStepShell(transport, recordCommands, false)
+  const toolShell = getShell({ sudo: false })
 
   const readTool: Exec = async (cmd) => callOrFail(async () => execCommand({ toolName: "read", shell: toolShell }, cmd))
   const inspectTool: Inspect = async (cmd) =>
@@ -235,7 +225,7 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
         return validOptions
       }
 
-      const shell = createStepShell(transport, recordCommands, validOptions.sudo)
+      const shell = getShell({ sudo: validOptions.sudo })
 
       const ctx: StepContext<K> = {
         stepName: validName,
@@ -271,5 +261,5 @@ export const createHostSession = (hostContext: HostContext, mode: Mode): HostSes
     run: async (stepName, cmd, options) => callStep(stepName, "run", async (ctx) => handleRun(ctx, cmd, options)),
   }
 
-  return { host, hostRecord }
+  return host
 }

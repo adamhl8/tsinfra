@@ -5,13 +5,13 @@ import process from "node:process"
 
 import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
-import { attempt, isErr } from "ts-explicit-errors"
+import { attempt } from "ts-explicit-errors"
 
 import {
   UNREACHABLE_TARGET,
   createFakeSudoSession,
+  createWrappedSession,
   prepareAndRunHost,
-  prepareHostContext,
   toLoadedHost,
 } from "#__tests__/session.ts"
 import type { HostFunction } from "#hosts/host.ts"
@@ -22,8 +22,6 @@ import { formatSummary } from "#report/summary.ts"
 import type { Want } from "#session/handlers/ensure/check.ts"
 import type { EnsureOptions } from "#session/handlers/ensure/ensure.ts"
 import type { Host } from "#session/session.ts"
-import { createHostSession } from "#session/session.ts"
-import type { Transport } from "#transport/transport.ts"
 
 const runNamedHost = async (name: string, fn: HostFunction, mode: Mode) =>
   prepareAndRunHost(toLoadedHost(name, host("@local", fn)), mode)
@@ -551,17 +549,12 @@ describe("formatHostBlock for a host state that still differs after the fix", ()
  * Creates a session where every command writes to stderr, and `filePath` changes right after a write, so it still
  * differs.
  */
-const createNoisySession = async (filePath: string) => {
-  const hostContext = await prepareHostContext(toLoadedHost("a", host("@local", changeOnce)))
-  if (isErr(hostContext)) throw hostContext
-
-  const transport: Transport = async (cmd) => {
-    const output = await hostContext.transport(`echo noise >&2\n${cmd}`)
+const createNoisySession = async (filePath: string) =>
+  createWrappedSession("apply", (transport) => async (cmd) => {
+    const output = await transport(`echo noise >&2\n${cmd}`)
     if (cmd.includes("mv -f")) await bun.write(filePath, "changed\n")
     return output
-  }
-  return createHostSession({ ...hostContext, transport }, "apply")
-}
+  })
 
 describe("formatHostBlock for the stderr of a step that still differs", () => {
   const AFTER_FIX_NOTE = "        some commands after the fix wrote to stderr, run with -vvv to see them"

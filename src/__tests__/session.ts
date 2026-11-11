@@ -9,6 +9,7 @@ import { attempt, isErr, messageChain } from "ts-explicit-errors"
 import type { HostDefinition, HostOptions } from "#hosts/host.ts"
 import { host, hostDefinitionSchema } from "#hosts/host.ts"
 import type { LoadedHost } from "#hosts/load.ts"
+import { buildHostDetails } from "#hosts/prepare/host-details/host-details.ts"
 import { prepareHosts } from "#hosts/prepare/prepare.ts"
 import { runHost } from "#hosts/run.ts"
 import type { Mode } from "#mode.ts"
@@ -16,8 +17,13 @@ import type { Want } from "#session/handlers/ensure/check.ts"
 import type { EnsureOptions } from "#session/handlers/ensure/ensure.ts"
 import type { RunOptions } from "#session/handlers/run.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
-import type { Host, HostContext, HostRecord } from "#session/session.ts"
-import { createHostSession } from "#session/session.ts"
+import type { Host, SessionContext, HostRecord } from "#session/session.ts"
+import {
+  createHostRecord,
+  createHostSession,
+  createPreparationRecorder,
+  createSessionRecorder,
+} from "#session/session.ts"
 import type { Transport } from "#transport/transport.ts"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
@@ -58,22 +64,37 @@ export const getPreparationFailure = (hostRecord: HostRecord): Error => {
 }
 
 /** Prepares one host the way a run does, and returns its context, or why it couldn't be prepared. */
-export const prepareHostContext = async (loadedHost: LoadedHost): Promise<Result<HostContext>> => {
+const prepareSessionContext = async (loadedHost: LoadedHost): Promise<Result<SessionContext>> => {
   const hostEntry = await prepareHostEntry(loadedHost)
-  return "hostContext" in hostEntry ? hostEntry.hostContext : getPreparationFailure(hostEntry.hostRecorder.hostRecord)
+  return hostEntry.sessionContext ?? getPreparationFailure(hostEntry.hostRecord)
 }
 
 /** Prepares a host 'a' on `@local`. */
-export const buildLocalHostContext = async (hostOptions?: HostOptions) =>
-  prepareHostContext(toLoadedHost("a", host("@local", doNothing, hostOptions)))
+export const buildLocalSessionContext = async (hostOptions?: HostOptions) =>
+  prepareSessionContext(toLoadedHost("a", host("@local", doNothing, hostOptions)))
+
+/** A test's view of a prepared host: the `Host` its function would get, and the record its session fills in. */
+interface TestSession {
+  host: Host
+  hostRecord: HostRecord
+}
+
+/** Prepares one host the way a run does, and returns its entry, or throws why it couldn't be prepared. */
+const preparePreparedHostEntry = async (loadedHost: LoadedHost) => {
+  const { hostRecord, sessionContext } = await prepareHostEntry(loadedHost)
+  if (!sessionContext) throw getPreparationFailure(hostRecord)
+  return { hostRecord, sessionContext }
+}
+
+/** Prepares `loadedHost` the way a run does, and creates its session. */
+export const prepareSession = async (loadedHost: LoadedHost, mode: Mode): Promise<TestSession> => {
+  const { sessionContext, hostRecord } = await preparePreparedHostEntry(loadedHost)
+  return { host: createHostSession(sessionContext, mode), hostRecord }
+}
 
 /** Creates a session for a host 'a' on `@local`. */
-export const createSession = async (mode: Mode = "apply", hostOptions?: HostOptions) => {
-  const hostContext = await buildLocalHostContext(hostOptions)
-  if (isErr(hostContext)) throw hostContext
-
-  return createHostSession(hostContext, mode)
-}
+export const createSession = async (mode: Mode = "apply", hostOptions?: HostOptions) =>
+  prepareSession(toLoadedHost("a", host("@local", doNothing, hostOptions)), mode)
 
 /** Writes a shell script named `name` into `binDir`, to stand in for a command on `PATH`. */
 export const writeFakeTool = async (binDir: string, name: string, body: string) => {
@@ -82,14 +103,31 @@ export const writeFakeTool = async (binDir: string, name: string, body: string) 
   await chmod(toolPath, 0o755)
 }
 
-/** Creates a session where the scripts in `binDir` come first on `PATH`. */
-const createSessionWithBinDir = async (mode: Mode, binDir: string) => {
-  const hostContext = await buildLocalHostContext()
-  if (isErr(hostContext)) throw hostContext
+/**
+ * Creates a session for a host 'a' on `@local` where each command goes through `wrapTransport` first. Prepares the host
+ * the way a run does, then builds its details again for the final transport, because the context holds none. Gives the
+ * session a second session recorder on the same record, over the wrapped transport.
+ */
+export const createWrappedSession = async (
+  mode: Mode,
+  wrapTransport: (transport: Transport) => Transport,
+): Promise<TestSession> => {
+  const loadedHost = toLoadedHost("a", host("@local", doNothing))
+  const { sessionContext, hostRecord } = await preparePreparedHostEntry(loadedHost)
 
-  const transport: Transport = async (cmd) => hostContext.transport(`PATH='${binDir}':"$PATH"\n${cmd}`)
-  return createHostSession({ ...hostContext, transport }, mode)
+  // Record this second preparation on a recorder of its own, because the session's record already has the first.
+  const { name, target, options } = loadedHost
+  const hostDetails = await buildHostDetails(loadedHost, createPreparationRecorder(createHostRecord(name, target)))
+  if (isErr(hostDetails)) throw hostDetails
+  if (!("transport" in hostDetails)) throw new Error("the host needs a sudo password prompt")
+
+  const sessionRecorder = createSessionRecorder(hostRecord, options, wrapTransport(hostDetails.transport))
+  return { host: createHostSession({ ...sessionContext, sessionRecorder }, mode), hostRecord }
 }
+
+/** Creates a session where the scripts in `binDir` come first on `PATH`. */
+const createSessionWithBinDir = async (mode: Mode, binDir: string) =>
+  createWrappedSession(mode, (transport) => async (cmd) => transport(`PATH='${binDir}':"$PATH"\n${cmd}`))
 
 /** Creates a session where each of `tools` stands in for a command on `PATH`, by its name and shell script body. */
 export const createFakeToolSession = async (mode: Mode, tools: Record<string, string>) => {

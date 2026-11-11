@@ -127,6 +127,17 @@ describe("prepareHosts with a sudo: true host whose sudo needs a password", () =
     )
   })
 
+  it("should record a stand-in for each password tried, never the password", async () => {
+    // Check the whole screen, because the prompt never shows a typed password, so only the printed record could.
+    const screen = await prepareInTerminal(["a"], ["wrong\r", "right\r"], {
+      cmd: [process.execPath, FIXTURE, "--records", "a"],
+    })
+
+    expect(screen.split("<sudo password>")).toHaveLength(3)
+    expect(screen).not.toContain("wrong")
+    expect(screen).not.toContain("right")
+  })
+
   it("should fail the host without prompting when stderr isn't a terminal", async () => {
     const cmd = ["sh", "-c", `exec '${process.execPath}' '${FIXTURE}' a 2>/dev/null`]
 

@@ -1,12 +1,13 @@
-export type { HostRecorder } from "#session/recorder/host-recorder.ts"
-export { createHostRecorder } from "#session/recorder/host-recorder.ts"
+export type { PreparationRecorder } from "#session/recorder/preparation-recorder.ts"
+export { createPreparationRecorder } from "#session/recorder/preparation-recorder.ts"
 export type {
   CommandRecord,
   ConvergePhase,
   HostRecord,
-  RecordedFailure,
   RecordedStepFailure,
   RecordedUnownedFailure,
   StepRecord,
 } from "#session/recorder/records.ts"
-export type { ComparePhase, ConvergeRecorder, StepRecorder } from "#session/recorder/step-recorder.ts"
+export { createHostRecord } from "#session/recorder/records.ts"
+export type { ComparePhase, ConvergeRecorder, SessionRecorder } from "#session/recorder/session-recorder.ts"
+export { createSessionRecorder } from "#session/recorder/session-recorder.ts"

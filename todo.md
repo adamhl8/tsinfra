@@ -21,38 +21,35 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
       prepared, a host function failure is anything thrown during the host function that no step owns, and a step
       failure belongs to a step. A preparation failure shows as `(preparation) <target>`, and a host function failure as
       `(host fn) <target>` with a note, in place of today's `(host) a.ts`. Write the four kinds down in the docs.
-   4. **The host recorder.** One recorder per host, not one per run, because it tracks the running step, and hosts
-      will run in parallel. It holds the host record, which preparation, the session, and `runHost` fill in, and the
-      report reads. It's built in three steps, each reviewed before the next.
-      1. **The recorder and the record (built).** The package `session/recorder/` holds `records.ts` (every record
-         type), `host-recorder.ts`, `step-recorder.ts`, and `failure-hints.ts`, with `recorder.ts` re-exporting them.
-         `HostRecord` is `{ name, target, preparationCommands, stepRecords, failure? }`, and `runHost` returns it in
-         place of `HostReport`. The host recorder creates the record and builds the step recorder, which closes over
-         the record and the host recorder's `recordFailure`, and pushes onto `stepRecords`. `failure` is the host's one
-         `RecordedFailure`: a `RecordedUnownedFailure { kind: "preparation" | "host fn", error, hints }`, or a
-         `RecordedStepFailure { kind: "step", stepRecord, error, hints }`. `recordFailure` gives a new failure
-         `preparation` while the host is preparing and `host fn` after. The step recorder gets `recordStepFailure(stepRecord,
-         error)` from the host recorder, and nothing else does. It records a step failure with the step's record and
-         hints from its commands, under the same keep-the-first-error rule as `recordFailure`. `failStep(error)` calls
-         it, and so does `finishStep(status)` when the host failed while the step ran. A failed step has no
-         status, and the report shows the failure after the steps, because the step that failed is always the last.
-         `failPreparation(error)` records the preparation's failure with its hints, and `finishPreparation()` ends it. `HostContext` carries the recorder.
-      2. **Shells, in two stages, and no transport in the context.** During preparation, the recorder's
-         `createShell(transport)` gives a recording shell on any transport: the local shell for `ssh -G`, and the target
-         shell once `baseTransport` exists. When preparation ends, `prepareHosts` builds the session's
-         `getShell({ sudo })` from the final transport, which is today's `createStepShell`, recording above the root
-         transport. The host context carries the recorder and `getShell`, and no transport, so nothing in the session
-         can run a command that isn't recorded. The helpers that put fake tools on `PATH` wrap the transport before
-         building `getShell`, with the same function `prepareHosts` uses, in place of swapping `hostContext.transport`.
-      3. **Recording preparation.** One `recordCommands`, moved up to the host recorder, sends each command to the
-         running step, or to `preparationCommands` while the host is preparing. `buildHostDetails` gets a per-host context with the
-         local shell and the recorder's `createShell`, in place of making its own shells. `prepareBaseTransport` and
-         `readSshDefaultOptions` take the local shell from it. `finishHostDetails` takes the target shell from the
-         details, in place of calling `createShell(baseTransport)` again. The sudo password check records a stand-in
-         through `recordedCmd`, so the password never reaches the record. It lands here, not in piece 5, because this
-         is where preparation's commands start being recorded. The password docker test already checks the whole
-         record.
-   5. **Preparation commands on the host record.** Preparation already records through the host recorder's shells, so
+   4. **The host's record and its recorders (built).** One record per host, not one per run, because hosts will run in
+      parallel, and the report reads it. The package `session/recorder/` holds `records.ts` (every record type, and
+      `createHostRecord`), `commands.ts` (`createRecordingTransport(transport, addCommand)`), `failure-hints.ts`, and a
+      recorder per stage of the run, both writing to the same `HostRecord`, with `recorder.ts` re-exporting them.
+      - **The record.** `HostRecord` is `{ name, target, preparationCommands, stepRecords, failure? }`, and `runHost`
+        returns it in place of `HostReport`. Every `HostEntry` carries it, beside its `loadedHost`, and an optional
+        `sessionContext` that's unset when preparation failed. The session never holds it. `failure` is the host's one
+        `RecordedFailure`: a
+        `RecordedUnownedFailure { kind: "preparation" | "host fn", error, hints }`, or a
+        `RecordedStepFailure { kind: "step", stepRecord, error, hints }`. A failed step has no status, and the report
+        shows the failure after the steps, because the step that failed is always the last.
+      - **The preparation recorder.** `createPreparationRecorder(hostRecord)` gives `getShell(transport)`, a shell
+        that records onto `preparationCommands`, and `recordFailure(error)`, which sets the `preparation` failure with
+        its hints. `buildHostDetails(loadedHost, preparationRecorder)` builds the control machine shell, gets the base
+        transport from `prepareBaseTransport(localShell, target)`, then builds the host shell on it, which
+        `HostDetails.hostShell` carries to `finishHostDetails` for the prompt's password checks. The sudo password
+        check records `<sudo password>` through `recordedCmd`, checked in Docker with real sudo, and locally through
+        the prompt fixture's `--records`.
+      - **The session recorder.** `createSessionRecorder(hostRecord, hostOptions, transport)` takes the host's final
+        transport and keeps it to itself, behind `getShell({ sudo })`, which records under the running step above the
+        root transport. So nothing in the session can run a command off the record. It also holds the step recording
+        (`startStep`, `finishStep`, `failStep`, `convergeRecorder`) and the session's failure rules: `recordFailure`
+        keeps the first error and creates `host fn` failures, and a step claims any failure from while it ran, with
+        hints from its commands. `getFailure()` gives the session the host's error. `SessionContext` is
+        `{ name, home, sessionRecorder }`, built when preparation hands off, and `createHostSession` returns the `Host`.
+      - **Tests.** `createWrappedSession` gives a session a second session recorder on the same record, over a wrapped
+        transport. Callers that prepare outside `prepareHosts` pass a plain, unrecorded shell, or a recorder of their
+        own.
+   5. **Preparation commands on the host record.** Preparation already records through the preparation recorder's shells, so
       this gives each command a label: `ssh -G`, the home and user reads, the sudo checks, and the askpass helper
       write. Record the end of the run's `ssh -O stop` on the record of each host that used that target. The
       transport's own mechanics stay off the record, because they belong in the diagnostic log: the

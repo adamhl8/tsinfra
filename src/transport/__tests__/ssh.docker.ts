@@ -7,11 +7,10 @@ import process from "node:process"
 import bun, { $ } from "bun"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
-import { prepareAndRunHost, prepareHostContext, readOrMessage, toLoadedHost } from "#__tests__/session.ts"
+import { prepareAndRunHost, prepareSession, readOrMessage, toLoadedHost } from "#__tests__/session.ts"
 import { host } from "#hosts/host.ts"
 import { prepareBaseTransport } from "#hosts/prepare/host-details/host-details.ts"
-import { createHostSession } from "#session/session.ts"
-import { closeConnections } from "#transport/transport.ts"
+import { closeConnections, createShell, getLocalTransport } from "#transport/transport.ts"
 
 // `setup.sh` points each of these at the sshd this file starts, except `tsinfra-no-sshd`, at a port nothing listens on.
 // Each host-key target has a `known_hosts` entry of its own: none for the new and the strict host, and a wrong key for
@@ -28,19 +27,19 @@ const SSHD_PID_PATH = path.join(SSHD_DIR, "sshd.pid")
 const SSH_DIR = path.join(os.homedir(), ".ssh")
 const KNOWN_HOSTS_PATH = path.join(SSH_DIR, "known_hosts")
 
+const doNothing = async () => {
+  /* empty */
+}
+
 /** Prepares the transport to `target`, or throws why it couldn't. */
 const prepareOrThrow = async (target: string) => {
-  const targetTransport = await prepareBaseTransport(target)
+  const targetTransport = await prepareBaseTransport(createShell(getLocalTransport()), target)
   if (isErr(targetTransport)) throw targetTransport
 
   return targetTransport
 }
 
 const transport = await prepareOrThrow(TARGET)
-
-const doNothing = async () => {
-  /* empty */
-}
 
 // Start sshd without `-D`, so it forks once it's listening, and the command returns when a connection can succeed.
 const startSshd = async () => {
@@ -67,12 +66,7 @@ const findKnownHost = async (name: string) => (await $`ssh-keygen -F ${name}`.no
 const runHostOn = async (target: string) => prepareAndRunHost(toLoadedHost("a", host(target, doNothing)), "apply")
 
 /** Prepares a host 'a' on the sshd the way a run does, and creates its session. */
-const createSshSession = async () => {
-  const hostContext = await prepareHostContext(toLoadedHost("a", host(TARGET, doNothing)))
-  if (isErr(hostContext)) throw hostContext
-
-  return createHostSession(hostContext, "apply")
-}
+const createSshSession = async () => prepareSession(toLoadedHost("a", host(TARGET, doNothing)), "apply")
 
 beforeEach(async () => {
   await startSshd()

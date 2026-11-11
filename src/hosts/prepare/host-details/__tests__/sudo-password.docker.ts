@@ -6,7 +6,7 @@ import path from "node:path"
 import { $ } from "bun"
 import { isErr, messageChain } from "ts-explicit-errors"
 
-import { buildLocalHostContext, createSession, fileOrMessage, readOrMessage } from "#__tests__/session.ts"
+import { buildLocalSessionContext, createSession, fileOrMessage, readOrMessage } from "#__tests__/session.ts"
 import type { HostOptions } from "#hosts/host.ts"
 
 // `setup.sh` gives this user this password.
@@ -15,8 +15,8 @@ const ASKPASS_HELPER_PATH = path.join(os.homedir(), ".tsinfra", "askpass.sh")
 
 /** Prepares a host on `@local` and returns the error's message chain, or `prepared`. */
 const prepareOrMessage = async (hostOptions: HostOptions) => {
-  const hostContext = await buildLocalHostContext(hostOptions)
-  return isErr(hostContext) ? messageChain(hostContext) : "prepared"
+  const sessionContext = await buildLocalSessionContext(hostOptions)
+  return isErr(sessionContext) ? messageChain(sessionContext) : "prepared"
 }
 
 describe("a user whose sudo needs a password", () => {
@@ -29,6 +29,10 @@ describe("a user whose sudo needs a password", () => {
     expect(await readOrMessage(hostSession.host, "sudo id -u")).toBe("0")
     expect(existsSync(ASKPASS_HELPER_PATH)).toBe(true)
     expect(JSON.stringify(hostSession.hostRecord)).not.toContain(PASSWORD)
+    // Check the stand-in too, so the test can't pass just because nothing was recorded.
+    expect(hostSession.hostRecord.preparationCommands.map(({ cmd }) => cmd)).toContain(
+      String.raw`printf '%s\n' <sudo password> | sudo -k -S -p '' true`,
+    )
   })
 
   it("should fail in preparation with only its own message for a wrong password from host()", async () => {

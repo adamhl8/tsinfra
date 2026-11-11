@@ -1,10 +1,17 @@
 import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
+import type { ValidHostOptions } from "#hosts/hosts.ts"
 import type { Comparison } from "#session/handlers/handlers.ts"
-import type { CommandRecord, ConvergePhase, HostRecord, StepRecord } from "#session/recorder/records.ts"
+import { createRecordingTransport } from "#session/recorder/commands.ts"
+import { getStepFailureHints } from "#session/recorder/failure-hints.ts"
+import type { ConvergePhase, HostRecord, StepRecord } from "#session/recorder/records.ts"
 import type { StepKind, StepStatus } from "#session/step.ts"
-import type { RecordingTransport, Transport } from "#transport/transport.ts"
+import type { Shell, Transport } from "#transport/transport.ts"
+import { createShell, createRootTransport } from "#transport/transport.ts"
+
+/** Returns a shell that records each command under the running step, and runs as root for `sudo: true`. */
+type GetShell = (options: { sudo: boolean }) => Shell
 
 /** The phases of `converge` that compare the host with what the step wants. */
 export type ComparePhase = Exclude<ConvergePhase, "fix">
@@ -19,9 +26,17 @@ export interface ConvergeRecorder {
   recordWaitingOn: (stepNames: string[]) => void
 }
 
-export interface StepRecorder {
-  /** Wraps `transport` so each command is recorded under the running step. */
-  recordCommands: (transport: Transport) => RecordingTransport
+/** Records the session's part of a host's run, once preparation has finished: each step, and the host's failure. */
+export interface SessionRecorder {
+  /** Gives the session its shells, so nothing in the session runs a command off the record. */
+  getShell: GetShell
+  /** Returns the error the host failed with, or nothing while it hasn't failed. */
+  getFailure: () => Error | undefined
+  /**
+   * Keeps `error` as the host's failure, and returns the error the host ends up with. A new failure is the host
+   * function's, until a step that was running makes it its own when it finishes.
+   */
+  recordFailure: (error: Error) => Error
   /** Records a new step and marks it running, or fails when another step is running. */
   startStep: (stepName: string, kind: StepKind) => Result
   /**
@@ -34,37 +49,56 @@ export interface StepRecorder {
   convergeRecorder: ConvergeRecorder
 }
 
-/** What a step recorder needs from its host's recorder. */
-interface StepRecorderContext {
-  hostRecord: HostRecord
-  /**
-   * Records `error` as the step's failure, with hints from its commands. Keeps an earlier failure's error instead,
-   * unless `error` wraps it.
-   */
-  recordStepFailure: (stepRecord: StepRecord, error: Error) => void
-}
-
-/** Tracks the running step for one host, and records each step and what happens during it on the host's record. */
-export const createStepRecorder = ({ hostRecord, recordStepFailure }: StepRecorderContext): StepRecorder => {
+/**
+ * Records a host's session on `hostRecord`, running its commands on `transport`, the host's final transport. Keeps
+ * `transport` to itself, so the session can only reach it through shells that record.
+ */
+export const createSessionRecorder = (
+  hostRecord: HostRecord,
+  hostOptions: ValidHostOptions,
+  transport: Transport,
+): SessionRecorder => {
   let currentStep: StepRecord | undefined
   let currentPhase: ConvergePhase | undefined
 
-  // Push the record before the command runs, so commands run at once keep the order they were called in.
-  // Stamp the phase now too, because a reader wants to know when a command started.
-  const recordCommands =
-    (transport: Transport): RecordingTransport =>
-    async (cmd, options = {}) => {
-      const { label, recordedCmd = cmd } = options
-      const commandRecord: CommandRecord = {
-        cmd: recordedCmd,
-        ...(label !== undefined && { label }),
-        ...(currentPhase && { phase: currentPhase }),
-      }
+  const getShell: GetShell = ({ sudo }) => {
+    const stepTransport = sudo ? createRootTransport(transport) : transport
+
+    // Record above the root transport, so the record holds the step's script without the `sudo sh -s` around it.
+    // Stamp the phase before the command runs, because a reader wants to know when a command started.
+    const recordingTransport = createRecordingTransport(stepTransport, (commandRecord) => {
+      if (currentPhase) commandRecord.phase = currentPhase
       currentStep?.commands.push(commandRecord)
-      const output = await transport(cmd)
-      commandRecord.output = output
-      return output
+    })
+
+    return createShell(recordingTransport)
+  }
+
+  // Keep the first failure's error, because calls made at once with `Promise.all` can each fail.
+  // Replace it only with an error that wraps it, which adds context such as the step's name.
+  const keepError = (error: Error): Error => {
+    const keptError = hostRecord.failure?.error
+    return keptError === undefined || error.cause === keptError ? error : keptError
+  }
+
+  const recordFailure = (error: Error): Error => {
+    const { failure } = hostRecord
+    // Keep an existing failure's kind, and only update its error, because the failure is already where it came from.
+    // `callOrFail` records again the error a step's failure already holds, and calls made at once can each fail.
+    if (failure) {
+      failure.error = keepError(error)
+      return failure.error
     }
+
+    hostRecord.failure = { kind: "host fn", error, hints: [] }
+    return error
+  }
+
+  // Work out the hints when the step is done, from all of its commands.
+  const recordStepFailure = (stepRecord: StepRecord, error: Error) => {
+    const hints = getStepFailureHints(hostOptions, stepRecord.commands)
+    hostRecord.failure = { kind: "step", stepRecord, error: keepError(error), hints }
+  }
 
   // Fail a step that starts while another is running, because a step's functions use the tools they are given.
   // This also catches steps run at once with `Promise.all`.
@@ -123,5 +157,7 @@ export const createStepRecorder = ({ hostRecord, recordStepFailure }: StepRecord
 
   const convergeRecorder: ConvergeRecorder = { startPhase, recordComparison, recordWaitingOn }
 
-  return { recordCommands, startStep, finishStep, failStep, convergeRecorder }
+  const getFailure = () => hostRecord.failure?.error
+
+  return { getShell, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder }
 }

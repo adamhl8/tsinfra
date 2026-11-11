@@ -11,12 +11,21 @@ const doNothing = async () => {
 }
 
 // Prepare a `sudo: true` host on `@local` for each name given, and print how each one ended.
-const names = process.argv.slice(2)
+// Pass `--records` first to also print each host's record, so a test can check what reached it.
+const args = process.argv.slice(2)
+const isPrintingRecords = args[0] === "--records"
+const names = isPrintingRecords ? args.slice(1) : args
+
 const hostEntries = await prepareHosts(
   names.map((name) => toLoadedHost(name, host("@local", doNothing, { sudo: true }))),
 )
 const results = hostEntries.map((hostEntry) => [
   hostEntry.loadedHost.name,
-  "hostContext" in hostEntry ? "prepared" : messageChain(getPreparationFailure(hostEntry.hostRecorder.hostRecord)),
+  hostEntry.sessionContext ? "prepared" : messageChain(getPreparationFailure(hostEntry.hostRecord)),
 ])
 console.log(JSON.stringify(results))
+
+if (isPrintingRecords) {
+  const hostRecords = hostEntries.map(({ hostRecord }) => hostRecord)
+  console.log(JSON.stringify(hostRecords))
+}
