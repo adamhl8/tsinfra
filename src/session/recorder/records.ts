@@ -9,6 +9,7 @@ export const createHostRecord = (name: string, target: string): HostRecord => ({
   name,
   target,
   preparationCommands: [],
+  runningStep: undefined,
   stepRecords: [],
 })
 
@@ -17,14 +18,16 @@ export interface HostRecord {
   target: string
   /** Every command preparation ran on the host, before its script ran. */
   preparationCommands: CommandRecord[]
-  /** Every step that started, in the order the script called them. */
-  stepRecords: StepRecord[]
+  /** The step that's running, until it finishes and joins `stepRecords`, or fails and becomes the failure's. */
+  runningStep: StepRecord | undefined
+  /** Every step that finished, in the order the script called them. The step that failed is the failure's. */
+  stepRecords: FinishedStepRecord[]
   /** The host's one failure, if it failed, and where it came from. */
   failure?: RecordedFailure
 }
 
 /** A host's failure: one that no step owns, or a step's. */
-type RecordedFailure = RecordedUnownedFailure | RecordedStepFailure
+export type RecordedFailure = RecordedUnownedFailure | RecordedStepFailure
 
 interface BaseRecordedFailure {
   error: Error
@@ -43,12 +46,16 @@ export interface RecordedStepFailure extends BaseRecordedFailure {
   stepRecord: StepRecord
 }
 
+/** The record of a step that finished, with how it turned out. */
+export interface FinishedStepRecord extends StepRecord {
+  status: StepStatus
+}
+
+/** A step's record without an outcome: the running step, which the recorder records on, or the step that failed. */
 export interface StepRecord {
   /** The name the script gave the step, or a read step's command. */
   name: string
   kind: StepKind
-  /** Unset until the step finishes, and on a failed step, whose outcome is the host record's `failure`. */
-  status?: StepStatus
   commands: CommandRecord[]
   comparisons: StepComparisons
   /** The names of the needed steps this step waited on. */

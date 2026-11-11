@@ -58,7 +58,6 @@ export const createSessionRecorder = (
   hostOptions: ValidHostOptions,
   transport: Transport,
 ): SessionRecorder => {
-  let currentStep: StepRecord | undefined
   let currentPhase: ConvergePhase | undefined
 
   const getShell: GetShell = ({ sudo }) => {
@@ -68,7 +67,7 @@ export const createSessionRecorder = (
     // Stamp the phase before the command runs, because a reader wants to know when a command started.
     const recordingTransport = createRecordingTransport(stepTransport, (commandRecord) => {
       if (currentPhase) commandRecord.phase = currentPhase
-      currentStep?.commands.push(commandRecord)
+      hostRecord.runningStep?.commands.push(commandRecord)
     })
 
     return createShell(recordingTransport)
@@ -103,28 +102,21 @@ export const createSessionRecorder = (
   // Fail a step that starts while another is running, because a step's functions use the tools they are given.
   // This also catches steps run at once with `Promise.all`.
   const startStep = (stepName: string, kind: StepKind): Result => {
-    if (currentStep) {
-      const { name, kind: runningKind } = currentStep
+    const { runningStep } = hostRecord
+    if (runningStep) {
+      const { name, kind: runningKind } = runningStep
       return err(`'${kind}' can't run while ${runningKind} step '${name}' is running`, undefined)
     }
 
-    const stepRecord: StepRecord = {
-      name: stepName,
-      kind,
-      commands: [],
-      comparisons: {},
-      waitingOn: [],
-    }
-    hostRecord.stepRecords.push(stepRecord)
-    currentStep = stepRecord
+    hostRecord.runningStep = { name: stepName, kind, commands: [], comparisons: {}, waitingOn: [] }
   }
 
   /** Marks no step as running, and returns the record of the step that was. */
   const endStep = () => {
-    const stepRecord = currentStep
-    currentStep = undefined
+    const { runningStep } = hostRecord
+    hostRecord.runningStep = undefined
     currentPhase = undefined
-    return stepRecord
+    return runningStep
   }
 
   const finishStep = (status: StepStatus) => {
@@ -135,7 +127,7 @@ export const createSessionRecorder = (
     // `exec` in a fix. It still fails the host, and it belongs to this step.
     // Pass the host's own error, because there's no new one, and the keep rule leaves it as it is.
     if (hostRecord.failure) recordStepFailure(stepRecord, hostRecord.failure.error)
-    else stepRecord.status = status
+    else hostRecord.stepRecords.push({ ...stepRecord, status })
   }
 
   const failStep = (error: Error) => {
@@ -148,11 +140,11 @@ export const createSessionRecorder = (
   }
 
   const recordComparison = (phase: ComparePhase, comparison: Comparison) => {
-    if (currentStep) currentStep.comparisons[phase] = comparison
+    if (hostRecord.runningStep) hostRecord.runningStep.comparisons[phase] = comparison
   }
 
   const recordWaitingOn = (stepNames: string[]) => {
-    if (currentStep) currentStep.waitingOn = stepNames
+    if (hostRecord.runningStep) hostRecord.runningStep.waitingOn = stepNames
   }
 
   const convergeRecorder: ConvergeRecorder = { startPhase, recordComparison, recordWaitingOn }

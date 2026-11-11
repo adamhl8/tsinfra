@@ -5,100 +5,84 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
 
 ## Next
 
-1. **SSH transport.** The local transport, the `{ ... } </dev/null` wrapper, and the `sudo` preamble are done. The rest
-   comes in six pieces, each reviewed before the next (see [Transport](./docs/transport.md#ssh-and-controlmaster)).
-   Pieces 3 to 5 clean up how a host's failures are recorded and reported, before SSH goes further:
-   1. **Plain SSH.** `ssh -T` with commands on stdin to `sh -s`, the ControlMaster options with `BatchMode`, ssh's own
-      exit 255 as a failure to run, one retry on a connection closing as a command joins it, and `ssh -O stop` at the
-      end of the run. Integration tests against a real sshd in `bask test-docker`. Test a command that can't run after
-      the session starts, like sshd going away mid-run: it fails the host, and the step's record keeps the command and
-      its error.
-   2. **`ssh -G` defaults.** Preparation reads the host's effective settings, then passes `accept-new`,
-      `ConnectTimeout=10`, and `LogLevel=ERROR` only where the config says nothing, with the hints for a new host and a
-      changed key.
-   3. **The failure kinds in the report.** Four kinds: a startup failure stops the run before any host exists (a bad
-      flag, no `hosts/` directory, a host script that won't load), a preparation failure stops one host while it's
-      prepared, a host function failure is anything thrown during the host function that no step owns, and a step
-      failure belongs to a step. A preparation failure shows as `(preparation) <target>`, and a host function failure as
-      `(host fn) <target>` with a note, in place of today's `(host) a.ts`. Write the four kinds down in the docs.
-   4. **The host's record and its recorders (built).** One record per host, not one per run, because hosts will run in
-      parallel, and the report reads it. The package `session/recorder/` holds `records.ts` (every record type, and
-      `createHostRecord`), `commands.ts` (`createRecordingTransport(transport, addCommand)`), `failure-hints.ts`, and a
-      recorder per stage of the run, both writing to the same `HostRecord`, with `recorder.ts` re-exporting them.
-      - **The record.** `HostRecord` is `{ name, target, preparationCommands, stepRecords, failure? }`, and `runHost`
-        returns it in place of `HostReport`. Every `HostEntry` carries it, beside its `loadedHost`, and an optional
-        `sessionContext` that's unset when preparation failed. The session never holds it. `failure` is the host's one
-        `RecordedFailure`: a
-        `RecordedUnownedFailure { kind: "preparation" | "host fn", error, hints }`, or a
-        `RecordedStepFailure { kind: "step", stepRecord, error, hints }`. A failed step has no status, and the report
-        shows the failure after the steps, because the step that failed is always the last.
-      - **The preparation recorder.** `createPreparationRecorder(hostRecord)` gives `getShell(transport)`, a shell
-        that records onto `preparationCommands`, and `recordFailure(error)`, which sets the `preparation` failure with
-        its hints. `buildHostDetails(loadedHost, preparationRecorder)` builds the control machine shell, gets the base
-        transport from `prepareBaseTransport(localShell, target)`, then builds the host shell on it, which
-        `HostDetails.hostShell` carries to `finishHostDetails` for the prompt's password checks. The sudo password
-        check records `<sudo password>` through `recordedCmd`, checked in Docker with real sudo, and locally through
-        the prompt fixture's `--records`.
-      - **The session recorder.** `createSessionRecorder(hostRecord, hostOptions, transport)` takes the host's final
-        transport and keeps it to itself, behind `getShell({ sudo })`, which records under the running step above the
-        root transport. So nothing in the session can run a command off the record. It also holds the step recording
-        (`startStep`, `finishStep`, `failStep`, `convergeRecorder`) and the session's failure rules: `recordFailure`
-        keeps the first error and creates `host fn` failures, and a step claims any failure from while it ran, with
-        hints from its commands. `getFailure()` gives the session the host's error. `SessionContext` is
-        `{ name, home, sessionRecorder }`, built when preparation hands off, and `createHostSession` returns the `Host`.
-      - **Tests.** `createWrappedSession` gives a session a second session recorder on the same record, over a wrapped
-        transport. Callers that prepare outside `prepareHosts` pass a plain, unrecorded shell, or a recorder of their
-        own.
-   5. **Preparation commands on the host record (built).** Each command preparation runs has a label: `ssh config`,
-      `home directory`, `user name`, `passwordless sudo check`, `askpass helper write`, and `sudo password check`. The transport's own mechanics stay off the record, because they belong in the diagnostic log: the
-      `{ ... } </dev/null` wrapper, the `sudo` function line, the `ssh` process around each command, the retry when a
-      connection closes, and the end of the run's `ssh -O stop` (decided 2026-11-10, in place of recording it on each
-      host that used that target).
-      - **One hint function (built).** `getFailureHints(target, hostOptions, commandRecords)` in
-        `session/recorder/failure-hints.ts` reads the stderr of each command that exited non-zero, and the message of
-        each that failed to run, which is where ssh's stderr lives. Both recorders call it: the preparation recorder
-        with `preparationCommands`, and the session recorder with the failed step's commands. So the host-key hints and
-        the sudo hint apply in either stage.
-   6. **The cross-shell tests (built).** `file-ssh.docker.ts` writes 10 MB of binary over SSH, as the SSH user and with
-      `sudo: true`, on dash and busybox sh, and `file.test.ts` writes it locally, which reaches macOS `/bin/sh` on a
-      Mac. macOS `/bin/sh` is bash in POSIX mode. bash over SSH waits for the `shell` option (see Later), because
-      `/bin/sh` is dash on Debian and busybox on Alpine. `sudo-password.docker.ts` gives sudo the password from
-      `host()` over SSH, and checks a wrong one fails. The typed prompt stays local only, because it reads the control
-      machine's terminal. `setup.sh` gives `tester` and `sudopw` an sshd each through `setup_sshd`, and
-      `src/__tests__/sshd.ts` starts and stops the running user's.
-2. **Verbosity levels.** In four pieces, each reviewed before the next (the design is in [CLI](./docs/cli.md#output),
-   and piece 1's steps are in `docs/superpowers/plans/2026-11-11-verbosity-piece-1.md`):
+1. **Verbosity levels.** In four pieces, each reviewed before the next (the design is in [CLI](./docs/cli.md#output)).
+   Each piece gets its own plan in `docs/superpowers/plans/`, written when it starts, and each step in it is reviewed
+   on its own. Every step ends with `tsc` and `bask lint` passing, and a step that changes what's recorded also runs
+   `bask test-docker`. Each piece adds a preview pass for its level, to check the output by eye:
    1. **The levels and `-v`.** `-v` counted with Optique's `.multiple()`, which already parses `-vvv`, `-v -v`, and
-      `--verbose -vv`, capped at 3, and a `verbosity` level in place of `verbose: boolean` in `FormatOptions`. A host
-      with no steps gets its "no steps" block by default. Every piece of a block gets the level it shows from, and one
-      `keepShown` filter prunes them before any column is sized. A `sudo` boolean on `StepRecord`, because `sudo: true`
+      `--verbose -vv`, capped at 3, and a `verbosity` level in `ReportOptions`. A host with no steps gets its "no steps"
+      block by default. The builders give every piece of a block the level it shows from, and one `keepShown` filter in
+      `renderHostBlock` prunes them before any column is sized. A `sudo` boolean on `StepRecord`, because `sudo: true`
       is a step option, and every command in the step runs as root. The session recorder's `getShell` splits in two:
       `getStepShell({ sudo })` records `sudo` on the running step and returns its shell, and `getToolShell()` gives
-      the tools theirs, which never use sudo. `-v` shows it as `sudo` in the step note, before any `needs`.
+      the tools theirs, which never use sudo. `-v` shows it as `sudo` in the entry's note, before any `needs`. Its
+      steps are in `docs/superpowers/plans/2026-11-11-verbosity-piece-1.md`:
+      1. **Count `-v` (built).**
+      2. **"no steps" by default (built).**
+      3. **The block's structure (built), step 3a.** The `HostBlock` types, build, style, and layout, and a report that
+         only renders, with the summary and the exit code read from the blocks.
+      4. **The running step on the host record (built), step 3d.** `stepRecords` holds only finished steps, and a step
+         that fails is the failure's.
+      5. **The diff's limits, step 3b.**
+      6. **Levels and the filter, step 3c.** Once it removes `isStepShown`, fold `getStepWarnings` into
+         `toWarningDetails` in `src/report/build/details/details.ts`, because it'll be the only caller, and the rule then
+         sits with the detail it makes.
+      7. **`StepRecord.sudo` and the two shells, step 4.**
+      8. **The `sudo` note, step 5.**
+      9. **A docs check, step 6.**
    2. **`secret` on commands.** The `secret` option [Steps](./docs/steps.md#commands) gives `read`, `exec`, `inspect`,
-      `ensure`, and `run` isn't built, and `-vv` prints the text of every command that ran, so it comes first. The
-      design is still to be settled.
-   3. **`-vv`.** Each step's commands under its details, tsinfra's own by their label, and the `file` write script's
-      label followed by its `validate` command. The write script records its `validate` command in a field next to
-      `label`, passed through `exec`'s options, because a labelled command never shows its text. Add that to
-      [What a host records](./docs/cli.md#what-a-host-records) with it. A preparation failure lists preparation's
-      commands by their labels.
-   4. **`-vvv`.** `exit:`, `stdout:`, and `stderr:` rows under each command, each stream cut off after 20 lines, and
-      the phase before each command in a step that compares. A read or inspect shows its rows right under its line.
-      A failure's note already tells people to run with `-vvv`, so `-vvv` has to show the stderr that note promises,
-      and the note itself goes away at `-vvv`, through an `until` level on it.
+      `ensure`, and `run` isn't built, and `-vv` prints the text of every command that ran, so it comes first. `file`'s
+      own `secret` is a different option, which never fetches the old content. Settle the design in a rundown before
+      its plan. The leanings so far:
+      - **The record** holds `<secret command>` in place of the command, like the `<sudo password>` stand-in, and
+        drops stdout and stderr. It keeps the exit code, which gives nothing away, so `-vvv` can still show it.
+      - **Errors** leave out the command and its stderr, like `failed to read <secret command> -> exited with code 1`,
+        because the docs promise to keep a secret out of errors, not only out of the report.
+      - **A secret `h.read` or `h.inspect`** takes the stand-in as its step name, because its name is its command.
 
-   The preview gets a pass for each level. The `verbose` worktree from 2026-11-09 holds an earlier start on piece 1,
-   built before the recorder package, so piece 1 starts again on `main`.
+      The steps, as expected so far:
+      1. **The recorder.** A `secret` flag in the shell's `CommandOptions` records the stand-in and drops the output,
+         tested in `session-recorder.test.ts`.
+      2. **Errors.** A secret command's failure leaves out its text and its stderr.
+      3. **The tools and the read steps.** `secret` on `read`, `exec`, and `inspect` as tools, and on `h.read` and
+         `h.inspect`, with the stand-in as the step's name.
+      4. **`ensure` and `run`.** `secret` on a string `check`, `fix`, or run command.
+      5. **The report.** A secret command never gives a `stderr:` failure row and never counts toward a hint. Then a
+         docs check.
+
+   3. **`-vv`.** Each step's commands under its details, tsinfra's own by their label, and the `file` write script's
+      label followed by its `validate` command. A preparation failure lists preparation's commands by their labels.
+      The steps:
+      1. **Command parts.** Each command a step ran is a part from 2, shown dimmed as `$ cmd` under the details. One
+         with a label shows as `$ (label)`, and a read or inspect lists none. A failed step's commands go under its
+         error with its other details. Add an `apply -vv` preview pass.
+      2. **`validate`.** The write script records its `validate` command in a field next to `label`, passed through
+         `exec`'s options, because a labelled command never shows its text. The report appends it, like
+         `$ (file write script) validate: nginx -t ...`. Add it to
+         [What a host records](./docs/cli.md#what-a-host-records).
+      3. **Preparation's commands.** The `(preparation)` entry lists them as labelled command parts from 2.
+      4. **A docs check,** and mark the piece built.
+   4. **`-vvv`.** `exit:`, `stdout:`, and `stderr:` rows under each command, each stream cut off after 20 lines, and
+      the phase before each command in a step that compares. A failure's note already tells people to run with
+      `-vvv`, so `-vvv` has to show the stderr that note promises, and the note itself goes away at `-vvv`. The steps:
+      1. **Exit rows.** An `exit:` row from 3 under each command, even for 0, and the error in its place for a command
+         that couldn't run. A read or inspect shows its rows right under its head line.
+      2. **stdout and stderr rows,** each cut off after 20 lines, with a note saying how many were left out.
+      3. **Phases.** In a step that compares, each command starts with its phase, like `before $ cmd`, and its rows
+         line up past it, as in the docs' example. It's the hardest alignment in the feature, so it's a step of its
+         own.
+      4. **`until`.** Parts get an `until` level, and the "run with -vvv" note uses it to go away at 3. Add an
+         `apply -vvv` preview pass.
+      5. **A docs check,** and mark this item built.
 
 ## Port
 
-3. **The Mac.** Port `~/homelab/pyinfra/macbook` to `hosts/macbook.ts`, with its helpers in `~/homelab/lib`. Compare
+2. **The Mac.** Port `~/homelab/pyinfra/macbook` to `hosts/macbook.ts`, with its helpers in `~/homelab/lib`. Compare
    `tsinfra plan` against `just plan macbook` on the same machine. This settles the plan output question, and
    tries the sudo prompt from `file` part 6 on a host without passwordless sudo.
-4. **Two simple containers.** flaresolverr and byparr, the ones the homelab todo already marks as the place to start.
+3. **Two simple containers.** flaresolverr and byparr, the ones the homelab todo already marks as the place to start.
    Then sonarr, which needs a systemd unit and a `needs`.
-5. **Revisit the open questions** with those ports as evidence, and decide which helpers move into tsinfra.
+4. **Revisit the open questions** with those ports as evidence, and decide which helpers move into tsinfra.
 
 ## Later
 
@@ -345,7 +329,7 @@ Decided, and wanted eventually, with no place in the order yet.
       1. **The signature.** `content` as `file`'s second argument, with every option optional, and a `Blob` like
          `Bun.file(...)` accepted as content, read inside the step.
       2. **The write script and verification.** The write script in its tested order, and verification after it. Now that
-         `file` can fail with "still differs", replace the hand-built record in `format.test.ts` that checks labelled
+         `file` can fail with "still differs", replace the hand-built record in `report.test.ts` that checks labelled
          commands stay out of the stderr rule with a real run.
       3. **Sudo.** `sudo` in the shell and transport for tsinfra's own commands.
       4. **The size limit.** Content over 10 MB fails before anything is sent.

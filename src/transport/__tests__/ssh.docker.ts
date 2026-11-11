@@ -6,7 +6,7 @@ import path from "node:path"
 import bun, { $ } from "bun"
 import { isErr, messageChain } from "ts-explicit-errors"
 
-import { createSessionOn, prepareAndRunHost, readOrMessage, toLoadedHost } from "#__tests__/session.ts"
+import { createSessionOn, getStepRecords, prepareAndRunHost, readOrMessage, toLoadedHost } from "#__tests__/session.ts"
 import { SSHD_TARGET, startSshd, stopSshd } from "#__tests__/sshd.ts"
 import { host } from "#hosts/host.ts"
 import { prepareBaseTransport } from "#hosts/prepare/host-details/host-details.ts"
@@ -142,7 +142,10 @@ describe("the ssh transport against a real sshd", () => {
     expect(await readOrMessage(hostSession.host, "echo hi")).toBe(`failed to read 'echo hi' -> ${sshError}`)
 
     expect(
-      hostSession.hostRecord.stepRecords[0]?.commands.map(({ cmd, output }) => ({ cmd, output: toMessage(output) })),
+      getStepRecords(hostSession.hostRecord)[0]?.commands.map(({ cmd, output }) => ({
+        cmd,
+        output: toMessage(output),
+      })),
     ).toStrictEqual([{ cmd: "echo hi", output: sshError }])
   })
 

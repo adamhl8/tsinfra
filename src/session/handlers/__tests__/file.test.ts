@@ -17,6 +17,7 @@ import {
   createFakeToolSession,
   createSession,
   fileOrMessage,
+  getStepRecords,
 } from "#__tests__/session.ts"
 import { handleFile } from "#session/handlers/file/file.ts"
 import { PUBLIC_FILE_MODE } from "#session/handlers/shared/filesystem/mode.ts"
@@ -317,7 +318,7 @@ describe("h.file owner check", () => {
     expect(await fileOrMessage(hostSession.host, filePath, "a\n", { user: "root" })).toBe(
       "failed to compare the host with what the step wants -> user 'root' needs sudo: true, because only root can change a file's owner to another user",
     )
-    expect(hostSession.hostRecord.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual([
+    expect(getStepRecords(hostSession.hostRecord)[0]?.commands.map(({ label }) => label)).toStrictEqual([
       "file details script",
       "user command",
     ])
@@ -418,7 +419,7 @@ describe("h.file size limit", () => {
     expect(await fileOrMessage(hostSession.host, await createFilePath(), toContent())).toBe(
       "the content given to 'file' is 10 MB, above the 10 MB limit",
     )
-    expect(hostSession.hostRecord.stepRecords[0]?.commands).toStrictEqual([])
+    expect(getStepRecords(hostSession.hostRecord)[0]?.commands).toStrictEqual([])
   })
 
   // Use a sparse file, because reading it would take far more memory than the test has.
@@ -631,7 +632,7 @@ describe("h.file in apply", () => {
     expect(await fileOrMessage(hostSession.host, filePath, "new\n")).toBe(
       `failed to compare the host with what the step wants -> '${filePath}' is a symlink, so file won't replace it`,
     )
-    expect(hostSession.hostRecord.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual([
+    expect(getStepRecords(hostSession.hostRecord)[0]?.commands.map(({ label }) => label)).toStrictEqual([
       "file details script",
     ])
     expect(await bun.file(targetPath).text()).toBe("old\n")
@@ -744,10 +745,9 @@ describe("h.file with sudo", () => {
       `failed to validate the options given to 'file' -> sudo must be boolean (was "yes")`,
     )
 
-    expect(hostSession.hostRecord.stepRecords[0]?.commands).toStrictEqual([])
-    expect(hostSession.hostRecord.failure).toMatchObject({
-      kind: "step",
-      stepRecord: hostSession.hostRecord.stepRecords[0],
+    expect(hostSession.hostRecord).toMatchObject({
+      stepRecords: [],
+      failure: { kind: "step", stepRecord: { commands: [] } },
     })
     expect(await readSudoCalls()).toStrictEqual([])
   })

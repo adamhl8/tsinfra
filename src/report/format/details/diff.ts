@@ -1,7 +1,7 @@
 import type { StructuredPatchHunk } from "diff"
 import { structuredPatch } from "diff"
 
-import type { FormatOptions } from "#report/format/format.ts"
+import type { ReportOptions } from "#report/report.ts"
 import { styleDiffFrame, styleGot, styleNote, styleWant } from "#styles.ts"
 import { endWithNewline, getMaxWidth } from "#utils.ts"
 
@@ -41,21 +41,21 @@ const formatHunk = (hunk: StructuredPatchHunk, gutterWidth: number): string[] =>
 }
 
 /**
- * Returns a line diff from `got` to `want`, numbered by `want`'s lines, with a dim rule between hunks. Without
- * `verbose`, a diff that is too long to show, or that takes too long to compute, becomes a note that suggests
- * `--verbose`.
+ * Returns a line diff from `got` to `want`, numbered by `want`'s lines, with a dim rule between hunks. Below level 1, a
+ * diff that is too long to show, or that takes too long to compute, becomes a note that suggests `--verbose`.
  */
-export const formatDiff = (got: string, want: string, formatOptions: FormatOptions): string[] => {
-  const { verbose = false } = formatOptions
+export const formatDiff = (got: string, want: string, reportOptions: ReportOptions): string[] => {
+  const { verbosity = 0 } = reportOptions
+  const isVerbose = verbosity >= 1
 
-  const timeout = verbose ? VERBOSE_DIFF_TIMEOUT_MS : DIFF_TIMEOUT_MS
+  const timeout = isVerbose ? VERBOSE_DIFF_TIMEOUT_MS : DIFF_TIMEOUT_MS
   // End both sides with a newline, so jsdiff never adds its "No newline at end of file" line.
   const patch = structuredPatch("", "", endWithNewline(got), endWithNewline(want), undefined, undefined, {
     context: DIFF_CONTEXT_LINES,
     timeout,
   })
 
-  if (patch === undefined) return [styleNote(`diff took too long to compute${verbose ? "" : VERBOSE_HINT}`)]
+  if (patch === undefined) return [styleNote(`diff took too long to compute${isVerbose ? "" : VERBOSE_HINT}`)]
 
   // Pad every gutter to the widest line number, so the diff lines start in one column.
   const lastLineNumbers = patch.hunks.map(({ newStart, newLines }) => newStart + newLines - 1)
@@ -71,7 +71,7 @@ export const formatDiff = (got: string, want: string, formatOptions: FormatOptio
     diffLines.push(...lines)
   }
 
-  if (diffLines.length > MAX_DIFF_LINES && !verbose)
+  if (diffLines.length > MAX_DIFF_LINES && !isVerbose)
     return [styleNote(`long diff (${diffLines.length} lines)${VERBOSE_HINT}`)]
 
   // Frame the diff with a rule above and below, so it stands apart from the lines around it, like a `stderr:` row.

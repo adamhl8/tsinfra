@@ -83,8 +83,10 @@ export type {
   ConvergePhase,
   HostRecord,
   PreparationRecorder,
+  RecordedFailure,
   RecordedStepFailure,
   RecordedUnownedFailure,
+  FinishedStepRecord,
   StepRecord,
 } from "#session/recorder/recorder.ts"
 export { createHostRecord, createPreparationRecorder, createSessionRecorder } from "#session/recorder/recorder.ts"

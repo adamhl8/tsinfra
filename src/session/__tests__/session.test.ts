@@ -6,19 +6,28 @@ import bun from "bun"
 import type { Result } from "ts-explicit-errors"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
-import { createSession, ensureOrMessage, getFailureMessage, readOrMessage, runOrMessage } from "#__tests__/session.ts"
-import type { HostRecord, StepRecord } from "#session/recorder/recorder.ts"
+import {
+  createSession,
+  ensureOrMessage,
+  getFailureMessage,
+  getStepRecords,
+  readOrMessage,
+  runOrMessage,
+} from "#__tests__/session.ts"
+import type { FinishedStepRecord, HostRecord, StepRecord } from "#session/recorder/recorder.ts"
 import type { Host } from "#session/session.ts"
 
 const toPlainResult = <T>(result: Result<T> | undefined) => (isErr(result) ? messageChain(result) : result)
 
-/** Returns a step's status, or for the step that failed, the message chain of the host's failure, which it owns. */
-const toPlainStatus = ({ failure }: HostRecord, stepRecord: StepRecord | undefined) =>
-  failure?.kind === "step" && failure.stepRecord === stepRecord ? messageChain(failure.error) : stepRecord?.status
+/** Returns a finished step's status, or for the step that failed, the message chain of the host's failure. */
+const toPlainStatus = ({ failure }: HostRecord, stepRecord: FinishedStepRecord | StepRecord | undefined) => {
+  if (stepRecord && "status" in stepRecord) return stepRecord.status
+  return failure && messageChain(failure.error)
+}
 
 /** Turns step records into plain values to compare, with a failed step's error as its message chain. */
 const toPlainRecords = (hostRecord: HostRecord) =>
-  hostRecord.stepRecords.map((stepRecord) => ({
+  getStepRecords(hostRecord).map((stepRecord) => ({
     name: stepRecord.name,
     kind: stepRecord.kind,
     status: toPlainStatus(hostRecord, stepRecord),
@@ -297,7 +306,7 @@ describe("step records", () => {
         commands: ["false", "echo nope >&2; exit 2"],
       },
     ])
-    expect(toPlainResult(hostSession.hostRecord.stepRecords[0]?.commands[1]?.output)).toStrictEqual({
+    expect(toPlainResult(getStepRecords(hostSession.hostRecord)[0]?.commands[1]?.output)).toStrictEqual({
       stdout: "",
       stderr: "nope\n",
       exitCode: 2,
@@ -396,7 +405,7 @@ describe("step records", () => {
 /** Returns what a step recorded, with each comparison as whether it was in sync, and each command as its phase. */
 const toConvergeRecord = (hostSession: Awaited<ReturnType<typeof createSession>>) => {
   const { hostRecord } = hostSession
-  const [stepRecord] = hostRecord.stepRecords
+  const [stepRecord] = getStepRecords(hostRecord)
   const { commands, comparisons } = stepRecord ?? {}
   return {
     status: toPlainStatus(hostRecord, stepRecord),

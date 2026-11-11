@@ -6,7 +6,7 @@ import { makeTempDir } from "@adamhl8/configs/test"
 
 import { createSession, fileOrMessage, prepareAndRunHost, toLoadedHost } from "#__tests__/session.ts"
 import { host } from "#hosts/host.ts"
-import { formatHostBlock } from "#report/format/format.ts"
+import { renderHostBlock, toHostBlock } from "#report/report.ts"
 
 describe("a user with no sudo rule", () => {
   it("should fail straight away when a step needs sudo", async () => {
@@ -28,7 +28,7 @@ describe("a user with no sudo rule", () => {
       "plan",
     )
 
-    expect(formatHostBlock(hostRecord)).toContain(
+    expect(renderHostBlock(toHostBlock(hostRecord, {}))).toContain(
       "sudo needs a password on this host, so set the sudo option on host()",
     )
   })

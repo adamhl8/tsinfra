@@ -7,6 +7,7 @@ import { HOST_SCRIPT_EXTENSION } from "#hosts/hosts.ts"
 import type { Mode } from "#mode.ts"
 import { MODES } from "#mode.ts"
 import packageJson from "#package.json" with { type: "json" }
+import { toVerbosity } from "#report/report.ts"
 
 const DEFAULT_HOSTS_DIR = "hosts"
 
@@ -14,9 +15,11 @@ const hostOptions = object({
   hostsDir: option("--hosts-dir", path({ metavar: "DIR" }), {
     description: message`The directory of host scripts`,
   }).withDefault(DEFAULT_HOSTS_DIR),
-  verbose: option("-v", "--verbose", {
-    description: message`Show every step, even the ones that didn't change anything`,
-  }),
+  verbosity: option("-v", "--verbose", {
+    description: message`Show more of each host's output. Use -vv and -vvv to show even more`,
+  })
+    .multiple()
+    .map((flags) => toVerbosity(flags.length)),
   hosts: argument(string({ metavar: "HOST" }), {
     description: message`A host to run, by its file name without ${text(HOST_SCRIPT_EXTENSION)} (default: every host)`,
   }).multiple(),

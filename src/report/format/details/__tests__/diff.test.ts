@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 
-import { formatDiff } from "#report/format/diff.ts"
+import { formatDiff } from "#report/format/details/diff.ts"
 
 const numberedLines = (prefix: string, count: number) =>
   Array.from({ length: count }, (_, index) => `${prefix}${index}`).join("\n")
@@ -19,7 +19,7 @@ describe("formatDiff", () => {
   })
 
   it("should show a long diff with --verbose, framed by a rule above and below", () => {
-    const diffLines = formatDiff(numberedLines("a", 10), numberedLines("b", 10), { verbose: true })
+    const diffLines = formatDiff(numberedLines("a", 10), numberedLines("b", 10), { verbosity: 1 })
     const rule = "─".repeat(6)
 
     expect(diffLines).toHaveLength(22)

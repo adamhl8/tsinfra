@@ -280,7 +280,7 @@ finishes:
 - **A live line per running host,** with a spinner and the step it is on. The current step comes from the host's
   record, because a step's record is pushed when the step starts.
 - **A permanent block per finished host.** When a host finishes, its live line goes away and its block prints above the
-  live area, where it stays. The block is the same text `formatHostBlock` produces, so the live view and the report never
+  live area, where it stays. The block is the same text `renderHostBlock` produces, so the live view and the report never
   disagree.
 - **The summary** prints once every host has finished.
 

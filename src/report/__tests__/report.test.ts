@@ -12,26 +12,39 @@ import {
   createFakeSudoSession,
   createWrappedSession,
   prepareAndRunHost,
+  throwBoom,
   toLoadedHost,
 } from "#__tests__/session.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
 import type { Mode } from "#mode.ts"
-import { formatHostBlock } from "#report/format/format.ts"
-import { formatSummary } from "#report/summary.ts"
+import type { ReportOptions } from "#report/report.ts"
+import { getExitCode, renderHostBlock, renderSummary, toHostBlock } from "#report/report.ts"
+import { hasDrift } from "#report/summary.ts"
 import type { Want } from "#session/handlers/ensure/check.ts"
 import type { EnsureOptions } from "#session/handlers/ensure/ensure.ts"
-import type { Host } from "#session/session.ts"
+import type { Host, HostRecord } from "#session/session.ts"
 
 const runNamedHost = async (name: string, fn: HostFunction, mode: Mode) =>
   prepareAndRunHost(toLoadedHost(name, host("@local", fn)), mode)
 
 const isRoot = process.getuid?.() === 0
 
-const formatBlock = async (fn: HostFunction, mode: Mode) => formatHostBlock(await runNamedHost("a", fn, mode))
+/** Builds a host's block from its record and renders it, as the CLI does. */
+const renderRecord = (hostRecord: HostRecord, reportOptions: ReportOptions = {}) =>
+  renderHostBlock(toHostBlock(hostRecord, reportOptions), reportOptions)
+
+/** Builds each host's block from its record and renders their summary, as the CLI does. */
+const renderRecordsSummary = (hostRecords: HostRecord[], mode: Mode) =>
+  renderSummary(
+    hostRecords.map((hostRecord) => toHostBlock(hostRecord, {})),
+    mode,
+  )
+
+const formatBlock = async (fn: HostFunction, mode: Mode) => renderRecord(await runNamedHost("a", fn, mode))
 
 const formatVerboseBlock = async (fn: HostFunction) =>
-  formatHostBlock(await runNamedHost("a", fn, "plan"), { verbose: true })
+  renderRecord(await runNamedHost("a", fn, "plan"), { verbosity: 1 })
 
 const changeAndRun = async (h: Host) => {
   await h.ensure("Write the unit", { check: "false", want: true, fix: "true" })
@@ -117,7 +130,7 @@ const failSecondCompare = async (h: Host) => {
   })
 }
 
-describe("formatHostBlock", () => {
+describe("renderHostBlock", () => {
   it("should mark a changed step with '~' and a ran step with '>' in plan", async () => {
     expect(await formatBlock(changeAndRun, "plan")).toBe(
       "a\n  ~ change:    (ensure) Write the unit\n  > triggered: (run)    Reload systemd\n  > triggered: (run)    Prune",
@@ -143,12 +156,18 @@ describe("formatHostBlock", () => {
     )
   })
 
-  it("should give a host with no steps a block with --verbose", async () => {
+  it("should give a host with no steps a block by default", async () => {
     expect(
-      await formatVerboseBlock(async () => {
+      await formatBlock(async () => {
         /* empty */
-      }),
+      }, "plan"),
     ).toBe(["a", "  no steps"].join("\n"))
+  })
+
+  it("should show a failure thrown before any step, not no steps", async () => {
+    expect(await formatBlock(throwBoom, "plan")).toBe(
+      "a\n  ! failed: (host fn) @local\n      boom\n        thrown in the host function, outside any step",
+    )
   })
 
   it("should line up the notes of a block's waiting steps in one column", async () => {
@@ -202,17 +221,18 @@ describe("formatHostBlock", () => {
     const startError =
       "failed to read the ssh config for 'unreachable host' -> exited with code 255: hostname contains invalid characters"
 
-    expect([formatHostBlock(hostRecord), formatSummary([hostRecord], "plan")]).toStrictEqual([
+    expect([renderRecord(hostRecord), renderRecordsSummary([hostRecord], "plan")]).toStrictEqual([
       `a\n  ! failed: (preparation) ${UNREACHABLE_TARGET}\n      ${startError}`,
       "a   failed",
     ])
   })
 
   it("should show a hint under a host that couldn't be prepared", () => {
-    const hostBlock = formatHostBlock({
+    const hostBlock = renderRecord({
       name: "a",
       target: "a.lan",
       preparationCommands: [],
+      runningStep: undefined,
       stepRecords: [],
       failure: {
         kind: "preparation",
@@ -264,7 +284,7 @@ const formatFailedCheck = async <T extends Want>(options: EnsureOptions<T>) => {
   return hostBlock?.split("\n").slice(3)
 }
 
-describe("formatHostBlock for a step that would change a string", () => {
+describe("renderHostBlock for a step that would change a string", () => {
   it("should show got and want under the step for a single-line value", async () => {
     const hostBlock = await formatBlock(async (h) => {
       await h.ensure("Start Sonarr", { check: "echo inactive", want: "active", fix: "true" })
@@ -324,7 +344,7 @@ describe("formatHostBlock for a step that would change a string", () => {
   })
 })
 
-describe("formatHostBlock for a file step", () => {
+describe("renderHostBlock for a file step", () => {
   it("should show a file's diff and each attribute that changes, old value to new", async () => {
     const filePath = path.join(await makeTempDir(), "app.conf")
     await bun.write(filePath, "port = 8080\nworkers = 4\n")
@@ -368,7 +388,7 @@ describe("formatHostBlock for a file step", () => {
     const { uid, gid } = await stat(filePath)
     const { hostSession } = await createFakeSudoSession("plan")
     await hostSession.host.file(filePath, "a\n", { user: uid + 1, group: gid + 1, sudo: true })
-    const hostBlock = formatHostBlock(hostSession.hostRecord)
+    const hostBlock = renderRecord(hostSession.hostRecord)
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
       `      user:  ${uid} -> ${uid + 1}`,
@@ -426,7 +446,7 @@ describe("formatHostBlock for a file step", () => {
     const { uid } = await lstat(linkPath)
     const { hostSession } = await createFakeSudoSession("plan")
     await hostSession.host.link(linkPath, directory, { user: uid + 1, sudo: true })
-    const hostBlock = formatHostBlock(hostSession.hostRecord)
+    const hostBlock = renderRecord(hostSession.hostRecord)
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
       `      target: /old -> ${directory}`,
@@ -462,7 +482,7 @@ describe("formatHostBlock for a file step", () => {
   })
 })
 
-describe("formatHostBlock for a host state that still differs after the fix", () => {
+describe("renderHostBlock for a host state that still differs after the fix", () => {
   it("should show the exit codes when a want: false check still exits 0", async () => {
     expect(await formatFailedCheck({ check: "true", want: false, fix: "true" })).toStrictEqual([
       "        got:  exit code 0",
@@ -556,7 +576,7 @@ const createNoisySession = async (filePath: string) =>
     return output
   })
 
-describe("formatHostBlock for the stderr of a step that still differs", () => {
+describe("renderHostBlock for the stderr of a step that still differs", () => {
   const AFTER_FIX_NOTE = "        some commands after the fix wrote to stderr, run with -vvv to see them"
   const DURING_FIX_NOTE = "        some commands during the fix wrote to stderr, run with -vvv to see them"
 
@@ -668,7 +688,7 @@ describe("formatHostBlock for the stderr of a step that still differs", () => {
     const hostSession = await createNoisySession(filePath)
     await attempt(async () => hostSession.host.file(filePath, "a\n"))
 
-    const hostBlock = formatHostBlock(hostSession.hostRecord)
+    const hostBlock = renderRecord(hostSession.hostRecord)
 
     expect(hostBlock).toContain("the host's state still differs after the fix")
     expect(hostBlock).not.toContain("noise")
@@ -676,7 +696,7 @@ describe("formatHostBlock for the stderr of a step that still differs", () => {
   })
 })
 
-describe("formatHostBlock for a step that failed before it could compare again", () => {
+describe("renderHostBlock for a step that failed before it could compare again", () => {
   it.each([
     ["the fix failed", failFix],
     ["the compare after the fix failed", failSecondCompare],
@@ -691,7 +711,7 @@ describe("formatHostBlock for a step that failed before it could compare again",
     ["the compare after the fix failed", failSecondCompare],
   ])("should show the labelled values from before the fix with verbose when %s", async (_, fn) => {
     const hostRecord = await runNamedHost("a", fn, "apply")
-    const lines = formatHostBlock(hostRecord, { verbose: true })?.split("\n").slice(3)
+    const lines = renderRecord(hostRecord, { verbosity: 1 })?.split("\n").slice(3)
 
     expect(lines).toStrictEqual(["        values before the fix", "        got:  'old'", "        want: 'new'"])
   })
@@ -739,7 +759,7 @@ const createBrokenLink = async () => {
 const NEEDS_PASSWORD_CMD = "echo 'sudo: a password is required' >&2; exit 1"
 const SUDO_OPTION_HINT = "        sudo needs a password on this host, so set the sudo option on host()"
 
-describe("formatHostBlock for a sudo that needed a password", () => {
+describe("renderHostBlock for a sudo that needed a password", () => {
   it("should hint at the sudo option under the failed step, on a host that doesn't declare sudo", async () => {
     const hostBlock = await formatBlock(async (h) => {
       await h.read(NEEDS_PASSWORD_CMD)
@@ -794,7 +814,7 @@ describe("formatHostBlock for a sudo that needed a password", () => {
   })
 })
 
-describe("formatHostBlock and formatSummary for a warning", () => {
+describe("renderHostBlock and renderSummary for a warning", () => {
   it("should show a link to a missing path that's already right without --verbose, and count it", async () => {
     const { linkPath, target } = await createBrokenLink()
     const hostRecord = await runNamedHost(
@@ -805,7 +825,7 @@ describe("formatHostBlock and formatSummary for a warning", () => {
       "plan",
     )
 
-    expect([formatHostBlock(hostRecord), formatSummary([hostRecord], "plan")]).toStrictEqual([
+    expect([renderRecord(hostRecord), renderRecordsSummary([hostRecord], "plan")]).toStrictEqual([
       ["a", `  = unchanged: (link) ${linkPath}`, `      warning: nothing exists at target -> ${target}`].join("\n"),
       "a   unchanged, 1 warning",
     ])
@@ -833,7 +853,7 @@ describe("formatHostBlock and formatSummary for a warning", () => {
       "plan",
     )
 
-    expect(formatSummary([hostRecord], "plan").split("\n").at(-1)).toBe("a   1 change, 2 warnings")
+    expect(renderRecordsSummary([hostRecord], "plan").split("\n").at(-1)).toBe("a   1 change, 2 warnings")
   })
 
   // Skip this as root, because root can write to any directory, so the write wouldn't fail.
@@ -854,7 +874,7 @@ describe("formatHostBlock and formatSummary for a warning", () => {
   })
 })
 
-describe("formatSummary", () => {
+describe("renderSummary", () => {
   it("should list each host's status, padded to the longest name, after the plan reminder", async () => {
     const hostRecords = [
       await runNamedHost("caddy", stayRight, "plan"),
@@ -863,7 +883,7 @@ describe("formatSummary", () => {
       await runNamedHost("web", changeOnce, "plan"),
     ]
 
-    expect(formatSummary(hostRecords, "plan")).toBe(
+    expect(renderRecordsSummary(hostRecords, "plan")).toBe(
       [
         "Steps after a change were checked without that change, so apply may differ.",
         "",
@@ -878,18 +898,83 @@ describe("formatSummary", () => {
   it("should count waiting steps apart from changes", async () => {
     const hostRecords = [await runNamedHost("macbook", waitOnBrew, "plan")]
 
-    expect(formatSummary(hostRecords, "plan").split("\n").at(-1)).toBe("macbook   1 change, 1 waiting")
+    expect(renderRecordsSummary(hostRecords, "plan").split("\n").at(-1)).toBe("macbook   1 change, 1 waiting")
   })
 
   it("should leave out the reminder when only runs would run", async () => {
     const hostRecords = [await runNamedHost("a", runOnce, "plan")]
 
-    expect(formatSummary(hostRecords, "plan")).toBe("a   1 change")
+    expect(renderRecordsSummary(hostRecords, "plan")).toBe("a   1 change")
   })
 
   it("should leave out the reminder in apply", async () => {
     const hostRecords = [await runNamedHost("a", runOnce, "apply")]
 
-    expect(formatSummary(hostRecords, "apply")).toBe("a   1 change")
+    expect(renderRecordsSummary(hostRecords, "apply")).toBe("a   1 change")
+  })
+  it("should count and exit the same at every level, because hiding a step doesn't change how the host went", async () => {
+    const { linkPath, target } = await createBrokenLink()
+    const hostRecord = await runNamedHost(
+      "a",
+      async (h) => {
+        await stayRight(h)
+        await h.link(linkPath, target)
+        await waitOnBrew(h)
+      },
+      "plan",
+    )
+
+    const verdicts = ([0, 1] as const).map((verbosity) => {
+      const hostBlocks = [toHostBlock(hostRecord, { verbosity })]
+      return [renderSummary(hostBlocks, "plan").split("\n").at(-1), getExitCode(hostBlocks, "plan")]
+    })
+    const verdict = ["a   1 change, 1 waiting, 1 warning", 2]
+    expect(verdicts).toStrictEqual([verdict, verdict])
+  })
+})
+
+/** Plans a host with `fn` and returns its block, as the CLI builds it. */
+const planBlock = async (fn: HostFunction, name = "a") => toHostBlock(await runNamedHost(name, fn, "plan"), {})
+
+describe("hasDrift", () => {
+  it("should be true when a step's check did not pass", async () => {
+    expect(hasDrift(await planBlock(changeOnce))).toBe(true)
+  })
+
+  it("should be false when only a run happened", async () => {
+    expect(hasDrift(await planBlock(runOnce))).toBe(false)
+  })
+
+  it("should be false when the only step failed", async () => {
+    expect(hasDrift(await planBlock(failRead))).toBe(false)
+  })
+})
+
+describe("getExitCode", () => {
+  it("should be 0 from plan when the only change is a run", async () => {
+    expect(getExitCode([await planBlock(runOnce)], "plan")).toBe(0)
+  })
+
+  it("should be 2 from plan when a host has drift", async () => {
+    expect(getExitCode([await planBlock(changeOnce)], "plan")).toBe(2)
+  })
+
+  it("should be 0 from apply when a host has drift", async () => {
+    expect(getExitCode([await planBlock(changeOnce)], "apply")).toBe(0)
+  })
+
+  it("should be 0 from plan when the only finding is a warning", async () => {
+    const { linkPath, target } = await createBrokenLink()
+    const hostBlock = await planBlock(async (h) => {
+      await h.link(linkPath, target)
+    })
+
+    expect(getExitCode([hostBlock], "plan")).toBe(0)
+  })
+
+  it("should be 1 when a host fails, even with drift on another", async () => {
+    const hostBlocks = [await planBlock(changeOnce, "a"), await planBlock(failRead, "b")]
+
+    expect(getExitCode(hostBlocks, "plan")).toBe(1)
   })
 })

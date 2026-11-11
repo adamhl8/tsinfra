@@ -4,8 +4,10 @@ export type {
   CommandRecord,
   ConvergePhase,
   HostRecord,
+  RecordedFailure,
   RecordedStepFailure,
   RecordedUnownedFailure,
+  FinishedStepRecord,
   StepRecord,
 } from "#session/recorder/records.ts"
 export { createHostRecord } from "#session/recorder/records.ts"

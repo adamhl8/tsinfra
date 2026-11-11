@@ -7,7 +7,14 @@ import process from "node:process"
 import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
 
-import { castInvalid, createFakeSudoSession, createSession, linkOrMessage, runOrMessage } from "#__tests__/session.ts"
+import {
+  castInvalid,
+  createFakeSudoSession,
+  createSession,
+  getStepRecords,
+  linkOrMessage,
+  runOrMessage,
+} from "#__tests__/session.ts"
 
 const COMPARE_ERROR = "failed to compare the host with what the step wants"
 const isRoot = process.getuid?.() === 0
@@ -18,7 +25,7 @@ const createPaths = async () => {
 }
 
 const getLabels = (hostSession: Awaited<ReturnType<typeof createSession>>) =>
-  hostSession.hostRecord.stepRecords[0]?.commands.map(({ label }) => label)
+  getStepRecords(hostSession.hostRecord)[0]?.commands.map(({ label }) => label)
 
 describe("h.link in plan", () => {
   it("should report a new link without making it", async () => {

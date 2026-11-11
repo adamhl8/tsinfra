@@ -17,7 +17,7 @@ import type { Want } from "#session/handlers/ensure/check.ts"
 import type { EnsureOptions } from "#session/handlers/ensure/ensure.ts"
 import type { RunOptions } from "#session/handlers/run.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
-import type { Host, SessionContext, HostRecord } from "#session/session.ts"
+import type { FinishedStepRecord, Host, SessionContext, HostRecord, StepRecord } from "#session/session.ts"
 import {
   createHostRecord,
   createHostSession,
@@ -28,6 +28,10 @@ import type { Transport } from "#transport/transport.ts"
 import { LOCAL_TARGET } from "#transport/transport.ts"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
+
+/** Returns every step a host recorded, in order: the steps that finished, then the step that failed, if one did. */
+export const getStepRecords = ({ stepRecords, failure }: HostRecord): (FinishedStepRecord | StepRecord)[] =>
+  failure?.kind === "step" ? [...stepRecords, failure.stepRecord] : stepRecords
 
 /** A target that can't be prepared, because ssh rejects the space in it before it reads any config or connects. */
 export const UNREACHABLE_TARGET = "unreachable host"

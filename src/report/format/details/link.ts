@@ -1,5 +1,6 @@
-import type { AlignedRow } from "#report/format/format.ts"
-import { toOwnerRow } from "#report/format/owner.ts"
+import type { AlignedRow } from "#report/format/details/aligned-row.ts"
+import { formatAlignedRow } from "#report/format/details/aligned-row.ts"
+import { formatOwnerChange } from "#report/format/details/owner.ts"
 import type { LinkComparisonValues, LinkChange } from "#session/session.ts"
 import { styleDescription, styleGot, styleWant } from "#styles.ts"
 
@@ -15,10 +16,10 @@ const formatLinkChange = (linkChange: Exclude<LinkChange, { kind: "same" }>): st
   return `${styleDescription(REPLACEMENT_WORDS[linkChange.kind])} ${styleWant(linkChange.want)}`
 }
 
-/** Returns a row for how the link changes, then a row for each owner that changes. */
-export const toLinkRows = (values: LinkComparisonValues): AlignedRow[] => {
+/** Formats how a link changes as its rows: one for its target, then one for each owner that changes. */
+export const formatLinkValues = (values: LinkComparisonValues): AlignedRow[] => {
   const { linkChange, ownerChanges } = values
-  const linkChangeRows =
-    linkChange.kind === "same" ? [] : [{ label: "target", valueLines: [formatLinkChange(linkChange)] }]
-  return [...linkChangeRows, ...ownerChanges.map((ownerChange) => toOwnerRow(ownerChange))]
+  const linkChangeRows = linkChange.kind === "same" ? [] : [formatAlignedRow("target", [formatLinkChange(linkChange)])]
+  const ownerRows = ownerChanges.map((ownerChange) => formatOwnerChange(ownerChange))
+  return [...linkChangeRows, ...ownerRows]
 }

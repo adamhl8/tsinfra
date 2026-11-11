@@ -4,7 +4,7 @@ import path from "node:path"
 import process from "node:process"
 
 // Prints the report for one example host per way a block can look, to inspect the output by eye.
-// It runs `plan` for what only shows in `plan` or without `--verbose`, then `apply --verbose` for the rest.
+// It runs `plan` for what only shows in `plan` or without `--verbose`, then `apply -v` for the rest.
 // Then it runs the sudo cases against a fake `sudo`, which accepts only the password `tsinfra`.
 // Run it with `bask report-preview`, and with `NO_COLOR=1` to see it without colors.
 // Run `bun report-preview.ts --sudo-prompt` to also get the sudo password prompt, and type at it.
@@ -14,13 +14,13 @@ import { err, isErr } from "ts-explicit-errors"
 
 import type { HostFunction, HostSudo } from "#hosts/host.ts"
 import { prepareHosts } from "#hosts/prepare/prepare.ts"
-import { hasDrift, runHost } from "#hosts/run.ts"
+import { runHost } from "#hosts/run.ts"
 import type { Mode } from "#mode.ts"
 import { printTsinfraError } from "#report/errors.ts"
-import { formatHostBlock } from "#report/format/format.ts"
-import { formatSummary } from "#report/summary.ts"
+import type { HostBlock } from "#report/report.ts"
+import { getExitCode, renderHostBlock, renderSummary, toHostBlock } from "#report/report.ts"
+import type { Verbosity } from "#report/verbosity.ts"
 import { PUBLIC_FILE_MODE } from "#session/handlers/shared/filesystem/mode.ts"
-import type { HostRecord } from "#session/session.ts"
 import { runLocal } from "#transport/local.ts"
 
 /**
@@ -186,9 +186,10 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      // A block with "no steps", which only shows with `--verbose`.
+      // A block with "no steps", which shows at every level.
       name: "no-steps",
       target: "@local",
+      pass: "plan",
       fn: async () => {
         // A script with no steps.
       },
@@ -351,16 +352,11 @@ const createScenarios = (dir: string): Scenario[] => {
   ]
 }
 
-const getExitCode = (hostRecords: HostRecord[], mode: Mode) => {
-  if (hostRecords.some(({ failure }) => failure)) return 1
-  return mode === "plan" && hostRecords.some((hostRecord) => hasDrift(hostRecord)) ? 2 : 0
-}
-
-const PASS_RUNS: Record<PreviewPass, { mode: Mode; verbose: boolean; fakeSudo: boolean }> = {
-  plan: { mode: "plan", verbose: false, fakeSudo: false },
-  applyVerbose: { mode: "apply", verbose: true, fakeSudo: false },
-  sudo: { mode: "apply", verbose: false, fakeSudo: true },
-  sudoPrompt: { mode: "apply", verbose: false, fakeSudo: true },
+const PASS_RUNS: Record<PreviewPass, { mode: Mode; verbosity: Verbosity; fakeSudo: boolean }> = {
+  plan: { mode: "plan", verbosity: 0, fakeSudo: false },
+  applyVerbose: { mode: "apply", verbosity: 1, fakeSudo: false },
+  sudo: { mode: "apply", verbosity: 0, fakeSudo: true },
+  sudoPrompt: { mode: "apply", verbosity: 0, fakeSudo: true },
 }
 
 // Fail `-n`, and with `-S` accept only `tsinfra`, printing what real sudo prints for one wrong try.
@@ -377,14 +373,15 @@ const FAKE_SUDO = [
 
 /** Runs the scenarios of one pass and prints each block, the summary, and the exit code the CLI would return. */
 const previewPass = async (pass: PreviewPass) => {
-  const { mode, verbose, fakeSudo } = PASS_RUNS[pass]
+  const { mode, verbosity, fakeSudo } = PASS_RUNS[pass]
   const dir = await mkdtemp(path.join(os.tmpdir(), "tsinfra-preview-"))
   try {
     const sudoNote = fakeSudo ? " (fake sudo, password 'tsinfra')" : ""
-    console.log(pc.cyan(pc.bold(`==== tsinfra ${mode}${verbose ? " --verbose" : ""}${sudoNote} ====`)))
+    const verbosityFlag = verbosity > 0 ? ` -${"v".repeat(verbosity)}` : ""
+    console.log(pc.cyan(pc.bold(`==== tsinfra ${mode}${verbosityFlag}${sudoNote} ====`)))
     console.log()
 
-    const hostRecords: HostRecord[] = []
+    const hostBlocks: HostBlock[] = []
     const scenarios = createScenarios(dir).filter((scenario) => (scenario.pass ?? "applyVerbose") === pass)
     const loadedHosts = scenarios.map((scenario) =>
       Object.assign(scenario, { options: { sudo: scenario.sudo ?? false } }),
@@ -393,15 +390,16 @@ const previewPass = async (pass: PreviewPass) => {
     for (const hostEntry of hostEntries) {
       // oxlint-disable-next-line no-await-in-loop - hosts run one at a time, the same as the CLI
       const hostRecord = await runHost(hostEntry, mode)
-      hostRecords.push(hostRecord)
+      const hostBlock = toHostBlock(hostRecord, { verbosity })
+      hostBlocks.push(hostBlock)
 
-      const block = formatHostBlock(hostRecord, { verbose })
-      if (block) console.log(`${block}\n`)
+      const renderedHostBlock = renderHostBlock(hostBlock, { verbosity })
+      if (renderedHostBlock) console.log(`${renderedHostBlock}\n`)
     }
 
-    console.log(formatSummary(hostRecords, mode))
+    console.log(renderSummary(hostBlocks, mode))
 
-    console.log(pc.dim(`\nexit code ${getExitCode(hostRecords, mode)}`))
+    console.log(pc.dim(`\nexit code ${getExitCode(hostBlocks, mode)}`))
     console.log()
   } finally {
     await rm(dir, { recursive: true, force: true })
