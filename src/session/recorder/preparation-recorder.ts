@@ -1,5 +1,6 @@
+import type { ValidHostOptions } from "#hosts/hosts.ts"
 import { createRecordingTransport } from "#session/recorder/commands.ts"
-import { getPreparationFailureHints } from "#session/recorder/failure-hints.ts"
+import { getFailureHints } from "#session/recorder/failure-hints.ts"
 import type { HostRecord } from "#session/recorder/records.ts"
 import type { Shell, Transport } from "#transport/transport.ts"
 import { createShell } from "#transport/transport.ts"
@@ -13,7 +14,10 @@ export interface PreparationRecorder {
 }
 
 /** Records a host's preparation on `hostRecord`. */
-export const createPreparationRecorder = (hostRecord: HostRecord): PreparationRecorder => {
+export const createPreparationRecorder = (
+  hostRecord: HostRecord,
+  hostOptions: ValidHostOptions,
+): PreparationRecorder => {
   const getShell = (transport: Transport) =>
     createShell(
       createRecordingTransport(transport, (commandRecord) => {
@@ -23,7 +27,7 @@ export const createPreparationRecorder = (hostRecord: HostRecord): PreparationRe
 
   // Record it as the host's first failure, because nothing else runs on the host before preparation finishes.
   const recordFailure = (error: Error) => {
-    const hints = getPreparationFailureHints(hostRecord.target, error)
+    const hints = getFailureHints(hostRecord.target, hostOptions, hostRecord.preparationCommands)
     hostRecord.failure = { kind: "preparation", error, hints }
   }
 

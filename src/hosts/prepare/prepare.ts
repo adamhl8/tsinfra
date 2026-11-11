@@ -43,7 +43,7 @@ export const prepareHosts = async (loadedHosts: LoadedHost[]): Promise<HostEntry
   const preparedHosts = await Promise.all(
     loadedHosts.map(async (loadedHost) => {
       const hostRecord = createHostRecord(loadedHost.name, loadedHost.target)
-      const preparationRecorder = createPreparationRecorder(hostRecord)
+      const preparationRecorder = createPreparationRecorder(hostRecord, loadedHost.options)
       const hostDetails = await buildHostDetails(loadedHost, preparationRecorder)
       const hostEntry: HostEntry = { loadedHost, hostRecord }
       return { hostEntry, preparationRecorder, hostDetails }

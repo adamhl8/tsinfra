@@ -117,7 +117,8 @@ export const createWrappedSession = async (
 
   // Record this second preparation on a recorder of its own, because the session's record already has the first.
   const { name, target, options } = loadedHost
-  const hostDetails = await buildHostDetails(loadedHost, createPreparationRecorder(createHostRecord(name, target)))
+  const preparationRecorder = createPreparationRecorder(createHostRecord(name, target), options)
+  const hostDetails = await buildHostDetails(loadedHost, preparationRecorder)
   if (isErr(hostDetails)) throw hostDetails
   if (!("transport" in hostDetails)) throw new Error("the host needs a sudo password prompt")
 

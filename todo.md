@@ -51,13 +51,15 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
         own.
    5. **Preparation commands on the host record.** Preparation already records through the preparation recorder's shells, so
       this gives each command a label: `ssh -G`, the home and user reads, the sudo checks, and the askpass helper
-      write. Record the end of the run's `ssh -O stop` on the record of each host that used that target. The
-      transport's own mechanics stay off the record, because they belong in the diagnostic log: the
-      `{ ... } </dev/null` wrapper, the `sudo` function line, the `ssh` process around each command, and the retry when
-      a connection closes.
-      - **One hint function.** The recorder already works out the hints when a step or the preparation fails, from
-        `getStepFailureHints` and `getPreparationFailureHints`. Merge them into one function over command records, which
-        also matches the message of a command that failed to run, because ssh's stderr lives in that error.
+      write. The transport's own mechanics stay off the record, because they belong in the diagnostic log: the
+      `{ ... } </dev/null` wrapper, the `sudo` function line, the `ssh` process around each command, the retry when a
+      connection closes, and the end of the run's `ssh -O stop` (decided 2026-11-10, in place of recording it on each
+      host that used that target).
+      - **One hint function (built).** `getFailureHints(target, hostOptions, commandRecords)` in
+        `session/recorder/failure-hints.ts` reads the stderr of each command that exited non-zero, and the message of
+        each that failed to run, which is where ssh's stderr lives. Both recorders call it: the preparation recorder
+        with `preparationCommands`, and the session recorder with the failed step's commands. So the host-key hints and
+        the sudo hint apply in either stage.
    6. **The `shell` host option.** `{ shell: "bash -l" }` starts `bash -l -s` in place of `sh -s`, on both transports.
    7. **The cross-shell tests.** The file write rule on dash, bash, and busybox sh over SSH, and on macOS `/bin/sh`,
       which runs only on darwin, so it is local only. The sudo password flows already work over any transport, so they

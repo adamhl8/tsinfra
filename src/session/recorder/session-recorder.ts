@@ -4,7 +4,7 @@ import { err } from "ts-explicit-errors"
 import type { ValidHostOptions } from "#hosts/hosts.ts"
 import type { Comparison } from "#session/handlers/handlers.ts"
 import { createRecordingTransport } from "#session/recorder/commands.ts"
-import { getStepFailureHints } from "#session/recorder/failure-hints.ts"
+import { getFailureHints } from "#session/recorder/failure-hints.ts"
 import type { ConvergePhase, HostRecord, StepRecord } from "#session/recorder/records.ts"
 import type { StepKind, StepStatus } from "#session/step.ts"
 import type { Shell, Transport } from "#transport/transport.ts"
@@ -96,7 +96,7 @@ export const createSessionRecorder = (
 
   // Work out the hints when the step is done, from all of its commands.
   const recordStepFailure = (stepRecord: StepRecord, error: Error) => {
-    const hints = getStepFailureHints(hostOptions, stepRecord.commands)
+    const hints = getFailureHints(hostRecord.target, hostOptions, stepRecord.commands)
     hostRecord.failure = { kind: "step", stepRecord, error: keepError(error), hints }
   }
 
