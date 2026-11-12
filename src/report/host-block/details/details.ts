@@ -1,3 +1,4 @@
+import { toCommandsDetails } from "#report/host-block/details/commands.ts"
 import { toComparisonValuesDetails } from "#report/host-block/details/comparisons.ts"
 import { toFailedStepDetails } from "#report/host-block/details/failure.ts"
 import { toOptionsDetails } from "#report/host-block/details/options.ts"
@@ -35,24 +36,31 @@ const toWarningDetails = (stepRecord: FinishedStepRecord): Detail[] => {
 
 const toHintDetails = (hints: string[]): Detail[] => hints.map((text) => ({ kind: "hint", text, from: 0 }))
 
-/** Returns a finished step's details: its options, how a changed step's value would change, then any warnings. */
+/**
+ * Returns a finished step's details: its options, how a changed step's value would change, any warnings, then its
+ * commands.
+ */
 export const toStepDetails = (stepRecord: FinishedStepRecord): Detail[] => {
   const { status, comparisons } = stepRecord
   const optionsDetails = toOptionsDetails(stepRecord)
+  const commandsDetails = toCommandsDetails(stepRecord)
 
-  if (status === "waiting") return optionsDetails
+  if (status === "waiting") return [...optionsDetails, ...commandsDetails]
 
   const values = comparisons.before?.values
   // Show how a changed step's value would change, when its name doesn't already say.
   const showsChange = status === "changed" && values !== undefined && SHOWS_CHANGE_DETAILS[values.kind]
   const changeDetails = showsChange ? toComparisonValuesDetails(values, 0) : []
   const warningDetails = toWarningDetails(stepRecord)
-  return [...optionsDetails, ...changeDetails, ...warningDetails]
+  return [...optionsDetails, ...changeDetails, ...warningDetails, ...commandsDetails]
 }
 
 const HOST_FUNCTION_FAILURE_NOTE = "thrown in the host function, outside any step"
 
-/** Returns what a failure shows under its error: a failed step's options and what it found, or a note, then any hints. */
+/**
+ * Returns what a failure shows under its error: a failed step's options, what it found, and its commands, or a note,
+ * then any hints.
+ */
 export const toFailureDetails = (failure: RecordedFailure): Detail[] => {
   const hintDetails = toHintDetails(failure.hints)
 
@@ -60,7 +68,8 @@ export const toFailureDetails = (failure: RecordedFailure): Detail[] => {
     const { stepRecord } = failure
     const optionsDetails = toOptionsDetails(stepRecord)
     const failedStepDetails = toFailedStepDetails(stepRecord)
-    return [...optionsDetails, ...failedStepDetails, ...hintDetails]
+    const commandsDetails = toCommandsDetails(stepRecord)
+    return [...optionsDetails, ...failedStepDetails, ...commandsDetails, ...hintDetails]
   }
 
   // Add a note to a host function failure, because `host fn` alone doesn't say it came from the script and not the host.

@@ -78,6 +78,8 @@ export type Detail = PieceLevels
     | { kind: "note"; text: string }
     // Something that worked, but needs a look, like a link to a path where nothing exists.
     | { kind: "warning"; warning: StepWarning }
+    // The commands the step ran, in the order they ran.
+    | { kind: "commands"; commands: StepCommand[] }
     // How to fix a failure, like setting the host's `sudo` option.
     | { kind: "hint"; text: string }
   )
@@ -95,6 +97,12 @@ export interface StepOption {
 /** An option's value, with the levels it shows at. A secret value is masked. */
 export interface OptionValue extends PieceLevels {
   value: string | boolean
+}
+
+/** A command a step ran, and its label when tsinfra wrote it, with any secret in its text masked. */
+export interface StepCommand {
+  cmd: string
+  label?: string
 }
 
 /** Something that worked but needs a look, with the value it's about, like a path, when there is one. */

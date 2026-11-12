@@ -88,19 +88,22 @@ levels only change what's printed:
 - **`-v`** (`--verbose`) adds the rest of the steps: steps that were already right as `=` lines, and each read or
   inspect as a `·` line named by its command. It also shows every diff in full, and a failed fix's values from before
   the fix. A step given options that change how its commands run gets an `options:` line under it, naming the ones it
-  set, like `options: sudo` or `options: env: URL, PORT, secretEnv: TOKEN`. It names each variable but shows no value,
-  because the values come at `-vv`. A `sudo` the script writes inside a command doesn't count, because it shows in the
-  command at `-vv`.
+  set, like `options: sudo` or `options: env { URL, PORT }, secretEnv { TOKEN }`. It names each variable but shows no
+  value, because the values come at `-vv`. A `sudo` the script writes inside a command doesn't count, because it shows
+  in the command at `-vv`.
 - **`-vv`** also turns the `options:` line into a block, with each variable on its own row and its value, and each
   `secretEnv` value as `[MASKED]`. The values line up within each of `env` and `secretEnv`, not across them, because
-  each is its own object. It lists each command a step ran, dimmed, under the step's details, like `$ systemctl is-active sonarr`,
-  in the order they ran. A read or inspect lists none, because its name is its command. A command tsinfra writes itself
-  shows as its label, like `$ (file details script)`, because its text is tsinfra's code, not the script's. The `file`
-  write script's label is followed by the script's `validate` command, like
-  `$ (file write script) validate: nginx -t -c "$tmp"`, because that command is the script's own. `plan` never runs the
+  each is its own object. It lists each command a step ran, dimmed, under a `commands:` heading after the step's other
+  details, like `$ systemctl is-active sonarr`, in the order they ran. A read or inspect lists none, because its name
+  is its command. A command tsinfra writes itself shows as its label in angle brackets, like
+  `$ <file details script>`, because its text is tsinfra's code, not the script's. Angle brackets mark text that isn't
+  shown, as the record's `<content as base64>` does. A command's later lines line up under its first line's text. On a
+  failed step, the commands come after what it found and before any hint. The `file` write script's label is followed
+  by the script's `validate` command, like `$ <file write script> validate: nginx -t -c "$tmp"`, because that command
+  is the script's own. `plan` never runs the
   write script, so the `validate` command only shows in `apply`. A step's commands never show the `sudo sh -s` that
   `sudo: true` wraps them in. A preparation failure lists the commands preparation ran, by their labels, like
-  `$ (home directory)`, so it shows how far preparation got. A host that was prepared lists none, because the same
+  `$ <home directory>`, so it shows how far preparation got. A host that was prepared lists none, because the same
   commands would repeat in every block.
 - **`-vvv`** also shows what each command printed, as `exit:`, `stdout:`, and `stderr:` rows under it, lined up like a
   step's other details. A read or inspect, which lists no command, shows its rows right under its line. Every command
@@ -136,37 +139,43 @@ sonarr                                                    # -v
 sonarr                                                    # -vv
   · observed:  (read)   uname -m
   = unchanged: (ensure) Install sonarr
-      $ command -v sonarr
+      commands:
+        $ command -v sonarr
   ~ change:    (file)   /etc/systemd/system/sonarr.service
       options:
         sudo: true
       <diff>
-      $ (file details script)
-      $ (file content)
-      $ (file write script)
-      $ (file details script)
+      commands:
+        $ <file details script>
+        $ <file content>
+        $ <file write script>
+        $ <file details script>
   > triggered: (run)    Reload systemd
-      $ sudo systemctl daemon-reload
+      commands:
+        $ sudo systemctl daemon-reload
 
 sonarr                                                    # -vvv
   · observed:  (read)   uname -m
       exit:   0
       stdout: x86_64
   = unchanged: (ensure) Install sonarr
-      before $ command -v sonarr
-               exit:   0
-               stdout: /usr/bin/sonarr
+      commands:
+        before $ command -v sonarr
+                 exit:   0
+                 stdout: /usr/bin/sonarr
   ~ change:    (file)   /etc/systemd/system/sonarr.service
       options:
         sudo: true
       <diff>
-      before $ (file details script)
-               exit:   0
-               stdout: <the file's details>
-      ...
+      commands:
+        before $ <file details script>
+                 exit:   0
+                 stdout: <the file's details>
+        ...
   > triggered: (run)    Reload systemd
-      $ sudo systemctl daemon-reload
-        exit: 0
+      commands:
+        $ sudo systemctl daemon-reload
+          exit: 0
 ```
 
 ```
@@ -237,10 +246,10 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   explain it, from its `fix` and `after` phases. A phase that ran one command, which wrote to stderr, gets a
   `stderr: <command> -> <stderr>` row. It's clear what that stderr relates to, because that command is all the phase ran.
   A phase that ran several commands, any of which wrote to stderr, can't say which one matters, so it gets a note
-  instead: "some commands during the fix wrote to stderr, run with -vvv to see them", or "after the fix" for the `after`
-  phase. `-vvv` leaves the note out, because each command's stderr already shows under it. Commands tsinfra wrote
-  itself never count. The `before` phase never shows here, because it ran before the fix,
-  so it can't explain the state after it. A failed fix, or a compare after the fix that failed, shows only its error,
+  instead: "some commands during the fix wrote to stderr, run with -vvv to see what they printed", or "after the fix"
+  for the `after` phase. `-vvv` leaves the note out, because each command's stderr already shows under it. Commands
+  tsinfra wrote itself never count. The `before` phase never shows here, because it ran before the fix, so it can't
+  explain the state after it. A failed fix, or a compare after the fix that failed, shows only its error,
   which already holds its stderr. `--verbose` adds the values from before the fix under a "values before the fix" note,
   which is there because they may no longer be true.
 - **Values** are cyan when they came from the script or the host, like the command in a `stderr:` row and the command a
@@ -254,8 +263,10 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   column. A waiting step's note is `needs 'A', 'B'`. A failure no step owns never gets a note.
 - **Options.** The `options:` heading is dim and italic, its keys are dim like other labels, and its values are styled
   like other values, so a string keeps its quotes. `[MASKED]` is dim and unquoted, because it's tsinfra's marker, not a
-  value the script gave. It's the first of a step's details, and on a failed step it comes after the error, like its
-  other details. Only options the step set show, so `sudo: false` and an empty `env` never do. Only options whose
+  value the script gave. On the line, an object's variable names go in braces after its name, like `env { URL, PORT }`,
+  with the braces dim. A colon there would nest under `options:`, and the braces keep one object's names apart from the
+  next. It's the first of a step's details, and on a failed step it comes after the error, like its other details.
+  Only options the step set show, so `sudo: false` and an empty `env` never do. Only options whose
   effect shows nowhere else in the report show: `sudo`, `env`, and `secretEnv`. `want`, `content`, `mode`, `user`,
   `group`, `needs`, and `after` already show as values, diffs, attribute rows, notes, or a status, and `check`, `fix`,
   and `validate` show as commands. Candidates for later are `file`'s `secret` and `overwrite: false`, `link`'s

@@ -17,17 +17,17 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
       1. **`shellOptions`** (built 2026-11-12). Rename `StepRecord.options` to `shellOptions`, which leaves `options` for the step's own
          options when the report first shows one.
       2. **The options line** (built 2026-11-12). Replace the `[sudo]` column with an `options:` line from 1, naming the options the step
-         set, with variable names but no values, like `options: env: URL, PORT, secretEnv: TOKEN`. Check it with
+         set, with variable names but no values, like `options: env { URL, PORT }, secretEnv { TOKEN }`. Check it with
          `bun report-preview.ts -v`.
       3. **The options block** (built 2026-11-12). From 2, the line becomes a block with each variable's value, and `[MASKED]` for each
          secret. Only one of the line and the block shows, so the line gets an `until` level here, ahead of the
          `-vvv` piece's `until` step.
-      4. **Command parts.** Each command a step ran is a part from 2, shown dimmed as `$ cmd` under the details. One
-         with a label shows as `$ (label)`, and a read or inspect lists none. A failed step's commands go under its
+      4. **Command parts** (built 2026-11-12). Each command a step ran is a part from 2, shown dimmed as `$ cmd` under the details. One
+         with a label shows as `$ <label>`, and a read or inspect lists none. A failed step's commands go under its
          error with its other details. Check it with `bun report-preview.ts -vv`.
       5. **`validate`.** The write script records its `validate` command in a field next to `label`, passed through
          `exec`'s options, because a labelled command never shows its text. The report appends it, like
-         `$ (file write script) validate: nginx -t ...`. Add it to
+         `$ <file write script> validate: nginx -t ...`. Add it to
          [What a host records](./docs/cli.md#what-a-host-records).
       6. **Preparation's commands.** The `(preparation)` entry lists them as labelled command parts from 2.
       7. **A docs check,** and mark the piece built.

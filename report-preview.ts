@@ -98,7 +98,7 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      // A `sudo: true` step's `[sudo]` from `-v`, in its own column, before the note of a step that waits.
+      // A `sudo: true` step's options line from `-v`, and its value from `-vv`, under a step that waits.
       // The file waits in `plan`, so it runs no command, and the real `sudo` is never called.
       name: "sudo-option",
       target: "@local",
@@ -107,6 +107,24 @@ const createScenarios = (dir: string): Scenario[] => {
         const brew = await h.ensure("Install brew packages", touchStep("brew"))
         await h.file(marker("sudo-conf"), "a\n", { needs: [brew], sudo: true })
         await h.ensure("Install fish", { needs: [brew], ...touchStep("fish") })
+      },
+    },
+    {
+      // Steps given `env` and `secretEnv`: an options line naming the variables from `-v`, and a block with their values
+      // from `-vv`, lined up within each object, with a multi-line value and each secret as `[MASKED]`.
+      name: "env-options",
+      target: "@local",
+      pass: "plan",
+      fn: async (h) => {
+        await h.read('printf %s "$URL"', {
+          env: { URL: "https://example.com", PORT: "8080" },
+          secretEnv: { TOKEN: "s3cret-token" },
+        })
+        await h.run("Deploy the app", 'echo "$RELEASE"', {
+          after: "always",
+          env: { RELEASE: "v1.2.3", NOTES: "first line\nsecond line" },
+          secretEnv: { API_KEY: "s3cret-key" },
+        })
       },
     },
     {

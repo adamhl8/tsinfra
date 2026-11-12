@@ -1,5 +1,6 @@
 import type { AlignedRow } from "#report/format/details/aligned-row.ts"
 import { formatAlignedRow } from "#report/format/details/aligned-row.ts"
+import { formatCommands } from "#report/format/details/commands.ts"
 import type { DiffLimits } from "#report/format/details/diff.ts"
 import { formatDiff } from "#report/format/details/diff.ts"
 import { formatEnsureValues } from "#report/format/details/ensure.ts"
@@ -56,6 +57,7 @@ export const formatDetail = (detail: Detail, diffLimits: DiffLimits | undefined)
   if (detail.kind === "stderr") return { kind: "aligned", rows: [formatStderr(detail.command, detail.stderr)] }
   if (detail.kind === "note") return { kind: "unaligned", rows: [styleNote(detail.text)] }
   if (detail.kind === "warning") return { kind: "unaligned", rows: [formatWarning(detail.warning)] }
+  if (detail.kind === "commands") return { kind: "unaligned", rows: formatCommands(detail.commands) }
 
   return { kind: "unaligned", rows: [styleHint(detail.text)] }
 }

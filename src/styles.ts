@@ -87,6 +87,9 @@ export const styleUnownedKind = pipeStyles(styleLabel, pc.italic)
 /** Dims a waiting step's note or the plan reminder, so the steps and the hosts stay the main thing on their lines. */
 export const styleAside = (text: string): string => pc.dim(text)
 
+/** Dims a command a step ran, so the commands read as background next to the details. */
+export const styleCommand = (text: string): string => pc.dim(text)
+
 /** Dims a diff's line numbers and rules, so the lines of the diff stand out. */
 export const styleDiffFrame = (text: string): string => pc.dim(text)
 

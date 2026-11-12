@@ -593,8 +593,8 @@ const createNoisySession = async (filePath: string) =>
   })
 
 describe("renderHostBlock for the stderr of a step that still differs", () => {
-  const AFTER_FIX_NOTE = "        some commands after the fix wrote to stderr, run with -vvv to see them"
-  const DURING_FIX_NOTE = "        some commands during the fix wrote to stderr, run with -vvv to see them"
+  const AFTER_FIX_NOTE = "        some commands after the fix wrote to stderr, run with -vvv to see what they printed"
+  const DURING_FIX_NOTE = "        some commands during the fix wrote to stderr, run with -vvv to see what they printed"
 
   it("should show nothing extra when no command wrote to stderr", async () => {
     const lines = await formatFailedCheck({ check: "false", want: true, fix: "true" })
@@ -987,6 +987,96 @@ const createSudoPaths = async () => {
   return { directory, oldPath, newPath: path.join(directory, "new.conf") }
 }
 
+describe("renderHostBlock for a step's commands", () => {
+  it("should list a step's commands under a commands heading with -vv, after its other details", async () => {
+    const filePath = path.join(await makeTempDir(), "hostname")
+    const hostSession = await createSession("apply")
+    await hostSession.host.ensure("Set the hostname", {
+      check: `cat '${filePath}' 2>/dev/null || true`,
+      want: "web1",
+      fix: `printf web1 > '${filePath}'`,
+    })
+
+    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")).toStrictEqual([
+      "a",
+      "  ~ change: (ensure) Set the hostname",
+      "      got:  ''",
+      "      want: 'web1'",
+      "      commands:",
+      `        $ cat '${filePath}' 2>/dev/null || true`,
+      `        $ printf web1 > '${filePath}'`,
+      `        $ cat '${filePath}' 2>/dev/null || true`,
+    ])
+  })
+
+  it("should leave the commands out with -v", async () => {
+    const hostSession = await createSession("apply")
+    await hostSession.host.run("Say hi", "echo hi", { after: "always" })
+
+    expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")).toStrictEqual(["a", "  > triggered: (run) Say hi"])
+  })
+
+  it("should list no commands for a read, because its name is its command", async () => {
+    const hostSession = await createSession()
+    await hostSession.host.read("true")
+
+    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")).toStrictEqual(["a", "  · observed: (read) true"])
+  })
+
+  it("should show a command tsinfra wrote by its label, in angle brackets", async () => {
+    const newPath = path.join(await makeTempDir(), "new.conf")
+    const hostSession = await createSession("plan")
+    await hostSession.host.file(newPath, "a\n")
+
+    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(2)).toStrictEqual([
+      "      content: new file, 2 bytes",
+      "      commands:",
+      "        $ <file details script>",
+    ])
+  })
+
+  it("should line up a multi-line command's later lines under its first", async () => {
+    const hostSession = await createSession("apply")
+    await hostSession.host.run("Say hi twice", "echo hi\necho hi", { after: "always" })
+
+    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(2)).toStrictEqual([
+      "      commands:",
+      "        $ echo hi",
+      "          echo hi",
+    ])
+  })
+
+  it("should list a failed step's commands under its error, after what it found and before its hint", async () => {
+    const hostSession = await createSession("apply")
+    await attempt(async () =>
+      hostSession.host.ensure("Set it", { check: "false", want: true, fix: NEEDS_PASSWORD_CMD }),
+    )
+
+    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(3)).toStrictEqual([
+      "        values before the fix",
+      "        got:  exit code 1",
+      "        want: exit code 0",
+      "        commands:",
+      "          $ false",
+      `          $ ${NEEDS_PASSWORD_CMD}`,
+      SUDO_OPTION_HINT,
+    ])
+  })
+
+  it("should show a secret in a command's text as [MASKED]", async () => {
+    const hostSession = await createSession("apply")
+    await hostSession.host.run("Check the token", 'test "$TOKEN" = s3cret-value', {
+      after: "always",
+      secretEnv: { TOKEN: "s3cret-value" },
+    })
+
+    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(-2)).toStrictEqual([
+      "      commands:",
+      '        $ test "$TOKEN" = [MASKED]',
+    ])
+  })
+})
+
 describe("renderHostBlock for a step's options", () => {
   it("should show sudo on an options line under the step with -v", async () => {
     const { oldPath, newPath } = await createSudoPaths()
@@ -1056,7 +1146,7 @@ describe("renderHostBlock for a step's options", () => {
     expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")).toStrictEqual([
       "a",
       "  · observed: (read) true",
-      "      options: env: URL, PORT, secretEnv: TOKEN",
+      "      options: env { URL, PORT }, secretEnv { TOKEN }",
     ])
   })
 
@@ -1071,6 +1161,8 @@ describe("renderHostBlock for a step's options", () => {
       "      options:",
       "        sudo: true",
       "      content: new file, 2 bytes",
+      "      commands:",
+      "        $ <file details script>",
     ])
   })
 

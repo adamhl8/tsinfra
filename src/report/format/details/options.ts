@@ -8,13 +8,18 @@ import { getMaxWidth, padToWidth } from "#utils.ts"
 const hasValues = (options: StepOption[]): boolean =>
   options.some(({ value, entries }) => value !== undefined || hasValues(entries))
 
-/** Formats one option for the options line: its name, and its entries' names after it, like `env: URL, PORT`. */
+/**
+ * Formats one option for the options line: its name, and its entries' names in braces after it, like `env { URL, PORT
+ * }`. Use braces, because a colon inside the line would nest under `options:`, and the braces keep one option's names
+ * apart from the next option's.
+ */
 const formatOptionsLinePart = ({ name, entries }: StepOption): string => {
   const entryNames = entries.map(({ name: entryName }) => styleValue(entryName))
-  return entries.length > 0 ? `${styleLabel(`${name}:`)} ${entryNames.join(", ")}` : styleLabel(name)
+  const entriesText = `${styleLabel("{")} ${entryNames.join(", ")} ${styleLabel("}")}`
+  return entries.length > 0 ? `${styleLabel(name)} ${entriesText}` : styleLabel(name)
 }
 
-/** Formats the options line, like `options: env: URL, PORT, secretEnv: TOKEN`. */
+/** Formats the options line, like `options: env { URL, PORT }, secretEnv { TOKEN }`. */
 const formatOptionsLine = (options: StepOption[]): string => {
   const optionsLineParts = options.map((option) => formatOptionsLinePart(option))
   return `${styleNote("options:")} ${optionsLineParts.join(", ")}`
