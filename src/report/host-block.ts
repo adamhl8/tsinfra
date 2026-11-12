@@ -1,3 +1,4 @@
+import type { Verbosity } from "#report/verbosity.ts"
 import type {
   EnsureComparisonValues,
   FileComparisonValues,
@@ -20,6 +21,8 @@ export interface HostBlockEntry {
   note: NotePart[]
   /** How a value would change, or for a failure, what the step last found on the host. */
   details: Detail[]
+  /** The lowest level the entry shows at, unless a note part or a detail inside it shows. The builder decides it. */
+  from: Verbosity
   /** Why the entry failed. */
   error?: Error
 }
@@ -48,23 +51,28 @@ export type NameKind =
 export interface NotePart {
   kind: "needs"
   needs: string[]
+  /** The lowest level the part shows at. The builder decides it. */
+  from: Verbosity
 }
 
-/** One thing an entry shows under its status line. */
+/**
+ * One thing an entry shows under its status line. Its `from` is the lowest level it shows at, which the builder
+ * decides.
+ */
 export type Detail =
-  | { kind: "diff"; got: string; want: string }
+  | { kind: "diff"; got: string; want: string; from: Verbosity }
   // Holds everything about a file but a text diff, which is a detail of its own.
-  | { kind: "fileComparisonValues"; values: FileComparisonValues }
-  | { kind: "linkComparisonValues"; values: LinkComparisonValues }
-  | { kind: "ensureComparisonValues"; values: EnsureComparisonValues }
+  | { kind: "fileComparisonValues"; values: FileComparisonValues; from: Verbosity }
+  | { kind: "linkComparisonValues"; values: LinkComparisonValues; from: Verbosity }
+  | { kind: "ensureComparisonValues"; values: EnsureComparisonValues; from: Verbosity }
   // The stderr of a command that can explain a failure that still differs after its fix.
-  | { kind: "stderr"; command: string; stderr: string }
+  | { kind: "stderr"; command: string; stderr: string; from: Verbosity }
   // tsinfra's own aside about the details around it.
-  | { kind: "note"; text: string }
+  | { kind: "note"; text: string; from: Verbosity }
   // Something that worked, but needs a look, like a link to a path where nothing exists.
-  | { kind: "warning"; warning: StepWarning }
+  | { kind: "warning"; warning: StepWarning; from: Verbosity }
   // How to fix a failure, like setting the host's `sudo` option.
-  | { kind: "hint"; text: string }
+  | { kind: "hint"; text: string; from: Verbosity }
 
 /** Something that worked but needs a look, with the value it's about, like a path, when there is one. */
 export interface StepWarning {

@@ -390,7 +390,7 @@ const previewPass = async (pass: PreviewPass) => {
     for (const hostEntry of hostEntries) {
       // oxlint-disable-next-line no-await-in-loop - hosts run one at a time, the same as the CLI
       const hostRecord = await runHost(hostEntry, mode)
-      const hostBlock = toHostBlock(hostRecord, { verbosity })
+      const hostBlock = toHostBlock(hostRecord)
       hostBlocks.push(hostBlock)
 
       const renderedHostBlock = renderHostBlock(hostBlock, { verbosity })

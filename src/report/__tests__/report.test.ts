@@ -18,9 +18,9 @@ import {
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
 import type { Mode } from "#mode.ts"
-import type { ReportOptions } from "#report/report.ts"
 import { getExitCode, renderHostBlock, renderSummary, toHostBlock } from "#report/report.ts"
 import { hasDrift } from "#report/summary.ts"
+import type { Verbosity } from "#report/verbosity.ts"
 import type { Want } from "#session/handlers/ensure/check.ts"
 import type { EnsureOptions } from "#session/handlers/ensure/ensure.ts"
 import type { Host, HostRecord } from "#session/session.ts"
@@ -31,20 +31,19 @@ const runNamedHost = async (name: string, fn: HostFunction, mode: Mode) =>
 const isRoot = process.getuid?.() === 0
 
 /** Builds a host's block from its record and renders it, as the CLI does. */
-const renderRecord = (hostRecord: HostRecord, reportOptions: ReportOptions = {}) =>
-  renderHostBlock(toHostBlock(hostRecord, reportOptions), reportOptions)
+const renderRecord = (hostRecord: HostRecord, verbosity: Verbosity = 0) =>
+  renderHostBlock(toHostBlock(hostRecord), { verbosity })
 
 /** Builds each host's block from its record and renders their summary, as the CLI does. */
 const renderRecordsSummary = (hostRecords: HostRecord[], mode: Mode) =>
   renderSummary(
-    hostRecords.map((hostRecord) => toHostBlock(hostRecord, {})),
+    hostRecords.map((hostRecord) => toHostBlock(hostRecord)),
     mode,
   )
 
 const formatBlock = async (fn: HostFunction, mode: Mode) => renderRecord(await runNamedHost("a", fn, mode))
 
-const formatVerboseBlock = async (fn: HostFunction) =>
-  renderRecord(await runNamedHost("a", fn, "plan"), { verbosity: 1 })
+const formatVerboseBlock = async (fn: HostFunction) => renderRecord(await runNamedHost("a", fn, "plan"), 1)
 
 const changeAndRun = async (h: Host) => {
   await h.ensure("Write the unit", { check: "false", want: true, fix: "true" })
@@ -183,6 +182,22 @@ describe("renderHostBlock", () => {
 
   it("should mark a waiting step with '?' and the steps it needs", async () => {
     expect(await formatBlock(waitOnBrew, "plan")).toBe(
+      [
+        "a",
+        "  ~ change:  (ensure) Install brew packages",
+        "  ? waiting: (ensure) Install fish plugins   needs 'Install brew packages'",
+      ].join("\n"),
+    )
+  })
+
+  it("should leave hidden steps out of the columns", async () => {
+    expect(
+      await formatBlock(async (h) => {
+        await h.inspect("true")
+        await h.ensure("Install every one of the fish plugins", { check: "true", want: true, fix: "true" })
+        await waitOnBrew(h)
+      }, "plan"),
+    ).toBe(
       [
         "a",
         "  ~ change:  (ensure) Install brew packages",
@@ -711,7 +726,7 @@ describe("renderHostBlock for a step that failed before it could compare again",
     ["the compare after the fix failed", failSecondCompare],
   ])("should show the labelled values from before the fix with verbose when %s", async (_, fn) => {
     const hostRecord = await runNamedHost("a", fn, "apply")
-    const lines = renderRecord(hostRecord, { verbosity: 1 })?.split("\n").slice(3)
+    const lines = renderRecord(hostRecord, 1)?.split("\n").slice(3)
 
     expect(lines).toStrictEqual(["        values before the fix", "        got:  'old'", "        want: 'new'"])
   })
@@ -912,29 +927,10 @@ describe("renderSummary", () => {
 
     expect(renderRecordsSummary(hostRecords, "apply")).toBe("a   1 change")
   })
-  it("should count and exit the same at every level, because hiding a step doesn't change how the host went", async () => {
-    const { linkPath, target } = await createBrokenLink()
-    const hostRecord = await runNamedHost(
-      "a",
-      async (h) => {
-        await stayRight(h)
-        await h.link(linkPath, target)
-        await waitOnBrew(h)
-      },
-      "plan",
-    )
-
-    const verdicts = ([0, 1] as const).map((verbosity) => {
-      const hostBlocks = [toHostBlock(hostRecord, { verbosity })]
-      return [renderSummary(hostBlocks, "plan").split("\n").at(-1), getExitCode(hostBlocks, "plan")]
-    })
-    const verdict = ["a   1 change, 1 waiting, 1 warning", 2]
-    expect(verdicts).toStrictEqual([verdict, verdict])
-  })
 })
 
 /** Plans a host with `fn` and returns its block, as the CLI builds it. */
-const planBlock = async (fn: HostFunction, name = "a") => toHostBlock(await runNamedHost(name, fn, "plan"), {})
+const planBlock = async (fn: HostFunction, name = "a") => toHostBlock(await runNamedHost(name, fn, "plan"))
 
 describe("hasDrift", () => {
   it("should be true when a step's check did not pass", async () => {

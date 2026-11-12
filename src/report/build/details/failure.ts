@@ -2,7 +2,6 @@ import { isErr } from "ts-explicit-errors"
 
 import { toComparisonValuesDetails } from "#report/build/details/comparisons.ts"
 import type { Detail } from "#report/host-block.ts"
-import type { ReportOptions } from "#report/report.ts"
 import type { CommandRecord, ConvergePhase, StepRecord } from "#session/session.ts"
 
 const BEFORE_FIX_NOTE = "values before the fix"
@@ -38,32 +37,31 @@ const toPhaseStderrDetails = (commandRecords: CommandRecord[], phase: StillDiffe
   if (phaseCommandRecords.length > 1) {
     const hasStderr = phaseCommandRecords.some((commandRecord) => getCommandStderr(commandRecord) !== undefined)
     const text = `some commands ${PHASE_DESCRIPTIONS[phase]} wrote to stderr, run with -vvv to see them`
-    return hasStderr ? [{ kind: "note", text }] : []
+    return hasStderr ? [{ kind: "note", text, from: 0 }] : []
   }
 
   const [onlyCommandRecord] = phaseCommandRecords
   const stderr = onlyCommandRecord && getCommandStderr(onlyCommandRecord)
-  return onlyCommandRecord && stderr ? [{ kind: "stderr", command: onlyCommandRecord.cmd, stderr }] : []
+  return onlyCommandRecord && stderr ? [{ kind: "stderr", command: onlyCommandRecord.cmd, stderr, from: 0 }] : []
 }
 
 /** Returns what a failed step found: the values that still differ and their stderr, or the values before the fix. */
-export const toFailedStepDetails = (stepRecord: StepRecord, reportOptions: ReportOptions): Detail[] => {
+export const toFailedStepDetails = (stepRecord: StepRecord): Detail[] => {
   const { commands, comparisons } = stepRecord
   const { before, after } = comparisons
-  const { verbosity = 0 } = reportOptions
 
-  // Show nothing for a compare that came back in sync, because a failure the script caught is what failed the step.
   if (after) {
+    // Show nothing for a compare that came back in sync, because a failure the script caught is what failed the step.
     if (after.inSync) return []
 
     const stderrDetails = STILL_DIFFERS_PHASES.flatMap((phase) => toPhaseStderrDetails(commands, phase))
-    return [...toComparisonValuesDetails(after.values), ...stderrDetails]
+    return [...toComparisonValuesDetails(after.values, 0), ...stderrDetails]
   }
 
-  // Hide the state from before the fix unless asked, because the error says what went wrong.
+  // Show the state from before the fix only from level 1, because the error already says what went wrong.
   // Label it, because it may no longer be true.
-  if (verbosity >= 1 && before && !before.inSync)
-    return [{ kind: "note", text: BEFORE_FIX_NOTE }, ...toComparisonValuesDetails(before.values)]
+  if (before && !before.inSync)
+    return [{ kind: "note", text: BEFORE_FIX_NOTE, from: 1 }, ...toComparisonValuesDetails(before.values, 1)]
 
   return []
 }

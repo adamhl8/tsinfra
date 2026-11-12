@@ -24,9 +24,7 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
       4. **The running step on the host record (built), step 3d.** `stepRecords` holds only finished steps, and a step
          that fails is the failure's.
       5. **The diff's limits (built), step 3b.**
-      6. **Levels and the filter, step 3c.** Once it removes `isStepShown`, fold `getStepWarnings` into
-         `toWarningDetails` in `src/report/build/details/details.ts`, because it'll be the only caller, and the rule then
-         sits with the detail it makes.
+      6. **Levels and the filter (built), step 3c.**
       7. **`StepRecord.sudo` and the two shells, step 4.**
       8. **The `sudo` note, step 5.**
       9. **A docs check, step 6.**

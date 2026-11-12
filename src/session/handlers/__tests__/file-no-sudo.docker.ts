@@ -28,7 +28,7 @@ describe("a user with no sudo rule", () => {
       "plan",
     )
 
-    expect(renderHostBlock(toHostBlock(hostRecord, {}))).toContain(
+    expect(renderHostBlock(toHostBlock(hostRecord), { verbosity: 0 })).toContain(
       "sudo needs a password on this host, so set the sudo option on host()",
     )
   })

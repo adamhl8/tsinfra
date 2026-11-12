@@ -1,7 +1,7 @@
-import { getStepWarnings, toFailureDetails, toStepDetails } from "#report/build/details/details.ts"
+import { toFailureDetails, toStepDetails } from "#report/build/details/details.ts"
 import { toStepNote } from "#report/build/note.ts"
 import type { EntryName, HostBlockEntry, NameKind } from "#report/host-block.ts"
-import type { ReportOptions } from "#report/report.ts"
+import type { Verbosity } from "#report/verbosity.ts"
 import type {
   FinishedStepRecord,
   HostRecord,
@@ -11,13 +11,13 @@ import type {
   StepStatus,
 } from "#session/session.ts"
 
-// Hide a step that was already right, or only looked, below level 1.
-const SHOWN_BY_DEFAULT: Record<StepStatus, boolean> = {
-  unchanged: false,
-  observed: false,
-  changed: true,
-  ran: true,
-  waiting: true,
+// Show a step that was already right, or only looked, from level 1, because it changed nothing on the host.
+const ENTRY_LEVELS: Record<StepStatus, Verbosity> = {
+  unchanged: 1,
+  observed: 1,
+  changed: 0,
+  ran: 0,
+  waiting: 0,
 }
 
 // Treat a read's or an inspect's name as a value, because it's the command itself, and a file's or a link's, because it's a path.
@@ -30,12 +30,6 @@ const STEP_NAME_KINDS: Record<StepKind, NameKind> = {
   run: "step",
 }
 
-const isStepShown = (stepRecord: FinishedStepRecord, reportOptions: ReportOptions): boolean => {
-  const { verbosity = 0 } = reportOptions
-  // Show a step with a warning, even one that was already right, so the warning can't be missed.
-  return SHOWN_BY_DEFAULT[stepRecord.status] || verbosity >= 1 || getStepWarnings(stepRecord).length > 0
-}
-
 const toStepName = ({ name, kind }: StepRecord): EntryName => ({ text: name, kind: STEP_NAME_KINDS[kind] })
 
 const toStepEntry = (stepRecord: FinishedStepRecord): HostBlockEntry => {
@@ -45,33 +39,31 @@ const toStepEntry = (stepRecord: FinishedStepRecord): HostBlockEntry => {
   const name = toStepName(stepRecord)
   const details = toStepDetails(stepRecord)
 
-  return { status, kind, name, note, details }
+  return { status, kind, name, note, details, from: ENTRY_LEVELS[status] }
 }
 
-const toFailureEntry = (failure: RecordedFailure, target: string, reportOptions: ReportOptions): HostBlockEntry => {
-  const details = toFailureDetails(failure, reportOptions)
+const toFailureEntry = (failure: RecordedFailure, target: string): HostBlockEntry => {
+  const details = toFailureDetails(failure)
 
   if (failure.kind === "step") {
     const { stepRecord, error } = failure
     const name = toStepName(stepRecord)
     const note = toStepNote(stepRecord, "failed")
-    return { status: "failed", kind: stepRecord.kind, name, note, details, error }
+    return { status: "failed", kind: stepRecord.kind, name, note, details, from: 0, error }
   }
 
   // Name a failure no step owns after the host's target, because the kind already says where it failed.
   const name: EntryName = { text: target, kind: "value" }
-  return { status: "failed", kind: failure.kind, name, note: [], details, error: failure.error }
+  return { status: "failed", kind: failure.kind, name, note: [], details, from: 0, error: failure.error }
 }
 
-/** Returns the entries a host block shows: one per step that shows, then the host's failure, if it failed. */
-export const toHostBlockEntries = (hostRecord: HostRecord, reportOptions: ReportOptions): HostBlockEntry[] => {
+/** Returns a host block's entries: one per finished step, at every level, then the host's failure, if it failed. */
+export const toHostBlockEntries = (hostRecord: HostRecord): HostBlockEntry[] => {
   const { target, stepRecords, failure } = hostRecord
-  const stepEntries = stepRecords
-    .filter((stepRecord) => isStepShown(stepRecord, reportOptions))
-    .map((stepRecord) => toStepEntry(stepRecord))
+  const stepEntries = stepRecords.map((stepRecord) => toStepEntry(stepRecord))
 
   // Show the failure after the steps, even a step's, because nothing runs once the host has failed.
   // That makes the step that failed the last one.
-  const failureEntries = failure ? [toFailureEntry(failure, target, reportOptions)] : []
+  const failureEntries = failure ? [toFailureEntry(failure, target)] : []
   return [...stepEntries, ...failureEntries]
 }
