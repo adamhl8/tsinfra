@@ -67,6 +67,8 @@ Opt-in features with no real case yet:
 - **`backup` on `link`,** for the first dotfiles run, where real files sit where the links go. home-manager's `-b`
   moves them aside and aborts if the backup already exists. If backups come back for `file`, Puppet's same-folder copy
   with an extension is the lightest model (see [Backups](./open-questions.md#backups-of-replaced-files)).
+- **`env` on a tool call,** for a value that only exists inside a step's function, like a container ID from one
+  `exec`, which goes into the next command's string today. Add it if a port needs one.
 - **An argument list as a command,** like `exec(["tar", "-xzf", name])`, rendered by quoting each element with
   `quoteShellArg`. It's safe for any value, with no variable to name, like Ansible's `command` module and Chef's array
   form of `execute`. Pipes, redirects, and `$VAR` don't fit it, so it would sit beside command strings, not replace
@@ -106,8 +108,8 @@ Opt-in features with no real case yet:
     shell. A `sudo` command inside a script still gets sudo's own PATH.
   - **Entries:** an entry must be absolute or start with `~/`. A `~/` entry resolves against the home directory that
     preparation reads, like `file`'s paths. An entry can't hold `:`, because PATH splits on it.
-  - **Why not `env`:** a general `env` option can't prepend to a variable without expanding `$PATH`, so `path` comes
-    first.
+  - **Why not `env`:** a step's `env` sets literal values for that one step, so it can't extend `PATH`. `path` would
+    prepend to it in every command on the host.
 - **A manual step,** for work no command can do: pressing a pairing button, a login URL from `tailscale up`, an App
   Store sign-in for `mas`, or a macOS permission like Full Disk Access. It's shaped like `ensure` with instructions in
   place of a fix, like `h.manual(name, { check, want, instructions })`. `plan` shows the instructions under `~ change`.

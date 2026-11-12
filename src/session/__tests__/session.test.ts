@@ -201,7 +201,11 @@ describe("step records", () => {
     await hostSession.host.file(path.join(directory, "user.conf"), "a\n")
     await hostSession.host.read("true")
 
-    expect(hostSession.hostRecord.stepRecords.map(({ options }) => options.sudo)).toStrictEqual([true, false, false])
+    expect(hostSession.hostRecord.stepRecords.map(({ shellOptions }) => shellOptions.sudo)).toStrictEqual([
+      true,
+      false,
+      false,
+    ])
   })
 
   it("should record an ensure's check, fix, and second check in apply", async () => {

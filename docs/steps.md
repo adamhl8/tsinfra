@@ -174,6 +174,10 @@ naming them at all:
 await h.read("gh api user", { secretEnv: { GH_TOKEN: token } })
 ```
 
+A `sudo` in the command still gets a variable the command names, like `sudo tee "$FILE"`, because the shell expands it
+before `sudo` runs. A program run under `sudo` doesn't see the exported variables themselves, because sudo resets the
+environment, so `sudo gh api user` gets no `GH_TOKEN`.
+
 A name must be a valid shell name, made of letters, digits, and underscores, and not starting with a digit. Any valid
 name works, `PATH` and `HOME` included, but a name can't be in both `env` and `secretEnv`. A value must be a string,
 and tsinfra doesn't convert one, so a port goes in as `String(port)`. Values are literal, so a value can't expand
@@ -287,6 +291,8 @@ exit, so it suits a command whose exit code is the answer, and one that prints t
 const container = await h.inspect("systemd-detect-virt --container")
 if (container.exitCode !== 0) await tuneKernel(h)
 ```
+
+It takes the same options as `read`: `env`, `secretEnv`, and `maskOutput`, which masks its stdout.
 
 Check, fix, and run functions get an `inspect` tool too. A command that could not run at all, like one on an unreachable
 host, still fails the host.

@@ -38,6 +38,8 @@ interface Scenario {
   pass?: PreviewPass
   /** The host's `sudo` option. Defaults to `false`. */
   sudo?: HostSudo
+  /** The highest level the case runs at, for one that only shows something worth seeing below it. */
+  maxVerbosity?: Verbosity
   fn: HostFunction
 }
 
@@ -122,9 +124,11 @@ const createScenarios = (dir: string): Scenario[] => {
     },
     {
       // The note that replaces a diff that takes too long, which suggests `--verbose`.
+      // Run it only at the default level, because `-v` shows the whole diff, thousands of lines.
       name: "big-diff",
       target: "@local",
       pass: "plan",
+      maxVerbosity: 0,
       fn: async (h) => {
         await h.ensure("Write the big file", {
           check: `cat '${marker("big")}' 2>/dev/null || seq -f 'old %g' 0 ${BIG_VALUE_LINE_COUNT - 1}`,
@@ -409,7 +413,10 @@ const previewPass = async (pass: PreviewPass, verbosity: Verbosity) => {
     console.log()
 
     const hostBlocks: HostBlock[] = []
-    const scenarios = createScenarios(dir).filter((scenario) => (scenario.pass ?? "apply") === pass)
+    const scenarios = createScenarios(dir).filter(
+      ({ pass: scenarioPass = "apply", maxVerbosity }) =>
+        scenarioPass === pass && (maxVerbosity === undefined || verbosity <= maxVerbosity),
+    )
     const loadedHosts = scenarios.map((scenario) =>
       Object.assign(scenario, { options: { sudo: scenario.sudo ?? false } }),
     )

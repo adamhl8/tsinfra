@@ -59,7 +59,7 @@ tsinfra keeps the script shape and adds what scripts lacked:
 - A template engine. Template literals cover it.
 - A library of built-in operations (apt, brew, systemd). Write helper functions. Some may move into tsinfra later.
 - A facts system. `h.read` returns a command's output.
-- Secret source adapters. Decrypt in your script and mark the file `secret`.
+- Secret source adapters. Decrypt in your script, and mark the file `secret` or pass the value in a step's `secretEnv`.
 
 ## Anti-goals
 

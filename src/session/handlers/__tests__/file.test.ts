@@ -747,7 +747,7 @@ describe("h.file with sudo", () => {
 
     expect(hostSession.hostRecord).toMatchObject({
       stepRecords: [],
-      failure: { kind: "step", stepRecord: { options: { sudo: false }, commands: [] } },
+      failure: { kind: "step", stepRecord: { shellOptions: { sudo: false }, commands: [] } },
     })
     expect(await readSudoCalls()).toStrictEqual([])
   })

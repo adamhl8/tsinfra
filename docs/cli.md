@@ -87,10 +87,12 @@ levels only change what's printed:
 
 - **`-v`** (`--verbose`) adds the rest of the steps: steps that were already right as `=` lines, and each read or
   inspect as a `·` line named by its command. It also shows every diff in full, and a failed fix's values from before
-  the fix. A step given `sudo: true` gets a dim `[sudo]` in its own column after its name, because the option ran every
-  command in the step as root. A `sudo` the script writes inside a command needs no `[sudo]`, because it shows in the
+  the fix. A step given options that change how its commands run gets an `options:` line under it, naming the ones it
+  set, like `options: sudo` or `options: env: URL, PORT, secretEnv: TOKEN`. It names each variable but shows no value,
+  because the values come at `-vv`. A `sudo` the script writes inside a command doesn't count, because it shows in the
   command at `-vv`.
-- **`-vv`** also lists each command a step ran, dimmed, under the step's details, like `$ systemctl is-active sonarr`,
+- **`-vv`** also turns the `options:` line into a block, with each variable on its own row and its value, and each
+  `secretEnv` value as `[MASKED]`. It lists each command a step ran, dimmed, under the step's details, like `$ systemctl is-active sonarr`,
   in the order they ran. A read or inspect lists none, because its name is its command. A command tsinfra writes itself
   shows as its label, like `$ (file details script)`, because its text is tsinfra's code, not the script's. The `file`
   write script's label is followed by the script's `validate` command, like
@@ -125,7 +127,8 @@ sonarr                                                    # default
 sonarr                                                    # -v
   · observed:  (read)   uname -m
   = unchanged: (ensure) Install sonarr
-  ~ change:    (file)   /etc/systemd/system/sonarr.service   [sudo]
+  ~ change:    (file)   /etc/systemd/system/sonarr.service
+      options: sudo
       <diff>
   > triggered: (run)    Reload systemd
 
@@ -133,7 +136,9 @@ sonarr                                                    # -vv
   · observed:  (read)   uname -m
   = unchanged: (ensure) Install sonarr
       $ command -v sonarr
-  ~ change:    (file)   /etc/systemd/system/sonarr.service   [sudo]
+  ~ change:    (file)   /etc/systemd/system/sonarr.service
+      options:
+        sudo: true
       <diff>
       $ (file details script)
       $ (file content)
@@ -150,7 +155,9 @@ sonarr                                                    # -vvv
       before $ command -v sonarr
                exit:   0
                stdout: /usr/bin/sonarr
-  ~ change:    (file)   /etc/systemd/system/sonarr.service   [sudo]
+  ~ change:    (file)   /etc/systemd/system/sonarr.service
+      options:
+        sudo: true
       <diff>
       before $ (file details script)
                exit:   0
@@ -243,11 +250,15 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   stand out.
 - **Colors** follow the status: a summary's change count matches `~` and `>`, and its waiting count matches `?`. The
   plan reminder is dim, so the host lines stay the main thing in the summary. In a block, the notes line up in one
-  column. A waiting step's note is `needs 'A', 'B'`. With `-v`, a `sudo: true` step gets a dim `[sudo]` in its own
-  column after its name and before any note, like `[sudo]   needs 'Install sonarr'`. The square brackets keep it apart
-  from the note even without color, because it's an option the script gave the step, not something tsinfra found.
-  Several options would share one pair of brackets. A failed `sudo: true` step keeps `[sudo]` on its line, above its
-  error. A failure no step owns never gets an option or a note.
+  column. A waiting step's note is `needs 'A', 'B'`. A failure no step owns never gets a note.
+- **Options.** The `options:` heading is dim and italic, its keys are dim like other labels, and its values are styled
+  like other values, so a string keeps its quotes. `[MASKED]` is dim and unquoted, because it's tsinfra's marker, not a
+  value the script gave. It's the first of a step's details, and on a failed step it comes after the error, like its
+  other details. Only options the step set show, so `sudo: false` and an empty `env` never do. Only options whose
+  effect shows nowhere else in the report show: `sudo`, `env`, and `secretEnv`. `want`, `content`, `mode`, `user`,
+  `group`, `needs`, and `after` already show as values, diffs, attribute rows, notes, or a status, and `check`, `fix`,
+  and `validate` show as commands. Candidates for later are `file`'s `secret` and `overwrite: false`, `link`'s
+  `force`, and `ensure`'s `verify: false`, because a step that used one can look the same as one that didn't.
 - **Warnings.** A step that worked but needs a look, like a link to a missing path, gets a `warning:` line under its
   details, with the label in bright yellow, so it stands apart from the plain yellow of a change. A warning makes its
   step show even when it was already right, without `--verbose`. The report decides what's a warning from the facts
@@ -255,7 +266,7 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   warning isn't drift, so it doesn't change the exit code.
 - **Levels.** Every piece of a block has the lowest level it shows at: a step's own line, each of its options, each
   part of its note, and each detail under it. A piece's level comes from what it is, like 1 for the line of a step that
-  was already right, 1 for the `[sudo]` option, and 0 for a warning. A piece shows once its own level is reached, or when anything inside
+  was already right, 1 for the options line, and 0 for a warning. A piece shows once its own level is reached, or when anything inside
   it shows, and a step that shows always prints its own line. So a warning, at 0, shows its step at the default level,
   even when the step was already right. The report builds every piece for every step, then keeps the ones the level
   shows, before it lines up the columns, so a hidden piece never widens one. A diff is the exception. It's one piece
@@ -326,10 +337,13 @@ in the order the script called them, and the host's failure, if it failed.
   failed: in preparation, in a step, or in the host function outside any step. A host whose preparation failed has no
   steps.
 - **A step** records its kind (`read`, `inspect`, `ensure`, `run`, `file`, or `link`), its name, and its status. A read
-  or inspect has no name, so it records its command. A step records its options, the ones that change how every
+  or inspect has no name, so it records its command. A step records its shell options, the ones that change how every
   command in it runs: `sudo`, `env`, and `secretEnv`, with each secret value as `[MASKED]`. Its commands are recorded
-  as the script wrote them, without the `sudo sh -s` around them or the prelude that sets the variables, so the options
-  are what say those were there. Every command in the step runs with the same options, so the step holds them once.
+  as the script wrote them, without the `sudo sh -s` around them or the prelude that sets the variables, so the shell
+  options are what say those were there. Every command in the step runs with the same ones, so the step holds them
+  once. A step's own options go in a separate field, added when the report first shows one, like `file`'s
+  `overwrite: false`. It holds only the options the report shows, as plain values, because the rest are functions,
+  file content, or already recorded another way.
   The step that's running is kept apart on the host's
   record until it ends, so the record always says which step is running. A step that finishes joins the host's steps,
   in the order the script called them, with its status.
@@ -342,6 +356,9 @@ in the order the script called them, and the host's failure, if it failed.
   and an `after` comparison when it compared again after the fix. Each holds the values it compared and whether they
   matched.
 - **A waiting step** records the names of the needed steps it waited on.
+- **Secrets are masked as they're recorded.** The session keeps the host's known secrets, from each step's `secretEnv`
+  and each `maskOutput` command, and replaces each one with `[MASKED]` in everything it records from then on, so the
+  record never holds a secret. Preparation never sees one, so it masks nothing.
 
 A step never records anything itself. It returns its one status, or an error, and the record gets everything else from
 the wrappers the step runs through: the shell's transport records commands, and `converge` records comparisons. So a

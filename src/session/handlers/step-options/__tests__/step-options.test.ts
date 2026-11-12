@@ -18,11 +18,11 @@ const readOrMessage = async (h: Host, cmd: string, options: ReadOptions) => {
   return isErr(output) ? messageChain(output) : output
 }
 
-/** Returns each finished step's name, options, and the stdout each of its commands recorded. */
+/** Returns each finished step's name, shell options, and the stdout each of its commands recorded. */
 const getRecordedSteps = (hostSession: Awaited<ReturnType<typeof createSession>>) =>
-  hostSession.hostRecord.stepRecords.map(({ name, options, commands }) => ({
+  hostSession.hostRecord.stepRecords.map(({ name, shellOptions, commands }) => ({
     name,
-    options,
+    shellOptions,
     stdouts: commands.map(({ output }) => (output === undefined || isErr(output) ? undefined : output.stdout)),
   }))
 
@@ -34,7 +34,7 @@ describe("env and secretEnv", () => {
     expect(await h.read('printf "%s|%s" "$V" "$T"', { env: { V: value }, secretEnv: { T: "t" } })).toBe(`${value}|t`)
   })
 
-  it("should record h.read's options with each secret masked, and mask the secret in its output", async () => {
+  it("should record h.read's shell options with each secret masked, and mask the secret in its output", async () => {
     const hostSession = await createSession()
     const stdout = await hostSession.host.read('printf %s "$TOKEN"', {
       env: { URL: "u" },
@@ -50,7 +50,7 @@ describe("env and secretEnv", () => {
       steps: [
         {
           name: 'printf %s "$TOKEN"',
-          options: { sudo: false, env: { URL: "u" }, secretEnv: { TOKEN: "[MASKED]" } },
+          shellOptions: { sudo: false, env: { URL: "u" }, secretEnv: { TOKEN: "[MASKED]" } },
           stdouts: ["[MASKED]"],
         },
       ],
@@ -137,8 +137,8 @@ describe("maskOutput", () => {
     expect({ stdout, steps: getRecordedSteps(hostSession) }).toStrictEqual({
       stdout: SECRET,
       steps: [
-        { name: PRINT_SECRET, options: { sudo: false, env: {}, secretEnv: {} }, stdouts: ["[MASKED]"] },
-        { name: "echo [MASKED]", options: { sudo: false, env: {}, secretEnv: {} }, stdouts: ["[MASKED]\n"] },
+        { name: PRINT_SECRET, shellOptions: { sudo: false, env: {}, secretEnv: {} }, stdouts: ["[MASKED]"] },
+        { name: "echo [MASKED]", shellOptions: { sudo: false, env: {}, secretEnv: {} }, stdouts: ["[MASKED]\n"] },
       ],
     })
   })

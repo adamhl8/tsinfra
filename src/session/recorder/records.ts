@@ -57,7 +57,7 @@ export interface StepRecord {
   name: string
   kind: StepKind
   /** The options that change how every command in the step runs, with each `secretEnv` value as `[MASKED]`. */
-  options: ValidStepShellOptions
+  shellOptions: ValidStepShellOptions
   commands: CommandRecord[]
   comparisons: StepComparisons
   /** The names of the needed steps this step waited on. */
