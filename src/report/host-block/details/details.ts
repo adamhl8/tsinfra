@@ -1,5 +1,6 @@
 import { toComparisonValuesDetails } from "#report/host-block/details/comparisons.ts"
 import { toFailedStepDetails } from "#report/host-block/details/failure.ts"
+import { toOptionsDetails } from "#report/host-block/details/options.ts"
 import type { Detail } from "#report/host-block/host-block.ts"
 import type { ComparisonValues, FinishedStepRecord, RecordedFailure } from "#session/session.ts"
 
@@ -34,25 +35,33 @@ const toWarningDetails = (stepRecord: FinishedStepRecord): Detail[] => {
 
 const toHintDetails = (hints: string[]): Detail[] => hints.map((text) => ({ kind: "hint", text, from: 0 }))
 
-/** Returns a finished step's details: how a changed step's value would change, then any warnings. */
+/** Returns a finished step's details: its options, how a changed step's value would change, then any warnings. */
 export const toStepDetails = (stepRecord: FinishedStepRecord): Detail[] => {
   const { status, comparisons } = stepRecord
-  if (status === "waiting") return []
+  const optionsDetails = toOptionsDetails(stepRecord)
+
+  if (status === "waiting") return optionsDetails
 
   const values = comparisons.before?.values
   // Show how a changed step's value would change, when its name doesn't already say.
   const showsChange = status === "changed" && values !== undefined && SHOWS_CHANGE_DETAILS[values.kind]
   const changeDetails = showsChange ? toComparisonValuesDetails(values, 0) : []
-  return [...changeDetails, ...toWarningDetails(stepRecord)]
+  const warningDetails = toWarningDetails(stepRecord)
+  return [...optionsDetails, ...changeDetails, ...warningDetails]
 }
 
 const HOST_FUNCTION_FAILURE_NOTE = "thrown in the host function, outside any step"
 
-/** Returns what a failure shows under its error: what a failed step found, or a note, then any hints. */
+/** Returns what a failure shows under its error: a failed step's options and what it found, or a note, then any hints. */
 export const toFailureDetails = (failure: RecordedFailure): Detail[] => {
   const hintDetails = toHintDetails(failure.hints)
 
-  if (failure.kind === "step") return [...toFailedStepDetails(failure.stepRecord), ...hintDetails]
+  if (failure.kind === "step") {
+    const { stepRecord } = failure
+    const optionsDetails = toOptionsDetails(stepRecord)
+    const failedStepDetails = toFailedStepDetails(stepRecord)
+    return [...optionsDetails, ...failedStepDetails, ...hintDetails]
+  }
 
   // Add a note to a host function failure, because `host fn` alone doesn't say it came from the script and not the host.
   const noteDetails: Detail[] =

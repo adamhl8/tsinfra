@@ -10,6 +10,7 @@ import { attempt } from "ts-explicit-errors"
 import {
   UNREACHABLE_TARGET,
   createFakeSudoSession,
+  createSession,
   createWrappedSession,
   prepareAndRunHost,
   throwBoom,
@@ -986,8 +987,8 @@ const createSudoPaths = async () => {
   return { directory, oldPath, newPath: path.join(directory, "new.conf") }
 }
 
-describe("renderHostBlock for a sudo step", () => {
-  it("should show sudo in its own column with -v", async () => {
+describe("renderHostBlock for a step's options", () => {
+  it("should show sudo on an options line under the step with -v", async () => {
     const { oldPath, newPath } = await createSudoPaths()
     const { hostSession } = await createFakeSudoSession("plan")
     await hostSession.host.file(oldPath, "a\n", { sudo: true })
@@ -996,14 +997,16 @@ describe("renderHostBlock for a sudo step", () => {
 
     expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")).toStrictEqual([
       "a",
-      `  = unchanged: (file)   ${oldPath}   [sudo]`,
-      `  ~ change:    (file)   ${newPath}   [sudo]`,
+      `  = unchanged: (file)   ${oldPath}`,
+      "      options: sudo",
+      `  ~ change:    (file)   ${newPath}`,
+      "      options: sudo",
       "      content: new file, 2 bytes",
       "  = unchanged: (ensure) Install git",
     ])
   })
 
-  it("should leave sudo out by default", async () => {
+  it("should leave the options out by default", async () => {
     const { newPath } = await createSudoPaths()
     const { hostSession } = await createFakeSudoSession("plan")
     await hostSession.host.file(newPath, "a\n", { sudo: true })
@@ -1015,7 +1018,7 @@ describe("renderHostBlock for a sudo step", () => {
     ])
   })
 
-  it("should put sudo before a waiting step's note, and line up the notes", async () => {
+  it("should show a waiting step's options under it, and line up the notes", async () => {
     const { newPath } = await createSudoPaths()
     const { hostSession } = await createFakeSudoSession("plan")
     const brew = await hostSession.host.ensure("Install brew packages", { check: "false", want: true, fix: "true" })
@@ -1025,22 +1028,49 @@ describe("renderHostBlock for a sudo step", () => {
     expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")).toStrictEqual([
       "a",
       "  ~ change:  (ensure) Install brew packages",
-      `  ? waiting: (file)   ${newPath}   [sudo]   needs 'Install brew packages'`,
-      `  ? waiting: (ensure) ${"Install fish".padEnd(newPath.length)}            needs 'Install brew packages'`,
+      `  ? waiting: (file)   ${newPath}   needs 'Install brew packages'`,
+      "      options: sudo",
+      `  ? waiting: (ensure) ${"Install fish".padEnd(newPath.length)}   needs 'Install brew packages'`,
     ])
   })
 
   // Skip this as root, because root can write to any directory, so the write wouldn't fail.
-  it.skipIf(isRoot)("should keep sudo on a failed step's line", async () => {
+  it.skipIf(isRoot)("should show a failed step's options after its error", async () => {
     const { directory, newPath } = await createSudoPaths()
     await chmod(directory, 0o500)
     const { hostSession } = await createFakeSudoSession("apply")
 
     try {
       await attempt(async () => hostSession.host.file(newPath, "a\n", { sudo: true }))
-      expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")[1]).toBe(`  ! failed: (file) ${newPath}   [sudo]`)
+      const lines = renderRecord(hostSession.hostRecord, 1)?.split("\n")
+      expect([lines?.[1], lines?.[3]]).toStrictEqual([`  ! failed: (file) ${newPath}`, "        options: sudo"])
     } finally {
       await chmod(directory, 0o755)
     }
+  })
+
+  it("should name the variables in env and secretEnv without their values", async () => {
+    const hostSession = await createSession()
+    await hostSession.host.read("true", { env: { URL: "u", PORT: "1" }, secretEnv: { TOKEN: "t" } })
+
+    expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")).toStrictEqual([
+      "a",
+      "  · observed: (read) true",
+      "      options: env: URL, PORT, secretEnv: TOKEN",
+    ])
+  })
+
+  it("should leave out options the step didn't set", async () => {
+    const { newPath } = await createSudoPaths()
+    const hostSession = await createSession("plan")
+    await hostSession.host.read("true", { env: {}, secretEnv: {} })
+    await hostSession.host.file(newPath, "a\n", { sudo: false })
+
+    expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")).toStrictEqual([
+      "a",
+      "  · observed: (read) true",
+      `  ~ change:   (file) ${newPath}`,
+      "      content: new file, 2 bytes",
+    ])
   })
 })

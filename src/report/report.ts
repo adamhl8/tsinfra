@@ -14,15 +14,14 @@ export interface ReportOptions {
   verbosity: Verbosity
 }
 
-/** Keeps the entries that show at `verbosity`, each with only the options, note parts, and details that show. */
+/** Keeps the entries that show at `verbosity`, each with only the note parts and details that show. */
 const keepShown = (hostBlockEntries: HostBlockEntry[], verbosity: Verbosity): HostBlockEntry[] =>
   hostBlockEntries.flatMap((hostBlockEntry) => {
-    const options = hostBlockEntry.options.filter(({ from }) => verbosity >= from)
     const note = hostBlockEntry.note.filter(({ from }) => verbosity >= from)
     const details = hostBlockEntry.details.filter(({ from }) => verbosity >= from)
     // Keep an entry when anything inside it shows, like a warning on a step that was already right, so it can't be missed.
-    const isShown = verbosity >= hostBlockEntry.from || options.length > 0 || note.length > 0 || details.length > 0
-    return isShown ? [{ ...hostBlockEntry, options, note, details }] : []
+    const isShown = verbosity >= hostBlockEntry.from || note.length > 0 || details.length > 0
+    return isShown ? [{ ...hostBlockEntry, note, details }] : []
   })
 
 /**

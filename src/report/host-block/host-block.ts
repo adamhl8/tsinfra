@@ -19,9 +19,7 @@ export interface HostBlockEntry {
   /** What the entry is about, which shows before the name. */
   kind: EntryKind
   name: EntryName
-  /** The step's options worth showing, like `sudo`, which show after the name. Empty when there are none. */
-  options: EntryOption[]
-  /** The note's parts, which show after the options, joined with `, `. Empty when the entry has no note. */
+  /** The note's parts, which show after the name, joined with `, `. Empty when the entry has no note. */
   note: NotePart[]
   /** How a value would change, or for a failure, what the step last found on the host. */
   details: Detail[]
@@ -51,13 +49,6 @@ export type NameKind =
   // A name that's a value: a read's or an inspect's command, a file's or a link's path, or a target.
   | "value"
 
-/** An option the script gave the step that changes how it ran, like `sudo`, which ran every command as root. */
-export interface EntryOption {
-  kind: "sudo"
-  /** The lowest level the option shows at. The builder decides it. */
-  from: Verbosity
-}
-
 /** One part of an entry's note, like `needs 'A', 'B'`, the names of the steps a waiting step needs. */
 export interface NotePart {
   kind: "needs"
@@ -67,10 +58,12 @@ export interface NotePart {
 }
 
 /**
- * One thing an entry shows under its status line. Its `from` is the lowest level it shows at, which the builder
- * decides.
+ * One thing an entry shows under its status line, in the order they show. Its `from` is the lowest level it shows at,
+ * which the builder decides.
  */
 export type Detail =
+  // The options the script set that change how the step's commands ran, like `sudo`.
+  | { kind: "options"; options: StepOptionDetail[]; from: Verbosity }
   | { kind: "diff"; got: string; want: string; from: Verbosity }
   // Holds everything about a file but a text diff, which is a detail of its own.
   | { kind: "fileComparisonValues"; values: FileComparisonValues; from: Verbosity }
@@ -84,6 +77,9 @@ export type Detail =
   | { kind: "warning"; warning: StepWarning; from: Verbosity }
   // How to fix a failure, like setting the host's `sudo` option.
   | { kind: "hint"; text: string; from: Verbosity }
+
+/** One option the script set on a step, with the variables of `env` or `secretEnv`, each secret value masked. */
+export type StepOptionDetail = { name: "sudo" } | { name: "env" | "secretEnv"; variables: Record<string, string> }
 
 /** Something that worked but needs a look, with the value it's about, like a path, when there is one. */
 export interface StepWarning {

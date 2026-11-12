@@ -16,7 +16,7 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
       preparation's commands by their labels. The steps:
       1. **`shellOptions`** (built 2026-11-12). Rename `StepRecord.options` to `shellOptions`, which leaves `options` for the step's own
          options when the report first shows one.
-      2. **The options line.** Replace the `[sudo]` column with an `options:` line from 1, naming the options the step
+      2. **The options line** (built 2026-11-12). Replace the `[sudo]` column with an `options:` line from 1, naming the options the step
          set, with variable names but no values, like `options: env: URL, PORT, secretEnv: TOKEN`. Check it with
          `bun report-preview.ts -v`.
       3. **The options block.** From 2, the line becomes a block with each variable's value, and `[MASKED]` for each
