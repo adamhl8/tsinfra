@@ -9,10 +9,15 @@ import type { HandlerReturn, StepContext } from "#session/step.ts"
 export interface ReadOptions extends EnvOptions, MaskOptions {}
 
 /** Runs the `read` step, which runs the same command as the `read` tool and gives the script its stdout. */
-export const handleRead = async (ctx: StepContext<"read">, cmd: unknown): Promise<Result<HandlerReturn<string>>> => {
+export const handleRead = async (
+  ctx: StepContext<"read">,
+  cmd: unknown,
+  options: unknown = {},
+): Promise<Result<HandlerReturn<string>>> => {
   const { shell } = ctx
 
-  const stdout = await execCommand({ toolName: "read", shell }, cmd)
+  // Leave `options` to `execCommand`, which validates `maskOutput` for the tool too.
+  const stdout = await execCommand({ toolName: "read", shell }, cmd, options)
   if (isErr(stdout)) return stdout
 
   return { status: "observed", value: stdout }

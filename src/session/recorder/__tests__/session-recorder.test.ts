@@ -2,19 +2,19 @@ import { describe, expect, it } from "bun:test"
 
 import { err, messageChain } from "ts-explicit-errors"
 
-import type { Comparison } from "#session/handlers/handlers.ts"
+import type { Comparison, ValidStepShellOptions } from "#session/handlers/handlers.ts"
 import type { HostRecord, StepRecord } from "#session/recorder/recorder.ts"
 import { createHostRecord, createSessionRecorder } from "#session/recorder/recorder.ts"
 import { runLocal } from "#transport/local.ts"
-import type { StepShellOptions, Transport } from "#transport/transport.ts"
+import type { Transport } from "#transport/transport.ts"
 
 // Stand in for `sudo` with a function that prints the command it's given, then runs it.
 const transport: Transport = async (cmd) => runLocal(`sudo() { echo "sudo $*"; "$@"; }\n${cmd}`)
 
-const NO_OPTIONS: StepShellOptions = { sudo: false, env: {}, secretEnv: {} }
+const NO_OPTIONS: ValidStepShellOptions = { sudo: false, env: {}, secretEnv: {} }
 
 /** Starts a step on a new recorder, and returns the host record and the step's shells, built from `options`. */
-const startStepWithShells = (options: StepShellOptions) => {
+const startStepWithShells = (options: ValidStepShellOptions) => {
   const hostRecord = createHostRecord("a", "@local")
   const sessionRecorder = createSessionRecorder(hostRecord, { sudo: false }, transport)
   sessionRecorder.startStep("a", "file")

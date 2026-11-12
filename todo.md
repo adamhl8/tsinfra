@@ -61,7 +61,7 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
          suite.
       2. **Masking** (built 2026-11-12). The host's known secrets, masked in each command's output and error, and in its text, with
          `maskOutput` adding a command's output to them.
-      3. **The step options.** `env`, `secretEnv`, and `maskOutput` on `h.read` and `h.inspect`, `env` and `secretEnv`
+      3. **The step options** (built 2026-11-12). `env`, `secretEnv`, and `maskOutput` on `h.read` and `h.inspect`, `env` and `secretEnv`
          on `ensure` and `run`, and `maskOutput` on the tools. The options schema checks that each name is a valid
          shell name, and that no name is in both `env` and `secretEnv`, so a bad one fails under its step. Its
          validated output is a `StepShellOptions`, with the defaults filled in. A Docker test checks a `sudo: true`

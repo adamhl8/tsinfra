@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test"
 
+import type { ValidStepShellOptions } from "#session/session.ts"
 import { runLocal } from "#transport/local.ts"
-import type { StepShellOptions } from "#transport/step.ts"
 import { createStepTransport } from "#transport/step.ts"
 
-const NO_OPTIONS: StepShellOptions = { sudo: false, env: {}, secretEnv: {} }
+const NO_OPTIONS: ValidStepShellOptions = { sudo: false, env: {}, secretEnv: {} }
 
 // Hold every character a value could break on in a script: a variable, both quotes, a space, and a newline.
 const AWKWARD_VALUE = `a $HOME "b" 'c'\nd`
@@ -13,7 +13,7 @@ const AWKWARD_VALUE = `a $HOME "b" 'c'\nd`
  * Runs `cmd` on a step transport built from `options`, and returns its output and every script it sent. Stand in for
  * `sudo` with a function that prints its arguments, then runs them with an empty environment, as sudo resets it.
  */
-const runInStep = async (options: StepShellOptions, cmd: string) => {
+const runInStep = async (options: ValidStepShellOptions, cmd: string) => {
   const scripts: string[] = []
   const stepTransport = createStepTransport(async (script) => {
     scripts.push(script)

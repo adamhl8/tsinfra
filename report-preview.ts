@@ -306,6 +306,16 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
+      // A failed read whose stderr holds a `secretEnv` value and one line of a multi-line one, each shown as `[MASKED]`.
+      name: "masked-secret",
+      target: "@local",
+      fn: async (h) => {
+        await h.read('echo "bad token $TOKEN, key line $(echo "$KEY" | tail -n 1)" >&2; exit 1', {
+          secretEnv: { TOKEN: "s3cret-value", KEY: "first-key-line\nsecond-key-line" },
+        })
+      },
+    },
+    {
       // A host whose preparation failed, as `(preparation)` and its target in the value color, because its script never ran.
       // Give it a target with a space, because ssh rejects one before it reads any config or connects.
       name: "unreachable",

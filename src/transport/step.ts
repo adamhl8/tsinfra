@@ -1,18 +1,9 @@
 import crypto from "node:crypto"
 
+import type { ValidStepShellOptions } from "#session/session.ts"
 import type { Transport } from "#transport/transport.ts"
 import { wrapCommand } from "#transport/utils.ts"
 import { quoteShellArg } from "#utils.ts"
-
-/** The options that change how every command in a step runs. */
-export interface StepShellOptions {
-  /** Whether every command runs as root, in a `sudo sh -s`. */
-  sudo: boolean
-  /** The variables exported to every command. */
-  env: Record<string, string>
-  /** The variables exported to every command, whose values never show. */
-  secretEnv: Record<string, string>
-}
 
 /** Starts `cmd` with an `export` line for each of `variables`, single-quoting each value so it stays literal. */
 const addEnvPrelude = (cmd: string, variables: Record<string, string>): string => {
@@ -34,7 +25,7 @@ const wrapInRootShell = (script: string): string => {
  * command, so the variables are set inside the root shell, and sudo's reset of the environment can't drop them.
  */
 export const createStepTransport =
-  (transport: Transport, { sudo, env, secretEnv }: StepShellOptions): Transport =>
+  (transport: Transport, { sudo, env, secretEnv }: ValidStepShellOptions): Transport =>
   async (cmd) => {
     const script = addEnvPrelude(cmd, { ...env, ...secretEnv })
     return transport(sudo ? wrapInRootShell(script) : script)

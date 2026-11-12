@@ -2,14 +2,14 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { ValidHostOptions } from "#hosts/hosts.ts"
-import type { Comparison } from "#session/handlers/handlers.ts"
+import type { Comparison, ValidStepShellOptions } from "#session/handlers/handlers.ts"
 import type { CommandRecorder } from "#session/recorder/commands.ts"
 import { createRecordingTransport } from "#session/recorder/commands.ts"
 import { getFailureHints } from "#session/recorder/failure-hints.ts"
 import { addSecret, maskSecrets } from "#session/recorder/masking.ts"
 import type { ConvergePhase, HostRecord, StepRecord } from "#session/recorder/records.ts"
 import type { StepKind, StepStatus } from "#session/step.ts"
-import type { Shell, StepShellOptions, Transport } from "#transport/transport.ts"
+import type { Shell, Transport } from "#transport/transport.ts"
 import { createShell, createStepTransport } from "#transport/transport.ts"
 
 /** The phases of `converge` that compare the host with what the step wants. */
@@ -39,7 +39,7 @@ export interface SessionRecorder {
    * Records the running step's options, and returns its shells, built once for the step. Recording and building in one
    * call keeps the record and the commands from disagreeing.
    */
-  getStepShells: (options: StepShellOptions) => StepShells
+  getStepShells: (options: ValidStepShellOptions) => StepShells
   /** Returns the error the host failed with, or nothing while it hasn't failed. */
   getFailure: () => Error | undefined
   /**
@@ -93,7 +93,7 @@ export const createSessionRecorder = (
   const createRecordingShell = (shellTransport: Transport): Shell =>
     createShell(createRecordingTransport(shellTransport, commandRecorder))
 
-  const getStepShells = (_options: StepShellOptions): StepShells => {
+  const getStepShells = (_options: ValidStepShellOptions): StepShells => {
     const secretValues = Object.values(_options.secretEnv)
     for (const value of secretValues) addSecret(secrets, value)
     // Record each command before the step transport adds the prelude and wraps it in `sudo sh -s`.

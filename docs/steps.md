@@ -175,7 +175,9 @@ await h.read("gh api user", { secretEnv: { GH_TOKEN: token } })
 ```
 
 A name must be a valid shell name, made of letters, digits, and underscores, and not starting with a digit. Any valid
-name works, `PATH` and `HOME` included. Values are literal, so a value can't expand another variable.
+name works, `PATH` and `HOME` included, but a name can't be in both `env` and `secretEnv`. A value must be a string,
+and tsinfra doesn't convert one, so a port goes in as `String(port)`. Values are literal, so a value can't expand
+another variable.
 `env: { PATH: "/opt/go/bin:$PATH" }` sets `PATH` to that exact text. Extend `PATH` in the command instead, where the
 shell expands it:
 

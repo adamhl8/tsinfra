@@ -49,6 +49,7 @@ export type {
   FileOwner,
   MaskOptions,
   StepNeeds,
-  SudoOptions,
+  StepShellOptions,
+  ValidStepShellOptions,
 } from "#session/handlers/step-options/step-options.ts"
-export { sudoOptionsSchema } from "#session/handlers/step-options/step-options.ts"
+export { stepShellOptionsSchema } from "#session/handlers/step-options/step-options.ts"

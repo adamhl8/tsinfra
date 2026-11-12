@@ -13,10 +13,12 @@ export interface InspectOptions extends EnvOptions, MaskOptions {}
 export const handleInspect = async (
   ctx: StepContext<"inspect">,
   cmd: unknown,
+  options: unknown = {},
 ): Promise<Result<HandlerReturn<InspectResult>>> => {
   const { shell } = ctx
 
-  const inspectResult = await inspectCommand({ toolName: "inspect", shell }, cmd)
+  // Leave `options` to `inspectCommand`, which validates `maskOutput` for the tool too.
+  const inspectResult = await inspectCommand({ toolName: "inspect", shell }, cmd, options)
   if (isErr(inspectResult)) return inspectResult
 
   return { status: "observed", value: inspectResult }

@@ -10,6 +10,8 @@ export interface MaskOptions {
   maskOutput?: boolean
 }
 
+export const maskOptionsSchema = type.declare<MaskOptions>().type({ "maskOutput?": "boolean" })
+
 // Accept only steps that read the host's state in `needs`, so not a run.
 const NEEDABLE_STEP_KINDS = ["file", "link", "ensure"] as const satisfies ChangeStepKind[]
 type NeedableStepKind = (typeof NEEDABLE_STEP_KINDS)[number]

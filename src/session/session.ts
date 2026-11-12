@@ -13,7 +13,7 @@ import type {
   RunOptions,
   ChangeStepResult,
   Change,
-  SudoOptions,
+  StepShellOptions,
   ChangeTools,
   Exec,
   Inspect,
@@ -28,7 +28,7 @@ import {
   handleRead,
   handleRun,
   createConverge,
-  sudoOptionsSchema,
+  stepShellOptionsSchema,
   validateInput,
   execCommand,
   inspectCommand,
@@ -73,6 +73,7 @@ export type {
   SizeComparison,
   StepNeeds,
   SymbolicMode,
+  ValidStepShellOptions,
   Want,
 } from "#session/handlers/handlers.ts"
 export {
@@ -200,12 +201,12 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
 
   /** Returns the tools a step's functions are given, running their commands on the step's `toolShell`. */
   const createTools = (toolShell: Shell) => {
-    const readTool: Exec = async (cmd) =>
-      callOrFail(async () => execCommand({ toolName: "read", shell: toolShell }, cmd))
-    const inspectTool: Inspect = async (cmd) =>
-      callOrFail(async () => inspectCommand({ toolName: "inspect", shell: toolShell }, cmd))
-    const execTool: Exec = async (cmd) =>
-      callOrFail(async () => execCommand({ toolName: "exec", shell: toolShell }, cmd))
+    const readTool: Exec = async (cmd, options) =>
+      callOrFail(async () => execCommand({ toolName: "read", shell: toolShell }, cmd, options))
+    const inspectTool: Inspect = async (cmd, options) =>
+      callOrFail(async () => inspectCommand({ toolName: "inspect", shell: toolShell }, cmd, options))
+    const execTool: Exec = async (cmd, options) =>
+      callOrFail(async () => execCommand({ toolName: "exec", shell: toolShell }, cmd, options))
     const readTools: ReadTools = { read: readTool, inspect: inspectTool }
     const changeTools: ChangeTools = { exec: execTool, inspect: inspectTool }
     return { readTools, changeTools }
@@ -218,7 +219,7 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
     stepName: unknown,
     kind: K,
     handler: (ctx: StepContext<K>) => Promise<Result<HandlerReturn<T>>>,
-    options: SudoOptions = {},
+    options: StepShellOptions = {},
   ): Promise<T> =>
     callOrFail(async () => {
       // Validate the name before recording the step, because the output shows every recorded step by its name.
@@ -232,13 +233,13 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
       if (isErr(stepStart)) return stepStart
 
       // Validate `options` after recording the step, so a bad one fails under the step like the step's other inputs.
-      const validOptions = validateInput(options, sudoOptionsSchema, { inputLabel: "options", givenTo: kind })
+      const validOptions = validateInput(options, stepShellOptionsSchema, { inputLabel: "options", givenTo: kind })
       if (isErr(validOptions)) {
         failStep(validOptions)
         return validOptions
       }
 
-      const { stepShell, toolShell } = getStepShells({ sudo: validOptions.sudo, env: {}, secretEnv: {} })
+      const { stepShell, toolShell } = getStepShells(validOptions)
       const { readTools, changeTools } = createTools(toolShell)
 
       const ctx: StepContext<K> = {
@@ -265,14 +266,16 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
   const host: Host = {
     name,
     // Pass `cmd` as the step name, because `h.read` and `h.inspect` take no name.
-    read: async (cmd) => callStep(cmd, "read", async (ctx) => handleRead(ctx, cmd)),
-    inspect: async (cmd) => callStep(cmd, "inspect", async (ctx) => handleInspect(ctx, cmd)),
+    read: async (cmd, options) => callStep(cmd, "read", async (ctx) => handleRead(ctx, cmd, options), options),
+    inspect: async (cmd, options) => callStep(cmd, "inspect", async (ctx) => handleInspect(ctx, cmd, options), options),
     file: async (path, content, options) =>
       callStep(path, "file", async (ctx) => handleFile(ctx, path, content, options), options),
     link: async (path, target, options) =>
       callStep(path, "link", async (ctx) => handleLink(ctx, path, target, options), options),
-    ensure: async (stepName, options) => callStep(stepName, "ensure", async (ctx) => handleEnsure(ctx, options)),
-    run: async (stepName, cmd, options) => callStep(stepName, "run", async (ctx) => handleRun(ctx, cmd, options)),
+    ensure: async (stepName, options) =>
+      callStep(stepName, "ensure", async (ctx) => handleEnsure(ctx, options), options),
+    run: async (stepName, cmd, options) =>
+      callStep(stepName, "run", async (ctx) => handleRun(ctx, cmd, options), options),
   }
 
   return host

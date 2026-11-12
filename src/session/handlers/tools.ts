@@ -3,6 +3,7 @@ import { err, isErr } from "ts-explicit-errors"
 
 import { validateInput } from "#session/handlers/shared/shared.ts"
 import type { MaskOptions } from "#session/handlers/step-options/step-options.ts"
+import { maskOptionsSchema } from "#session/handlers/step-options/step-options.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
 import type { Shell } from "#transport/transport.ts"
 
@@ -49,26 +50,36 @@ const TOOL_VERBS: Record<ToolName, string> = {
 }
 
 /** Runs one command for `read` or `exec` and returns its stdout, trimmed. A non-zero exit is an error. */
-export const execCommand = async (ctx: ToolContext, cmd: unknown): Promise<Result<string>> => {
+export const execCommand = async (ctx: ToolContext, cmd: unknown, options: unknown = {}): Promise<Result<string>> => {
   const { toolName, shell } = ctx
 
   const validCmd = validateInput(cmd, nonEmptyStringSchema, { inputLabel: "command", givenTo: toolName })
   if (isErr(validCmd)) return validCmd
 
-  const stdout = await shell.exec(validCmd)
+  const validOptions = validateInput(options, maskOptionsSchema, { inputLabel: "options", givenTo: toolName })
+  if (isErr(validOptions)) return validOptions
+
+  const stdout = await shell.exec(validCmd, validOptions)
   if (isErr(stdout)) return err(`failed to ${TOOL_VERBS[toolName]} '${validCmd}'`, stdout)
 
   return stdout.trim()
 }
 
 /** Runs one command for `inspect` and returns its output and exit code. A non-zero exit is an answer, not an error. */
-export const inspectCommand = async (ctx: ToolContext, cmd: unknown): Promise<Result<InspectResult>> => {
+export const inspectCommand = async (
+  ctx: ToolContext,
+  cmd: unknown,
+  options: unknown = {},
+): Promise<Result<InspectResult>> => {
   const { toolName, shell } = ctx
 
   const validCmd = validateInput(cmd, nonEmptyStringSchema, { inputLabel: "command", givenTo: toolName })
   if (isErr(validCmd)) return validCmd
 
-  const commandOutput = await shell.inspect(validCmd)
+  const validOptions = validateInput(options, maskOptionsSchema, { inputLabel: "options", givenTo: toolName })
+  if (isErr(validOptions)) return validOptions
+
+  const commandOutput = await shell.inspect(validCmd, validOptions)
   if (isErr(commandOutput)) return err(`failed to ${TOOL_VERBS[toolName]} '${validCmd}'`, commandOutput)
 
   const { stdout, stderr, exitCode } = commandOutput
