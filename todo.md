@@ -19,7 +19,7 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
       2. **The options line** (built 2026-11-12). Replace the `[sudo]` column with an `options:` line from 1, naming the options the step
          set, with variable names but no values, like `options: env: URL, PORT, secretEnv: TOKEN`. Check it with
          `bun report-preview.ts -v`.
-      3. **The options block.** From 2, the line becomes a block with each variable's value, and `[MASKED]` for each
+      3. **The options block** (built 2026-11-12). From 2, the line becomes a block with each variable's value, and `[MASKED]` for each
          secret. Only one of the line and the block shows, so the line gets an `until` level here, ahead of the
          `-vvv` piece's `until` step.
       4. **Command parts.** Each command a step ran is a part from 2, shown dimmed as `$ cmd` under the details. One

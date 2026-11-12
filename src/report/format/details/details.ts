@@ -5,7 +5,7 @@ import { formatDiff } from "#report/format/details/diff.ts"
 import { formatEnsureValues } from "#report/format/details/ensure.ts"
 import { formatFileValues } from "#report/format/details/file.ts"
 import { formatLinkValues } from "#report/format/details/link.ts"
-import { formatOptionsLine } from "#report/format/details/options.ts"
+import { formatOptions } from "#report/format/details/options.ts"
 import type { Detail, StepWarning } from "#report/host-block/host-block.ts"
 import type { Style } from "#styles.ts"
 import { styleError, styleHint, styleNote, styleValue, styleWarning } from "#styles.ts"
@@ -48,8 +48,7 @@ const formatStderr = (command: string, stderr: string): AlignedRow => {
 
 /** Formats a detail as the rows it prints as, aligned or not. Checks each kind in the order the details show. */
 export const formatDetail = (detail: Detail, diffLimits: DiffLimits | undefined): DetailRows => {
-  // Keep the options line out of the aligned rows, because its label would push every value under it to the right.
-  if (detail.kind === "options") return { kind: "unaligned", rows: [formatOptionsLine(detail.options)] }
+  if (detail.kind === "options") return { kind: "unaligned", rows: formatOptions(detail.options) }
   if (detail.kind === "diff") return { kind: "unaligned", rows: formatDiff(detail.got, detail.want, diffLimits) }
   if (detail.kind === "fileComparisonValues") return { kind: "aligned", rows: formatFileValues(detail.values) }
   if (detail.kind === "linkComparisonValues") return { kind: "aligned", rows: formatLinkValues(detail.values) }

@@ -10,11 +10,20 @@ import type {
   StepStatus,
 } from "#session/session.ts"
 
+/** The levels a piece of a block shows at: from `from`, up to `until` when it has one. The builder decides both. */
+export interface PieceLevels {
+  from: Verbosity
+  until?: Verbosity
+}
+
 /** A host's block: its name, then its entries, or "no steps" for a script that made none and didn't fail. */
 export type HostBlock = { name: string } & ({ kind: "entries"; entries: HostBlockEntry[] } | { kind: "noSteps" })
 
-/** One entry of a host block: a step, or the one failure no step owns. */
-export interface HostBlockEntry {
+/**
+ * One entry of a host block: a step, or the one failure no step owns. Its levels are where its own line shows, and it
+ * also shows when a note part or a detail inside it shows.
+ */
+export interface HostBlockEntry extends PieceLevels {
   status: EntryStatus
   /** What the entry is about, which shows before the name. */
   kind: EntryKind
@@ -23,8 +32,6 @@ export interface HostBlockEntry {
   note: NotePart[]
   /** How a value would change, or for a failure, what the step last found on the host. */
   details: Detail[]
-  /** The lowest level the entry shows at, unless a note part or a detail inside it shows. The builder decides it. */
-  from: Verbosity
   /** Why the entry failed. */
   error?: Error
 }
@@ -50,36 +57,45 @@ export type NameKind =
   | "value"
 
 /** One part of an entry's note, like `needs 'A', 'B'`, the names of the steps a waiting step needs. */
-export interface NotePart {
+export interface NotePart extends PieceLevels {
   kind: "needs"
   needs: string[]
-  /** The lowest level the part shows at. The builder decides it. */
-  from: Verbosity
 }
 
-/**
- * One thing an entry shows under its status line, in the order they show. Its `from` is the lowest level it shows at,
- * which the builder decides.
- */
-export type Detail =
+/** One thing an entry shows under its status line, in the order they show, with the levels it shows at. */
+export type Detail = PieceLevels
   // The options the script set that change how the step's commands ran, like `sudo`.
-  | { kind: "options"; options: StepOptionDetail[]; from: Verbosity }
-  | { kind: "diff"; got: string; want: string; from: Verbosity }
-  // Holds everything about a file but a text diff, which is a detail of its own.
-  | { kind: "fileComparisonValues"; values: FileComparisonValues; from: Verbosity }
-  | { kind: "linkComparisonValues"; values: LinkComparisonValues; from: Verbosity }
-  | { kind: "ensureComparisonValues"; values: EnsureComparisonValues; from: Verbosity }
-  // The stderr of a command that can explain a failure that still differs after its fix.
-  | { kind: "stderr"; command: string; stderr: string; from: Verbosity }
-  // tsinfra's own aside about the details around it.
-  | { kind: "note"; text: string; from: Verbosity }
-  // Something that worked, but needs a look, like a link to a path where nothing exists.
-  | { kind: "warning"; warning: StepWarning; from: Verbosity }
-  // How to fix a failure, like setting the host's `sudo` option.
-  | { kind: "hint"; text: string; from: Verbosity }
+  & (
+    | { kind: "options"; options: StepOption[] }
+    | { kind: "diff"; got: string; want: string }
+    // Holds everything about a file but a text diff, which is a detail of its own.
+    | { kind: "fileComparisonValues"; values: FileComparisonValues }
+    | { kind: "linkComparisonValues"; values: LinkComparisonValues }
+    | { kind: "ensureComparisonValues"; values: EnsureComparisonValues }
+    // The stderr of a command that can explain a failure that still differs after its fix.
+    | { kind: "stderr"; command: string; stderr: string }
+    // tsinfra's own aside about the details around it.
+    | { kind: "note"; text: string }
+    // Something that worked, but needs a look, like a link to a path where nothing exists.
+    | { kind: "warning"; warning: StepWarning }
+    // How to fix a failure, like setting the host's `sudo` option.
+    | { kind: "hint"; text: string }
+  )
 
-/** One option the script set on a step, with the variables of `env` or `secretEnv`, each secret value masked. */
-export type StepOptionDetail = { name: "sudo" } | { name: "env" | "secretEnv"; variables: Record<string, string> }
+/**
+ * One option the script set on a step, like `sudo`, or one entry of an option, like a variable of `env`. Its name
+ * always shows with the options detail. Its value is a piece of its own, which the filter leaves out below its level.
+ */
+export interface StepOption {
+  name: string
+  value?: OptionValue
+  entries: StepOption[]
+}
+
+/** An option's value, with the levels it shows at. A secret value is masked. */
+export interface OptionValue extends PieceLevels {
+  value: string | boolean
+}
 
 /** Something that worked but needs a look, with the value it's about, like a path, when there is one. */
 export interface StepWarning {

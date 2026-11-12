@@ -1,5 +1,5 @@
 import { DEFAULT_DIFF_LIMITS, formatHostBlock } from "#report/format/format.ts"
-import type { HostBlock, HostBlockEntry } from "#report/host-block/host-block.ts"
+import type { Detail, HostBlock, HostBlockEntry, PieceLevels, StepOption } from "#report/host-block/host-block.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 
 export { toHostBlock } from "#report/host-block/host-block.ts"
@@ -14,13 +14,33 @@ export interface ReportOptions {
   verbosity: Verbosity
 }
 
+/** Reports whether a piece shows at `verbosity`: from its `from`, up to its `until` when it has one. */
+const isShownAt = ({ from, until }: PieceLevels, verbosity: Verbosity): boolean =>
+  verbosity >= from && (until === undefined || verbosity <= until)
+
+/** Returns `option` with each value in it, its own and its entries', only when the value shows at `verbosity`. */
+const keepShownOptionValues = (option: StepOption, verbosity: Verbosity): StepOption => {
+  const { name, value } = option
+  const entries = option.entries.map((entry) => keepShownOptionValues(entry, verbosity))
+  return { name, ...(value && isShownAt(value, verbosity) && { value }), entries }
+}
+
+/** Returns `detail` with only the pieces inside it that show at `verbosity`, which only the options detail has. */
+const keepShownInDetail = (detail: Detail, verbosity: Verbosity): Detail => {
+  if (detail.kind !== "options") return detail
+
+  const options = detail.options.map((option) => keepShownOptionValues(option, verbosity))
+  return { ...detail, options }
+}
+
 /** Keeps the entries that show at `verbosity`, each with only the note parts and details that show. */
 const keepShown = (hostBlockEntries: HostBlockEntry[], verbosity: Verbosity): HostBlockEntry[] =>
   hostBlockEntries.flatMap((hostBlockEntry) => {
-    const note = hostBlockEntry.note.filter(({ from }) => verbosity >= from)
-    const details = hostBlockEntry.details.filter(({ from }) => verbosity >= from)
+    const note = hostBlockEntry.note.filter((notePart) => isShownAt(notePart, verbosity))
+    const shownDetails = hostBlockEntry.details.filter((detail) => isShownAt(detail, verbosity))
+    const details = shownDetails.map((detail) => keepShownInDetail(detail, verbosity))
     // Keep an entry when anything inside it shows, like a warning on a step that was already right, so it can't be missed.
-    const isShown = verbosity >= hostBlockEntry.from || note.length > 0 || details.length > 0
+    const isShown = isShownAt(hostBlockEntry, verbosity) || note.length > 0 || details.length > 0
     return isShown ? [{ ...hostBlockEntry, note, details }] : []
   })
 

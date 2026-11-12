@@ -66,6 +66,9 @@ export const styleGotExitCode = pipeStyles(styleGot, pc.italic)
  */
 export const styleWantExitCode = pipeStyles(styleWant, pc.italic)
 
+/** Colors a boolean value and italicizes it, because it isn't quoted like a string, and it should still read as a value. */
+export const styleValueBoolean = pipeStyles(styleValue, pc.italic)
+
 /** Colors a hint like a warning, and italicizes it, because it has no label to set it apart. */
 export const styleHint = pipeStyles(pc.yellowBright, pc.italic)
 

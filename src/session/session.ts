@@ -97,7 +97,12 @@ export type {
   FinishedStepRecord,
   StepRecord,
 } from "#session/recorder/recorder.ts"
-export { createHostRecord, createPreparationRecorder, createSessionRecorder } from "#session/recorder/recorder.ts"
+export {
+  createHostRecord,
+  createPreparationRecorder,
+  createSessionRecorder,
+  MASKED_VALUE,
+} from "#session/recorder/recorder.ts"
 export type { ComparisonValues, StepKind, StepStatus } from "#session/step.ts"
 
 /** What a host's session needs, set up before any script runs. */

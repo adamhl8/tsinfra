@@ -4,7 +4,7 @@ import type { FormattedEntry } from "#report/format/format.ts"
 import type { StatusLine } from "#report/format/status-line.ts"
 import { getMaxWidth, padToWidth } from "#utils.ts"
 
-const INDENT = "  "
+export const INDENT = "  "
 const DETAIL_INDENT = INDENT.repeat(3)
 export const COLUMN_GAP = "   "
 

@@ -92,7 +92,8 @@ levels only change what's printed:
   because the values come at `-vv`. A `sudo` the script writes inside a command doesn't count, because it shows in the
   command at `-vv`.
 - **`-vv`** also turns the `options:` line into a block, with each variable on its own row and its value, and each
-  `secretEnv` value as `[MASKED]`. It lists each command a step ran, dimmed, under the step's details, like `$ systemctl is-active sonarr`,
+  `secretEnv` value as `[MASKED]`. The values line up within each of `env` and `secretEnv`, not across them, because
+  each is its own object. It lists each command a step ran, dimmed, under the step's details, like `$ systemctl is-active sonarr`,
   in the order they ran. A read or inspect lists none, because its name is its command. A command tsinfra writes itself
   shows as its label, like `$ (file details script)`, because its text is tsinfra's code, not the script's. The `file`
   write script's label is followed by the script's `validate` command, like
@@ -266,7 +267,7 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   warning isn't drift, so it doesn't change the exit code.
 - **Levels.** Every piece of a block has the lowest level it shows at: a step's own line, each of its options, each
   part of its note, and each detail under it. A piece's level comes from what it is, like 1 for the line of a step that
-  was already right, 1 for the options line, and 0 for a warning. A piece shows once its own level is reached, or when anything inside
+  was already right, 1 for the options line, and 0 for a warning. A piece can also stop at a level, like the options line, which the block replaces from 2. A piece shows once its own level is reached, or when anything inside
   it shows, and a step that shows always prints its own line. So a warning, at 0, shows its step at the default level,
   even when the step was already right. The report builds every piece for every step, then keeps the ones the level
   shows, before it lines up the columns, so a hidden piece never widens one. A diff is the exception. It's one piece

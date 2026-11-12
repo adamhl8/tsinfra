@@ -1,5 +1,5 @@
 /** What a secret shows as wherever it would show, as GitLab CI shows it. */
-const MASKED_VALUE = "[MASKED]"
+export const MASKED_VALUE = "[MASKED]"
 
 /**
  * Adds `value` to `secrets`, and each of its lines on its own, because a diff or a stderr line can show one line of a
