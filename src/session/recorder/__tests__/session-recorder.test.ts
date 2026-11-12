@@ -1,29 +1,57 @@
 import { describe, expect, it } from "bun:test"
 
-import type { StepRecord } from "#session/recorder/recorder.ts"
+import type { SessionRecorder, StepRecord } from "#session/recorder/recorder.ts"
 import { createHostRecord, createSessionRecorder } from "#session/recorder/recorder.ts"
 import { runLocal } from "#transport/local.ts"
-import type { Transport } from "#transport/transport.ts"
+import type { Shell, Transport } from "#transport/transport.ts"
 
 // Stand in for `sudo` with a function that prints the command it's given, then runs it.
 const transport: Transport = async (cmd) => runLocal(`sudo() { echo "sudo $*"; "$@"; }\n${cmd}`)
 
-/** Runs `echo hi` in a step on the shell for `sudo`, and returns its stdout and the commands the step recorded. */
-const runInStep = async (sudo: boolean) => {
+/**
+ * Runs `echo hi` in a step, on the shell `getShell` gives, and returns its stdout, the commands the step recorded, and
+ * the step's `sudo`.
+ */
+const runInStep = async (getShell: (sessionRecorder: SessionRecorder) => Shell) => {
   const hostRecord = createHostRecord("a", "@local")
   const sessionRecorder = createSessionRecorder(hostRecord, { sudo: false }, transport)
   sessionRecorder.startStep("a", "file")
-  const stdout = await sessionRecorder.getShell({ sudo }).exec("echo hi")
-  return { stdout, recordedCmds: hostRecord.runningStep?.commands.map(({ cmd }) => cmd) }
+  const stdout = await getShell(sessionRecorder).exec("echo hi")
+  const { runningStep } = hostRecord
+  return { stdout, recordedCmds: runningStep?.commands.map(({ cmd }) => cmd), sudo: runningStep?.sudo }
 }
 
-describe("SessionRecorder.getShell", () => {
-  it("should run a sudo: true step's script in sudo sh -s, and record the script without it", async () => {
-    expect(await runInStep(true)).toStrictEqual({ stdout: "sudo sh -s\nhi\n", recordedCmds: ["echo hi"] })
+describe("SessionRecorder.getStepShell", () => {
+  it("should run a sudo: true step's script in sudo sh -s, record the script without it, and record sudo", async () => {
+    expect(await runInStep((sessionRecorder) => sessionRecorder.getStepShell({ sudo: true }))).toStrictEqual({
+      stdout: "sudo sh -s\nhi\n",
+      recordedCmds: ["echo hi"],
+      sudo: true,
+    })
   })
 
   it("should run a step without sudo as it is", async () => {
-    expect(await runInStep(false)).toStrictEqual({ stdout: "hi\n", recordedCmds: ["echo hi"] })
+    expect(await runInStep((sessionRecorder) => sessionRecorder.getStepShell({ sudo: false }))).toStrictEqual({
+      stdout: "hi\n",
+      recordedCmds: ["echo hi"],
+      sudo: false,
+    })
+  })
+})
+
+/** Gives the tools' shell inside a step that chose `sudo: true`. */
+const getToolShellInSudoStep = (sessionRecorder: SessionRecorder) => {
+  sessionRecorder.getStepShell({ sudo: true })
+  return sessionRecorder.getToolShell()
+}
+
+describe("SessionRecorder.getToolShell", () => {
+  it("should record a tool's command under a sudo: true step, without running it as root", async () => {
+    expect(await runInStep(getToolShellInSudoStep)).toStrictEqual({
+      stdout: "hi\n",
+      recordedCmds: ["echo hi"],
+      sudo: true,
+    })
   })
 })
 
@@ -32,7 +60,7 @@ describe("SessionRecorder steps", () => {
     const hostRecord = createHostRecord("a", "@local")
     const sessionRecorder = createSessionRecorder(hostRecord, { sudo: false }, transport)
     sessionRecorder.startStep("a", "file")
-    await sessionRecorder.getShell({ sudo: false }).exec("echo hi")
+    await sessionRecorder.getStepShell({ sudo: false }).exec("echo hi")
     const whileRunning = [hostRecord.runningStep?.name, hostRecord.stepRecords.length]
 
     sessionRecorder.finishStep("changed")
@@ -54,7 +82,14 @@ describe("SessionRecorder steps", () => {
 
     sessionRecorder.failStep(error)
 
-    const stepRecord: StepRecord = { name: "a", kind: "file", commands: [], comparisons: {}, waitingOn: [] }
+    const stepRecord: StepRecord = {
+      name: "a",
+      kind: "file",
+      sudo: false,
+      commands: [],
+      comparisons: {},
+      waitingOn: [],
+    }
     expect([hostRecord.runningStep, hostRecord.stepRecords, hostRecord.failure]).toStrictEqual([
       undefined,
       [],

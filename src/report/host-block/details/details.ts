@@ -1,6 +1,6 @@
-import { toComparisonValuesDetails } from "#report/build/details/comparisons.ts"
-import { toFailedStepDetails } from "#report/build/details/failure.ts"
-import type { Detail } from "#report/host-block.ts"
+import { toComparisonValuesDetails } from "#report/host-block/details/comparisons.ts"
+import { toFailedStepDetails } from "#report/host-block/details/failure.ts"
+import type { Detail } from "#report/host-block/host-block.ts"
 import type { ComparisonValues, FinishedStepRecord, RecordedFailure } from "#session/session.ts"
 
 // Show how a string value, a file, or a link would change, because the step's name doesn't say.

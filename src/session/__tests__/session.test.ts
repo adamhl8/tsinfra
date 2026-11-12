@@ -7,6 +7,7 @@ import type { Result } from "ts-explicit-errors"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
 import {
+  createFakeSudoSession,
   createSession,
   ensureOrMessage,
   getFailureMessage,
@@ -193,6 +194,16 @@ describe("h inside a step", () => {
 })
 
 describe("step records", () => {
+  it("should record whether a step ran as root", async () => {
+    const directory = await makeTempDir()
+    const { hostSession } = await createFakeSudoSession("plan")
+    await hostSession.host.file(path.join(directory, "root.conf"), "a\n", { sudo: true })
+    await hostSession.host.file(path.join(directory, "user.conf"), "a\n")
+    await hostSession.host.read("true")
+
+    expect(hostSession.hostRecord.stepRecords.map(({ sudo }) => sudo)).toStrictEqual([true, false, false])
+  })
+
   it("should record an ensure's check, fix, and second check in apply", async () => {
     const marker = path.join(await makeTempDir(), "marker")
     const hostSession = await createSession("apply")

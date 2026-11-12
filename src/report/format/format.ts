@@ -4,7 +4,7 @@ import type { DiffLimits } from "#report/format/details/details.ts"
 import { layoutHostBlock, layoutNoStepsBlock } from "#report/format/layout.ts"
 import type { StatusLine } from "#report/format/status-line.ts"
 import { formatStatusLine } from "#report/format/status-line.ts"
-import type { HostBlock, HostBlockEntry } from "#report/host-block.ts"
+import type { HostBlock, HostBlockEntry } from "#report/host-block/host-block.ts"
 import { styleHostName, styleNote } from "#styles.ts"
 
 export type { DiffLimits } from "#report/format/details/details.ts"

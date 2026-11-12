@@ -2,7 +2,7 @@ import { messageChain } from "ts-explicit-errors"
 
 import type { DetailRows, DiffLimits } from "#report/format/details/details.ts"
 import { formatDetail } from "#report/format/details/details.ts"
-import type { HostBlockEntry } from "#report/host-block.ts"
+import type { HostBlockEntry } from "#report/host-block/host-block.ts"
 import { styleError } from "#styles.ts"
 import { splitNonEmptyLines } from "#utils.ts"
 

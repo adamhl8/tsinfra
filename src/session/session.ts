@@ -172,7 +172,8 @@ const STEP_NAME_LABELS: Record<StepKind, string> = {
  */
 export const createHostSession = (sessionContext: SessionContext, mode: Mode): Host => {
   const { name, home, sessionRecorder } = sessionContext
-  const { getShell, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder } = sessionRecorder
+  const { getStepShell, getToolShell, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder } =
+    sessionRecorder
 
   // oxlint-disable-next-line promise/prefer-await-to-callbacks - `callback` is awaited, and the rule only matches its name
   const callOrFail = async <T>(callback: () => Promise<Result<T>>) => {
@@ -191,7 +192,7 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
   }
 
   // Leave the tools on a shell without sudo, because no tool takes a `sudo` option.
-  const toolShell = getShell({ sudo: false })
+  const toolShell = getToolShell()
 
   const readTool: Exec = async (cmd) => callOrFail(async () => execCommand({ toolName: "read", shell: toolShell }, cmd))
   const inspectTool: Inspect = async (cmd) =>
@@ -227,7 +228,7 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
         return validOptions
       }
 
-      const shell = getShell({ sudo: validOptions.sudo })
+      const shell = getStepShell({ sudo: validOptions.sudo })
 
       const ctx: StepContext<K> = {
         stepName: validName,

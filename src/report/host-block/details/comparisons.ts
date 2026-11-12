@@ -1,4 +1,4 @@
-import type { Detail } from "#report/host-block.ts"
+import type { Detail } from "#report/host-block/host-block.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 import type { ComparisonValues, EnsureComparisonValues, FileComparisonValues } from "#session/session.ts"
 import { isMultiLine } from "#utils.ts"

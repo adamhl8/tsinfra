@@ -1,7 +1,9 @@
+import { toHostBlockEntries } from "#report/host-block/entries.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 import type {
   EnsureComparisonValues,
   FileComparisonValues,
+  HostRecord,
   LinkComparisonValues,
   RecordedUnownedFailure,
   StepKind,
@@ -17,7 +19,9 @@ export interface HostBlockEntry {
   /** What the entry is about, which shows before the name. */
   kind: EntryKind
   name: EntryName
-  /** The note's parts, which show after the name, joined with `, `. Empty when the entry has no note. */
+  /** The step's options worth showing, like `sudo`, which show after the name. Empty when there are none. */
+  options: EntryOption[]
+  /** The note's parts, which show after the options, joined with `, `. Empty when the entry has no note. */
   note: NotePart[]
   /** How a value would change, or for a failure, what the step last found on the host. */
   details: Detail[]
@@ -46,6 +50,13 @@ export type NameKind =
   | "step"
   // A name that's a value: a read's or an inspect's command, a file's or a link's path, or a target.
   | "value"
+
+/** An option the script gave the step that changes how it ran, like `sudo`, which ran every command as root. */
+export interface EntryOption {
+  kind: "sudo"
+  /** The lowest level the option shows at. The builder decides it. */
+  from: Verbosity
+}
 
 /** One part of an entry's note, like `needs 'A', 'B'`, the names of the steps a waiting step needs. */
 export interface NotePart {
@@ -78,4 +89,17 @@ export type Detail =
 export interface StepWarning {
   text: string
   value?: string
+}
+
+/**
+ * Returns a host's block, with every piece at every level, each with the level it shows from: an entry per finished
+ * step, then the host's failure, if it failed. A host whose script made no steps and didn't fail gets "no steps"
+ * instead, so it's clear the host ran.
+ */
+export const toHostBlock = (hostRecord: HostRecord): HostBlock => {
+  const { name, stepRecords, failure } = hostRecord
+  if (stepRecords.length === 0 && !failure) return { name, kind: "noSteps" }
+
+  const entries = toHostBlockEntries(hostRecord)
+  return { name, kind: "entries", entries }
 }

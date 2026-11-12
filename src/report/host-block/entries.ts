@@ -1,6 +1,7 @@
-import { toFailureDetails, toStepDetails } from "#report/build/details/details.ts"
-import { toStepNote } from "#report/build/note.ts"
-import type { EntryName, HostBlockEntry, NameKind } from "#report/host-block.ts"
+import { toFailureDetails, toStepDetails } from "#report/host-block/details/details.ts"
+import type { EntryName, HostBlockEntry, NameKind } from "#report/host-block/host-block.ts"
+import { toStepNote } from "#report/host-block/note.ts"
+import { toStepOptions } from "#report/host-block/options.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 import type {
   FinishedStepRecord,
@@ -35,11 +36,12 @@ const toStepName = ({ name, kind }: StepRecord): EntryName => ({ text: name, kin
 const toStepEntry = (stepRecord: FinishedStepRecord): HostBlockEntry => {
   const { status, kind } = stepRecord
 
-  const note = toStepNote(stepRecord, status)
   const name = toStepName(stepRecord)
+  const options = toStepOptions(stepRecord)
+  const note = toStepNote(stepRecord, status)
   const details = toStepDetails(stepRecord)
 
-  return { status, kind, name, note, details, from: ENTRY_LEVELS[status] }
+  return { status, kind, name, options, note, details, from: ENTRY_LEVELS[status] }
 }
 
 const toFailureEntry = (failure: RecordedFailure, target: string): HostBlockEntry => {
@@ -48,13 +50,14 @@ const toFailureEntry = (failure: RecordedFailure, target: string): HostBlockEntr
   if (failure.kind === "step") {
     const { stepRecord, error } = failure
     const name = toStepName(stepRecord)
+    const options = toStepOptions(stepRecord)
     const note = toStepNote(stepRecord, "failed")
-    return { status: "failed", kind: stepRecord.kind, name, note, details, from: 0, error }
+    return { status: "failed", kind: stepRecord.kind, name, options, note, details, from: 0, error }
   }
 
   // Name a failure no step owns after the host's target, because the kind already says where it failed.
   const name: EntryName = { text: target, kind: "value" }
-  return { status: "failed", kind: failure.kind, name, note: [], details, from: 0, error: failure.error }
+  return { status: "failed", kind: failure.kind, name, options: [], note: [], details, from: 0, error: failure.error }
 }
 
 /** Returns a host block's entries: one per finished step, at every level, then the host's failure, if it failed. */

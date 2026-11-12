@@ -15,7 +15,8 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
       `renderHostBlock` prunes them before any column is sized. A `sudo` boolean on `StepRecord`, because `sudo: true`
       is a step option, and every command in the step runs as root. The session recorder's `getShell` splits in two:
       `getStepShell({ sudo })` records `sudo` on the running step and returns its shell, and `getToolShell()` gives
-      the tools theirs, which never use sudo. `-v` shows it as `sudo` in the entry's note, before any `needs`. Its
+      the tools theirs, which never use sudo. `-v` shows it as a dim `[sudo]` in an options column after the name,
+      before the note. Its
       steps are in `docs/superpowers/plans/2026-11-11-verbosity-piece-1.md`:
       1. **Count `-v` (built).**
       2. **"no steps" by default (built).**
@@ -25,8 +26,8 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
          that fails is the failure's.
       5. **The diff's limits (built), step 3b.**
       6. **Levels and the filter (built), step 3c.**
-      7. **`StepRecord.sudo` and the two shells, step 4.**
-      8. **The `sudo` note, step 5.**
+      7. **`StepRecord.sudo` and the two shells (built), step 4.**
+      8. **The `[sudo]` option (built), step 5.** Its own column after the name, before the note.
       9. **A docs check, step 6.**
    2. **`secret` on commands.** The `secret` option [Steps](./docs/steps.md#commands) gives `read`, `exec`, `inspect`,
       `ensure`, and `run` isn't built, and `-vv` prints the text of every command that ran, so it comes first. `file`'s

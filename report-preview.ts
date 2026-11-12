@@ -4,12 +4,14 @@ import path from "node:path"
 import process from "node:process"
 
 // Prints the report for one example host per way a block can look, to inspect the output by eye.
-// It runs `plan` for what only shows in `plan` or without `--verbose`, then `apply -v` for the rest.
+// It runs `plan` for what only shows in `plan`, then `apply` for the rest.
 // Then it runs the sudo cases against a fake `sudo`, which accepts only the password `tsinfra`.
+// Every pass shows the level its `-v` flags ask for, like the CLI, so `bun report-preview.ts -vv` checks level 2.
 // Run it with `bask report-preview`, and with `NO_COLOR=1` to see it without colors.
 // Run `bun report-preview.ts --sudo-prompt` to also get the sudo password prompt, and type at it.
 import bun, { spawn } from "bun"
 import pc from "picocolors"
+import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { HostFunction, HostSudo } from "#hosts/host.ts"
@@ -18,21 +20,21 @@ import { runHost } from "#hosts/run.ts"
 import type { Mode } from "#mode.ts"
 import { printTsinfraError } from "#report/errors.ts"
 import type { HostBlock } from "#report/report.ts"
-import { getExitCode, renderHostBlock, renderSummary, toHostBlock } from "#report/report.ts"
+import { getExitCode, renderHostBlock, renderSummary, toHostBlock, toVerbosity } from "#report/report.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 import { PUBLIC_FILE_MODE } from "#session/handlers/shared/filesystem/mode.ts"
 import { runLocal } from "#transport/local.ts"
 
 /**
- * One run of the preview: `plan` shows what only it and a run without `--verbose` show, and `applyVerbose` the rest.
- * `sudo` shows the sudo cases that need no typing, and `sudoPrompt` the ones that prompt.
+ * One run of the preview: `plan` shows what only shows in `plan`, and `apply` the rest. `sudo` shows the sudo cases
+ * that need no typing, and `sudoPrompt` the ones that prompt.
  */
-type PreviewPass = "plan" | "applyVerbose" | "sudo" | "sudoPrompt"
+type PreviewPass = "plan" | "apply" | "sudo" | "sudoPrompt"
 
 interface Scenario {
   name: string
   target: string
-  /** The pass the case shows up in. Defaults to `applyVerbose`, which shows the most. */
+  /** The pass the case shows up in. Defaults to `apply`. */
   pass?: PreviewPass
   /** The host's `sudo` option. Defaults to `false`. */
   sudo?: HostSudo
@@ -91,6 +93,18 @@ const createScenarios = (dir: string): Scenario[] => {
         const brew = await h.ensure("Install brew packages", touchStep("brew"))
         const fish = await h.ensure("Install fish", { needs: [brew], ...touchStep("fish") })
         await h.ensure("Install editor plugins", { needs: [brew, fish], ...touchStep("editor") })
+      },
+    },
+    {
+      // A `sudo: true` step's `[sudo]` from `-v`, in its own column, before the note of a step that waits.
+      // The file waits in `plan`, so it runs no command, and the real `sudo` is never called.
+      name: "sudo-option",
+      target: "@local",
+      pass: "plan",
+      fn: async (h) => {
+        const brew = await h.ensure("Install brew packages", touchStep("brew"))
+        await h.file(marker("sudo-conf"), "a\n", { needs: [brew], sudo: true })
+        await h.ensure("Install fish", { needs: [brew], ...touchStep("fish") })
       },
     },
     {
@@ -352,11 +366,11 @@ const createScenarios = (dir: string): Scenario[] => {
   ]
 }
 
-const PASS_RUNS: Record<PreviewPass, { mode: Mode; verbosity: Verbosity; fakeSudo: boolean }> = {
-  plan: { mode: "plan", verbosity: 0, fakeSudo: false },
-  applyVerbose: { mode: "apply", verbosity: 1, fakeSudo: false },
-  sudo: { mode: "apply", verbosity: 0, fakeSudo: true },
-  sudoPrompt: { mode: "apply", verbosity: 0, fakeSudo: true },
+const PASS_RUNS: Record<PreviewPass, { mode: Mode; fakeSudo: boolean }> = {
+  plan: { mode: "plan", fakeSudo: false },
+  apply: { mode: "apply", fakeSudo: false },
+  sudo: { mode: "apply", fakeSudo: true },
+  sudoPrompt: { mode: "apply", fakeSudo: true },
 }
 
 // Fail `-n`, and with `-S` accept only `tsinfra`, printing what real sudo prints for one wrong try.
@@ -371,9 +385,12 @@ const FAKE_SUDO = [
   "exit 1",
 ].join("\n")
 
-/** Runs the scenarios of one pass and prints each block, the summary, and the exit code the CLI would return. */
-const previewPass = async (pass: PreviewPass) => {
-  const { mode, verbosity, fakeSudo } = PASS_RUNS[pass]
+/**
+ * Runs the scenarios of one pass at `verbosity`, and prints each block, the summary, and the exit code the CLI would
+ * return.
+ */
+const previewPass = async (pass: PreviewPass, verbosity: Verbosity) => {
+  const { mode, fakeSudo } = PASS_RUNS[pass]
   const dir = await mkdtemp(path.join(os.tmpdir(), "tsinfra-preview-"))
   try {
     const sudoNote = fakeSudo ? " (fake sudo, password 'tsinfra')" : ""
@@ -382,7 +399,7 @@ const previewPass = async (pass: PreviewPass) => {
     console.log()
 
     const hostBlocks: HostBlock[] = []
-    const scenarios = createScenarios(dir).filter((scenario) => (scenario.pass ?? "applyVerbose") === pass)
+    const scenarios = createScenarios(dir).filter((scenario) => (scenario.pass ?? "apply") === pass)
     const loadedHosts = scenarios.map((scenario) =>
       Object.assign(scenario, { options: { sudo: scenario.sudo ?? false } }),
     )
@@ -423,8 +440,8 @@ const previewSudoPasses = async (): Promise<number> => {
     await bun.write(fakeSudoPath, `${FAKE_SUDO}\n`)
     await chmod(fakeSudoPath, 0o755)
 
-    const promptFlags = process.argv.includes(SUDO_PROMPT_FLAG) ? [SUDO_PROMPT_FLAG] : []
-    const child = spawn([process.execPath, import.meta.path, ...promptFlags], {
+    // Pass the child every argument, so it shows the same level, and prompts only when asked.
+    const child = spawn([process.execPath, import.meta.path, ...process.argv.slice(2)], {
       env: {
         ...process.env,
         PATH: `${path.dirname(fakeSudoPath)}:${process.env["PATH"]}`,
@@ -442,7 +459,7 @@ const previewSudoPasses = async (): Promise<number> => {
 }
 
 /** Runs the sudo passes, in the child that `previewSudoPasses` starts. Stops before any case if the fake isn't found. */
-const runSudoPasses = async (): Promise<number> => {
+const runSudoPasses = async (verbosity: Verbosity): Promise<number> => {
   const foundSudo = await runLocal("command -v sudo")
   if (isErr(foundSudo) || foundSudo.stdout.trim() !== process.env[FAKE_SUDO_PATH_VARIABLE]) {
     printTsinfraError(
@@ -451,8 +468,8 @@ const runSudoPasses = async (): Promise<number> => {
     return 1
   }
 
-  await previewPass("sudo")
-  if (process.argv.includes(SUDO_PROMPT_FLAG)) await previewPass("sudoPrompt")
+  await previewPass("sudo", verbosity)
+  if (process.argv.includes(SUDO_PROMPT_FLAG)) await previewPass("sudoPrompt", verbosity)
   return 0
 }
 
@@ -466,11 +483,33 @@ const previewOwnErrors = () => {
   console.log()
 }
 
-const main = async (): Promise<number> => {
-  if (process.env[FAKE_SUDO_PATH_VARIABLE] !== undefined) return runSudoPasses()
+// Match a run of short `-v` flags, like `-vv`, which counts as one level per `v`.
+const SHORT_VERBOSE_FLAGS = /^-v+$/v
 
-  await previewPass("plan")
-  await previewPass("applyVerbose")
+/** Returns the level the preview's `-v` and `--verbose` flags ask for, like the CLI, or an error for any other argument. */
+const parseVerbosity = (args: string[]): Result<Verbosity> => {
+  let flagCount = 0
+  for (const arg of args) {
+    if (arg === "--verbose") flagCount += 1
+    else if (SHORT_VERBOSE_FLAGS.test(arg)) flagCount += arg.length - 1
+    else if (arg !== SUDO_PROMPT_FLAG)
+      return err(`unknown argument '${arg}', expected -v, -vv, -vvv, --verbose, or ${SUDO_PROMPT_FLAG}`, undefined)
+  }
+
+  return toVerbosity(flagCount)
+}
+
+const main = async (): Promise<number> => {
+  const verbosity = parseVerbosity(process.argv.slice(2))
+  if (isErr(verbosity)) {
+    printTsinfraError(verbosity)
+    return 1
+  }
+
+  if (process.env[FAKE_SUDO_PATH_VARIABLE] !== undefined) return runSudoPasses(verbosity)
+
+  await previewPass("plan", verbosity)
+  await previewPass("apply", verbosity)
   const sudoExitCode = await previewSudoPasses()
   previewOwnErrors()
   return sudoExitCode

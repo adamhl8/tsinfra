@@ -974,3 +974,73 @@ describe("getExitCode", () => {
     expect(getExitCode(hostBlocks, "plan")).toBe(1)
   })
 })
+
+/**
+ * Returns a temp directory with `old.conf` holding `a`, and the path of `new.conf`, which doesn't exist yet. The names
+ * are the same length, so the paths line up.
+ */
+const createSudoPaths = async () => {
+  const directory = await makeTempDir()
+  const oldPath = path.join(directory, "old.conf")
+  await bun.write(oldPath, "a\n")
+  return { directory, oldPath, newPath: path.join(directory, "new.conf") }
+}
+
+describe("renderHostBlock for a sudo step", () => {
+  it("should show sudo in its own column with -v", async () => {
+    const { oldPath, newPath } = await createSudoPaths()
+    const { hostSession } = await createFakeSudoSession("plan")
+    await hostSession.host.file(oldPath, "a\n", { sudo: true })
+    await hostSession.host.file(newPath, "a\n", { sudo: true })
+    await hostSession.host.ensure("Install git", { check: "true", want: true, fix: "true" })
+
+    expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")).toStrictEqual([
+      "a",
+      `  = unchanged: (file)   ${oldPath}   [sudo]`,
+      `  ~ change:    (file)   ${newPath}   [sudo]`,
+      "      content: new file, 2 bytes",
+      "  = unchanged: (ensure) Install git",
+    ])
+  })
+
+  it("should leave sudo out by default", async () => {
+    const { newPath } = await createSudoPaths()
+    const { hostSession } = await createFakeSudoSession("plan")
+    await hostSession.host.file(newPath, "a\n", { sudo: true })
+
+    expect(renderRecord(hostSession.hostRecord)?.split("\n")).toStrictEqual([
+      "a",
+      `  ~ change: (file) ${newPath}`,
+      "      content: new file, 2 bytes",
+    ])
+  })
+
+  it("should put sudo before a waiting step's note, and line up the notes", async () => {
+    const { newPath } = await createSudoPaths()
+    const { hostSession } = await createFakeSudoSession("plan")
+    const brew = await hostSession.host.ensure("Install brew packages", { check: "false", want: true, fix: "true" })
+    await hostSession.host.file(newPath, "a\n", { needs: [brew], sudo: true })
+    await hostSession.host.ensure("Install fish", { needs: [brew], check: "true", want: true, fix: "true" })
+
+    expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")).toStrictEqual([
+      "a",
+      "  ~ change:  (ensure) Install brew packages",
+      `  ? waiting: (file)   ${newPath}   [sudo]   needs 'Install brew packages'`,
+      `  ? waiting: (ensure) ${"Install fish".padEnd(newPath.length)}            needs 'Install brew packages'`,
+    ])
+  })
+
+  // Skip this as root, because root can write to any directory, so the write wouldn't fail.
+  it.skipIf(isRoot)("should keep sudo on a failed step's line", async () => {
+    const { directory, newPath } = await createSudoPaths()
+    await chmod(directory, 0o500)
+    const { hostSession } = await createFakeSudoSession("apply")
+
+    try {
+      await attempt(async () => hostSession.host.file(newPath, "a\n", { sudo: true }))
+      expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")[1]).toBe(`  ! failed: (file) ${newPath}   [sudo]`)
+    } finally {
+      await chmod(directory, 0o755)
+    }
+  })
+})

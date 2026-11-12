@@ -56,6 +56,8 @@ export interface StepRecord {
   /** The name the script gave the step, or a read step's command. */
   name: string
   kind: StepKind
+  /** Whether `sudo: true` ran every command in the step as root. */
+  sudo: boolean
   commands: CommandRecord[]
   comparisons: StepComparisons
   /** The names of the needed steps this step waited on. */

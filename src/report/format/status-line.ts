@@ -1,4 +1,4 @@
-import type { EntryKind, EntryStatus, HostBlockEntry, NameKind, NotePart } from "#report/host-block.ts"
+import type { EntryKind, EntryStatus, HostBlockEntry, NameKind, NotePart } from "#report/host-block/host-block.ts"
 import type { Style } from "#styles.ts"
 import { STATUS_STYLES, styleAside, styleLabel, styleUnownedKind, styleValue } from "#styles.ts"
 import { quoteNames } from "#utils.ts"
@@ -8,6 +8,8 @@ export interface StatusLine {
   status: string
   kind: string
   name: string
+  /** Unset when the entry has no options to show. */
+  options?: string
   /** Unset when the entry has no note. */
   note?: string
 }
@@ -33,10 +35,12 @@ const formatKind = (kind: EntryKind): string => {
   return kind === "preparation" || kind === "host fn" ? styleUnownedKind(text) : styleLabel(text)
 }
 
-/** Formats the fields an entry's status line shows, and joins its note's parts into the note's text. */
+/** Formats the fields an entry's status line shows, and joins its options and its note's parts into their text. */
 export const formatStatusLine = (hostBlockEntry: HostBlockEntry): StatusLine => {
-  const { status, kind, name, note } = hostBlockEntry
+  const { status, kind, name, options, note } = hostBlockEntry
   const { color } = STATUS_STYLES[status]
+  // Name each option as the script writes it, in square brackets, so the options read apart from the note.
+  const optionsText = `[${options.map((option) => option.kind).join(", ")}]`
   const noteText = note.map((notePart) => formatNotePart(notePart)).join(", ")
 
   return {
@@ -44,6 +48,7 @@ export const formatStatusLine = (hostBlockEntry: HostBlockEntry): StatusLine => 
     status: `${color(formatStatus(status))}:`,
     kind: formatKind(kind),
     name: NAME_STYLES[name.kind](name.text),
+    ...(options.length > 0 && { options: styleAside(optionsText) }),
     ...(note.length > 0 && { note: styleAside(noteText) }),
   }
 }

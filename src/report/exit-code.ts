@@ -1,5 +1,5 @@
 import type { Mode } from "#mode.ts"
-import type { HostBlock } from "#report/host-block.ts"
+import type { HostBlock } from "#report/host-block/host-block.ts"
 import { hasDrift, hasFailed } from "#report/summary.ts"
 
 const DRIFT_EXIT_CODE = 2

@@ -1,7 +1,7 @@
 import { isErr } from "ts-explicit-errors"
 
-import { toComparisonValuesDetails } from "#report/build/details/comparisons.ts"
-import type { Detail } from "#report/host-block.ts"
+import { toComparisonValuesDetails } from "#report/host-block/details/comparisons.ts"
+import type { Detail } from "#report/host-block/host-block.ts"
 import type { CommandRecord, ConvergePhase, StepRecord } from "#session/session.ts"
 
 const BEFORE_FIX_NOTE = "values before the fix"

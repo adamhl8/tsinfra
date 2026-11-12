@@ -1,4 +1,4 @@
-import type { EntryStatus, NotePart } from "#report/host-block.ts"
+import type { EntryStatus, NotePart } from "#report/host-block/host-block.ts"
 import type { StepRecord } from "#session/session.ts"
 
 /** Returns a step's note: a `needs` part when its entry is waiting. */

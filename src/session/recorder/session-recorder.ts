@@ -10,9 +10,6 @@ import type { StepKind, StepStatus } from "#session/step.ts"
 import type { Shell, Transport } from "#transport/transport.ts"
 import { createShell, createRootTransport } from "#transport/transport.ts"
 
-/** Returns a shell that records each command under the running step, and runs as root for `sudo: true`. */
-type GetShell = (options: { sudo: boolean }) => Shell
-
 /** The phases of `converge` that compare the host with what the step wants. */
 export type ComparePhase = Exclude<ConvergePhase, "fix">
 
@@ -28,8 +25,13 @@ export interface ConvergeRecorder {
 
 /** Records the session's part of a host's run, once preparation has finished: each step, and the host's failure. */
 export interface SessionRecorder {
-  /** Gives the session its shells, so nothing in the session runs a command off the record. */
-  getShell: GetShell
+  /**
+   * Records whether the running step runs as root, and returns its shell, which records each command under the step and
+   * runs it as root for `sudo: true`. Choosing both in one call keeps the record and the commands from disagreeing.
+   */
+  getStepShell: (options: { sudo: boolean }) => Shell
+  /** Returns the tools' shell, which records each command under the running step and never runs as root. */
+  getToolShell: () => Shell
   /** Returns the error the host failed with, or nothing while it hasn't failed. */
   getFailure: () => Error | undefined
   /**
@@ -60,18 +62,24 @@ export const createSessionRecorder = (
 ): SessionRecorder => {
   let currentPhase: ConvergePhase | undefined
 
-  const getShell: GetShell = ({ sudo }) => {
-    const stepTransport = sudo ? createRootTransport(transport) : transport
-
-    // Record above the root transport, so the record holds the step's script without the `sudo sh -s` around it.
+  /** Returns a shell on `shellTransport` that records each command under the running step. */
+  const createRecordingShell = (shellTransport: Transport): Shell => {
     // Stamp the phase before the command runs, because a reader wants to know when a command started.
-    const recordingTransport = createRecordingTransport(stepTransport, (commandRecord) => {
+    const recordingTransport = createRecordingTransport(shellTransport, (commandRecord) => {
       if (currentPhase) commandRecord.phase = currentPhase
       hostRecord.runningStep?.commands.push(commandRecord)
     })
 
     return createShell(recordingTransport)
   }
+
+  const getStepShell = ({ sudo }: { sudo: boolean }): Shell => {
+    if (hostRecord.runningStep) hostRecord.runningStep.sudo = sudo
+    // Record each command before the root transport wraps it in `sudo sh -s`, so the record holds the step's own script.
+    return createRecordingShell(sudo ? createRootTransport(transport) : transport)
+  }
+
+  const getToolShell = (): Shell => createRecordingShell(transport)
 
   // Keep the first failure's error, because calls made at once with `Promise.all` can each fail.
   // Replace it only with an error that wraps it, which adds context such as the step's name.
@@ -108,7 +116,8 @@ export const createSessionRecorder = (
       return err(`'${kind}' can't run while ${runningKind} step '${name}' is running`, undefined)
     }
 
-    hostRecord.runningStep = { name: stepName, kind, commands: [], comparisons: {}, waitingOn: [] }
+    // Start with `sudo: false`, so a step that fails its option check before choosing a shell still reads false.
+    hostRecord.runningStep = { name: stepName, kind, sudo: false, commands: [], comparisons: {}, waitingOn: [] }
   }
 
   /** Marks no step as running, and returns the record of the step that was. */
@@ -151,5 +160,5 @@ export const createSessionRecorder = (
 
   const getFailure = () => hostRecord.failure?.error
 
-  return { getShell, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder }
+  return { getStepShell, getToolShell, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder }
 }
