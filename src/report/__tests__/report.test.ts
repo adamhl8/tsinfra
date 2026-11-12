@@ -267,6 +267,43 @@ describe("renderHostBlock", () => {
     )
   })
 
+  it("should list the commands preparation ran under its failure with -vv, by their labels", async () => {
+    const hostRecord = await prepareAndRunHost(toLoadedHost("a", host(UNREACHABLE_TARGET, changeThenThrow)), "plan")
+
+    expect([
+      renderRecord(hostRecord, 1)?.split("\n").length,
+      renderRecord(hostRecord, 2)?.split("\n").slice(3),
+    ]).toStrictEqual([3, ["        commands:", "          $ <ssh config>"]])
+  })
+
+  it("should list preparation's commands before its hint", () => {
+    const hostBlock = renderRecord(
+      {
+        name: "a",
+        target: "a.lan",
+        preparationCommands: [
+          { cmd: "ssh -G -T -- a.lan", label: "ssh config" },
+          { cmd: String.raw`printf '%s\n' "$HOME"`, label: "home directory" },
+        ],
+        runningStep: undefined,
+        stepRecords: [],
+        failure: {
+          kind: "preparation",
+          error: new Error("Host key verification failed."),
+          hints: ["run 'ssh a.lan' once to check the host's key and save it"],
+        },
+      },
+      2,
+    )
+
+    expect(hostBlock?.split("\n").slice(3)).toStrictEqual([
+      "        commands:",
+      "          $ <ssh config>",
+      "          $ <home directory>",
+      "        run 'ssh a.lan' once to check the host's key and save it",
+    ])
+  })
+
   it("should show the error from steps run at once under the step that was running", async () => {
     expect(await formatBlock(runStepsAtOnce, "plan")).toBe(
       "a\n  ! failed: (ensure) First\n      'ensure' can't run while ensure step 'First' is running",

@@ -1,4 +1,10 @@
-import { toFailureDetails, toStepDetails } from "#report/host-block/details/details.ts"
+import {
+  toHintDetails,
+  toHostFunctionFailureDetails,
+  toPreparationFailureDetails,
+  toStepDetails,
+  toStepFailureDetails,
+} from "#report/host-block/details/details.ts"
 import type { EntryName, HostBlockEntry, NameKind } from "#report/host-block/host-block.ts"
 import { toStepNote } from "#report/host-block/note.ts"
 import type { Verbosity } from "#report/verbosity.ts"
@@ -42,28 +48,35 @@ const toStepEntry = (stepRecord: FinishedStepRecord): HostBlockEntry => {
   return { status, kind, name, note, details, from: ENTRY_LEVELS[status] }
 }
 
-const toFailureEntry = (failure: RecordedFailure, target: string): HostBlockEntry => {
-  const details = toFailureDetails(failure)
+const toFailureEntry = (failure: RecordedFailure, hostRecord: HostRecord): HostBlockEntry => {
+  const { target, preparationCommands } = hostRecord
+  // Show the hints last under every kind of failure, because they say how to fix it.
+  const hintDetails = toHintDetails(failure.hints)
 
   if (failure.kind === "step") {
     const { stepRecord, error } = failure
     const name = toStepName(stepRecord)
     const note = toStepNote(stepRecord, "failed")
+    const stepFailureDetails = toStepFailureDetails(stepRecord)
+    const details = [...stepFailureDetails, ...hintDetails]
     return { status: "failed", kind: stepRecord.kind, name, note, details, from: 0, error }
   }
 
   // Name a failure no step owns after the host's target, because the kind already says where it failed.
   const name: EntryName = { text: target, kind: "value" }
+  const kindDetails =
+    failure.kind === "preparation" ? toPreparationFailureDetails(preparationCommands) : toHostFunctionFailureDetails()
+  const details = [...kindDetails, ...hintDetails]
   return { status: "failed", kind: failure.kind, name, note: [], details, from: 0, error: failure.error }
 }
 
 /** Returns a host block's entries: one per finished step, at every level, then the host's failure, if it failed. */
 export const toHostBlockEntries = (hostRecord: HostRecord): HostBlockEntry[] => {
-  const { target, stepRecords, failure } = hostRecord
+  const { stepRecords, failure } = hostRecord
   const stepEntries = stepRecords.map((stepRecord) => toStepEntry(stepRecord))
 
   // Show the failure after the steps, even a step's, because nothing runs once the host has failed.
   // That makes the step that failed the last one.
-  const failureEntries = failure ? [toFailureEntry(failure, target)] : []
+  const failureEntries = failure ? [toFailureEntry(failure, hostRecord)] : []
   return [...stepEntries, ...failureEntries]
 }

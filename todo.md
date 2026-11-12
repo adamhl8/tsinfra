@@ -28,7 +28,7 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
       5. **Step options** (built 2026-11-12). `StepRecord.options` is one generic record of the options a step set,
          replacing `shellOptions`: `getStepShells` adds the shell options, and each handler adds its own through
          `ctx.recordOptions`, like `file`'s `validate` as the command it built. The report shows them all the same way.
-      6. **Preparation's commands.** The `(preparation)` entry lists them as labelled command parts from 2.
+      6. **Preparation's commands** (built 2026-11-12). The `(preparation)` entry lists them as labelled command parts from 2.
       7. **A docs check,** and mark the piece built.
    2. **`-vvv`.** `exit:`, `stdout:`, and `stderr:` rows under each command, each stream cut off after 20 lines, and
       the phase before each command in a step that compares. A failure's note already tells people to run with
