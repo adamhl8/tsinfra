@@ -135,7 +135,7 @@ machine, like a binary built locally, or an image for `docker load`. `exec` can 
 base64 heredoc, but that is the multi-line shell this design avoids. The same gap stops a fix from writing a file,
 because `h.file` inside a fix is a step inside a step.
 
-The likely answer is an `input` option in the tools' `ToolOptions`, sent to the command's stdin:
+The likely answer is an `input` option on the tools, next to `maskOutput`, sent to the command's stdin:
 
 ```ts
 await exec("docker load", { input: imageTarball })

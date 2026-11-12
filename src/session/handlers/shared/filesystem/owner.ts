@@ -2,7 +2,8 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { HostOwner, OwnerChange, OwnerOptions } from "#session/handlers/shared/filesystem/attributes.ts"
+import type { HostOwner, OwnerChange } from "#session/handlers/shared/filesystem/attributes.ts"
+import type { OwnerOptions } from "#session/handlers/step-options/step-options.ts"
 import type { Shell } from "#transport/transport.ts"
 
 /** Who runs the step's commands, which is root under `sudo`. `user` is empty for a uid with no name. */

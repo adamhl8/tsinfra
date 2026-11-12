@@ -28,8 +28,8 @@ Everything a host script does to its host goes through `h`, the context passed t
 ```ts
 interface Host {
   readonly name: string // the host script's name, e.g. "sonarr"
-  read(cmd: string, options?: StepEnv & ToolOptions): Promise<string>
-  inspect(cmd: string, options?: StepEnv & ToolOptions): Promise<InspectResult>
+  read(cmd: string, options?: ReadOptions): Promise<string>
+  inspect(cmd: string, options?: InspectOptions): Promise<InspectResult>
   file(path: string, content: string | Uint8Array | Blob, options?: FileOptions): Promise<ChangeStepResult>
   link(path: string, target: string, options?: LinkOptions): Promise<ChangeStepResult>
   ensure<T extends string | boolean>(name: string, options: EnsureOptions<T>): Promise<ChangeStepResult>
@@ -48,20 +48,23 @@ type ReadTools = { read: Exec; inspect: Inspect }
 type ChangeTools = { exec: Exec; inspect: Inspect }
 
 // Runs one command and returns its stdout. A check gets it as `read`, and a fix or run function as `exec`.
-type Exec = (cmd: string, options?: ToolOptions) => Promise<string>
+type Exec = (cmd: string, options?: MaskOptions) => Promise<string>
 
 // Runs one command and returns its output and exit code, without failing on a non-zero exit.
-type Inspect = (cmd: string, options?: ToolOptions) => Promise<InspectResult>
+type Inspect = (cmd: string, options?: MaskOptions) => Promise<InspectResult>
 
-type ToolOptions = {
+type MaskOptions = {
   maskOutput?: boolean // mask the output like a secret, here and in every later command on the host
 }
 
 // Variables every command in the step references as "$NAME", including its functions' tool calls.
-type StepEnv = {
+type EnvOptions = {
   env?: Record<string, string>
   secretEnv?: Record<string, string> // shown as [MASKED] wherever they'd show, from then on
 }
+
+type ReadOptions = EnvOptions & MaskOptions
+type InspectOptions = EnvOptions & MaskOptions
 
 type InspectResult = {
   stdout: string // trimmed
@@ -144,7 +147,7 @@ tsinfra records every command's output under its step, and the report shows none
 command only hides it from `-vvv` and from a failure's error, which is when you'd want it. Keep a quiet flag only where
 it changes the output a script uses, like `docker compose ps -q` printing only container IDs.
 
-`read`, `inspect`, and `exec` are the tools. Each runs one command and takes `ToolOptions`. `read` and `exec` return
+`read`, `inspect`, and `exec` are the tools. Each runs one command and takes `MaskOptions`. `read` and `exec` return
 stdout and fail on a non-zero exit. `inspect` never fails on a non-zero exit, for a command whose exit code or stderr is
 the answer.
 
@@ -627,7 +630,7 @@ type EnsureOptions<T extends string | boolean> = {
   want: T
   fix: string | ((tools: ChangeTools) => Promise<void>)
   verify?: boolean // default true
-  env?: Record<string, string> // see StepEnv
+  env?: Record<string, string> // see EnvOptions
   secretEnv?: Record<string, string>
   needs?: ChangeStepResult<"file" | "link" | "ensure">[] // earlier steps this step's check depends on
 }
@@ -877,7 +880,7 @@ run's check confirms it. Before reaching for it, try these:
 ## `run`
 
 ```ts
-type RunOptions = StepEnv & {
+type RunOptions = EnvOptions & {
   after: ChangeStepResult<"file" | "link" | "ensure" | "run" | "reboot">[] | "always" // run when any of these changed, or "always" on every pass
 }
 ```

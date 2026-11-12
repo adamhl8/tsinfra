@@ -2,7 +2,7 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#mode.ts"
-import type { StepNeeds } from "#session/handlers/shared/step-options.ts"
+import type { StepNeeds } from "#session/handlers/step-options/step-options.ts"
 import type { ComparePhase, ConvergeRecorder } from "#session/recorder/recorder.ts"
 import type { ComparisonValues, StepStatus } from "#session/step.ts"
 

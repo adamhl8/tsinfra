@@ -8,21 +8,20 @@ import { resolveContent } from "#session/handlers/file/resolved-content.ts"
 import { buildValidateCommand } from "#session/handlers/file/validate-command.ts"
 import type { FileWrite } from "#session/handlers/file/write.ts"
 import { writeFile } from "#session/handlers/file/write.ts"
+import type { ChangeStepResult } from "#session/handlers/shared/shared.ts"
+import { withChangeStepResult, validateHostPath, validateInput } from "#session/handlers/shared/shared.ts"
 import type {
-  ChangeStepResult,
   FileAttributeOptions,
+  HandlerOptions,
   NeedsOptions,
   SudoOptions,
-} from "#session/handlers/shared/shared.ts"
+} from "#session/handlers/step-options/step-options.ts"
 import {
-  withChangeStepResult,
   fileAttributeOptionsSchema,
-  validateHostPath,
   NO_NEEDS,
   needsOptionsSchema,
-  validateInput,
-} from "#session/handlers/shared/shared.ts"
-import type { HandlerOptions, HandlerReturn, StepContext } from "#session/step.ts"
+} from "#session/handlers/step-options/step-options.ts"
+import type { HandlerReturn, StepContext } from "#session/step.ts"
 
 export type {
   ContentComparison,

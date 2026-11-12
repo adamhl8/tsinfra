@@ -2,6 +2,7 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import { validateInput } from "#session/handlers/shared/shared.ts"
+import type { MaskOptions } from "#session/handlers/step-options/step-options.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
 import type { Shell } from "#transport/transport.ts"
 
@@ -20,10 +21,10 @@ export interface ChangeTools {
 }
 
 /** Runs one command on the host and returns its stdout, trimmed. A non-zero exit throws. */
-export type Exec = (cmd: string) => Promise<string>
+export type Exec = (cmd: string, options?: MaskOptions) => Promise<string>
 
 /** Runs one command on the host and returns its output and exit code. A non-zero exit is an answer, not a failure. */
-export type Inspect = (cmd: string) => Promise<InspectResult>
+export type Inspect = (cmd: string, options?: MaskOptions) => Promise<InspectResult>
 
 /** What `inspect` gives a script: a command's stdout and stderr, both trimmed, and its exit code. */
 export interface InspectResult {

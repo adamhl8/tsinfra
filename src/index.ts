@@ -2,6 +2,7 @@ export type { HostDefinition, HostFunction, HostOptions } from "#hosts/hosts.ts"
 export { host } from "#hosts/hosts.ts"
 export type {
   EnsureOptions,
+  EnvOptions,
   FileMode,
   OctalMode,
   SymbolicMode,
@@ -16,7 +17,10 @@ export type {
   ChangeTools,
   Exec,
   Inspect,
+  InspectOptions,
   InspectResult,
+  MaskOptions,
+  ReadOptions,
   ReadTools,
   RunOptions,
   RunTrigger,

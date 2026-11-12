@@ -7,7 +7,9 @@ import type {
   Want,
   FileContent,
   FileOptions,
+  InspectOptions,
   LinkOptions,
+  ReadOptions,
   RunOptions,
   ChangeStepResult,
   Change,
@@ -46,6 +48,7 @@ export type {
   ContentComparison,
   EnsureComparisonValues,
   EnsureOptions,
+  EnvOptions,
   Exec,
   FileAttributeOptions,
   FileComparisonValues,
@@ -54,13 +57,16 @@ export type {
   FileOptions,
   FileOwner,
   Inspect,
+  InspectOptions,
   InspectResult,
   LinkChange,
   LinkComparisonValues,
   LinkOptions,
+  MaskOptions,
   ModeBits,
   OctalMode,
   OwnerChange,
+  ReadOptions,
   ReadTools,
   RunOptions,
   RunTrigger,
@@ -112,14 +118,14 @@ export interface Host extends Record<StepKind, unknown> {
    * A non-zero exit fails the host and throws. Catching it does not recover the host. Use `inspect` when a non-zero
    * exit is a legitimate answer.
    */
-  read: (cmd: string) => Promise<string>
+  read: (cmd: string, options?: ReadOptions) => Promise<string>
   /**
    * Runs `cmd` on the host and returns its stdout and stderr, both trimmed, and its exit code. It must not change what
    * the script manages, because it also runs during `plan`.
    *
    * A non-zero exit is an answer, not a failure. Only a command that can't run at all fails the host and throws.
    */
-  inspect: (cmd: string) => Promise<InspectResult>
+  inspect: (cmd: string, options?: InspectOptions) => Promise<InspectResult>
   /**
    * Writes `content` to `path`, and manages the file's mode, user, and group when they are given. A leading `~/` means
    * the SSH user's home. In `plan` it only reads the file's state, and shows a diff of what would change.

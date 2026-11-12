@@ -8,9 +8,11 @@ export type {
   SizeComparison,
 } from "#session/handlers/file/file.ts"
 export { handleFile } from "#session/handlers/file/file.ts"
+export type { InspectOptions } from "#session/handlers/inspect.ts"
 export { handleInspect } from "#session/handlers/inspect.ts"
 export type { LinkChange, LinkComparisonValues, LinkOptions } from "#session/handlers/link/link.ts"
 export { handleLink } from "#session/handlers/link/link.ts"
+export type { ReadOptions } from "#session/handlers/read.ts"
 export { handleRead } from "#session/handlers/read.ts"
 export type { RunOptions, RunTrigger } from "#session/handlers/run.ts"
 export { handleRun } from "#session/handlers/run.ts"
@@ -21,14 +23,10 @@ export type {
   ChangeStepResult,
   Comparison,
   Converge,
-  FileAttributeOptions,
   FileMode,
-  FileOwner,
   ModeBits,
   OctalMode,
   OwnerChange,
-  StepNeeds,
-  SudoOptions,
   SymbolicMode,
 } from "#session/handlers/shared/shared.ts"
 export {
@@ -39,10 +37,18 @@ export {
   PRIVATE_FILE_MODE,
   PUBLIC_EXECUTABLE_MODE,
   PUBLIC_FILE_MODE,
-  sudoOptionsSchema,
   toOctalMode,
   toSymbolicMode,
   validateInput,
 } from "#session/handlers/shared/shared.ts"
 export type { ChangeTools, Exec, Inspect, InspectResult, ReadTools } from "#session/handlers/tools.ts"
 export { execCommand, inspectCommand } from "#session/handlers/tools.ts"
+export type {
+  EnvOptions,
+  FileAttributeOptions,
+  FileOwner,
+  MaskOptions,
+  StepNeeds,
+  SudoOptions,
+} from "#session/handlers/step-options/step-options.ts"
+export { sudoOptionsSchema } from "#session/handlers/step-options/step-options.ts"

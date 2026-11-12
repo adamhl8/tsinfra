@@ -10,6 +10,7 @@ import {
   runChange,
   validateInput,
 } from "#session/handlers/shared/shared.ts"
+import type { EnvOptions, HandlerOptions } from "#session/handlers/step-options/step-options.ts"
 import type { HandlerReturn, StepContext } from "#session/step.ts"
 
 /** What makes a run run: the steps it follows, or `"always"`. */
@@ -21,7 +22,7 @@ const runTriggerSchema = type
   .declare<RunTrigger>()
   .type(type("'always'").or(changeStepResultSchema.array().atLeastLength(1)))
 
-export interface RunOptions {
+export interface RunOptions extends EnvOptions {
   /**
    * The results of the steps this run follows, so it runs when any of them changed. `"always"` runs it on every pass,
    * for upkeep with no trigger. In `plan` a run never runs, and reports changed when it would, so the plan shows it.
@@ -30,7 +31,7 @@ export interface RunOptions {
 }
 
 // Validate the options at runtime too, because a script can get past the types, like with `as` or `@ts-ignore`.
-const runOptionsSchema = type.declare<RunOptions>().type({
+const runOptionsSchema = type.declare<HandlerOptions<RunOptions>>().type({
   after: runTriggerSchema,
 })
 

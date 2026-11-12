@@ -1,9 +1,6 @@
-import type {
-  AttributeChange,
-  FileAttributeOptions,
-  HostFileAttributeDetails,
-} from "#session/handlers/shared/shared.ts"
+import type { AttributeChange, HostFileAttributeDetails } from "#session/handlers/shared/shared.ts"
 import { parseFileMode, findOwnerChanges } from "#session/handlers/shared/shared.ts"
+import type { FileAttributeOptions } from "#session/handlers/step-options/step-options.ts"
 
 /** Lists the given attributes whose value on the host differs, comparing a name with a name and a number with an id. */
 export const findAttributeChanges = (

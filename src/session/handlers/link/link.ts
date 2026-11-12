@@ -5,16 +5,16 @@ import { isErr } from "ts-explicit-errors"
 import { compareLink } from "#session/handlers/link/comparison.ts"
 import { getHostLinkDetails } from "#session/handlers/link/host-link-details.ts"
 import { writeLink } from "#session/handlers/link/write.ts"
-import type { ChangeStepResult, OwnerOptions, NeedsOptions, SudoOptions } from "#session/handlers/shared/shared.ts"
-import {
-  withChangeStepResult,
-  ownerOptionsSchema,
-  validateHostPath,
-  NO_NEEDS,
-  needsOptionsSchema,
-  validateInput,
-} from "#session/handlers/shared/shared.ts"
-import type { HandlerOptions, HandlerReturn, StepContext } from "#session/step.ts"
+import type { ChangeStepResult } from "#session/handlers/shared/shared.ts"
+import { withChangeStepResult, validateHostPath, validateInput } from "#session/handlers/shared/shared.ts"
+import type {
+  HandlerOptions,
+  OwnerOptions,
+  NeedsOptions,
+  SudoOptions,
+} from "#session/handlers/step-options/step-options.ts"
+import { ownerOptionsSchema, NO_NEEDS, needsOptionsSchema } from "#session/handlers/step-options/step-options.ts"
+import type { HandlerReturn, StepContext } from "#session/step.ts"
 
 export type { LinkChange, LinkComparisonValues } from "#session/handlers/link/comparison.ts"
 

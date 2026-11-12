@@ -6,22 +6,17 @@ import type { Check, Want } from "#session/handlers/ensure/check.ts"
 import { checkSchema, wantSchema } from "#session/handlers/ensure/check.ts"
 import { compareCheck } from "#session/handlers/ensure/comparison.ts"
 import { getHostCheckDetails } from "#session/handlers/ensure/host-check-details.ts"
-import type { ChangeStepResult, Change, NeedsOptions } from "#session/handlers/shared/shared.ts"
-import {
-  withChangeStepResult,
-  changeSchema,
-  runChange,
-  NO_NEEDS,
-  needsOptionsSchema,
-  validateInput,
-} from "#session/handlers/shared/shared.ts"
+import type { ChangeStepResult, Change } from "#session/handlers/shared/shared.ts"
+import { withChangeStepResult, changeSchema, runChange, validateInput } from "#session/handlers/shared/shared.ts"
+import type { EnvOptions, HandlerOptions, NeedsOptions } from "#session/handlers/step-options/step-options.ts"
+import { NO_NEEDS, needsOptionsSchema } from "#session/handlers/step-options/step-options.ts"
 import type { HandlerReturn, StepContext } from "#session/step.ts"
 
 export type { Check, Want } from "#session/handlers/ensure/check.ts"
 export type { EnsureComparisonValues } from "#session/handlers/ensure/comparison.ts"
 
 /** `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string. */
-export interface EnsureOptions<T extends Want> extends NeedsOptions {
+export interface EnsureOptions<T extends Want> extends NeedsOptions, EnvOptions {
   /**
    * A command, or a function given `read` that returns the value to compare. It also runs during `plan`, so it must not
    * change what the script manages.
@@ -44,7 +39,7 @@ export interface EnsureOptions<T extends Want> extends NeedsOptions {
 // Validate the options at runtime too, because a script can get past the types, like with `as` or `@ts-ignore`.
 // Set the defaults in a pipe, because ArkType only allows a default on a required key.
 const ensureOptionsSchema = type
-  .declare<EnsureOptions<Want>>()
+  .declare<HandlerOptions<EnsureOptions<Want>>>()
   .type(needsOptionsSchema.merge({ check: checkSchema, want: wantSchema, fix: changeSchema, "verify?": "boolean" }))
   .pipe((options) => ({ verify: true, needs: NO_NEEDS, ...options }))
 

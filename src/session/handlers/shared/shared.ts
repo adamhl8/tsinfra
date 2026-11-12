@@ -7,26 +7,22 @@ export { createConverge } from "#session/handlers/shared/converge.ts"
 export type {
   AttributeChange,
   Bytes,
-  FileAttributeOptions,
   FileMode,
-  FileOwner,
   HostFileAttributeDetails,
   HostOwner,
   ModeBits,
   OctalMode,
   OwnerChange,
-  OwnerOptions,
   SymbolicMode,
 } from "#session/handlers/shared/filesystem/filesystem.ts"
 export {
   buildChownLines,
   buildTempDirectoryLines,
   checkCanSetOwner,
-  fileAttributeOptionsSchema,
   findOwnerChanges,
   GROUP_EXECUTABLE_MODE,
   GROUP_FILE_MODE,
-  ownerOptionsSchema,
+  OCTAL_MODE_PATTERN,
   parseFileMode,
   PRIVATE_EXECUTABLE_MODE,
   PRIVATE_FILE_MODE,
@@ -34,6 +30,7 @@ export {
   PUBLIC_FILE_MODE,
   REMOVE_TEMP_DIRECTORY_LINES,
   statModeSchema,
+  SYMBOLIC_MODE_PATTERN,
   TEMP_PATH_ARG,
   toBytes,
   toOctalMode,
@@ -41,6 +38,4 @@ export {
   toWriteScriptPaths,
   validateHostPath,
 } from "#session/handlers/shared/filesystem/filesystem.ts"
-export type { NeedsOptions, StepNeeds, SudoOptions } from "#session/handlers/shared/step-options.ts"
-export { needsOptionsSchema, NO_NEEDS, sudoOptionsSchema } from "#session/handlers/shared/step-options.ts"
 export { validateInput } from "#session/handlers/shared/validate-input.ts"

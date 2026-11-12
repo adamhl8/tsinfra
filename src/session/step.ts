@@ -6,7 +6,6 @@ import type {
   FileComparisonValues,
   LinkComparisonValues,
   Converge,
-  SudoOptions,
   ChangeTools,
   ReadTools,
 } from "#session/handlers/handlers.ts"
@@ -15,9 +14,6 @@ import type { Shell } from "#transport/transport.ts"
 // Refuse an empty name, path, or command.
 // An empty command is a `sh` syntax error, and an empty name leaves a blank in the output.
 export const nonEmptyStringSchema = type("string > 0")
-
-/** Removes the options `callStep` handles from `T`, leaving the ones a step's handler validates. */
-export type HandlerOptions<T> = Omit<T, keyof SudoOptions>
 
 const READ_STEP_KINDS = ["read", "inspect"] as const
 export const CHANGE_STEP_KINDS = ["file", "link", "ensure", "run"] as const
