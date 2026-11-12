@@ -193,8 +193,9 @@ and a `;` or `$(...)` runs part of it. The same goes for one host's output used 
 
 **`secretEnv` keeps a secret out of everything tsinfra shows or keeps.** The command's text never holds it. Its value
 shows as `[MASKED]` in the record's variables, and in the output and errors of that step's commands and of every later
-command on the host. Masking replaces every match of the value, so a very short secret masks a lot. That's noisy, but
-never leaks.
+command on the host. Masking replaces every match of the value, and of each line of a multi-line value, because a diff
+or an error can show one line of it. So a very short secret masks a lot. That's noisy, but never leaks. tsinfra masks
+each value as it records it, so the record never holds a secret. Your script still gets the real values.
 
 **`maskOutput: true` masks a command's output,** for a secret read from the host, like `cat /etc/app/token`. It's an
 option on the tools and on `h.read` and `h.inspect`. The output joins the host's secrets, so later commands mask it too,

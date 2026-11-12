@@ -4,7 +4,7 @@ import { runLocal } from "#transport/local.ts"
 import { closeSshConnection, createSshTransport } from "#transport/ssh.ts"
 import { wrapCommand } from "#transport/utils.ts"
 
-export type { RecordingTransport, Shell } from "#transport/shell.ts"
+export type { CommandOptions, RecordingTransport, Shell } from "#transport/shell.ts"
 export { createShell } from "#transport/shell.ts"
 export type { StepShellOptions } from "#transport/step.ts"
 export { createStepTransport } from "#transport/step.ts"

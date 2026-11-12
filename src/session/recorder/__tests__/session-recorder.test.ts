@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test"
 
+import { err, messageChain } from "ts-explicit-errors"
+
+import type { Comparison } from "#session/handlers/handlers.ts"
 import type { HostRecord, StepRecord } from "#session/recorder/recorder.ts"
 import { createHostRecord, createSessionRecorder } from "#session/recorder/recorder.ts"
 import { runLocal } from "#transport/local.ts"
@@ -15,7 +18,7 @@ const startStepWithShells = (options: StepShellOptions) => {
   const hostRecord = createHostRecord("a", "@local")
   const sessionRecorder = createSessionRecorder(hostRecord, { sudo: false }, transport)
   sessionRecorder.startStep("a", "file")
-  return { hostRecord, ...sessionRecorder.getStepShells(options) }
+  return { hostRecord, sessionRecorder, ...sessionRecorder.getStepShells(options) }
 }
 
 /** Returns the running step's options and the commands it recorded. */
@@ -119,5 +122,108 @@ describe("SessionRecorder steps", () => {
       [],
       { kind: "step", stepRecord, error, hints: [] },
     ])
+  })
+})
+
+const SECRET = "s3cret-value"
+
+/** Returns each finished step's name, and each of its commands with its output. */
+const getStepCommands = (hostRecord: HostRecord) =>
+  hostRecord.stepRecords.map(({ name, commands }) => ({
+    name,
+    commands: commands.map(({ cmd, output }) => ({ cmd, output })),
+  }))
+
+/** Returns each command of the running step with its output. */
+const getRunningCommands = (hostRecord: HostRecord) =>
+  hostRecord.runningStep?.commands.map(({ cmd, output }) => ({ cmd, output }))
+
+/** Returns `stdout` as a command's output, with no stderr and exit code 0. */
+const toOutput = (stdout: string) => ({ stdout, stderr: "", exitCode: 0 })
+
+describe("SessionRecorder masking", () => {
+  it("should mask a secretEnv value from its step on, and still return it to the script", async () => {
+    const { hostRecord, sessionRecorder, stepShell } = startStepWithShells({
+      ...NO_OPTIONS,
+      secretEnv: { TOKEN: SECRET },
+    })
+    const stdout = await stepShell.exec('printf %s "$TOKEN"')
+    sessionRecorder.finishStep("ran")
+    sessionRecorder.startStep(`echo ${SECRET}`, "read")
+    await sessionRecorder.getStepShells(NO_OPTIONS).stepShell.exec(`echo ${SECRET}`)
+    sessionRecorder.finishStep("observed")
+
+    expect({ stdout, steps: getStepCommands(hostRecord) }).toStrictEqual({
+      stdout: SECRET,
+      steps: [
+        { name: "a", commands: [{ cmd: 'printf %s "$TOKEN"', output: toOutput("[MASKED]") }] },
+        { name: "echo [MASKED]", commands: [{ cmd: "echo [MASKED]", output: toOutput("[MASKED]\n") }] },
+      ],
+    })
+  })
+
+  it("should mask a maskOutput command's own output, and the value in later commands", async () => {
+    const { hostRecord, toolShell } = startStepWithShells(NO_OPTIONS)
+    // Build the secret from two parts, so the command's own text doesn't hold it.
+    const stdout = await toolShell.exec(String.raw`printf '%s-%s\n' s3cret value`, { maskOutput: true })
+    await toolShell.exec(`test ${SECRET} = ${SECRET}`)
+
+    expect({ stdout, commands: getRunningCommands(hostRecord) }).toStrictEqual({
+      stdout: `${SECRET}\n`,
+      commands: [
+        { cmd: String.raw`printf '%s-%s\n' s3cret value`, output: toOutput("[MASKED]\n") },
+        { cmd: "test [MASKED] = [MASKED]", output: toOutput("") },
+      ],
+    })
+  })
+
+  it("should mask one line of a multi-line secret on its own", async () => {
+    const { hostRecord, stepShell } = startStepWithShells({
+      ...NO_OPTIONS,
+      secretEnv: { KEY: "first-line\nsecond-line" },
+    })
+    await stepShell.exec(String.raw`printf "%s\n" "$KEY" | tail -n 1`)
+
+    expect(getRunningCommands(hostRecord)).toStrictEqual([
+      { cmd: String.raw`printf "%s\n" "$KEY" | tail -n 1`, output: toOutput("[MASKED]\n") },
+    ])
+  })
+
+  it("should mask a secret through the failure's error chain, and leave it the same when recorded again", () => {
+    const { hostRecord, sessionRecorder } = startStepWithShells({ ...NO_OPTIONS, secretEnv: { TOKEN: SECRET } })
+    const commandError = err(`exited with code 1: ${SECRET}`, undefined)
+    sessionRecorder.failStep(err("failed to run the step", commandError))
+    const hostError = sessionRecorder.recordFailure(err("failed to run the host", hostRecord.failure?.error))
+
+    expect({
+      chain: messageChain(hostError),
+      hasSecretInStack: commandError.stack?.includes(SECRET),
+    }).toStrictEqual({
+      chain: "failed to run the host -> failed to run the step -> exited with code 1: [MASKED]",
+      hasSecretInStack: false,
+    })
+  })
+
+  it("should mask a secret in a recorded comparison, and leave the comparison converge holds as it is", () => {
+    const { hostRecord, sessionRecorder } = startStepWithShells({ ...NO_OPTIONS, secretEnv: { TOKEN: SECRET } })
+    const comparison: Comparison = { inSync: false, values: { kind: "string", got: "old", want: SECRET } }
+    sessionRecorder.convergeRecorder.recordComparison("before", comparison)
+
+    expect([hostRecord.runningStep?.comparisons.before, comparison.values]).toStrictEqual([
+      { inSync: false, values: { kind: "string", got: "old", want: "[MASKED]" } },
+      { kind: "string", got: "old", want: SECRET },
+    ])
+  })
+
+  it("should mask in one pass, so a secret inside [MASKED] doesn't match, and mask nothing for an empty value", async () => {
+    const secretEnv = { TOKEN: SECRET, SHORT: "MASK", EMPTY: "" }
+    const { hostRecord, stepShell } = startStepWithShells({ ...NO_OPTIONS, secretEnv })
+    await stepShell.exec('printf "%s %s|" "$TOKEN" "$SHORT"')
+
+    expect({ ...getRunningStep(hostRecord), commands: getRunningCommands(hostRecord) }).toStrictEqual({
+      options: { ...NO_OPTIONS, secretEnv: { TOKEN: "[MASKED]", SHORT: "[MASKED]", EMPTY: "" } },
+      recordedCmds: ['printf "%s %s|" "$TOKEN" "$SHORT"'],
+      commands: [{ cmd: 'printf "%s %s|" "$TOKEN" "$SHORT"', output: toOutput("[MASKED] [MASKED]|") }],
+    })
   })
 })

@@ -1,10 +1,12 @@
 import type { Result } from "ts-explicit-errors"
-import { err } from "ts-explicit-errors"
+import { err, isErr } from "ts-explicit-errors"
 
 import type { ValidHostOptions } from "#hosts/hosts.ts"
 import type { Comparison } from "#session/handlers/handlers.ts"
+import type { CommandRecorder } from "#session/recorder/commands.ts"
 import { createRecordingTransport } from "#session/recorder/commands.ts"
 import { getFailureHints } from "#session/recorder/failure-hints.ts"
+import { addSecret, maskSecrets } from "#session/recorder/masking.ts"
 import type { ConvergePhase, HostRecord, StepRecord } from "#session/recorder/records.ts"
 import type { StepKind, StepStatus } from "#session/step.ts"
 import type { Shell, StepShellOptions, Transport } from "#transport/transport.ts"
@@ -30,12 +32,6 @@ interface StepShells {
   /** Runs the tools' commands with the step's variables, and never as root, because no tool takes `sudo`. */
   toolShell: Shell
 }
-
-const MASKED_VALUE = "[MASKED]"
-
-/** Returns `secretEnv` with each value as `MASKED_VALUE`, so the record never holds a secret. */
-const maskValues = (secretEnv: Record<string, string>): Record<string, string> =>
-  Object.fromEntries(Object.keys(secretEnv).map((name) => [name, MASKED_VALUE]))
 
 /** Records the session's part of a host's run, once preparation has finished: each step, and the host's failure. */
 export interface SessionRecorder {
@@ -65,7 +61,8 @@ export interface SessionRecorder {
 
 /**
  * Records a host's session on `hostRecord`, running its commands on `transport`, the host's final transport. Keeps
- * `transport` to itself, so the session can only reach it through shells that record.
+ * `transport` to itself, so the session can only reach it through shells that record. Masks every value it records with
+ * the secrets the host knows so far, so the record never holds a secret.
  */
 export const createSessionRecorder = (
   hostRecord: HostRecord,
@@ -73,26 +70,40 @@ export const createSessionRecorder = (
   transport: Transport,
 ): SessionRecorder => {
   let currentPhase: ConvergePhase | undefined
+  const secrets = new Set<string>()
+  const mask = <T>(value: T): T => maskSecrets(value, secrets)
 
-  /** Returns a shell on `shellTransport` that records each command under the running step. */
-  const createRecordingShell = (shellTransport: Transport): Shell => {
-    // Stamp the phase before the command runs, because a reader wants to know when a command started.
-    const recordingTransport = createRecordingTransport(shellTransport, (commandRecord) => {
+  const commandRecorder: CommandRecorder = {
+    recordCommand: (commandRecord) => {
+      // Assign the masked `cmd` onto this record, because the recording transport passes this same record to
+      // `recordOutput`.
+      commandRecord.cmd = mask(commandRecord.cmd)
+      // Stamp the phase before the command runs, because a reader wants to know when a command started.
       if (currentPhase) commandRecord.phase = currentPhase
       hostRecord.runningStep?.commands.push(commandRecord)
-    })
-
-    return createShell(recordingTransport)
+    },
+    recordOutput: (commandRecord, output, { maskOutput }) => {
+      // Add the trimmed stdout, because that's what the `read` tool returns to the script.
+      if (maskOutput && !isErr(output)) addSecret(secrets, output.stdout.trim())
+      commandRecord.output = mask(output)
+    },
   }
 
-  const getStepShells = (options: StepShellOptions): StepShells => {
-    if (hostRecord.runningStep)
-      hostRecord.runningStep.options = { ...options, secretEnv: maskValues(options.secretEnv) }
+  /** Returns a shell on `shellTransport` that records each command under the running step. */
+  const createRecordingShell = (shellTransport: Transport): Shell =>
+    createShell(createRecordingTransport(shellTransport, commandRecorder))
 
+  const getStepShells = (_options: StepShellOptions): StepShells => {
+    const secretValues = Object.values(_options.secretEnv)
+    for (const value of secretValues) addSecret(secrets, value)
     // Record each command before the step transport adds the prelude and wraps it in `sudo sh -s`.
     // The record then holds the step's own script.
-    const stepShell = createRecordingShell(createStepTransport(transport, options))
-    const toolShell = createRecordingShell(createStepTransport(transport, { ...options, sudo: false }))
+    const stepShell = createRecordingShell(createStepTransport(transport, _options))
+    const toolShell = createRecordingShell(createStepTransport(transport, { ..._options, sudo: false }))
+
+    const options = mask(_options)
+    if (hostRecord.runningStep) hostRecord.runningStep.options = options
+
     return { stepShell, toolShell }
   }
 
@@ -103,7 +114,8 @@ export const createSessionRecorder = (
     return keptError === undefined || error.cause === keptError ? error : keptError
   }
 
-  const recordFailure = (error: Error): Error => {
+  const recordFailure = (_error: Error): Error => {
+    const error = mask(_error)
     const { failure } = hostRecord
     // Keep an existing failure's kind, and only update its error, because the failure is already where it came from.
     // `callOrFail` records again the error a step's failure already holds, and calls made at once can each fail.
@@ -116,15 +128,11 @@ export const createSessionRecorder = (
     return error
   }
 
-  // Work out the hints when the step is done, from all of its commands.
-  const recordStepFailure = (stepRecord: StepRecord, error: Error) => {
-    const hints = getFailureHints(hostRecord.target, hostOptions, stepRecord.commands)
-    hostRecord.failure = { kind: "step", stepRecord, error: keepError(error), hints }
-  }
-
   // Fail a step that starts while another is running, because a step's functions use the tools they are given.
   // This also catches steps run at once with `Promise.all`.
-  const startStep = (stepName: string, kind: StepKind): Result => {
+  const startStep = (_stepName: string, kind: StepKind): Result => {
+    // Mask the name, because a read step's name is its command.
+    const stepName = mask(_stepName)
     const { runningStep } = hostRecord
     if (runningStep) {
       const { name, kind: runningKind } = runningStep
@@ -142,6 +150,13 @@ export const createSessionRecorder = (
     hostRecord.runningStep = undefined
     currentPhase = undefined
     return runningStep
+  }
+
+  // Work out the hints when the step is done, from all of its commands.
+  const recordStepFailure = (stepRecord: StepRecord, _error: Error) => {
+    const error = mask(_error)
+    const hints = getFailureHints(hostRecord.target, hostOptions, stepRecord.commands)
+    hostRecord.failure = { kind: "step", stepRecord, error: keepError(error), hints }
   }
 
   const finishStep = (status: StepStatus) => {
@@ -164,11 +179,13 @@ export const createSessionRecorder = (
     currentPhase = phase
   }
 
-  const recordComparison = (phase: ComparePhase, comparison: Comparison) => {
+  const recordComparison = (phase: ComparePhase, _comparison: Comparison) => {
+    const comparison = mask(_comparison)
     if (hostRecord.runningStep) hostRecord.runningStep.comparisons[phase] = comparison
   }
 
-  const recordWaitingOn = (stepNames: string[]) => {
+  const recordWaitingOn = (_stepNames: string[]) => {
+    const stepNames = mask(_stepNames)
     if (hostRecord.runningStep) hostRecord.runningStep.waitingOn = stepNames
   }
 

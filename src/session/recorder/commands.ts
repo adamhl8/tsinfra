@@ -1,18 +1,26 @@
-import type { CommandRecord } from "#session/recorder/records.ts"
-import type { RecordingTransport, Transport } from "#transport/transport.ts"
+import type { Result } from "ts-explicit-errors"
 
-/**
- * Returns `transport` with each command it runs recorded through `addCommand`. Each recorder passes its own, which
- * decides where the record goes.
- */
+import type { CommandRecord } from "#session/recorder/records.ts"
+import type { CommandOptions, CommandOutput, RecordingTransport, Transport } from "#transport/transport.ts"
+
+/** Where a recording transport puts each command's record. Each recorder passes its own. */
+export interface CommandRecorder {
+  /** Records a command, before it runs. */
+  recordCommand: (commandRecord: CommandRecord) => void
+  /** Records the output on a command's record, once the command finishes. */
+  recordOutput: (commandRecord: CommandRecord, output: Result<CommandOutput>, options: CommandOptions) => void
+}
+
+/** Returns `transport` with each command it runs recorded through `commandRecorder`. */
 export const createRecordingTransport =
-  (transport: Transport, addCommand: (commandRecord: CommandRecord) => void): RecordingTransport =>
+  (transport: Transport, commandRecorder: CommandRecorder): RecordingTransport =>
   async (cmd, options = {}) => {
+    const { recordCommand, recordOutput } = commandRecorder
     const { label, recordedCmd = cmd } = options
     const commandRecord: CommandRecord = { cmd: recordedCmd, ...(label !== undefined && { label }) }
-    // Add the record before the command runs, so commands run at once keep the order they were called in.
-    addCommand(commandRecord)
+    // Record the command before it runs, so commands run at once keep the order they were called in.
+    recordCommand(commandRecord)
     const output = await transport(cmd)
-    commandRecord.output = output
+    recordOutput(commandRecord, output, options)
     return output
   }

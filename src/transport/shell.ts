@@ -4,11 +4,13 @@ import { isErr } from "ts-explicit-errors"
 import type { CommandOutput } from "#transport/transport.ts"
 import { createCommandExitError } from "#utils.ts"
 
-interface CommandOptions {
+export interface CommandOptions {
   /** A short name for a command tsinfra wrote itself. */
   label?: string
   /** The text to record in place of the command, for one that holds content. */
   recordedCmd?: string
+  /** Whether the command's output is a secret, which the record masks from this command on. */
+  maskOutput?: boolean
 }
 
 /** Runs a command like a `Transport`, and also takes what the recorder needs to know about it. */

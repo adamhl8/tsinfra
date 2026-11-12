@@ -59,7 +59,7 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
          commands get no prelude. The step options come in step 3, so
          it's tested through `createStepTransport` and `getStepShells`. The record changes, so it runs the Docker
          suite.
-      2. **Masking.** The host's known secrets, masked in each command's output and error, and in its text, with
+      2. **Masking** (built 2026-11-12). The host's known secrets, masked in each command's output and error, and in its text, with
          `maskOutput` adding a command's output to them.
       3. **The step options.** `env`, `secretEnv`, and `maskOutput` on `h.read` and `h.inspect`, `env` and `secretEnv`
          on `ensure` and `run`, and `maskOutput` on the tools. The options schema checks that each name is a valid
