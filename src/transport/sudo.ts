@@ -1,7 +1,4 @@
-import crypto from "node:crypto"
-
 import type { Transport } from "#transport/transport.ts"
-import { wrapCommand } from "#transport/utils.ts"
 import { quoteShellArg } from "#utils.ts"
 
 const SUDO_PASSWORD_VARIABLE = "TSINFRA_SUDO_PASSWORD"
@@ -36,8 +33,8 @@ const buildAskpassSudoFunction = (password: string): string =>
   `sudo() { ${SUDO_PASSWORD_VARIABLE}=${quoteShellArg(password)} SUDO_ASKPASS=${ASKPASS_HELPER_PATH} command sudo -A "$@"; }`
 
 /**
- * Starts every script with `sudoFunction`, which a script's own `sudo` calls. It sits below the recorder, so it's never
- * on the record.
+ * Starts every script with `sudoFunction`, which a script's own `sudo` calls. The recorder sees each command before
+ * this adds the function, so it's never on the record.
  */
 const withSudoFunction =
   (transport: Transport, sudoFunction: string): Transport =>
@@ -51,15 +48,3 @@ export const createPasswordlessSudoTransport = (transport: Transport): Transport
 /** Returns a transport whose scripts' `sudo` gets `password` through the askpass helper. */
 export const createAskpassSudoTransport = (transport: Transport, password: string): Transport =>
   withSudoFunction(transport, buildAskpassSudoFunction(password))
-
-/**
- * Runs each script as root, in a `sh -s` under `sudo`, for a step given `sudo: true`. Send the script on stdin, so it's
- * never in `ps` or the sudo log. Use a random delimiter, because a path in the script can hold any line, even one
- * matching a fixed delimiter.
- */
-export const createRootTransport =
-  (transport: Transport): Transport =>
-  async (cmd) => {
-    const delimiter = `__TSINFRA_SUDO_${crypto.randomUUID()}__`
-    return transport(`sudo sh -s <<'${delimiter}'\n${wrapCommand(cmd)}\n${delimiter}`)
-  }

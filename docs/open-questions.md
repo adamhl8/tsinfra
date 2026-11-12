@@ -17,7 +17,6 @@ What still needs an answer. Most are best settled by porting real hosts first (s
 - [`fsync` before the rename](#fsync-before-the-rename)
 - [Backups of replaced files](#backups-of-replaced-files)
 - [Steps side by side within a host](#steps-side-by-side-within-a-host)
-- [Quoting values in commands](#quoting-values-in-commands)
 - [Ordering between hosts](#ordering-between-hosts)
 - [No state](#no-state)
 
@@ -136,7 +135,7 @@ machine, like a binary built locally, or an image for `docker load`. `exec` can 
 base64 heredoc, but that is the multi-line shell this design avoids. The same gap stops a fix from writing a file,
 because `h.file` inside a fix is a step inside a step.
 
-The likely answer is an `input` option in `CommandOptions`, sent to the command's stdin:
+The likely answer is an `input` option in the tools' `ToolOptions`, sent to the command's stdin:
 
 ```ts
 await exec("docker load", { input: imageTarball })
@@ -197,15 +196,6 @@ current step. Running steps side by side is not worth supporting yet:
 Commands inside one step can already run at once, with `Promise.all` over `exec` in a fix. If a host ever needs steps
 side by side, `AsyncLocalStorage` from `node:async_hooks` can track the current step for each async chain instead of
 one variable for the host.
-
-## Quoting values in commands
-
-Computing values in TypeScript means putting them into command strings, and a value with a space or a quote breaks the
-command. A tagged template that escapes what is put into it would fix this: `` sh`curl -fsSL ${url} -o ${dest}` ``.
-Bun ships `$.escape`, so it would be a thin wrapper. It applies to `check`, `read`, `fix`, `exec`, and `run` alike.
-`file` already quotes the paths it puts into its own commands, with POSIX single quotes (see
-[Steps](./steps.md#file)). That helper could be the start of this tag, since `$.escape` targets Bun Shell, not POSIX
-`sh`.
 
 ## Ordering between hosts
 

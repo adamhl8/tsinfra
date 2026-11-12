@@ -67,8 +67,10 @@ Opt-in features with no real case yet:
 - **`backup` on `link`,** for the first dotfiles run, where real files sit where the links go. home-manager's `-b`
   moves them aside and aborts if the backup already exists. If backups come back for `file`, Puppet's same-folder copy
   with an extension is the lightest model (see [Backups](./open-questions.md#backups-of-replaced-files)).
-- **A `Secret` value type** that stays masked through string building, like Pulumi's secrets, without its full
-  `Output<T>` model.
+- **An argument list as a command,** like `exec(["tar", "-xzf", name])`, rendered by quoting each element with
+  `quoteShellArg`. It's safe for any value, with no variable to name, like Ansible's `command` module and Chef's array
+  form of `execute`. Pipes, redirects, and `$VAR` don't fit it, so it would sit beside command strings, not replace
+  them. Add it if the ports show many commands built from values, where `env` feels heavy.
 - **A programmatic `plan()` and `apply()`** that return host records, like Pulumi's Automation API.
 - **A container transport,** like pyinfra's `@docker/<name>` connector, with the same `@` syntax as `@local`:
   `@incus/<name>` through the local `incus` client and a configured remote, and `@docker/<name>` through
@@ -99,7 +101,7 @@ Opt-in features with no real case yet:
   Ansible's `environment`, but only for PATH. It covers the case the `shell` option was for, a tool installed outside
   the default PATH, like Go's. It has none of a login shell's pitfalls (see [Login shells](./transport.md#login-shells)).
   - **How it works:** a transport wrapper, like the one that adds the `sudo` function, starts each script with
-    `PATH=<entries>:"$PATH"` and `export PATH`. It sits below the recorder, so the record shows the script as written.
+    `PATH=<entries>:"$PATH"` and `export PATH`. It wraps each command after the recorder has seen it, so the record shows the script as written.
   - **Under sudo:** sudo resets PATH to its `secure_path`, so a `sudo: true` step gets the same line inside its nested
     shell. A `sudo` command inside a script still gets sudo's own PATH.
   - **Entries:** an entry must be absolute or start with `~/`. A `~/` entry resolves against the home directory that

@@ -28,8 +28,8 @@ Everything a host script does to its host goes through `h`, the context passed t
 ```ts
 interface Host {
   readonly name: string // the host script's name, e.g. "sonarr"
-  read(cmd: string, options?: CommandOptions): Promise<string>
-  inspect(cmd: string, options?: CommandOptions): Promise<InspectResult>
+  read(cmd: string, options?: StepEnv & ToolOptions): Promise<string>
+  inspect(cmd: string, options?: StepEnv & ToolOptions): Promise<InspectResult>
   file(path: string, content: string | Uint8Array | Blob, options?: FileOptions): Promise<ChangeStepResult>
   link(path: string, target: string, options?: LinkOptions): Promise<ChangeStepResult>
   ensure<T extends string | boolean>(name: string, options: EnsureOptions<T>): Promise<ChangeStepResult>
@@ -48,13 +48,19 @@ type ReadTools = { read: Exec; inspect: Inspect }
 type ChangeTools = { exec: Exec; inspect: Inspect }
 
 // Runs one command and returns its stdout. A check gets it as `read`, and a fix or run function as `exec`.
-type Exec = (cmd: string, options?: CommandOptions) => Promise<string>
+type Exec = (cmd: string, options?: ToolOptions) => Promise<string>
 
 // Runs one command and returns its output and exit code, without failing on a non-zero exit.
-type Inspect = (cmd: string, options?: CommandOptions) => Promise<InspectResult>
+type Inspect = (cmd: string, options?: ToolOptions) => Promise<InspectResult>
 
-type CommandOptions = {
-  secret?: boolean // keep the command and its output out of the output and errors
+type ToolOptions = {
+  maskOutput?: boolean // mask the output like a secret, here and in every later command on the host
+}
+
+// Variables every command in the step references as "$NAME", including its functions' tool calls.
+type StepEnv = {
+  env?: Record<string, string>
+  secretEnv?: Record<string, string> // shown as [MASKED] wherever they'd show, from then on
 }
 
 type InspectResult = {
@@ -112,7 +118,7 @@ if (docker.exitCode !== 0) await h.run("Install docker", installDocker, { after:
 ```
 
 It mostly works. `plan` runs the inspect and shows the run when docker is missing. What it loses is the check after the
-fix, the drift exit code, and the step's line in verbose output when docker is already there. Nothing looks broken,
+fix, the drift exit code, and the step's status line in verbose output when docker is already there. Nothing looks broken,
 which is why the table matters. The same step as an `ensure`:
 
 ```ts
@@ -138,9 +144,61 @@ tsinfra records every command's output under its step, and the report shows none
 command only hides it from `-vvv` and from a failure's error, which is when you'd want it. Keep a quiet flag only where
 it changes the output a script uses, like `docker compose ps -q` printing only container IDs.
 
-`read`, `inspect`, and `exec` are the tools. Each runs one command and takes `CommandOptions`. `read` and `exec` return
+`read`, `inspect`, and `exec` are the tools. Each runs one command and takes `ToolOptions`. `read` and `exec` return
 stdout and fail on a non-zero exit. `inspect` never fails on a non-zero exit, for a command whose exit code or stderr is
 the answer.
+
+**Values go into a command as environment variables,** not into its text. A step takes `env` and `secretEnv`, and its
+commands reference them the way shell scripts do, as `"$NAME"`:
+
+```ts
+await h.read('curl -fsSL -H "Authorization: Bearer $TOKEN" "$URL"', {
+  secretEnv: { TOKEN: token },
+  env: { URL: url },
+})
+```
+
+tsinfra sets the variables just before the command runs, so the shell expands them wherever they appear, inside double
+quotes or not. tsinfra never quotes a value into a command, so any value works exactly as it is, with spaces, `$`, or
+`"` in it. Write `"$NAME"` in double quotes, as in any shell script, because a bare `$NAME` splits on spaces. This is
+GitHub's advice for secrets in Actions too, because putting values into a script's text invites injection and quoting
+bugs.
+
+The variables are exported, so a tool that reads its credentials from the environment gets them without the command
+naming them at all:
+
+```ts
+await h.read("gh api user", { secretEnv: { GH_TOKEN: token } })
+```
+
+A name must be a valid shell name, made of letters, digits, and underscores, and not starting with a digit. Any valid
+name works, `PATH` and `HOME` included. Values are literal, so a value can't expand another variable.
+`env: { PATH: "/opt/go/bin:$PATH" }` sets `PATH` to that exact text. Extend `PATH` in the command instead, where the
+shell expands it:
+
+```ts
+await h.read('PATH="/opt/go/bin:$PATH" go version')
+```
+
+`env` and `secretEnv` belong to the step, so they reach every command it runs: a string `check` or `fix`, a run's
+command, and every tool call inside a check, fix, or run function. The tools don't take them. A value that only exists
+inside a function, like a container ID from one `exec`, goes into the next command's string, and quoting it is up to
+the script.
+
+**A value from outside your script goes in through `env`, never into the command string.** That means a host's own
+output, like file names from `ls`, and anything fetched, like a version tag or a URL. A command string is code, and
+tsinfra runs it as written, so a value put into it is read as code too. A space or a newline in it breaks the command,
+and a `;` or `$(...)` runs part of it. The same goes for one host's output used in a command on another host. Through
+`env`, the shell only ever reads it as a value.
+
+**`secretEnv` keeps a secret out of everything tsinfra shows or keeps.** The command's text never holds it. Its value
+shows as `[MASKED]` in the record's variables, and in the output and errors of that step's commands and of every later
+command on the host. Masking replaces every match of the value, so a very short secret masks a lot. That's noisy, but
+never leaks.
+
+**`maskOutput: true` masks a command's output,** for a secret read from the host, like `cat /etc/app/token`. It's an
+option on the tools and on `h.read` and `h.inspect`. The output joins the host's secrets, so later commands mask it too,
+including in a command's text, if a function puts it there.
 
 Every output a script gets back is trimmed of leading and trailing whitespace, because that is what a script usually
 compares to. That covers `read`, `exec`, and both streams from `inspect`, on `h` and as tools. tsinfra's own comparison
@@ -210,8 +268,8 @@ A non-zero exit fails the host, with the command's stderr. When the exit code or
 [`inspect`](#inspect). A `read` must not change what the script manages, because it also runs during `plan` (see
 [what a check may change](#what-a-check-may-change)). Nothing can enforce that.
 
-`secret: true` keeps the command out of errors and output, for a command that carries a token. The output itself is
-only ever returned to the script.
+A read that needs a secret takes it through `secretEnv`, and a read whose output is a secret takes `maskOutput: true`
+(see [Commands](#commands)). The script always gets the real output.
 
 ## `inspect`
 
@@ -376,7 +434,7 @@ fi
 
 ### The diff
 
-When the hashes differ, a second command fetches the old content with `cat`, so the step's line can show a diff (see
+When the hashes differ, a second command fetches the old content with `cat`, so the report can show a diff under the step (see
 [CLI](./cli.md#how-the-report-is-built)). It skips that fetch, and shows a `content:` line instead, in these cases:
 
 | Case                                                | Line                                           |
@@ -568,7 +626,8 @@ type EnsureOptions<T extends string | boolean> = {
   want: T
   fix: string | ((tools: ChangeTools) => Promise<void>)
   verify?: boolean // default true
-  secret?: boolean // hide the diff
+  env?: Record<string, string> // see StepEnv
+  secretEnv?: Record<string, string>
   needs?: ChangeStepResult<"file" | "link" | "ensure">[] // earlier steps this step's check depends on
 }
 ```
@@ -588,9 +647,9 @@ await h.ensure("Remove the old user", { check: "id olduser", want: false, fix: "
 
 **A string `want`** is compared to the command's stdout. `want` is computed in your script on the control machine.
 Trailing newlines are stripped from both (the way `$(cmd)` does), then the two are compared exactly. Stripping `want`
-too means a value built from a template literal that ends in a newline still matches. When they differ, the step's line
-in `plan` and `apply` shows how: a `got:` and a `want:` line for a single-line value, or a line diff for a multi-line
-one.
+too means a value built from a template literal that ends in a newline still matches. When they differ, the report shows
+how under the step's status line, in `plan` and `apply`: a `got:` and a `want:` line for a single-line value, or a
+line diff for a multi-line one.
 
 ```ts
 await h.ensure("Start Sonarr", {
@@ -610,6 +669,21 @@ already produces output that differs from `want`, so this only catches the broke
 There is no number form for a specific exit code. `want: 0` would mean the same as `want: true`, and the cases that
 need a specific code, like `systemctl is-active`, read better as output. It can be added later without breaking
 anything.
+
+**A secret is checked on the host,** with an exit-code check and the secret in `secretEnv`, so no secret value is
+compared in TypeScript or shown as `got:` and `want:`:
+
+```ts
+await h.ensure("Set the API token", {
+  check: 'grep -qxF "$TOKEN" ~/.config/app/token',
+  want: true,
+  fix: 'printf "%s\\n" "$TOKEN" > ~/.config/app/token',
+  secretEnv: { TOKEN: token },
+})
+```
+
+A string `want` that matches a known secret is still masked in the record, by value, but the exit-code check never puts
+it there.
 
 **A check function** works out the answer in TypeScript, for state that is awkward to test in shell. It calls the
 `read` and `inspect` it is given, and returns the value compared to `want`: a boolean for a boolean `want`, and a
@@ -802,13 +876,13 @@ run's check confirms it. Before reaching for it, try these:
 ## `run`
 
 ```ts
-type RunOptions = CommandOptions & {
+type RunOptions = StepEnv & {
   after: ChangeStepResult<"file" | "link" | "ensure" | "run" | "reboot">[] | "always" // run when any of these changed, or "always" on every pass
 }
 ```
 
-A step with no check: one command, or a function given `exec` for one action that takes several commands. `secret`
-applies to a string command, and a function passes it to each `exec`. Write `sudo` inside the command where it's needed.
+A step with no check: one command, or a function given `exec` for one action that takes several commands. `env` and
+`secretEnv` reach the command, or each `exec` in the function. Write `sudo` inside the command where it's needed.
 
 A run is for work that something in this run triggers, not the host's state. There are two kinds, and both go in
 `after`, which is required, so a forgotten trigger is a type error:

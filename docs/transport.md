@@ -47,6 +47,25 @@ The script is wrapped as `{ <script>\n} </dev/null`. The shell parses the whole 
 with stdin from `/dev/null`. Without that wrapper, a command in the script that reads stdin (`apt` asking a question, a
 nested `ssh`) would read the rest of the script as its input.
 
+A step given `env` or `secretEnv` (see [Steps](./steps.md#commands)) gets a prelude before each command it runs, which
+exports each variable with its value single-quoted:
+
+```sh
+export TOKEN='s3cr'\''et'
+export URL='https://example.com'
+```
+
+- **The value travels on stdin,** inside the script, like the sudo password, so it's never on a command line.
+- **Each step gets its own transport,** built once when the step starts from its `sudo`, `env`, and `secretEnv`. It
+  adds the prelude to each command, then, for `sudo: true`, wraps the prelude with the command in the nested
+  `sudo sh -s`. So the variables are set inside the root shell, and sudo's reset of the environment doesn't drop them.
+- **The recorder sees each command before the step's transport changes it,** so the record holds the command as the
+  script wrote it, without the prelude or `sudo sh -s`. The step's record keeps its options, with each secret as
+  `[MASKED]` (see [What a host records](./cli.md#what-a-host-records)).
+- **A tool call inside the step's functions gets the same prelude.** The tools get a shell built for each step from
+  the same options, with `sudo` off, because no tool runs as root.
+- **Preparation's commands get no prelude,** because only steps take `env`.
+
 Output comes back as stdout, stderr, and an exit code. `ssh` itself exits 255 when the connection fails, so a 255
 always gets the connection error from ssh's stderr rather than being treated as the command's exit code (see
 [SSH and ControlMaster](#ssh-and-controlmaster)).

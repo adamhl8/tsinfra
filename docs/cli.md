@@ -87,8 +87,9 @@ levels only change what's printed:
 
 - **`-v`** (`--verbose`) adds the rest of the steps: steps that were already right as `=` lines, and each read or
   inspect as a `·` line named by its command. It also shows every diff in full, and a failed fix's values from before
-  the fix. A step given `sudo: true` gets `sudo` in its step note, because the option ran every command in the step as
-  root. A `sudo` the script writes inside a command needs no note, because it shows in the command at `-vv`.
+  the fix. A step given `sudo: true` gets a dim `[sudo]` in its own column after its name, because the option ran every
+  command in the step as root. A `sudo` the script writes inside a command needs no `[sudo]`, because it shows in the
+  command at `-vv`.
 - **`-vv`** also lists each command a step ran, dimmed, under the step's details, like `$ systemctl is-active sonarr`,
   in the order they ran. A read or inspect lists none, because its name is its command. A command tsinfra writes itself
   shows as its label, like `$ (file details script)`, because its text is tsinfra's code, not the script's. The `file`
@@ -105,9 +106,12 @@ levels only change what's printed:
   compares the host's state, each command starts with its phase, `before`, `fix`, or `after`, because the same check
   runs before and after the fix, and its output can differ. tsinfra's own commands keep their label, so their text
   never shows. It's in the source, and in the [diagnostic logs](#diagnostic-logs).
-- **Secrets never show.** A `secret` command keeps its text and output out of the record, and `shell.inspect` records
-  every command, so it's the one place to enforce that. The sudo preamble is added below the recorder, so it's never
-  recorded at all.
+- **Secrets never show.** A secret reaches a command through the step's `secretEnv`, so the command's text never holds
+  it, and `-vv` shows `"$TOKEN"` where it's used. The step's record keeps its variables, with each secret as
+  `[MASKED]`, and the output and errors of that command and of every later command on the host are masked the same
+  way. `maskOutput` masks a command's own output, for a secret read from the host (see [Steps](./steps.md#commands)).
+  Every command is recorded, so the record is the one place to enforce that. The sudo preamble and the variables wrap
+  each command after the recorder has seen it, so neither is recorded as part of the command.
 - **A failure doesn't need them.** A failed step's error already names the command that failed and its stderr.
 
 The same host at each level, in `apply`, with a `sudo: true` file that changes, and the run it triggers:
@@ -121,7 +125,7 @@ sonarr                                                    # default
 sonarr                                                    # -v
   · observed:  (read)   uname -m
   = unchanged: (ensure) Install sonarr
-  ~ change:    (file)   /etc/systemd/system/sonarr.service   sudo
+  ~ change:    (file)   /etc/systemd/system/sonarr.service   [sudo]
       <diff>
   > triggered: (run)    Reload systemd
 
@@ -129,7 +133,7 @@ sonarr                                                    # -vv
   · observed:  (read)   uname -m
   = unchanged: (ensure) Install sonarr
       $ command -v sonarr
-  ~ change:    (file)   /etc/systemd/system/sonarr.service   sudo
+  ~ change:    (file)   /etc/systemd/system/sonarr.service   [sudo]
       <diff>
       $ (file details script)
       $ (file content)
@@ -146,7 +150,7 @@ sonarr                                                    # -vvv
       before $ command -v sonarr
                exit:   0
                stdout: /usr/bin/sonarr
-  ~ change:    (file)   /etc/systemd/system/sonarr.service   sudo
+  ~ change:    (file)   /etc/systemd/system/sonarr.service   [sudo]
       <diff>
       before $ (file details script)
                exit:   0
@@ -199,7 +203,9 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   `FORCE_COLOR`, and `--no-color`, and prints plain text when stdout is not a terminal. `util.styleText` from `node:util`
   does the same, but its behavior depends on each runtime's `node:util`, and picocolors' rules are its own. Tests set
   `NO_COLOR` in the test preload, before anything imports picocolors.
-- **Step lines.** A line starts with the step's status, as a symbol and a word in the status's color, then an uncolored colon, like `~ change:`.
+- **Status lines.** A host's block is its name, then its entries, or "no steps" for a script that made none. Each entry
+  is a status line, with its details and any error on the lines under it. A status line starts with the entry's status,
+  as a symbol and a word in the status's color, then an uncolored colon, like `~ change:`.
   Then comes the step's kind in dim parentheses, like `(file)`, and then its name. The status and the kind are each
   padded to the widest in the block, so every kind and every name starts in one column. The parentheses keep the kind
   apart from the name without color. A failure no step owns shows `(preparation)` or `(host fn)` in place of a kind,
@@ -236,18 +242,20 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   multi-line value's later lines line up under its first line's text. The labels, like `got:`, are dim, so the values
   stand out.
 - **Colors** follow the status: a summary's change count matches `~` and `>`, and its waiting count matches `?`. The
-  plan reminder is dim, so the host lines stay the main thing in the summary. In a block, the step notes line up in one
-  column. A waiting step's note is `needs 'A', 'B'`, and with `-v` a `sudo: true` step's note starts with `sudo`, like
-  `sudo, needs 'Install sonarr'`. A failed `sudo: true` step keeps its note on its line, above its error. A failure no
-  step owns never gets one.
+  plan reminder is dim, so the host lines stay the main thing in the summary. In a block, the notes line up in one
+  column. A waiting step's note is `needs 'A', 'B'`. With `-v`, a `sudo: true` step gets a dim `[sudo]` in its own
+  column after its name and before any note, like `[sudo]   needs 'Install sonarr'`. The square brackets keep it apart
+  from the note even without color, because it's an option the script gave the step, not something tsinfra found.
+  Several options would share one pair of brackets. A failed `sudo: true` step keeps `[sudo]` on its line, above its
+  error. A failure no step owns never gets an option or a note.
 - **Warnings.** A step that worked but needs a look, like a link to a missing path, gets a `warning:` line under its
   details, with the label in bright yellow, so it stands apart from the plain yellow of a change. A warning makes its
   step show even when it was already right, without `--verbose`. The report decides what's a warning from the facts
   in the record, so no step records words. A failed step gets none, because its error is what needs fixing first. A
   warning isn't drift, so it doesn't change the exit code.
-- **Levels.** Every piece of a block has the lowest level it shows at: a step's own line, each part of its step note,
-  and each detail under it. A piece's level comes from what it is, like 1 for the line of a step that was already
-  right, 1 for a `sudo` note, and 0 for a warning. A piece shows once its own level is reached, or when anything inside
+- **Levels.** Every piece of a block has the lowest level it shows at: a step's own line, each of its options, each
+  part of its note, and each detail under it. A piece's level comes from what it is, like 1 for the line of a step that
+  was already right, 1 for the `[sudo]` option, and 0 for a warning. A piece shows once its own level is reached, or when anything inside
   it shows, and a step that shows always prints its own line. So a warning, at 0, shows its step at the default level,
   even when the step was already right. The report builds every piece for every step, then keeps the ones the level
   shows, before it lines up the columns, so a hidden piece never widens one. A diff is the exception. It's one piece
@@ -318,8 +326,13 @@ in the order the script called them, and the host's failure, if it failed.
   failed: in preparation, in a step, or in the host function outside any step. A host whose preparation failed has no
   steps.
 - **A step** records its kind (`read`, `inspect`, `ensure`, `run`, `file`, or `link`), its name, and its status. A read
-  or inspect has no name, so it records its command. A step given `sudo: true` records that, because its commands are
-  recorded without the `sudo sh -s` around them.
+  or inspect has no name, so it records its command. A step records its options, the ones that change how every
+  command in it runs: `sudo`, `env`, and `secretEnv`, with each secret value as `[MASKED]`. Its commands are recorded
+  as the script wrote them, without the `sudo sh -s` around them or the prelude that sets the variables, so the options
+  are what say those were there. Every command in the step runs with the same options, so the step holds them once.
+  The step that's running is kept apart on the host's
+  record until it ends, so the record always says which step is running. A step that finishes joins the host's steps,
+  in the order the script called them, with its status.
 - **A step's commands** are every command that ran while it was running, including those from reading its state and from its fix
   functions. A read or inspect has exactly one.
 - **A command** records the command, its stdout and stderr, and its exit code. A command that could not run at all
@@ -336,11 +349,11 @@ failure keeps what the step found before it.
 
 A step's status is `unchanged`, `changed`, `ran`, `waiting`, or `observed`. `changed` means the host's state differed.
 `ran` means a run's trigger fired, or its `after` was `"always"`. `waiting` means a step it needs would change. A read
-or inspect is always `observed`. The record is the same in `plan` and `apply`, and so is each step's line. A changed
+or inspect is always `observed`. The record is the same in `plan` and `apply`, and so is each step's status line. A changed
 step's details come from its `before` comparison, so `apply` can show what a step changed too.
 
-A failed step has no status. The host's failure holds its error and the step it belongs to, and the report shows it
-after the other steps. That includes a failure the script caught inside the step. Steps called after the host failed
+A failed step has no status. Its record never joins the host's steps. The host's failure holds it, with its error, so
+the fact that it failed lives in one place, and the report shows it after the other steps. That includes a failure the script caught inside the step. Steps called after the host failed
 throw without running, so they are not recorded, and the step that failed is always the last one. A failure that is
 not a step's, like a bug in the script, is a host function failure.
 
@@ -357,7 +370,7 @@ A failure is one of four kinds, named after what it stops.
 - **A host function failure** is anything thrown during the host function that no step owns, like a bug in the script.
   It's the block's last line, `(host fn)` and the host's target, like `(host fn) web.lan`, with a note that it was
   thrown in the host function.
-- **A step failure** belongs to the step that was running, and shows on that step's line. That includes a failure the
+- **A step failure** belongs to the step that was running, and shows on that step's status line. That includes a failure the
   script caught inside the step.
 
 Every kind but a startup failure fails only its own host, so the other hosts still run, and the run exits 1.

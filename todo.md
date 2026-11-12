@@ -5,73 +5,92 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
 
 ## Next
 
-1. **Verbosity levels.** In four pieces, each reviewed before the next (the design is in [CLI](./docs/cli.md#output)).
-   Each piece gets its own plan in `docs/superpowers/plans/`, written when it starts, and each step in it is reviewed
-   on its own. Every step ends with `tsc` and `bask lint` passing, and a step that changes what's recorded also runs
-   `bask test-docker`. Each piece adds a preview pass for its level, to check the output by eye:
-   1. **The levels and `-v`.** `-v` counted with Optique's `.multiple()`, which already parses `-vvv`, `-v -v`, and
-      `--verbose -vv`, capped at 3, and a `verbosity` level in `ReportOptions`. A host with no steps gets its "no steps"
-      block by default. The builders give every piece of a block the level it shows from, and one `keepShown` filter in
-      `renderHostBlock` prunes them before any column is sized. A `sudo` boolean on `StepRecord`, because `sudo: true`
-      is a step option, and every command in the step runs as root. The session recorder's `getShell` splits in two:
-      `getStepShell({ sudo })` records `sudo` on the running step and returns its shell, and `getToolShell()` gives
-      the tools theirs, which never use sudo. `-v` shows it as a dim `[sudo]` in an options column after the name,
-      before the note. Its
-      steps are in `docs/superpowers/plans/2026-11-11-verbosity-piece-1.md`:
-      1. **Count `-v` (built).**
-      2. **"no steps" by default (built).**
-      3. **The block's structure (built), step 3a.** The `HostBlock` types, build, style, and layout, and a report that
-         only renders, with the summary and the exit code read from the blocks.
-      4. **The running step on the host record (built), step 3d.** `stepRecords` holds only finished steps, and a step
-         that fails is the failure's.
-      5. **The diff's limits (built), step 3b.**
-      6. **Levels and the filter (built), step 3c.**
-      7. **`StepRecord.sudo` and the two shells (built), step 4.**
-      8. **The `[sudo]` option (built), step 5.** Its own column after the name, before the note.
-      9. **A docs check, step 6.**
-   2. **`secret` on commands.** The `secret` option [Steps](./docs/steps.md#commands) gives `read`, `exec`, `inspect`,
-      `ensure`, and `run` isn't built, and `-vv` prints the text of every command that ran, so it comes first. `file`'s
-      own `secret` is a different option, which never fetches the old content. Settle the design in a rundown before
-      its plan. The leanings so far:
-      - **The record** holds `<secret command>` in place of the command, like the `<sudo password>` stand-in, and
-        drops stdout and stderr. It keeps the exit code, which gives nothing away, so `-vvv` can still show it.
-      - **Errors** leave out the command and its stderr, like `failed to read <secret command> -> exited with code 1`,
-        because the docs promise to keep a secret out of errors, not only out of the report.
-      - **A secret `h.read` or `h.inspect`** takes the stand-in as its step name, because its name is its command.
+1. **Verbosity levels.** The levels, `-v`, and the `[sudo]` option are done. The rest comes in three pieces, each
+   reviewed before the next (the design is in [CLI](./docs/cli.md#output)). Each piece gets its own plan in
+   `docs/superpowers/plans/`, written when it starts, and each step in it is reviewed on its own. Every step ends with
+   `tsc` and `bask lint` passing, and a step that changes what's recorded also runs `bask test-docker`. Each piece
+   checks its level by eye with the preview's `-v` flags, like `bun report-preview.ts -vv`:
+   1. **Values and secrets in commands.** It comes first, because `-vv` prints the text of every command that ran, so
+      a secret has to stay out of it before then. Decided on 2026-11-11, and written into
+      [Steps](./docs/steps.md#commands):
+      - **Values go in as environment variables,** not into the command's text. A step takes `env` and `secretEnv`,
+        and its commands reference them the way shell scripts do, like `curl -H "Authorization: Bearer $TOKEN" "$URL"`.
+        The shell expands them wherever they appear, so tsinfra never quotes a value into a command, and any value
+        works byte for byte, `$` and `"` included. It's GitHub's own guidance for secrets in Actions, because putting
+        values into a script's text invites injection and quoting bugs. It also answers the open question about quoting
+        values in commands.
+      - **`env` and `secretEnv` are step options,** on `h.read`, `h.inspect`, `ensure`, and `run`. They apply to every
+        command the step runs: a string command, and every tool call inside a check, fix, or run function. So the tools
+        never take `env`. A value that only exists inside a function, like a container ID from one `exec`, goes into
+        the next command's string as today, and quoting it is the script's job. A tool-level `env` can come later if a
+        port needs one.
+      - **`secretEnv`'s values are masked.** They show as `[MASKED]`, as GitLab CI does, wherever they'd show: in the
+        record's variables, and in the output and errors of that step's commands and every later command on the host.
+        The command text never holds them. Masking by value replaces every match, so a very short secret masks a lot,
+        which is noisy but safe. GitHub Actions documents the same. No import is needed, unlike a `secret()` marker.
+      - **`maskOutput: true`** masks a command's output, for a secret read from the host, like `cat /etc/app/token`.
+        It's an option on the tools and on `h.read` and `h.inspect`. The output joins the host's known secrets, so later
+        commands mask it too, including in a command's text if a function puts it there.
+      - **A secret check compares on the host,** as an exit-code check like `grep -qxF "$TOKEN" /etc/app/token` with
+        `want: true`, so no secret value is compared in TypeScript or shown as `got:` and `want:`. A string `want`
+        that matches a known secret is still masked in the record, by value.
+      - **The variables are exported in a prelude** before the command, added after the recorder has seen it, like the
+        sudo preamble. Exporting them means a tool that reads its credentials from the environment, like `gh` reading
+        `GH_TOKEN`, gets them without the command naming them. A `sudo` inside a command still sees them, because the
+        shell expands them before `sudo` runs, and a `sudo: true` step's prelude runs inside its root shell.
+      - **A name must be a valid shell name,** checked with a clear error, because an invalid one turns its line of the
+        prelude into a different command, like `MY-TOKEN='x'` running a command named `MY-TOKEN=x`. Any valid name is
+        allowed, `PATH` and `HOME` included.
+      - **Values are literal.** They're single-quoted in the prelude, which is what keeps `$` and `"` in a secret safe,
+        so a value can't expand another variable. `env: { PATH: "/opt/go/bin:$PATH" }` sets `PATH` to that exact text.
+        Extending `PATH` belongs in the command, like `PATH="/opt/go/bin:$PATH" go version`.
+      - **It replaces the `secret` option** the docs used to promise, which hid a whole command.
 
       The steps, as expected so far:
-      1. **The recorder.** A `secret` flag in the shell's `CommandOptions` records the stand-in and drops the output,
-         tested in `session-recorder.test.ts`.
-      2. **Errors.** A secret command's failure leaves out its text and its stderr.
-      3. **The tools and the read steps.** `secret` on `read`, `exec`, and `inspect` as tools, and on `h.read` and
-         `h.inspect`, with the stand-in as the step's name.
-      4. **`ensure` and `run`.** `secret` on a string `check`, `fix`, or run command.
-      5. **The report.** A secret command never gives a `stderr:` failure row and never counts toward a hint. Then a
-         docs check.
+      1. **The step transport** (built 2026-11-12). `createStepTransport(transport, options)` in `transport/step.ts` replaces
+         `createRootTransport`. It adds a prelude of exported, single-quoted variables to each command, then, for
+         `sudo: true`, wraps the prelude with the command in `sudo sh -s`, so the variables are set inside the root
+         shell. One `StepShellOptions` type (`sudo`, `env`, `secretEnv`, all required) runs from the recorder to the
+         record, and step 3's validated options become it too. `getStepShell` becomes `getStepShells(options)`, which
+         builds the step's shell and the tools' shell once per step, the tools' with `sudo: false`, each a recording
+         shell around a step transport, so the recorder sees each command before the step transport changes it. It
+         records the options on the running step as `options`, replacing `sudo`, with each secret value as
+         `[MASKED]`. `callStep` builds the read and change tools for each step from its tools' shell. Preparation's
+         commands get no prelude. The step options come in step 3, so
+         it's tested through `createStepTransport` and `getStepShells`. The record changes, so it runs the Docker
+         suite.
+      2. **Masking.** The host's known secrets, masked in each command's output and error, and in its text, with
+         `maskOutput` adding a command's output to them.
+      3. **The step options.** `env`, `secretEnv`, and `maskOutput` on `h.read` and `h.inspect`, `env` and `secretEnv`
+         on `ensure` and `run`, and `maskOutput` on the tools. The options schema checks that each name is a valid
+         shell name, and that no name is in both `env` and `secretEnv`, so a bad one fails under its step. Its
+         validated output is a `StepShellOptions`, with the defaults filled in. A Docker test checks a `sudo: true`
+         step's variables under real sudo.
+      4. **A docs check.**
 
-   3. **`-vv`.** Each step's commands under its details, tsinfra's own by their label, and the `file` write script's
+   2. **`-vv`.** Each step's commands under its details, tsinfra's own by their label, and the `file` write script's
       label followed by its `validate` command. A preparation failure lists preparation's commands by their labels.
       The steps:
       1. **Command parts.** Each command a step ran is a part from 2, shown dimmed as `$ cmd` under the details. One
          with a label shows as `$ (label)`, and a read or inspect lists none. A failed step's commands go under its
-         error with its other details. Add an `apply -vv` preview pass.
+         error with its other details. Check it with `bun report-preview.ts -vv`.
       2. **`validate`.** The write script records its `validate` command in a field next to `label`, passed through
          `exec`'s options, because a labelled command never shows its text. The report appends it, like
          `$ (file write script) validate: nginx -t ...`. Add it to
          [What a host records](./docs/cli.md#what-a-host-records).
       3. **Preparation's commands.** The `(preparation)` entry lists them as labelled command parts from 2.
       4. **A docs check,** and mark the piece built.
-   4. **`-vvv`.** `exit:`, `stdout:`, and `stderr:` rows under each command, each stream cut off after 20 lines, and
+   3. **`-vvv`.** `exit:`, `stdout:`, and `stderr:` rows under each command, each stream cut off after 20 lines, and
       the phase before each command in a step that compares. A failure's note already tells people to run with
       `-vvv`, so `-vvv` has to show the stderr that note promises, and the note itself goes away at `-vvv`. The steps:
       1. **Exit rows.** An `exit:` row from 3 under each command, even for 0, and the error in its place for a command
-         that couldn't run. A read or inspect shows its rows right under its head line.
+         that couldn't run. A read or inspect shows its rows right under its status line.
       2. **stdout and stderr rows,** each cut off after 20 lines, with a note saying how many were left out.
       3. **Phases.** In a step that compares, each command starts with its phase, like `before $ cmd`, and its rows
          line up past it, as in the docs' example. It's the hardest alignment in the feature, so it's a step of its
          own.
-      4. **`until`.** Parts get an `until` level, and the "run with -vvv" note uses it to go away at 3. Add an
-         `apply -vvv` preview pass.
+      4. **`until`.** Parts get an `until` level, and the "run with -vvv" note uses it to go away at 3. Check it with
+         `bun report-preview.ts -vvv`.
       5. **A docs check,** and mark this item built.
 
 ## Port

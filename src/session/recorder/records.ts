@@ -2,7 +2,7 @@ import type { Result } from "ts-explicit-errors"
 
 import type { Comparison } from "#session/handlers/handlers.ts"
 import type { StepKind, StepStatus } from "#session/step.ts"
-import type { CommandOutput } from "#transport/transport.ts"
+import type { CommandOutput, StepShellOptions } from "#transport/transport.ts"
 
 /** Returns a new, empty record for the host `name` on `target`, which preparation and the session both record on. */
 export const createHostRecord = (name: string, target: string): HostRecord => ({
@@ -56,8 +56,8 @@ export interface StepRecord {
   /** The name the script gave the step, or a read step's command. */
   name: string
   kind: StepKind
-  /** Whether `sudo: true` ran every command in the step as root. */
-  sudo: boolean
+  /** The options that change how every command in the step runs, with each `secretEnv` value as `[MASKED]`. */
+  options: StepShellOptions
   commands: CommandRecord[]
   comparisons: StepComparisons
   /** The names of the needed steps this step waited on. */

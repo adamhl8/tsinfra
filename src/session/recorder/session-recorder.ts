@@ -7,8 +7,8 @@ import { createRecordingTransport } from "#session/recorder/commands.ts"
 import { getFailureHints } from "#session/recorder/failure-hints.ts"
 import type { ConvergePhase, HostRecord, StepRecord } from "#session/recorder/records.ts"
 import type { StepKind, StepStatus } from "#session/step.ts"
-import type { Shell, Transport } from "#transport/transport.ts"
-import { createShell, createRootTransport } from "#transport/transport.ts"
+import type { Shell, StepShellOptions, Transport } from "#transport/transport.ts"
+import { createShell, createStepTransport } from "#transport/transport.ts"
 
 /** The phases of `converge` that compare the host with what the step wants. */
 export type ComparePhase = Exclude<ConvergePhase, "fix">
@@ -23,15 +23,27 @@ export interface ConvergeRecorder {
   recordWaitingOn: (stepNames: string[]) => void
 }
 
+/** A step's shells, which both record each command under the step. */
+interface StepShells {
+  /** Runs the step's own commands with its options. */
+  stepShell: Shell
+  /** Runs the tools' commands with the step's variables, and never as root, because no tool takes `sudo`. */
+  toolShell: Shell
+}
+
+const MASKED_VALUE = "[MASKED]"
+
+/** Returns `secretEnv` with each value as `MASKED_VALUE`, so the record never holds a secret. */
+const maskValues = (secretEnv: Record<string, string>): Record<string, string> =>
+  Object.fromEntries(Object.keys(secretEnv).map((name) => [name, MASKED_VALUE]))
+
 /** Records the session's part of a host's run, once preparation has finished: each step, and the host's failure. */
 export interface SessionRecorder {
   /**
-   * Records whether the running step runs as root, and returns its shell, which records each command under the step and
-   * runs it as root for `sudo: true`. Choosing both in one call keeps the record and the commands from disagreeing.
+   * Records the running step's options, and returns its shells, built once for the step. Recording and building in one
+   * call keeps the record and the commands from disagreeing.
    */
-  getStepShell: (options: { sudo: boolean }) => Shell
-  /** Returns the tools' shell, which records each command under the running step and never runs as root. */
-  getToolShell: () => Shell
+  getStepShells: (options: StepShellOptions) => StepShells
   /** Returns the error the host failed with, or nothing while it hasn't failed. */
   getFailure: () => Error | undefined
   /**
@@ -73,13 +85,16 @@ export const createSessionRecorder = (
     return createShell(recordingTransport)
   }
 
-  const getStepShell = ({ sudo }: { sudo: boolean }): Shell => {
-    if (hostRecord.runningStep) hostRecord.runningStep.sudo = sudo
-    // Record each command before the root transport wraps it in `sudo sh -s`, so the record holds the step's own script.
-    return createRecordingShell(sudo ? createRootTransport(transport) : transport)
-  }
+  const getStepShells = (options: StepShellOptions): StepShells => {
+    if (hostRecord.runningStep)
+      hostRecord.runningStep.options = { ...options, secretEnv: maskValues(options.secretEnv) }
 
-  const getToolShell = (): Shell => createRecordingShell(transport)
+    // Record each command before the step transport adds the prelude and wraps it in `sudo sh -s`.
+    // The record then holds the step's own script.
+    const stepShell = createRecordingShell(createStepTransport(transport, options))
+    const toolShell = createRecordingShell(createStepTransport(transport, { ...options, sudo: false }))
+    return { stepShell, toolShell }
+  }
 
   // Keep the first failure's error, because calls made at once with `Promise.all` can each fail.
   // Replace it only with an error that wraps it, which adds context such as the step's name.
@@ -116,8 +131,9 @@ export const createSessionRecorder = (
       return err(`'${kind}' can't run while ${runningKind} step '${name}' is running`, undefined)
     }
 
-    // Start with `sudo: false`, so a step that fails its option check before choosing a shell still reads false.
-    hostRecord.runningStep = { name: stepName, kind, sudo: false, commands: [], comparisons: {}, waitingOn: [] }
+    // Start with empty options, so a step that fails its option check before getting its shells still has them.
+    const options = { sudo: false, env: {}, secretEnv: {} }
+    hostRecord.runningStep = { name: stepName, kind, options, commands: [], comparisons: {}, waitingOn: [] }
   }
 
   /** Marks no step as running, and returns the record of the step that was. */
@@ -160,5 +176,5 @@ export const createSessionRecorder = (
 
   const getFailure = () => hostRecord.failure?.error
 
-  return { getStepShell, getToolShell, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder }
+  return { getStepShells, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder }
 }

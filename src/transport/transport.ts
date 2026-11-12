@@ -6,10 +6,11 @@ import { wrapCommand } from "#transport/utils.ts"
 
 export type { RecordingTransport, Shell } from "#transport/shell.ts"
 export { createShell } from "#transport/shell.ts"
+export type { StepShellOptions } from "#transport/step.ts"
+export { createStepTransport } from "#transport/step.ts"
 export {
   createAskpassSudoTransport,
   createPasswordlessSudoTransport,
-  createRootTransport,
   WRITE_ASKPASS_HELPER_SCRIPT,
 } from "#transport/sudo.ts"
 

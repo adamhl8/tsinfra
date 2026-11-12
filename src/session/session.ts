@@ -34,6 +34,7 @@ import {
 import type { SessionRecorder } from "#session/recorder/recorder.ts"
 import type { HandlerReturn, StepContext, StepKind } from "#session/step.ts"
 import { nonEmptyStringSchema } from "#session/step.ts"
+import type { Shell } from "#transport/transport.ts"
 
 export type {
   AttributeChange,
@@ -172,7 +173,7 @@ const STEP_NAME_LABELS: Record<StepKind, string> = {
  */
 export const createHostSession = (sessionContext: SessionContext, mode: Mode): Host => {
   const { name, home, sessionRecorder } = sessionContext
-  const { getStepShell, getToolShell, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder } =
+  const { getStepShells, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder } =
     sessionRecorder
 
   // oxlint-disable-next-line promise/prefer-await-to-callbacks - `callback` is awaited, and the rule only matches its name
@@ -191,15 +192,18 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
     return value
   }
 
-  // Leave the tools on a shell without sudo, because no tool takes a `sudo` option.
-  const toolShell = getToolShell()
-
-  const readTool: Exec = async (cmd) => callOrFail(async () => execCommand({ toolName: "read", shell: toolShell }, cmd))
-  const inspectTool: Inspect = async (cmd) =>
-    callOrFail(async () => inspectCommand({ toolName: "inspect", shell: toolShell }, cmd))
-  const execTool: Exec = async (cmd) => callOrFail(async () => execCommand({ toolName: "exec", shell: toolShell }, cmd))
-  const readTools: ReadTools = { read: readTool, inspect: inspectTool }
-  const changeTools: ChangeTools = { exec: execTool, inspect: inspectTool }
+  /** Returns the tools a step's functions are given, running their commands on the step's `toolShell`. */
+  const createTools = (toolShell: Shell) => {
+    const readTool: Exec = async (cmd) =>
+      callOrFail(async () => execCommand({ toolName: "read", shell: toolShell }, cmd))
+    const inspectTool: Inspect = async (cmd) =>
+      callOrFail(async () => inspectCommand({ toolName: "inspect", shell: toolShell }, cmd))
+    const execTool: Exec = async (cmd) =>
+      callOrFail(async () => execCommand({ toolName: "exec", shell: toolShell }, cmd))
+    const readTools: ReadTools = { read: readTool, inspect: inspectTool }
+    const changeTools: ChangeTools = { exec: execTool, inspect: inspectTool }
+    return { readTools, changeTools }
+  }
 
   // Record what `converge` finds as it goes, so a failure can't lose it and a handler never records anything itself.
   const converge = createConverge(mode, convergeRecorder)
@@ -228,13 +232,14 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
         return validOptions
       }
 
-      const shell = getStepShell({ sudo: validOptions.sudo })
+      const { stepShell, toolShell } = getStepShells({ sudo: validOptions.sudo, env: {}, secretEnv: {} })
+      const { readTools, changeTools } = createTools(toolShell)
 
       const ctx: StepContext<K> = {
         stepName: validName,
         kind,
         mode,
-        shell,
+        shell: stepShell,
         home,
         readTools,
         changeTools,
