@@ -8,6 +8,7 @@ export type {
   RecordedStepFailure,
   RecordedUnownedFailure,
   FinishedStepRecord,
+  StepOptionsRecord,
   StepRecord,
 } from "#session/recorder/records.ts"
 export { MASKED_VALUE } from "#session/recorder/masking.ts"

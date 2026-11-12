@@ -9,6 +9,7 @@ import type {
   ChangeTools,
   ReadTools,
 } from "#session/handlers/handlers.ts"
+import type { StepOptionsRecord } from "#session/recorder/recorder.ts"
 import type { Shell } from "#transport/transport.ts"
 
 // Refuse an empty name, path, or command.
@@ -42,6 +43,11 @@ export interface StepContext<K extends StepKind = StepKind> {
   /** Given to a fix or run function. */
   changeTools: ChangeTools
   converge: Converge
+  /**
+   * Records the options the step was given that the report shows, like `validate`'s command. The recorder leaves out
+   * each one at its default. Call it right after validating them, so a failure can't lose them.
+   */
+  recordOptions: (options: StepOptionsRecord) => void
 }
 
 /** What a step's handler gives: the status to record, and the value to give the script. */

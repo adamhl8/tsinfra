@@ -1210,6 +1210,64 @@ describe("renderHostBlock for a step's options", () => {
     }
   })
 
+  it("should name a step's own options with -v, and show their values with -vv, in plan too", async () => {
+    const { newPath } = await createSudoPaths()
+    const hostSession = await createSession("plan")
+    await hostSession.host.file(newPath, "a\n", { validate: (tmp) => `test -s ${tmp}`, secret: true, overwrite: false })
+
+    expect(renderRecord(hostSession.hostRecord, 1)?.split("\n").slice(2, 3)).toStrictEqual([
+      "      options: validate, secret, overwrite",
+    ])
+    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(2, 6)).toStrictEqual([
+      "      options:",
+      `        validate:  'test -s "$tmppath"'`,
+      "        secret:    true",
+      "        overwrite: false",
+    ])
+  })
+
+  it("should show the shell options before a step's own", async () => {
+    const { newPath } = await createSudoPaths()
+    const { hostSession } = await createFakeSudoSession("plan")
+    await hostSession.host.file(newPath, "a\n", { sudo: true, overwrite: false })
+
+    expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")[2]).toBe("      options: sudo, overwrite")
+  })
+
+  it("should show link's force and ensure's verify when they're set", async () => {
+    const directory = await makeTempDir()
+    const linkPath = path.join(directory, "link")
+    const hostSession = await createSession("plan")
+    await hostSession.host.link(linkPath, directory, { force: true })
+    await hostSession.host.ensure("Reboot", { check: "true", want: true, fix: "true", verify: false })
+
+    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")).toStrictEqual([
+      "a",
+      `  ~ change:    (link)   ${linkPath}`,
+      "      options:",
+      "        force: true",
+      `      target: new link to ${directory}`,
+      "      commands:",
+      "        $ <link details script>",
+      "  = unchanged: (ensure) Reboot",
+      "      options:",
+      "        verify: false",
+      "      commands:",
+      "        $ true",
+    ])
+  })
+
+  it("should show a failed validate's command in the options under the error", async () => {
+    const { newPath } = await createSudoPaths()
+    const hostSession = await createSession("apply")
+    await attempt(async () => hostSession.host.file(newPath, "a\n", { validate: (tmp) => `false ${tmp}` }))
+
+    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(3, 5)).toStrictEqual([
+      "        options:",
+      `          validate: 'false "$tmppath"'`,
+    ])
+  })
+
   it("should leave out options the step didn't set", async () => {
     const { newPath } = await createSudoPaths()
     const hostSession = await createSession("plan")

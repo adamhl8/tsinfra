@@ -95,6 +95,7 @@ export type {
   RecordedStepFailure,
   RecordedUnownedFailure,
   FinishedStepRecord,
+  StepOptionsRecord,
   StepRecord,
 } from "#session/recorder/recorder.ts"
 export {
@@ -185,7 +186,7 @@ const STEP_NAME_LABELS: Record<StepKind, string> = {
  */
 export const createHostSession = (sessionContext: SessionContext, mode: Mode): Host => {
   const { name, home, sessionRecorder } = sessionContext
-  const { getStepShells, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder } =
+  const { getStepShells, recordOptions, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder } =
     sessionRecorder
 
   // oxlint-disable-next-line promise/prefer-await-to-callbacks - `callback` is awaited, and the rule only matches its name
@@ -256,6 +257,7 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
         readTools,
         changeTools,
         converge,
+        recordOptions,
       }
 
       const handlerReturn = await handler(ctx)

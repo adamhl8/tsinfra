@@ -60,7 +60,7 @@ export URL='https://example.com'
   adds the prelude to each command, then, for `sudo: true`, wraps the prelude with the command in the nested
   `sudo sh -s`. So the variables are set inside the root shell, and sudo's reset of the environment doesn't drop them.
 - **The recorder sees each command before the step's transport changes it,** so the record holds the command as the
-  script wrote it, without the prelude or `sudo sh -s`. The step's record keeps its shell options, with each secret as
+  script wrote it, without the prelude or `sudo sh -s`. The step's record keeps the options it set, with each secret as
   `[MASKED]` (see [What a host records](./cli.md#what-a-host-records)).
 - **A tool call inside the step's functions gets the same prelude.** The tools get a shell built for each step from
   the same options, with `sudo` off, because no tool runs as root.

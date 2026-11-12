@@ -98,10 +98,9 @@ levels only change what's printed:
   is its command. A command tsinfra writes itself shows as its label in angle brackets, like
   `$ <file details script>`, because its text is tsinfra's code, not the script's. Angle brackets mark text that isn't
   shown, as the record's `<content as base64>` does. A command's later lines line up under its first line's text. On a
-  failed step, the commands come after what it found and before any hint. The `file` write script's label is followed
-  by the script's `validate` command, like `$ <file write script> validate: nginx -t -c "$tmp"`, because that command
-  is the script's own. `plan` never runs the
-  write script, so the `validate` command only shows in `apply`. A step's commands never show the `sudo sh -s` that
+  failed step, the commands come after what it found and before any hint. A `file` step's `validate` command shows in
+  its options, not after the write script's label, so it shows in `plan` too. A step's commands never show the
+  `sudo sh -s` that
   `sudo: true` wraps them in. A preparation failure lists the commands preparation ran, by their labels, like
   `$ <home directory>`, so it shows how far preparation got. A host that was prepared lists none, because the same
   commands would repeat in every block.
@@ -266,11 +265,12 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   value the script gave. On the line, an object's variable names go in braces after its name, like `env { URL, PORT }`,
   with the braces dim. A colon there would nest under `options:`, and the braces keep one object's names apart from the
   next. It's the first of a step's details, and on a failed step it comes after the error, like its other details.
-  Only options the step set show, so `sudo: false` and an empty `env` never do. Only options whose
-  effect shows nowhere else in the report show: `sudo`, `env`, and `secretEnv`. `want`, `content`, `mode`, `user`,
-  `group`, `needs`, and `after` already show as values, diffs, attribute rows, notes, or a status, and `check`, `fix`,
-  and `validate` show as commands. Candidates for later are `file`'s `secret` and `overwrite: false`, `link`'s
-  `force`, and `ensure`'s `verify: false`, because a step that used one can look the same as one that didn't.
+  Only options the step set show, so `sudo: false` and an empty `env` never do. Only options whose effect shows
+  nowhere else in the report show: `sudo`, `env`, and `secretEnv`, `file`'s `validate`, as the command it built,
+  `secret`, and `overwrite: false`, `link`'s `force`, and `ensure`'s `verify: false`. A step that used one of those can
+  look the same as one that didn't. `want`, `content`, `mode`, `user`, `group`, `needs`, and `after` already show as
+  values, diffs, attribute rows, notes, or a status, and `check` and `fix` show as commands. The shell options come
+  first, then the step's own, in the order they were recorded.
 - **Warnings.** A step that worked but needs a look, like a link to a missing path, gets a `warning:` line under its
   details, with the label in bright yellow, so it stands apart from the plain yellow of a change. A warning makes its
   step show even when it was already right, without `--verbose`. The report decides what's a warning from the facts
@@ -349,14 +349,14 @@ in the order the script called them, and the host's failure, if it failed.
   failed: in preparation, in a step, or in the host function outside any step. A host whose preparation failed has no
   steps.
 - **A step** records its kind (`read`, `inspect`, `ensure`, `run`, `file`, or `link`), its name, and its status. A read
-  or inspect has no name, so it records its command. A step records its shell options, the ones that change how every
-  command in it runs: `sudo`, `env`, and `secretEnv`, with each secret value as `[MASKED]`. Its commands are recorded
-  as the script wrote them, without the `sudo sh -s` around them or the prelude that sets the variables, so the shell
-  options are what say those were there. Every command in the step runs with the same ones, so the step holds them
-  once. A step's own options go in a separate field, added when the report first shows one, like `file`'s
-  `overwrite: false`. It holds only the options the report shows, as plain values, because the rest are functions,
-  file content, or already recorded another way.
-  The step that's running is kept apart on the host's
+  or inspect has no name, so it records its command. A step records the options it set that the report shows, by
+  name, as one record: first its shell options, the ones that change how every command in it runs (`sudo`, `env`, and
+  `secretEnv`), then its own, like `file`'s `validate` command or `overwrite: false`. An option at its default isn't
+  recorded, and each secret value is `[MASKED]`. Its commands are recorded as the script wrote them, without the
+  `sudo sh -s` around them or the prelude that sets the variables, so the options are what say those were there. The
+  record holds plain values only: `validate` as the command it built, because the script passed a function. A step's
+  handler records its own options right after validating them, through a function the recorder gives it, like
+  `converge`'s, so a failure can't lose them. The step that's running is kept apart on the host's
   record until it ends, so the record always says which step is running. A step that finishes joins the host's steps,
   in the order the script called them, with its status.
 - **A step's commands** are every command that ran while it was running, including those from reading its state and from its fix

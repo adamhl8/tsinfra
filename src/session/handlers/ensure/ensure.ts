@@ -47,12 +47,13 @@ export const handleEnsure = async (
   ctx: StepContext<"ensure">,
   options: unknown,
 ): Promise<Result<HandlerReturn<ChangeStepResult<"ensure">>>> => {
-  const { kind, shell, readTools, converge } = ctx
+  const { kind, shell, readTools, converge, recordOptions } = ctx
 
   const validOptions = validateInput(options, ensureOptionsSchema, { inputLabel: "options", givenTo: kind })
   if (isErr(validOptions)) return validOptions
 
   const { check, want, fix, verify, needs } = validOptions
+  recordOptions({ verify })
 
   const status = await converge({
     needs,

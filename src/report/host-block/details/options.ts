@@ -1,6 +1,6 @@
 import type { Detail, OptionValue, StepOption } from "#report/host-block/host-block.ts"
 import type { Verbosity } from "#report/verbosity.ts"
-import type { StepRecord } from "#session/session.ts"
+import type { StepOptionsRecord, StepRecord } from "#session/session.ts"
 
 // Name the options at level 1, because they say how the step ran, not what it changed.
 const OPTIONS_LEVEL: Verbosity = 1
@@ -9,21 +9,21 @@ const OPTION_VALUES_LEVEL: Verbosity = 2
 
 const toOptionValue = (value: string | boolean): OptionValue => ({ value, from: OPTION_VALUES_LEVEL })
 
-/** Returns `env` or `secretEnv` as an option with an entry per variable, or none when it has no variables. */
-const toVariablesOptions = (name: "env" | "secretEnv", variables: Record<string, string>): StepOption[] => {
-  const entries = Object.entries(variables).map(([variableName, value]) => ({
-    name: variableName,
-    value: toOptionValue(value),
-    entries: [],
-  }))
-  return entries.length > 0 ? [{ name, entries }] : []
+type OptionsRecordValue = NonNullable<StepOptionsRecord[keyof StepOptionsRecord]>
+
+/** Returns an option as a node: a flag or a text as its value, or variables like `env`'s as an entry each. */
+const toStepOption = (name: string, value: OptionsRecordValue): StepOption => {
+  if (typeof value === "string" || typeof value === "boolean") return { name, value: toOptionValue(value), entries: [] }
+
+  const entries = Object.entries(value).map(([entryName, entryValue]) => toStepOption(entryName, entryValue))
+  return { name, entries }
 }
 
-/** Returns the options the step set that change how its commands ran, as one detail, or none when it set none. */
+/** Returns the options the step set that the report shows, as one detail, or none when it set none. */
 export const toOptionsDetails = (stepRecord: StepRecord): Detail[] => {
-  const { sudo, env, secretEnv } = stepRecord.shellOptions
-  const sudoOptions: StepOption[] = sudo ? [{ name: "sudo", value: toOptionValue(true), entries: [] }] : []
-  const options = [...sudoOptions, ...toVariablesOptions("env", env), ...toVariablesOptions("secretEnv", secretEnv)]
-
+  const recordedOptions = Object.entries(stepRecord.options).filter(
+    (entry): entry is [string, OptionsRecordValue] => entry[1] !== undefined,
+  )
+  const options = recordedOptions.map(([name, value]) => toStepOption(name, value))
   return options.length > 0 ? [{ kind: "options", options, from: OPTIONS_LEVEL }] : []
 }

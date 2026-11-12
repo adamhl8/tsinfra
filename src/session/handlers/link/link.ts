@@ -43,7 +43,7 @@ export const handleLink = async (
   target: unknown,
   options: unknown = {},
 ): Promise<Result<HandlerReturn<ChangeStepResult<"link">>>> => {
-  const { kind, shell, home, converge } = ctx
+  const { kind, shell, home, converge, recordOptions } = ctx
 
   const absolutePath = validateHostPath(path, home, { inputLabel: "path", givenTo: kind })
   if (isErr(absolutePath)) return absolutePath
@@ -58,7 +58,8 @@ export const handleLink = async (
   const validOptions = validateInput(options, linkOptionsSchema, { inputLabel: "options", givenTo: kind })
   if (isErr(validOptions)) return validOptions
 
-  const { needs } = validOptions
+  const { needs, force } = validOptions
+  recordOptions({ force })
 
   const status = await converge({
     needs,

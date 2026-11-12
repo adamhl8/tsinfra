@@ -83,7 +83,7 @@ export const handleFile = async (
   content: unknown,
   options: unknown = {},
 ): Promise<Result<HandlerReturn<ChangeStepResult<"file">>>> => {
-  const { kind, shell, home, converge } = ctx
+  const { kind, shell, home, converge, recordOptions } = ctx
 
   const absolutePath = validateHostPath(path, home, { inputLabel: "path", givenTo: kind })
   if (isErr(absolutePath)) return absolutePath
@@ -101,10 +101,13 @@ export const handleFile = async (
   const resolvedContent = await resolveContent(validContent)
   if (isErr(resolvedContent)) return resolvedContent
 
-  const { needs, validate } = validOptions
+  const { needs, validate, secret, overwrite } = validOptions
 
   const validateCommand = buildValidateCommand(validate)
   if (isErr(validateCommand)) return validateCommand
+
+  // Record `validate` as the command it built, because the script passed a function.
+  recordOptions({ validate: validateCommand, secret, overwrite })
 
   const fileWrite: FileWrite = { resolvedContent, validateCommand }
 

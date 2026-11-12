@@ -1,6 +1,13 @@
 import type { Result } from "ts-explicit-errors"
 
-import type { Comparison, ValidStepShellOptions } from "#session/handlers/handlers.ts"
+import type {
+  Comparison,
+  EnsureOptions,
+  FileOptions,
+  LinkOptions,
+  StepShellOptions,
+  Want,
+} from "#session/handlers/handlers.ts"
 import type { StepKind, StepStatus } from "#session/step.ts"
 import type { CommandOutput } from "#transport/transport.ts"
 
@@ -56,17 +63,47 @@ export interface StepRecord {
   /** The name the script gave the step, or a read step's command. */
   name: string
   kind: StepKind
-  /** The options that change how every command in the step runs, with each `secretEnv` value as `[MASKED]`. */
-  shellOptions: ValidStepShellOptions
+  /**
+   * The options the step set that the report shows, by name, in the order they were recorded: the shell options first,
+   * then the step's own. Each is left out when it's at its default, and each secret value is `[MASKED]`.
+   */
+  options: StepOptionsRecord
   commands: CommandRecord[]
   comparisons: StepComparisons
   /** The names of the needed steps this step waited on. */
   waitingOn: string[]
 }
 
-interface StepComparisons {
-  before?: Comparison
-  after?: Comparison
+const NO_VARIABLES: Record<string, string> = {}
+
+/**
+ * The defaults of the options a step's record holds, so the recorder leaves out any option still at its default. Each
+ * schema declares its own defaults, and the tests that record a step with no options catch any default that differs.
+ * Check it against `StepOptionsRecord`, so an option added, removed, or retyped there fails to compile here. Leave out
+ * `validate`, because it has no default.
+ */
+export const RECORDED_OPTION_DEFAULTS = {
+  sudo: false,
+  env: NO_VARIABLES,
+  secretEnv: NO_VARIABLES,
+  secret: false,
+  overwrite: true,
+  force: false,
+  verify: true,
+} satisfies Required<Omit<StepOptionsRecord, "validate">>
+
+/** Every option a step's record can hold: the shell options, then the step's own options that the report shows. */
+export interface StepOptionsRecord
+  extends
+    StepShellOptions,
+    Pick<FileOptions, "secret" | "overwrite">,
+    Pick<LinkOptions, "force">,
+    Pick<EnsureOptions<Want>, "verify"> {
+  /**
+   * `validate`'s command, which the record holds in place of the function the script passed. Unset for a step without
+   * one.
+   */
+  validate?: string | undefined
 }
 
 export interface CommandRecord {
@@ -81,3 +118,8 @@ export interface CommandRecord {
 
 /** The parts of `converge` that run commands, in order. */
 export type ConvergePhase = "before" | "fix" | "after"
+
+interface StepComparisons {
+  before?: Comparison
+  after?: Comparison
+}

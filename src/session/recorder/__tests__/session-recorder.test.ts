@@ -21,9 +21,9 @@ const startStepWithShells = (shellOptions: ValidStepShellOptions) => {
   return { hostRecord, sessionRecorder, ...sessionRecorder.getStepShells(shellOptions) }
 }
 
-/** Returns the running step's shell options and the commands it recorded. */
+/** Returns the running step's options and the commands it recorded. */
 const getRunningStep = (hostRecord: HostRecord) => ({
-  shellOptions: hostRecord.runningStep?.shellOptions,
+  options: hostRecord.runningStep?.options,
   recordedCmds: hostRecord.runningStep?.commands.map(({ cmd }) => cmd),
 })
 
@@ -34,7 +34,7 @@ describe("SessionRecorder.getStepShells", () => {
 
     expect({ stdout, ...getRunningStep(hostRecord) }).toStrictEqual({
       stdout: "sudo sh -s\nhi\n",
-      shellOptions: { ...NO_SHELL_OPTIONS, sudo: true },
+      options: { sudo: true },
       recordedCmds: ["echo hi"],
     })
   })
@@ -45,12 +45,12 @@ describe("SessionRecorder.getStepShells", () => {
 
     expect({ stdout, ...getRunningStep(hostRecord) }).toStrictEqual({
       stdout: "hi\n",
-      shellOptions: NO_SHELL_OPTIONS,
+      options: {},
       recordedCmds: ["echo hi"],
     })
   })
 
-  it("should record the step's shell options with each secret masked, and its commands as written", async () => {
+  it("should record the options the step set with each secret masked, and its commands as written", async () => {
     const secret = "s3cret-value"
     const env = { URL: "https://example.com" }
     const { hostRecord, stepShell } = startStepWithShells({ sudo: false, env, secretEnv: { TOKEN: secret } })
@@ -64,7 +64,7 @@ describe("SessionRecorder.getStepShells", () => {
       hasSecret: JSON.stringify(hostRecord).includes(secret),
     }).toStrictEqual({
       stdout: "",
-      shellOptions: { sudo: false, env, secretEnv: { TOKEN: "[MASKED]" } },
+      options: { env, secretEnv: { TOKEN: "[MASKED]" } },
       recordedCmds: [cmd],
       hasSecret: false,
     })
@@ -76,7 +76,7 @@ describe("SessionRecorder.getStepShells", () => {
 
     expect({ stdout, ...getRunningStep(hostRecord) }).toStrictEqual({
       stdout: "v",
-      shellOptions: { ...NO_SHELL_OPTIONS, sudo: true, env: { V: "v" } },
+      options: { sudo: true, env: { V: "v" } },
       recordedCmds: ['printf %s "$V"'],
     })
   })
@@ -112,7 +112,7 @@ describe("SessionRecorder steps", () => {
     const stepRecord: StepRecord = {
       name: "a",
       kind: "file",
-      shellOptions: NO_SHELL_OPTIONS,
+      options: {},
       commands: [],
       comparisons: {},
       waitingOn: [],
@@ -215,13 +215,23 @@ describe("SessionRecorder masking", () => {
     ])
   })
 
+  it("should mask a step's own options, and record them after its shell options", () => {
+    const { hostRecord, sessionRecorder } = startStepWithShells({ ...NO_SHELL_OPTIONS, secretEnv: { TOKEN: SECRET } })
+    sessionRecorder.recordOptions({ validate: `check ${SECRET}` })
+
+    // Compare the JSON, because it keeps the order the options were recorded in.
+    expect(JSON.stringify(hostRecord.runningStep?.options)).toBe(
+      JSON.stringify({ secretEnv: { TOKEN: "[MASKED]" }, validate: "check [MASKED]" }),
+    )
+  })
+
   it("should mask in one pass, so a secret inside [MASKED] doesn't match, and mask nothing for an empty value", async () => {
     const secretEnv = { TOKEN: SECRET, SHORT: "MASK", EMPTY: "" }
     const { hostRecord, stepShell } = startStepWithShells({ ...NO_SHELL_OPTIONS, secretEnv })
     await stepShell.exec('printf "%s %s|" "$TOKEN" "$SHORT"')
 
     expect({ ...getRunningStep(hostRecord), commands: getRunningCommands(hostRecord) }).toStrictEqual({
-      shellOptions: { ...NO_SHELL_OPTIONS, secretEnv: { TOKEN: "[MASKED]", SHORT: "[MASKED]", EMPTY: "" } },
+      options: { secretEnv: { TOKEN: "[MASKED]", SHORT: "[MASKED]", EMPTY: "" } },
       recordedCmds: ['printf "%s %s|" "$TOKEN" "$SHORT"'],
       commands: [{ cmd: 'printf "%s %s|" "$TOKEN" "$SHORT"', output: toOutput("[MASKED] [MASKED]|") }],
     })

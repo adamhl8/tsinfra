@@ -25,10 +25,9 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
       4. **Command parts** (built 2026-11-12). Each command a step ran is a part from 2, shown dimmed as `$ cmd` under the details. One
          with a label shows as `$ <label>`, and a read or inspect lists none. A failed step's commands go under its
          error with its other details. Check it with `bun report-preview.ts -vv`.
-      5. **`validate`.** The write script records its `validate` command in a field next to `label`, passed through
-         `exec`'s options, because a labelled command never shows its text. The report appends it, like
-         `$ <file write script> validate: nginx -t ...`. Add it to
-         [What a host records](./docs/cli.md#what-a-host-records).
+      5. **Step options** (built 2026-11-12). `StepRecord.options` is one generic record of the options a step set,
+         replacing `shellOptions`: `getStepShells` adds the shell options, and each handler adds its own through
+         `ctx.recordOptions`, like `file`'s `validate` as the command it built. The report shows them all the same way.
       6. **Preparation's commands.** The `(preparation)` entry lists them as labelled command parts from 2.
       7. **A docs check,** and mark the piece built.
    2. **`-vvv`.** `exit:`, `stdout:`, and `stderr:` rows under each command, each stream cut off after 20 lines, and

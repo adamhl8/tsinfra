@@ -1,3 +1,4 @@
+import { deepEquals } from "bun"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
@@ -7,7 +8,8 @@ import type { CommandRecorder } from "#session/recorder/commands.ts"
 import { createRecordingTransport } from "#session/recorder/commands.ts"
 import { getFailureHints } from "#session/recorder/failure-hints.ts"
 import { addSecret, maskSecrets } from "#session/recorder/masking.ts"
-import type { ConvergePhase, HostRecord, StepRecord } from "#session/recorder/records.ts"
+import type { ConvergePhase, HostRecord, StepOptionsRecord, StepRecord } from "#session/recorder/records.ts"
+import { RECORDED_OPTION_DEFAULTS } from "#session/recorder/records.ts"
 import type { StepKind, StepStatus } from "#session/step.ts"
 import type { Shell, Transport } from "#transport/transport.ts"
 import { createShell, createStepTransport } from "#transport/transport.ts"
@@ -33,13 +35,28 @@ interface StepShells {
   toolShell: Shell
 }
 
+// Look each default up by an option's name, because an option without one, like `validate`, has none to compare to.
+const OPTION_DEFAULTS = new Map<string, unknown>(Object.entries(RECORDED_OPTION_DEFAULTS))
+
+/** Returns `options` without the ones at their defaults or unset, because the record holds only what a step set. */
+const toSetOptions = (options: StepOptionsRecord): StepOptionsRecord => {
+  const setEntries = Object.entries(options).filter(([name, value]) => !deepEquals(value, OPTION_DEFAULTS.get(name)))
+  // Cast back, because `Object.fromEntries` loses the keys' types, and filtering only removes entries.
+  return Object.fromEntries(setEntries)
+}
+
 /** Records the session's part of a host's run, once preparation has finished: each step, and the host's failure. */
 export interface SessionRecorder {
   /**
-   * Records the running step's shell options, and returns its shells, built once for the step. Recording and building
-   * in one call keeps the record and the commands from disagreeing.
+   * Records the shell options the running step set, and returns its shells, built once for the step. Recording and
+   * building in one call keeps the record and the commands from disagreeing.
    */
   getStepShells: (options: ValidStepShellOptions) => StepShells
+  /**
+   * Records `options` on the running step, after any it already has, masked, and leaves out each one at its default. A
+   * step's handler calls it right after validating its options, so a failure can't lose them.
+   */
+  recordOptions: (options: StepOptionsRecord) => void
   /** Returns the error the host failed with, or nothing while it hasn't failed. */
   getFailure: () => Error | undefined
   /**
@@ -93,6 +110,11 @@ export const createSessionRecorder = (
   const createRecordingShell = (shellTransport: Transport): Shell =>
     createShell(createRecordingTransport(shellTransport, commandRecorder))
 
+  const recordOptions = (_options: StepOptionsRecord) => {
+    const options = mask(toSetOptions(_options))
+    if (hostRecord.runningStep) hostRecord.runningStep.options = { ...hostRecord.runningStep.options, ...options }
+  }
+
   const getStepShells = (_shellOptions: ValidStepShellOptions): StepShells => {
     const secretValues = Object.values(_shellOptions.secretEnv)
     for (const value of secretValues) addSecret(secrets, value)
@@ -101,8 +123,7 @@ export const createSessionRecorder = (
     const stepShell = createRecordingShell(createStepTransport(transport, _shellOptions))
     const toolShell = createRecordingShell(createStepTransport(transport, { ..._shellOptions, sudo: false }))
 
-    const shellOptions = mask(_shellOptions)
-    if (hostRecord.runningStep) hostRecord.runningStep.shellOptions = shellOptions
+    recordOptions(_shellOptions)
 
     return { stepShell, toolShell }
   }
@@ -139,9 +160,7 @@ export const createSessionRecorder = (
       return err(`'${kind}' can't run while ${runningKind} step '${name}' is running`, undefined)
     }
 
-    // Start with empty shell options, so a step that fails its option check before getting its shells still has them.
-    const shellOptions = { sudo: false, env: {}, secretEnv: {} }
-    hostRecord.runningStep = { name: stepName, kind, shellOptions, commands: [], comparisons: {}, waitingOn: [] }
+    hostRecord.runningStep = { name: stepName, kind, options: {}, commands: [], comparisons: {}, waitingOn: [] }
   }
 
   /** Marks no step as running, and returns the record of the step that was. */
@@ -193,5 +212,5 @@ export const createSessionRecorder = (
 
   const getFailure = () => hostRecord.failure?.error
 
-  return { getStepShells, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder }
+  return { getStepShells, recordOptions, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder }
 }
