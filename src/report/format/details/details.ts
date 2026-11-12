@@ -1,16 +1,18 @@
 import type { AlignedRow } from "#report/format/details/aligned-row.ts"
 import { formatAlignedRow } from "#report/format/details/aligned-row.ts"
+import type { DiffLimits } from "#report/format/details/diff.ts"
 import { formatDiff } from "#report/format/details/diff.ts"
 import { formatEnsureValues } from "#report/format/details/ensure.ts"
 import { formatFileValues } from "#report/format/details/file.ts"
 import { formatLinkValues } from "#report/format/details/link.ts"
 import type { Detail, StepWarning } from "#report/host-block.ts"
-import type { ReportOptions } from "#report/report.ts"
 import type { Style } from "#styles.ts"
 import { styleError, styleHint, styleNote, styleValue, styleWarning } from "#styles.ts"
 import { splitNonEmptyLines } from "#utils.ts"
 
 export type { AlignedRow } from "#report/format/details/aligned-row.ts"
+export type { DiffLimits } from "#report/format/details/diff.ts"
+export { DEFAULT_DIFF_LIMITS } from "#report/format/details/diff.ts"
 
 /**
  * A detail's rows, formatted, before layout positions them. A row is one or more lines. Aligned rows line up their
@@ -37,8 +39,8 @@ const formatWarning = (warning: StepWarning): string => {
 }
 
 /** Formats a detail as the rows it prints as, aligned or not. */
-export const formatDetail = (detail: Detail, reportOptions: ReportOptions): DetailRows => {
-  if (detail.kind === "diff") return { kind: "unaligned", rows: formatDiff(detail.got, detail.want, reportOptions) }
+export const formatDetail = (detail: Detail, diffLimits: DiffLimits | undefined): DetailRows => {
+  if (detail.kind === "diff") return { kind: "unaligned", rows: formatDiff(detail.got, detail.want, diffLimits) }
   if (detail.kind === "note") return { kind: "unaligned", rows: [styleNote(detail.text)] }
   if (detail.kind === "warning") return { kind: "unaligned", rows: [formatWarning(detail.warning)] }
   if (detail.kind === "hint") return { kind: "unaligned", rows: [styleHint(detail.text)] }

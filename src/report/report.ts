@@ -1,4 +1,4 @@
-import { formatHostBlock } from "#report/format/format.ts"
+import { DEFAULT_DIFF_LIMITS, formatHostBlock } from "#report/format/format.ts"
 import type { HostBlock } from "#report/host-block.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 
@@ -22,5 +22,9 @@ export const renderHostBlock = (hostBlock: HostBlock, reportOptions: ReportOptio
   // Give a host whose steps are all hidden no block, because its line in the summary already says how it went.
   if (hostBlock.kind === "entries" && hostBlock.entries.length === 0) return
 
-  return formatHostBlock(hostBlock, reportOptions)
+  // Give the diff limits instead of a level, because computing a full diff only to drop it would be slow.
+  const { verbosity = 0 } = reportOptions
+  const diffLimits = verbosity >= 1 ? undefined : DEFAULT_DIFF_LIMITS
+
+  return formatHostBlock(hostBlock, diffLimits)
 }
