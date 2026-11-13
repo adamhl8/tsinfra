@@ -2,6 +2,7 @@ export type { PreparationRecorder } from "#session/recorder/preparation-recorder
 export { createPreparationRecorder } from "#session/recorder/preparation-recorder.ts"
 export type {
   CommandRecord,
+  FailureHint,
   ConvergePhase,
   HostRecord,
   RecordedFailure,

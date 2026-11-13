@@ -1,14 +1,12 @@
 import type { Mode } from "#mode.ts"
-import {
-  COLUMN_GAP,
-  formatFailed,
-  formatPlanReminder,
-  formatStatusCount,
-  formatUnchanged,
-  formatWarningCount,
-} from "#report/format/format.ts"
+import { COLUMN_GAP, formatPlanReminder, formatStatusText, formatWarningCount } from "#report/format/format.ts"
 import type { HostBlock, HostBlockEntry } from "#report/host-block/host-block.ts"
 import { getMaxWidth, padToWidth } from "#utils.ts"
+
+const PLAN_REMINDER = "Steps after a change were checked without that change, so apply may differ."
+
+/** Returns `count` with its noun, like `1 change` or `2 changes`. */
+const countOf = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`
 
 const getEntries = (hostBlock: HostBlock): HostBlockEntry[] => (hostBlock.kind === "entries" ? hostBlock.entries : [])
 
@@ -21,7 +19,7 @@ export const hasDrift = (hostBlock: HostBlock): boolean =>
   getEntries(hostBlock).some(({ status }) => status === "changed")
 
 const formatHostStatus = (hostBlock: HostBlock): string => {
-  if (hasFailed(hostBlock)) return formatFailed()
+  if (hasFailed(hostBlock)) return formatStatusText("failed", "failed")
 
   const entries = getEntries(hostBlock)
   const statuses = entries.map(({ status }) => status)
@@ -34,10 +32,10 @@ const formatHostStatus = (hostBlock: HostBlock): string => {
 
   // Leave the comma between the counts unstyled.
   const counts: string[] = []
-  if (changeCount > 0) counts.push(formatStatusCount("changed", changeCount))
-  if (waitingCount > 0) counts.push(formatStatusCount("waiting", waitingCount))
-  if (counts.length === 0) counts.push(formatUnchanged())
-  if (warningCount > 0) counts.push(formatWarningCount(warningCount))
+  if (changeCount > 0) counts.push(formatStatusText("changed", countOf(changeCount, "change", "changes")))
+  if (waitingCount > 0) counts.push(formatStatusText("waiting", `${waitingCount} waiting`))
+  if (counts.length === 0) counts.push(formatStatusText("unchanged", "unchanged"))
+  if (warningCount > 0) counts.push(formatWarningCount(countOf(warningCount, "warning", "warnings")))
   return counts.join(", ")
 }
 
@@ -49,5 +47,5 @@ export const renderSummary = (hostBlocks: HostBlock[], mode: Mode): string => {
   )
 
   const hasAnyDrift = mode === "plan" && hostBlocks.some((hostBlock) => hasDrift(hostBlock))
-  return [...(hasAnyDrift ? [formatPlanReminder(), ""] : []), ...hostLines].join("\n")
+  return [...(hasAnyDrift ? [formatPlanReminder(PLAN_REMINDER), ""] : []), ...hostLines].join("\n")
 }

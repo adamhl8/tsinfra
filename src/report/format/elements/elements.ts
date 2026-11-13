@@ -7,7 +7,7 @@ export {
   formatStdoutLine,
 } from "#report/format/elements/commands.ts"
 export { formatDiffGutter, formatDiffLine, formatDiffRule } from "#report/format/elements/diff.ts"
-export { formatEntryName, formatKind, formatNeeds, formatStatus } from "#report/format/elements/entry.ts"
+export { formatEntryName, formatEntryNote, formatKind, formatStatus } from "#report/format/elements/entry.ts"
 export {
   formatHeading,
   formatLabel,
@@ -23,12 +23,7 @@ export {
   formatPlanReminder,
   formatWarningLabel,
 } from "#report/format/elements/messages.ts"
-export {
-  formatFailed,
-  formatStatusCount,
-  formatUnchanged,
-  formatWarningCount,
-} from "#report/format/elements/summary.ts"
+export { formatStatusText, formatWarningCount } from "#report/format/elements/summary.ts"
 export {
   formatChange,
   formatExitCode,

@@ -12,13 +12,7 @@ export type { DiffLimits } from "#report/format/details/details.ts"
 export { DEFAULT_DIFF_LIMITS } from "#report/format/details/details.ts"
 export { COLUMN_GAP } from "#report/format/layout.ts"
 // Re-export the summary's elements, because the summary is formatted outside this folder.
-export {
-  formatFailed,
-  formatPlanReminder,
-  formatStatusCount,
-  formatUnchanged,
-  formatWarningCount,
-} from "#report/format/elements/elements.ts"
+export { formatPlanReminder, formatStatusText, formatWarningCount } from "#report/format/elements/elements.ts"
 
 /** An entry with each piece formatted, before layout lines it up with the block's other entries. */
 export interface FormattedEntry {

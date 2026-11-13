@@ -1,13 +1,7 @@
 import { isErr, messageChain } from "ts-explicit-errors"
 
 import type { ValidHostOptions } from "#hosts/hosts.ts"
-import type { CommandRecord } from "#session/recorder/records.ts"
-
-// Name both fixes, because `sudo: true` and `sudo: { password }` each give sudo what it needs.
-const SUDO_OPTION_HINT = "sudo needs a password on this host, so set the sudo option on host()"
-
-// Point at the line ssh names as offending, because at `LogLevel=ERROR` it prints that, but not its `ssh-keygen` command.
-const CHANGED_HOST_KEY_HINT = "if the host was recreated, remove its old key from the known_hosts line named above"
+import type { CommandRecord, FailureHint } from "#session/recorder/records.ts"
 
 /**
  * Returns what each command that failed printed about why: its stderr for a non-zero exit, or its error's message for
@@ -28,21 +22,20 @@ export const getFailureHints = (
   target: string,
   hostOptions: ValidHostOptions,
   commandRecords: CommandRecord[],
-): string[] => {
+): FailureHint[] => {
   const failureTexts = getFailureTexts(commandRecords)
   const hasFailedWith = (text: string) => failureTexts.some((failureText) => failureText.includes(text))
 
   // Match ssh's banner for a key that differs from the one in `known_hosts`. Check it first, because ssh ends it with
   // `Host key verification failed` too. Offer no way around it, because a changed key can mean a different host.
-  if (hasFailedWith("REMOTE HOST IDENTIFICATION HAS CHANGED")) return [CHANGED_HOST_KEY_HINT]
+  if (hasFailedWith("REMOTE HOST IDENTIFICATION HAS CHANGED")) return [{ kind: "changedHostKey" }]
 
   // Match the line ssh ends an unknown host with under `StrictHostKeyChecking yes`, which the user chose.
-  if (hasFailedWith("Host key verification failed"))
-    return [`run 'ssh ${target}' once to check the host's key and save it`]
+  if (hasFailedWith("Host key verification failed")) return [{ kind: "unknownHostKey", target }]
 
   // Hint at the `sudo` option only on a host that leaves it off, because a host that sets it already did the fix.
   // Match the line `sudo -n` prints when it needs a password. It's English only, so another locale gets no hint.
-  if (hostOptions.sudo === false && hasFailedWith("sudo: a password is required")) return [SUDO_OPTION_HINT]
+  if (hostOptions.sudo === false && hasFailedWith("sudo: a password is required")) return [{ kind: "sudoOption" }]
 
   return []
 }

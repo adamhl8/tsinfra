@@ -116,9 +116,7 @@ describe("the ssh transport against a real sshd", () => {
     const hostRecord = await runHostOn(STRICT_TARGET)
 
     expect(toMessage(hostRecord.failure?.error)).toEndWith("Host key verification failed.")
-    expect(hostRecord.failure?.hints).toStrictEqual([
-      `run 'ssh ${STRICT_TARGET}' once to check the host's key and save it`,
-    ])
+    expect(hostRecord.failure?.hints).toStrictEqual([{ kind: "unknownHostKey", target: STRICT_TARGET }])
   })
 
   it("should fail a host whose key changed, with the line of the old key and a hint to remove it", async () => {
@@ -126,9 +124,7 @@ describe("the ssh transport against a real sshd", () => {
     const hostRecord = await runHostOn(CHANGED_KEY_TARGET)
 
     expect(toMessage(hostRecord.failure?.error)).toContain(`Offending ED25519 key in ${KNOWN_HOSTS_PATH}:1`)
-    expect(hostRecord.failure?.hints).toStrictEqual([
-      "if the host was recreated, remove its old key from the known_hosts line named above",
-    ])
+    expect(hostRecord.failure?.hints).toStrictEqual([{ kind: "changedHostKey" }])
     expect(await bun.file(KNOWN_HOSTS_PATH).text()).toBe(knownHosts)
   })
 

@@ -254,7 +254,7 @@ describe("renderHostBlock", () => {
       failure: {
         kind: "preparation",
         error: new Error("Host key verification failed."),
-        hints: ["run 'ssh a.lan' once to check the host's key and save it"],
+        hints: [{ kind: "unknownHostKey", target: "a.lan" }],
       },
     })
 
@@ -265,6 +265,21 @@ describe("renderHostBlock", () => {
         "      Host key verification failed.",
         "        run 'ssh a.lan' once to check the host's key and save it",
       ].join("\n"),
+    )
+  })
+
+  it("should show the hint for a host key that changed", () => {
+    const hostBlock = renderRecord({
+      name: "a",
+      target: "a.lan",
+      preparationCommands: [],
+      runningStep: undefined,
+      stepRecords: [],
+      failure: { kind: "preparation", error: new Error("failed"), hints: [{ kind: "changedHostKey" }] },
+    })
+
+    expect(hostBlock?.split("\n").at(-1)).toBe(
+      "        if the host was recreated, remove its old key from the known_hosts line named above",
     )
   })
 
@@ -291,7 +306,7 @@ describe("renderHostBlock", () => {
         failure: {
           kind: "preparation",
           error: new Error("Host key verification failed."),
-          hints: ["run 'ssh a.lan' once to check the host's key and save it"],
+          hints: [{ kind: "unknownHostKey", target: "a.lan" }],
         },
       },
       2,
@@ -419,7 +434,8 @@ describe("renderHostBlock for a step that would change a string", () => {
   it("should show a note when the lines take too long to compare", async () => {
     const hostBlock = await formatBlock(async (h) => {
       await h.ensure("Write the config", {
-        check: "seq -f 'a%g' 0 19999",
+        // Print the lines with `awk`, because BusyBox's `seq` has no `-f`.
+        check: "awk 'BEGIN { for (i = 0; i < 20000; i++) print \"a\" i }'",
         want: numberedLines("b").join("\n"),
         fix: "true",
       })

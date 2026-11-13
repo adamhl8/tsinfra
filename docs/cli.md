@@ -198,14 +198,18 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
     green for what the script wants, so a `got:` value and a diff's `-` line always match. It's the only place
     picocolors is used.
   - **Elements** (`report/format/elements/`) each format one element of the output from its data, like a status, a
-    kind, a label, or a value. An element adds its own text, like the parentheses around a kind, and picks its own look
-    from the palette, so it never takes a style. It doesn't know where it ends up. Elements look alike only by choice,
+    kind, a label, or a value. An element decides how something looks, and structure decides what it says. So an
+    element adds its own markup, like the parentheses around a kind, the quotes at a value's edges, or the `(empty)`
+    marker, and picks its own look from the palette, so it never takes a style. It holds none of tsinfra's words. It
+    doesn't know where it ends up. Elements look alike only by choice,
     like a kind and the `(empty)` marker, which are both muted, so either can change alone. The files are named after
     what their elements are about, never after a layout shape like a row. A formatter for one kind of data, like a
     file's size, stays private next to its caller, and its text can go through an element after it.
   - **Structure** (`report/format/details/`, the rest of `report/format/`, and `report/summary.ts`) puts elements
-    together into a detail's rows or an entry's lines. It adds only separators, like the colon after a status or the
-    `, ` between counts.
+    together into a detail's rows or an entry's lines. It adds separators, like the colon after a status or the `, `
+    between counts, and every word: label and heading names, sentences, count phrases, and the words for the model's
+    data, like a warning's or a hint's kind. Each detail kind has its own file in `details/`, so its words live with
+    it.
   - **Layout** (`report/format/layout.ts`) pads and indents the rows into columns.
 - **Status lines.** A host's block is its name, then its entries, or "no steps" for a script that made none. Each entry
   is a status line, with its details and any error on the lines under it. A status line starts with the entry's status,
@@ -338,7 +342,8 @@ in the order the script called them, and the host's failure, if it failed.
   records `<sudo password>` in place of the password, so the password never reaches the record.
 
 - **The failure** is the host's only one, because nothing runs on a host once it has failed. It records its error, its
-  kind (see [Kinds of failure](#kinds-of-failure)), and any hints for it. The kind comes from where the host was when it
+  kind (see [Kinds of failure](#kinds-of-failure)), and any hints for it. A hint is recorded as its kind, like
+  `unknownHostKey` with the target, and the report picks its words. The kind comes from where the host was when it
   failed: in preparation, in a step, or in the host function outside any step. A host whose preparation failed has no
   steps.
 - **A step** records its kind (`read`, `inspect`, `ensure`, `run`, `file`, or `link`), its name, and its status. A read

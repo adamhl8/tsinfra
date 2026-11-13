@@ -89,6 +89,7 @@ export {
 export type {
   CommandRecord,
   ConvergePhase,
+  FailureHint,
   HostRecord,
   PreparationRecorder,
   RecordedFailure,

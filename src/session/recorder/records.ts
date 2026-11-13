@@ -39,8 +39,17 @@ export type RecordedFailure = RecordedUnownedFailure | RecordedStepFailure
 interface BaseRecordedFailure {
   error: Error
   /** How to fix the failure, which the report shows under it. */
-  hints: string[]
+  hints: FailureHint[]
 }
+
+/** A way to fix a failure, recorded as its kind, so the report picks the words. */
+export type FailureHint =
+  // ssh found a key that differs from the one in `known_hosts`.
+  | { kind: "changedHostKey" }
+  // ssh found no key for the host in `known_hosts`, under `StrictHostKeyChecking yes`.
+  | { kind: "unknownHostKey"; target: string }
+  // sudo needs a password on a host that leaves the `sudo` option off.
+  | { kind: "sudoOption" }
 
 /** A failure no step owns: one from preparation, or one the host function threw outside any step, for `host fn`. */
 export interface RecordedUnownedFailure extends BaseRecordedFailure {

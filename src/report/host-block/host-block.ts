@@ -3,6 +3,7 @@ import type { Verbosity } from "#report/verbosity.ts"
 import type {
   ConvergePhase,
   EnsureComparisonValues,
+  FailureHint,
   FileComparisonValues,
   HostRecord,
   LinkComparisonValues,
@@ -76,7 +77,7 @@ export type Detail = PieceLevels
     // The stderr of a command that can explain a failure that still differs after its fix.
     | { kind: "stderr"; command: string; stderr: string }
     // tsinfra's own aside about the details around it.
-    | { kind: "note"; text: string }
+    | { kind: "note"; note: DetailNote }
     // Something that worked, but needs a look, like a link to a path where nothing exists.
     | { kind: "warning"; warning: StepWarning }
     // The commands the step ran, in the order they ran.
@@ -84,7 +85,7 @@ export type Detail = PieceLevels
     // What a read or inspect step's one command printed, because the step lists no commands to show it under.
     | { kind: "commandOutput"; output: CommandOutputDetail }
     // How to fix a failure, like setting the host's `sudo` option.
-    | { kind: "hint"; text: string }
+    | { kind: "hint"; hint: FailureHint }
   )
 
 /**
@@ -119,11 +120,23 @@ export type CommandOutputDetail =
   | { kind: "exited"; exitCode: number; stdout: string; stderr: string }
   | { kind: "failed"; error: Error }
 
-/** Something that worked but needs a look, with the value it's about, like a path, when there is one. */
+/** Something that worked but needs a look, as its kind, so the report picks the words. */
 export interface StepWarning {
-  text: string
-  value?: string
+  kind: "missingTarget"
+  target: string
 }
+
+/** Tsinfra's own aside about the details around it, as its kind, so the report picks the words. */
+export type DetailNote =
+  // The values from before the fix, under a failure, which may no longer be true.
+  | { kind: "valuesBeforeFix" }
+  // Several commands in one phase of a failed step wrote to stderr, which shows only at a higher level.
+  | { kind: "commandsWroteStderr"; phase: StillDiffersPhase }
+  // The host function threw outside any step.
+  | { kind: "hostFunctionFailure" }
+
+/** The phases of a step whose commands can explain why its state still differs after the fix. */
+export type StillDiffersPhase = Extract<ConvergePhase, "fix" | "after">
 
 /**
  * Returns a host's block, with every piece at every level, each with the level it shows from: an entry per finished

@@ -1,15 +1,13 @@
 import { styleError, styleItalic, styleMuted, styleWarning } from "#styles.ts"
 
-const PLAN_REMINDER = "Steps after a change were checked without that change, so apply may differ."
-
 /** Formats tsinfra's own aside, like "no steps" or a note in place of a diff, muted and italic. */
 export const formatNote = (text: string): string => styleItalic(styleMuted(text))
 
-/** Formats a hint in the warning color, italic because it has no label to set it apart. */
+/** Formats how to fix a failure in the warning color, italic because it has no label to set it apart. */
 export const formatHint = (text: string): string => styleItalic(styleWarning(text))
 
-/** Formats the label that starts a warning, `warning:`. */
-export const formatWarningLabel = (): string => styleWarning("warning:")
+/** Formats the label that starts a warning with its colon, like `warning:`, in the warning color. */
+export const formatWarningLabel = (name: string): string => styleWarning(`${name}:`)
 
 /** Formats one line of an error. */
 export const formatErrorLine = (line: string): string => styleError(line)
@@ -18,4 +16,4 @@ export const formatErrorLine = (line: string): string => styleError(line)
 export const formatChangeDescription = (words: string): string => styleItalic(words)
 
 /** Formats the reminder that `plan` checked steps after a change without it, muted so the host lines stay the focus. */
-export const formatPlanReminder = (): string => styleMuted(PLAN_REMINDER)
+export const formatPlanReminder = (text: string): string => styleMuted(text)
