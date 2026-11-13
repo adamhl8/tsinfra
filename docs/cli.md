@@ -3,14 +3,11 @@
 <!-- toc -->
 
 - [Hosts](#hosts)
-  - [Tasks](#tasks)
 - [plan and apply](#plan-and-apply)
 - [Output](#output)
   - [How the report is built](#how-the-report-is-built)
-  - [Live progress](#live-progress)
   - [What a host records](#what-a-host-records)
   - [Kinds of failure](#kinds-of-failure)
-  - [Diagnostic logs](#diagnostic-logs)
 - [Exit codes](#exit-codes)
 
 <!-- tocstop -->
@@ -30,46 +27,14 @@ else and is imported like any other module.
 
 With no host names, `plan` and `apply` run every host. An unknown name is an error that lists the names that exist.
 
-### Tasks
-
-A host can have named tasks besides its main function, for work you run on demand, like updates. Configuring a host and
-updating it use the same steps, but an update shouldn't happen every time the configuration changes:
-
-```ts
-const update = task("update", async (h) => {
-  await h.ensure("Upgrade packages", {
-    check: "sudo apt-get update && apt list --upgradable | tail -n +2",
-    want: "",
-    fix: "sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y",
-  })
-})
-
-export default host("sonarr.lan", configure, { sudo: true, tasks: [update] })
-```
-
-```sh
-tsinfra plan sonarr                # the main function
-tsinfra plan sonarr --task update  # only the update task
-tsinfra plan --task update         # every host that has an update task, and no others
-```
-
-- **A task is an ordinary host function,** with the same `h`, steps, `plan`, `apply`, session, and sudo prompt. With
-  an empty `want`, `plan --task update` lists what would upgrade on every host.
-- **`task(name, fn)` mirrors `host(target, fn)`,** and `host()` registers its tasks explicitly with `tasks`, so a task
-  only belongs to the hosts that list it. A task exported from a shared module doesn't register itself anywhere.
-- **Define a task above the `host()` call,** because `host()` reads `tasks` straight away, and a `const` can't be read
-  before its line.
-- **Task names are unique within a host.**
-- **It isn't tags.** Tags pick steps inside one script. A task is a separate function, so each one still reads top to
-  bottom.
-
 ## plan and apply
 
 - **`plan`** reads the host's state for every step and runs no fix. See [Steps](./steps.md).
 - **`apply`** reads the host's state for every step and runs every needed fix, in order, with no confirmation prompt. Run `plan` first to see
   what will happen. That is the workflow `~/homelab/justfile` already uses, with `apply` passing `-y` to pyinfra.
 
-Hosts run in parallel, up to `--parallel <n>` at once (default 8). Steps within a host always run one at a time, in
+Hosts run one at a time, in the order of their names (see
+[Running hosts in parallel](./roadmap.md#running-hosts-in-parallel)). Steps within a host always run one at a time, in
 order. A step that starts while another is running fails the host (see [Steps](./steps.md#commands)).
 
 ## Output
@@ -86,7 +51,7 @@ three. Every command is already recorded with its output (see [What a host recor
 levels only change what's printed:
 
 - **`-v`** (`--verbose`) adds the rest of the steps: steps that were already right as `=` lines, and each read or
-  inspect as a `·` line named by its command. It also shows every diff in full, and a failed fix's values from before
+  inspect as a `·` line named by its command. It also shows every diff and every differing line in full, and a failed fix's values from before
   the fix. A step given options that change how its commands run gets an `options:` line under it, naming the ones it
   set, like `options: sudo` or `options: env { URL, PORT }, secretEnv { TOKEN }`. It names each variable but shows no
   value, because the values come at `-vv`. A `sudo` the script writes inside a command doesn't count, because it shows
@@ -113,7 +78,7 @@ levels only change what's printed:
   its leading whitespace. In a step that compares the host's state, each command starts with its phase in parentheses,
   styled like a step's kind, as `(before)`, `(fix)`, or `(after)`, padded so the prompts line up, because the same check
   runs before and after the fix, and its output can differ. tsinfra's own commands keep their label, so their text never
-  shows. It's in the source, and in the [diagnostic logs](#diagnostic-logs).
+  shows. It's in the source, and will be in the [diagnostic logs](./roadmap.md#diagnostic-logs).
 - **Secrets never show.** A secret reaches a command through the step's `secretEnv`, so the command's text never holds
   it, and `-vv` shows `"$TOKEN"` where it's used. The step's record keeps its variables, with each secret as
   `[MASKED]`, and the output and errors of that command and of every later command on the host are masked the same
@@ -209,7 +174,7 @@ sonarr    2 changes
 
 Each line names its status in words after the symbol. A status reads the same in `plan` and `apply`, because `plan`
 never changes anything the script manages, so its words have no tense, and a line needs no "would". The exact format is
-open: see [Open questions](./open-questions.md).
+open (see [the roadmap](./roadmap.md#what-plan-output-should-look-like)).
 
 ### How the report is built
 
@@ -226,6 +191,22 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   `FORCE_COLOR`, and `--no-color`, and prints plain text when stdout is not a terminal. `util.styleText` from `node:util`
   does the same, but its behavior depends on each runtime's `node:util`, and picocolors' rules are its own. Tests set
   `NO_COLOR` in the test preload, before anything imports picocolors.
+- **Stages.** A host's record becomes text in five stages, each with one job:
+  - **Model** (`report/host-block/`) turns the record into blocks, entries, and details, with the level each detail
+    shows from.
+  - **Palette** (`styles.ts`) holds the looks several elements share on purpose, like red for what's on the host and
+    green for what the script wants, so a `got:` value and a diff's `-` line always match. It's the only place
+    picocolors is used.
+  - **Elements** (`report/format/elements/`) each format one element of the output from its data, like a status, a
+    kind, a label, or a value. An element adds its own text, like the parentheses around a kind, and picks its own look
+    from the palette, so it never takes a style. It doesn't know where it ends up. Elements look alike only by choice,
+    like a kind and the `(empty)` marker, which are both muted, so either can change alone. The files are named after
+    what their elements are about, never after a layout shape like a row. A formatter for one kind of data, like a
+    file's size, stays private next to its caller, and its text can go through an element after it.
+  - **Structure** (`report/format/details/`, the rest of `report/format/`, and `report/summary.ts`) puts elements
+    together into a detail's rows or an entry's lines. It adds only separators, like the colon after a status or the
+    `, ` between counts.
+  - **Layout** (`report/format/layout.ts`) pads and indents the rows into columns.
 - **Status lines.** A host's block is its name, then its entries, or "no steps" for a script that made none. Each entry
   is a status line, with its details and any error on the lines under it. A status line starts with the entry's status,
   as a symbol and a word in the status's color, then an uncolored colon, like `~ change:`.
@@ -261,15 +242,36 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   which is there because they may no longer be true.
 - **Values** are cyan when they came from the script or the host, like the command in a `stderr:` row and the command a
   read or inspect is named by. The stderr in that row is bright red like an error, so it stands apart from its command. That sets them apart from tsinfra's own words. A `got:` value is red and a `want:` value is green, like a
-  diff's `-` and `+` lines. A string value keeps its quotes, so an empty one still shows without color, but the quotes
-  stay uncolored, so they don't read as part of the value. An exit code is also italic, because it isn't quoted. A
-  multi-line value's later lines line up under its first line's text. The labels, like `got:`, are dim, so the values
-  stand out.
+  diff's `-` and `+` lines. The labels, like `got:`, are dim, so the values stand out. A multi-line value's later lines
+  line up under its first line's text.
+
+  A string shows in its color alone, with no quotes. Where it can't show as itself, it gets a dim marker or quotes:
+
+  | Value or line                               | Shows as    |
+  | ------------------------------------------- | ----------- |
+  | Empty, a whole value or one of its lines    | `(empty)`   |
+  | Only whitespace, like `"  "`                | `'  '`      |
+  | Leading or trailing whitespace, `" active"` | `' active'` |
+
+  The marker is dim, like `[MASKED]`, because it's tsinfra's word, not the value. It says "empty", not "blank", because a
+  value of only whitespace shows quoted, so `""` and `"  "` never look the same. The quotes stay uncolored, so they
+  don't read as part of the value.
+
+  Italics mark a value that isn't a string but could pass for one. A boolean or a number prints as text a string could
+  hold too, like `true` or `501`, so it's italic. An owner row is where this matters most: a user given as the name
+  `"501"` shows plain, and one given as the uid `501` shows italic. A value tsinfra renders into its own format, like a
+  mode or a size, can't pass for a string the script gave, so it shows plain. A value that's hard to read alone, like an
+  exit code, is described in words, like `exit code 1`, and the description is italic as a whole. Without color, a
+  string `true` and a boolean `true` look the same, but one comparison never mixes the two.
+
+  These rules cover compared values and the values a script gave, in every step's rows and the `options` block.
+  Commands and their output show as they are, because they're for reading, not comparing.
+
 - **Colors** follow the status: a summary's change count matches `~` and `>`, and its waiting count matches `?`. The
   plan reminder is dim, so the host lines stay the main thing in the summary. In a block, the notes line up in one
   column. A waiting step's note is `needs 'A', 'B'`. A failure no step owns never gets a note.
 - **Options.** The `options:` heading is dim and italic, its keys are dim like other labels, and its values are styled
-  like other values, so a string keeps its quotes. `[MASKED]` is dim and unquoted, because it's tsinfra's marker, not a
+  like other values, with the same markers and quotes. `[MASKED]` is dim, because it's tsinfra's marker, not a
   value the script gave. On the line, an object's variable names go in braces after its name, like `env { URL, PORT }`,
   with the braces dim. A colon there would nest under `options:`, and the braces keep one object's names apart from the
   next. It's the first of a step's details, and on a failed step it comes after the error, like its other details.
@@ -291,13 +293,15 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   step show even when it was already right, without `--verbose`. The report decides what's a warning from the facts
   in the record, so no step records words. A failed step gets none, because its error is what needs fixing first. A
   warning isn't drift, so it doesn't change the exit code.
-- **Levels.** Every piece of a block has the lowest level it shows at: a step's own line, each of its options, each
-  part of its note, and each detail under it. A piece's level comes from what it is, like 1 for the line of a step that
-  was already right, 1 for the options line, and 0 for a warning. A piece can also stop at a level, like the options line, which the block replaces from 2. A piece shows once its own level is reached, or when anything inside
-  it shows, and a step that shows always prints its own line. So a warning, at 0, shows its step at the default level,
-  even when the step was already right. The report builds every piece for every step, then keeps the ones the level
-  shows, before it lines up the columns, so a hidden piece never widens one. A diff is the exception. It's one piece
-  at every level, and the level only sets its limits, because computing a full diff only to drop it would be slow.
+- **Levels.** Every piece of a block has the lowest level it shows at: a step's own line, each part of its note, each
+  detail under it, and the pieces inside a detail, like an option's value or what a command printed. A piece's level comes from what it is, like 1 for the line of a step that was
+  already right, 1 for the options line, and 0 for a warning. A piece can also stop at a level, like the "run with -vvv"
+  note, which goes away at 3, where the stderr it points at shows. A piece shows once its own level is reached, or when
+  anything inside it shows, and a step that shows always prints its own line. So a warning, at 0, shows its step at the
+  default level, even when the step was already right. The report builds every piece for every step, then keeps the ones
+  the level shows, before it lines up the columns, so a hidden piece never widens one. A diff, and a string `ensure`
+  value's rows, are the exception. Each is one piece at every level, and the level only sets its limits, because
+  computing a full diff only to drop it would be slow.
 - **A host with nothing to show** gets no block, only its line in the summary. A host whose script made no steps
   isn't one, because its "no steps" block shows that it ran.
 - **The summary** has one line per host: `unchanged`, `failed`, or a count of changes, where a count includes both
@@ -306,49 +310,23 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   starts with the reminder that steps after a change were checked without it (see
   [Steps](./steps.md#what-plan-can-and-cannot-show)).
 - **Diffs** come from jsdiff (the `diff` package), not hand-written code. It is the standard line-diff library for
-  JavaScript, has no dependencies, and returns hunks with context as data, which the report colors itself. A step that
-  would change a string shows how under its line: `got:` and `want:` for a single-line value, or a diff for a multi-line
-  one. A diff shows 1 unchanged line around each change. Each line is numbered by where it sits in `want`, so a removed
+  JavaScript, has no dependencies, and returns hunks with context as data, which the report colors itself. A file's
+  text content shows as a diff. A diff shows 1 unchanged line around each change. Each line is numbered by where it sits in `want`, so a removed
   line, which isn't in `want`, has no number, the way Zed shows a combined diff. A dim rule separates the hunks, and
-  another frames the diff above and below, so it stands apart from a `stderr:` row or a `mode:` row after it. A
-  boolean or an exit code shows nothing, because the step's name says what yes and no mean. A diff longer than 15 lines,
-  counting the rules between hunks, shows "long diff (N lines)" instead. A diff that takes longer than 200 ms to compute shows "diff took
-  too long to compute". Both suggest `--verbose`, which shows every diff in full and allows 10 seconds to compute one.
+  another frames the diff above and below, so it stands apart from a `stderr:` row or a `mode:` row after it. A diff
+  longer than 15 lines, counting the rules between hunks, shows "long diff (N lines)" instead. A diff that takes longer
+  than 200 ms to compute shows "diff took too long to compute". Both suggest `--verbose`, which shows every diff in full
+  and allows 10 seconds to compute one.
+- **A string `ensure` value** shows as `got:` and `want:` rows under its step, not as a diff, because a check's output
+  has no lines for numbers to point to. A multi-line value shows only the lines that differ, which jsdiff picks, so a
+  long list with one change stays short. Each line follows the rules in Values, so an empty line or a trailing space
+  still shows. An empty value shows as `(empty)`, and a side whose lines are all in the other side has no row, like a lone `want:` row
+  for a missing package. The rows don't say where in the value a line sits, so a pure reorder shows the same lines
+  under both. More than 15 differing lines show "N lines differ", and lines that take longer than 200 ms to compare
+  show "values took too long to compare". Both suggest `--verbose`, which shows every differing line. A boolean or an
+  exit code shows nothing, because the step's name says what yes and no mean.
 
-A `--json` mode that writes the report as data is a later addition (see
-[Open questions](./open-questions.md#json-output)).
-
-### Live progress
-
-While hosts run, the output shows what tsinfra is doing, and each host's progress turns into its report when it
-finishes:
-
-- **A live line per running host,** with a spinner and the step it is on. The current step comes from the host's
-  record, because a step's record is pushed when the step starts.
-- **A permanent block per finished host.** When a host finishes, its live line goes away and its block prints above the
-  live area, where it stays. The block is the same text `renderHostBlock` produces, so the live view and the report never
-  disagree.
-- **The summary** prints once every host has finished.
-
-This uses [Ink](https://github.com/vadimdemedes/ink). Its `<Static>` component is this pattern exactly: what it
-renders prints once and stays, while the rest of the output redraws below it. Ink also captures `console.log` from a
-host script and prints it above the live area, so a script's own output can't garble the live lines. When stdout is not
-a terminal, Ink prints the `<Static>` items and skips the live area, so CI and pipes get only the blocks and the summary.
-That was checked under Bun with Ink 8.
-
-[listr2](https://github.com/listr2/listr2) was the alternative. It is a task list with spinners and a concurrency limit,
-and it is much smaller than Ink. It does not fit this design:
-
-- **It controls the layout.** Finished tasks stay in their place in the list, with its own symbols and indentation. A
-  block with diffs could only go in a task's output, formatted by its renderer.
-- **It keeps list order, not finish order.** A host that finishes early would not print before the ones above it.
-- **Its non-terminal output is its own.** Its fallback renderers print lines like task started and completed, not the
-  report.
-- **It does not capture a script's `console.log`,** which would write into the middle of its live lines.
-
-Live progress comes with the SSH transport and `--parallel`, because that is when hosts are slow enough, and run at once,
-for progress to matter. Until then the blocks print directly as each host finishes. The details still open are in
-[Open questions](./open-questions.md#live-progress-details).
+There's no `--json` mode yet (see [Maybe later](./roadmap.md#maybe-later)).
 
 ### What a host records
 
@@ -418,21 +396,6 @@ A failure is one of four kinds, named after what it stops.
   script caught inside the step.
 
 Every kind but a startup failure fails only its own host, so the other hosts still run, and the run exits 1.
-
-### Diagnostic logs
-
-Logs are separate from the report. They are for working out what tsinfra itself did, like which SSH command it ran, how
-long a connection took, or why it failed. They use [LogTape](https://logtape.org) and go to stderr, so stdout stays the
-report.
-
-- **LogTape** has no dependencies and supports Bun. It stays silent until the application configures it, which matters
-  because host scripts import tsinfra as a library. It ships a JSON Lines formatter, and `@logtape/pretty` for readable
-  terminal output.
-- **`@optique/logtape`** adds the logging options to the existing Optique parser: `--log-level` and `--log-output`. It
-  can also add a `-v`/`-vv` form, which tsinfra leaves out, because `-v` already sets how much the report shows (see
-  [Output](#output)).
-
-Nothing logs yet. LogTape is its own feature, added on its own.
 
 ## Exit codes
 

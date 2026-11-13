@@ -1,6 +1,7 @@
 # tsinfra design
 
-Working design notes. Some of what they describe isn't built yet (see the [roadmap](../todo.md)).
+Working design notes. They describe tsinfra as it is. What's planned, undecided, or ruled out is in the
+[roadmap](./roadmap.md).
 
 tsinfra is a small TypeScript library and CLI for keeping machines configured. You write one script per host. It reads
 top to bottom and is made of idempotent steps. tsinfra reads each step's state on the host, shows what has drifted, and runs a fix
@@ -15,6 +16,8 @@ design replaces it with something one person can build and maintain.
 - [Goals](#goals)
 - [Non-goals](#non-goals)
 - [Anti-goals](#anti-goals)
+- [No state](#no-state)
+- [Compared with other tools](#compared-with-other-tools)
 - [Example](#example)
 - [Concepts](#concepts)
 - [Contents](#contents)
@@ -54,7 +57,7 @@ tsinfra keeps the script shape and adds what scripts lacked:
 
 - An inventory file, tags, or groups. A folder of host scripts is the inventory.
 - A dependency graph or any reordering of steps. The order you wrote is the order things run.
-- Ordering between hosts, for now. Run them as separate commands. A [tentative design](./open-questions.md#ordering-between-hosts) comes late.
+- Ordering between hosts, for now. Run them as separate commands. A [tentative design](./roadmap.md#ordering-between-hosts) comes late.
 - A state file.
 - A template engine. Template literals cover it.
 - A library of built-in operations (apt, brew, systemd). Write helper functions. Some may move into tsinfra later.
@@ -69,6 +72,41 @@ These would make it a failure even if it works:
   first.
 - **A plan that looks complete but is not.** Where `plan` cannot know, it says so.
 - **Ceremony in scripts.** An `isErr` after every step, or registering steps before running them.
+
+## No state
+
+tsinfra keeps no record of past runs. Every `plan` reads the machine as it is now. There is no state file to lose, lock,
+or keep in sync, and any checkout on any control machine gives the same plan. Ansible and pyinfra work the same way.
+Terraform needs state because it creates resources and has to know which ones are its own. tsinfra configures machines
+that already exist.
+
+What that costs:
+
+- **Removing a step does not undo it.** A file or package the script stops managing stays on the machine. Removing it
+  takes a step that removes it, like `check: "test -e /etc/sonarr.conf"` and `want: false`, with
+  `fix: "sudo rm /etc/sonarr.conf"`.
+- **`plan` cannot say why something differs.** A hand edit on the machine and an edit to the script look the same,
+  because there is no record of the last apply.
+- **Run-once work needs a marker.** A one-time migration has no natural check, so it leaves a marker on the host, like
+  `test -f /var/lib/myapp/migrated`, and checks for that.
+
+If forgotten files become a real problem, a manifest of managed paths on the host is a lighter fix than a state file
+(see [Removed resources](./roadmap.md#removed-resources)).
+
+## Compared with other tools
+
+Where tsinfra differs from the tools in the survey behind the [roadmap's ideas](./roadmap.md#ideas), led by its
+strengths:
+
+|                      | tsinfra                                                                     | Others                                                                                                                                                                                                                             |
+| -------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Needs on the host    | `sh` and `sshd`                                                             | Ansible needs Python, except `raw`, which has no check mode or diff. salt-ssh needs Python 3 and sends a "thin" tarball. Chef's agentless mode is Linux only, and Bolt's `apply` installs the Puppet agent. cdist matches tsinfra. |
+| When state is read   | Just before each step's fix, and again after it                             | pyinfra reads facts in a prepare phase before any change, and its docs warn they go stale. cdist runs every explorer before any code.                                                                                              |
+| How honest `plan` is | A step that depends on a change waits with `needs`, and follow-up runs show | Chef calls its own why-run mode "harmful" because it can only forecast. Ansible modules without check-mode support report nothing. Puppet's noop skips refreshes.                                                                  |
+| Order                | Top to bottom, as written                                                   | Puppet orders by a graph. cdist's order is undefined without dependencies.                                                                                                                                                         |
+| Reacting to a change | Typed `changed` results passed to `after`                                   | Ansible handlers run at the end of the play. cdist types grep message files.                                                                                                                                                       |
+| Language             | TypeScript, with typed options and template literals                        | YAML, DSLs, or shell scripts with a file per parameter                                                                                                                                                                             |
+| State file           | None                                                                        | Same as Ansible and pyinfra. Terraform needs one because it creates resources.                                                                                                                                                     |
 
 ## Example
 
@@ -125,7 +163,6 @@ tsinfra plan            # every host
 | **Need**  | An earlier step whose change a step's state depends on, named in `needs`.                         |
 | **Plan**  | Read every step's state, run no fix. Show what would change.                                      |
 | **Apply** | Read every step's state, and run the fix wherever it differs.                                     |
-| **Task**  | A named function on a host besides its main one, like `update`, run with `--task`.                |
 
 ## Contents
 
@@ -134,8 +171,8 @@ tsinfra plan            # every host
 - **[Waiting on earlier steps](./needs.md)**: `needs`, and how `plan` waits on an earlier change
 - **[Transport](./transport.md)**: local and SSH, ControlMaster, sudo, and how commands and files cross
 - **[CLI](./cli.md)**: the `hosts/` folder, `plan` and `apply`, output, and exit codes
-- **[Open questions](./open-questions.md)**: what still needs an answer
-- **[Ideas](./ideas.md)**: features other tools have that could fit, what was decided, and what was rejected
+- **[Recipes](./recipes.md)**: patterns that need no tsinfra feature
+- **[Roadmap](./roadmap.md)**: what's planned, the open questions, ideas from other tools, and what was rejected
 
 ## Runtime
 

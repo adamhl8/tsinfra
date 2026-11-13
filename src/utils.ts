@@ -13,9 +13,6 @@ export const getMaxWidth = (texts: string[]): number => Math.max(0, ...texts.map
 /** Pads `value` with spaces to `width` terminal columns. */
 export const padToWidth = (value: string, width: number): string => value + " ".repeat(width - stringWidth(value))
 
-/** Reports whether `text` spans more than one line. */
-export const isMultiLine = (text: string): boolean => text.includes("\n")
-
 /** Removes every newline at the end of `text`. */
 export const stripTrailingNewlines = (text: string): string => text.replace(TRAILING_NEWLINES, "")
 

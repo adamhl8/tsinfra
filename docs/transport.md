@@ -19,7 +19,6 @@ the remote shell.
 ```ts
 export default host("sonarr.lan", async (h) => { ... }) // SSH, any target ssh accepts
 export default host("@local", async (h) => { ... }) // the control machine itself
-export default host("caddy.lan", async (h) => { ... }, { shell: ["bash", "-l", "-s"] }) // not built yet
 ```
 
 `"@local"` is the same magic name pyinfra uses, and the one `~/homelab/pyinfra/inventory.py` already uses.
@@ -30,7 +29,7 @@ in as the `User` that `~/.ssh/config` gives the host, or else as the local user.
 ## Commands travel on stdin
 
 Every command is sent as a script on stdin to a shell on the host. The command that starts that shell is a fixed
-string, unless the host sets `shell` (see [Login shells](#login-shells)):
+string:
 
 ```sh
 ssh <options> sonarr.lan sh -s  # SSH
@@ -75,32 +74,9 @@ always gets the connection error from ssh's stderr rather than being treated as 
 `sh -s` is not a login shell, so PATH additions from `.bashrc` or `.profile` do not load. The archived Bun scripts used
 `bash -li` for exactly that (Go's path lives in `.bashrc` on the caddy container).
 
-The host option `shell` replaces the whole command that starts the host's shell, as an array of words, like
-`{ shell: ["bash", "-l", "-s"] }`. The default is `["sh", "-s"]`. It isn't built yet, and it's under Later in
-`todo.md` (decided 2026-11-11). The control machine's own commands, like `ssh -G`, keep `sh -s`.
-
-- **The option is the whole command, `-s` included.** tsinfra adds no flag to it, because it can't know how another
-  shell reads its script. The one requirement is that the shell reads its script from stdin.
-- **Each word reaches the shell as written.** Locally, tsinfra runs the array as the process's arguments. Over SSH, ssh
-  joins its arguments into one string, and the user's login shell parses it, so tsinfra quotes each word with
-  `quoteShellArg` first. A single string would mean two things. Split locally, `bash -c 'x'` gives bash the quotes as
-  part of its script. Over SSH, the login shell removes them.
-- **`sudo: true` runs the same shell,** as `sudo <shell> <<'<delimiter>'`, with each word quoted. Under sudo, `-l`
-  loads root's profile, not the user's, because sudo sets `HOME` to root's.
-- **tsinfra checks nothing about the shell.** Picking one that works is the user's job. The commands tsinfra writes,
-  like the `{ ... } </dev/null` wrapper, the `sudo` function, and `file`'s scripts, are POSIX sh. So the shell must be
-  POSIX compatible, and fish is not. A shell that can't run them fails preparation's first command.
-
-A login shell has two pitfalls, which the user docs should warn about:
-
-- **Anything the profile prints lands in every command's stdout.** That breaks preparation's home directory read and
-  `file`'s details, so a profile that prints can't be used.
-- **`bash -l` may not load PATH set in `.bashrc`.** A login bash reads `.profile`, which on Debian sources `.bashrc`.
-  Debian's `.bashrc` stops early in a non-interactive shell, so a PATH line at its end never runs. Move the line into
-  `.profile`. Adding `-i` loads `.bashrc`, but an interactive bash reading a pipe writes prompts and job-control
-  warnings to stderr, which lands on the record.
-
-A `path` option may fit that case better (see [Ideas](./ideas.md#maybe-later)).
+A `shell` host option that replaces `sh -s` is planned (see
+[The `shell` host option](./roadmap.md#the-shell-host-option)), and a `path` option that adds to PATH is an idea (see
+[Maybe later](./roadmap.md#maybe-later)).
 
 ## File writes
 
@@ -166,7 +142,7 @@ Each step's place in the order matters:
 
 No step runs `fsync` before the rename. A crash at the wrong moment could leave the new file empty after a reboot.
 Ansible and Chef skip it too, and Puppet and Salt don't (see
-[Open questions](./open-questions.md#fsync-before-the-rename)).
+[the roadmap](./roadmap.md#fsync-before-the-rename)).
 
 The record never holds the content. It stores the script with `<content as base64>` in place of the heredoc's content,
 because the content may be a secret, and it can be large.
@@ -228,8 +204,8 @@ ssh -T -o ControlMaster=auto -o ControlPath=~/.ssh/tsinfra-%C -o ControlPersist=
   CLI closes each connection at the end of the run with `ssh -O stop`. `stop` lets sessions already on the connection
   finish, where `exit` would kill them. Two tsinfra runs to the same host share one socket, so one run's `exit` would
   kill the other's commands.
-- **BatchMode** makes ssh fail instead of prompting. Hosts run in parallel, and a password or host-key prompt from one
-  of them would hang the run. The error says to run `ssh <host>` once by hand.
+- **BatchMode** makes ssh fail instead of prompting, because a password or host-key prompt would hang the run, and
+  with hosts in parallel it would mix with their output. The error says to run `ssh <host>` once by hand.
 - **`--`** ends ssh's options, so a target can't be read as one.
 
 The first command to a host, the home read when it's prepared, opens the connection. An unreachable host fails
@@ -368,7 +344,7 @@ first run on the Incus host need a password.
 
 **Preparation.** Every host is prepared before any script runs: connect, read `$HOME`, and for a host that declares
 `sudo`, check it. That happens for every host at once. Then the hosts that need a password prompt, one at a time, in the
-hosts' order. Then the scripts run, one after another or in parallel, so a prompt never mixes with a running host's
+hosts' order. Then the scripts run, one after another, so a prompt never mixes with a running host's
 output. A host that can't be reached fails here, before any other host changes anything. A host has to declare `sudo`
 because of this: by the time its script runs, it's too late to ask.
 

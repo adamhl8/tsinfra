@@ -19,7 +19,6 @@ Everything a host script does to its host goes through `h`, the context passed t
   - [What a check may change](#what-a-check-may-change)
   - [`fix`](#fix)
 - [`run`](#run)
-- [`reboot`](#reboot)
 - [Failure](#failure)
 - [What `plan` can and cannot show](#what-plan-can-and-cannot-show)
 
@@ -38,7 +37,6 @@ interface Host {
     cmd: string | ((tools: ChangeTools) => Promise<void>),
     options: RunOptions,
   ): Promise<ChangeStepResult>
-  reboot(options: RebootOptions): Promise<ChangeStepResult>
 }
 
 // Tools that only read the host, given to a check function. These are the same as `h.read` and `h.inspect`.
@@ -72,7 +70,7 @@ type InspectResult = {
   exitCode: number
 }
 
-type ChangeStepKind = "file" | "link" | "ensure" | "run" | "reboot"
+type ChangeStepKind = "file" | "link" | "ensure" | "run"
 
 // What a change step returns.
 type ChangeStepResult<K extends ChangeStepKind = ChangeStepKind> = {
@@ -224,8 +222,9 @@ covers.
 
 **An option takes a function when tsinfra decides when, or whether, it runs.** `check` runs in both modes and again
 after the fix. `fix` and a run's command run only in `apply`, and only when needed. Every other option is a plain value
-that your script computes before the call: `want`, `needs`, `after`, and `file`'s `content`. A `want` that depends on
-the host belongs in the check, which reads both values and returns the comparison. `h.read` and `h.inspect` run
+that your script computes before the call: `want`, `needs`, `after`, and `file`'s `content`. A `want` read with
+`h.read` sees the host before any earlier change in `plan`, so when an earlier step changes what it reads, the read
+belongs in the check (see [Recipes](./recipes.md#the-state-you-want-or-whats-left-to-do)). `h.read` and `h.inspect` run
 straight away, so they take a command, not a function. Combining several reads is ordinary code at the top level.
 
 **A function holds commands, not decisions.** A fix or run function that tests the machine before acting is an
@@ -333,7 +332,7 @@ always the content itself, so it can't be mistaken for a path. tsinfra reads the
 - **A missing file fails the step,** like `failed to read local file '/repo/files/Caddyfile'`, not the script.
 - **Its size is known before reading,** from `blob.size`, so the [size limit](#the-write) fails before anything is read.
 - **It leaves room for streaming.** `blob.stream()` is how large files could be sent without holding them in memory
-  (see [Open questions](./open-questions.md#files-over-10-mb)).
+  (see [the roadmap](./roadmap.md#files-over-10-mb)).
 
 A file that needs values filled in is read and edited in the script, then passed as a string, like any template.
 
@@ -403,7 +402,7 @@ which can sudo to any user. tsinfra only escalates to root, where `~` as `/root`
 **Symlinks and other non-files are refused.** If `path` is a symlink, a directory, or anything but a regular file, the
 step fails, like `'/etc/x' is a symlink, so file won't replace it`. Managing a link is what [`link`](#link) is for.
 Whether `file` should follow a link and write to its target is open (see
-[Open questions](./open-questions.md#following-symlinks-in-file)).
+[the roadmap](./roadmap.md#following-symlinks-in-file)).
 
 ### Reading the state
 
@@ -487,7 +486,7 @@ with its owner and mode.
 
 **Size limit.** Content over 10 MB fails before anything is read or sent, like `local file '/srv/app.iso' is 14 MB, above the 10 MB limit`. The
 shell holds the whole script in memory, and base64 adds a third, so the heredoc suits config files, not large binaries.
-A streaming path for large files is open (see [Open questions](./open-questions.md#files-over-10-mb)).
+A streaming path for large files is open (see [the roadmap](./roadmap.md#files-over-10-mb)).
 
 **Content written only once.** `overwrite: false` creates a missing file, and never touches it after that.
 It's for a file an app rewrites itself, like Sonarr's `config.xml`, which changes whenever a setting changes in its web
@@ -660,8 +659,9 @@ await h.ensure("Remove the old user", { check: "id olduser", want: false, fix: "
 **A string `want`** is compared to the command's stdout. `want` is computed in your script on the control machine.
 Trailing newlines are stripped from both (the way `$(cmd)` does), then the two are compared exactly. Stripping `want`
 too means a value built from a template literal that ends in a newline still matches. When they differ, the report shows
-how under the step's status line, in `plan` and `apply`: a `got:` and a `want:` line for a single-line value, or a
-line diff for a multi-line one.
+how under the step's status line, in `plan` and `apply`, as a `got:` and a `want:` row. For a multi-line value, the rows
+hold only the lines that differ (see [CLI](./cli.md#how-the-report-is-built)). For a list of things, like packages, see
+[The state you want, or what's left to do](./recipes.md#the-state-you-want-or-whats-left-to-do).
 
 ```ts
 await h.ensure("Start Sonarr", {
@@ -833,11 +833,12 @@ unless it starts with `set -e`. Use the function form for anything past one comm
 that needs a sudo password, tsinfra supplies it (see [Transport](./transport.md#sudo)).
 
 **Verification.** After a fix runs, the check runs again. If it still does not pass, the step fails with "the host's
-state still differs after the fix", followed by a `got:` and a `want:` line, or a line diff for a
-multi-line string. A string is quoted, so an empty value shows as `''`. A boolean shows as `true` or `false`. An exit
-status shows as `exit code 1`, against `exit code 0` or `a non-zero exit code`. A `stderr:` row follows for the fix and
-the check when each ran one command that printed some, and names that command (see
-[CLI](./cli.md#output)). A step that reports a change on every run is a bug, and this is what surfaces it the first time.
+state still differs after the fix", followed by a `got:` and a `want:` row, which hold only the lines that differ for
+a multi-line string. A string shows as it is, and an empty one as `(empty)` (see
+[CLI](./cli.md#how-the-report-is-built)). A boolean shows as `true` or `false`. An exit status shows as `exit code 1`,
+against `exit code 0` or `a non-zero exit code`. A `stderr:` row follows for the fix and the check when each ran one
+command that printed some, and names that command (see [CLI](./cli.md#output)). A step that reports a change on every
+run is a bug, and this is what surfaces it the first time.
 
 ```
 the host's state still differs after the fix
@@ -889,7 +890,7 @@ run's check confirms it. Before reaching for it, try these:
 
 ```ts
 type RunOptions = EnvOptions & {
-  after: ChangeStepResult<"file" | "link" | "ensure" | "run" | "reboot">[] | "always" // run when any of these changed, or "always" on every pass
+  after: ChangeStepResult<"file" | "link" | "ensure" | "run">[] | "always" // run when any of these changed, or "always" on every pass
 }
 ```
 
@@ -920,8 +921,8 @@ that didn't happen.
 **Put a run right after the steps it follows.** tsinfra keeps no state, so a trigger that didn't get its run is lost. If
 a unit file changes and the host fails before its reload runs, the next `apply` finds the file already right and
 reports it unchanged, so the reload never fires on its own. With the run right after its steps, the only gap left is the
-run itself failing. When a run with `after` fails, its error ends with a hint, like
-`the steps it follows won't show as changed on the next apply, so run this by hand once it's fixed`.
+run itself failing. A run with `after` that fails needs a rerun by hand once it's fixed, because the steps it follows
+won't show as changed on the next apply.
 
 |                       | `apply`                           | `plan`                                   |
 | --------------------- | --------------------------------- | ---------------------------------------- |
@@ -969,7 +970,7 @@ await updateComposeStack(h, [compose])
 ```
 
 The same works for steps with a check, as in `aptPackage(h, "caddy")`. Helpers like these are how tsinfra gets modules,
-whether you write them or tsinfra ships them (see [Open questions](./open-questions.md#helpers-worth-shipping)).
+whether you write them or tsinfra ships them (see [the roadmap](./roadmap.md#helpers-worth-shipping)).
 
 Anything that can be checked should be an `ensure`, not a `run`. `after` keeps a check out of the trigger, but one can
 still hide in a run function:
@@ -986,40 +987,6 @@ await h.run(
 
 It works, but it never counts as drift, and `plan` shows it whether or not anything would change. Nothing can stop it,
 because a function can run any code.
-
-## `reboot`
-
-```ts
-type RebootOptions = {
-  after: ChangeStepResult<"file" | "link" | "ensure" | "run" | "reboot">[] | "always" // the same as a run's
-  timeout?: number // milliseconds to go down and come back, default 10 minutes
-}
-```
-
-```ts
-const kernel = await h.ensure("Install the HWE kernel", { ... })
-await h.reboot({ after: [kernel] })
-```
-
-Reboots the host, waits for it to come back, and carries on with the script. Running `reboot` with `exec` would drop the
-connection, so the command would look failed, and nothing would wait for the host. A reboot is a follow-up to a change,
-not state a check can read, so it works like a [`run`](#run):
-
-- **`after` decides when.** It reboots when a step it follows changed, or on every pass with `"always"`. In `plan` it
-  never reboots, and shows as a `>` line, so later steps are checked against the host as it is, like any step after a
-  change.
-- **How it works.** It reads the boot id (`/proc/sys/kernel/random/boot_id` on Linux, `sysctl -n kern.boottime` on
-  macOS), starts `sudo reboot` in the background so the command returns cleanly, drops the ControlMaster socket, and
-  polls until the host answers. Then it reads the boot id again. An unchanged boot id fails the step with
-  `the host didn't reboot`, so a host that never went down doesn't count, the same check Ansible's `reboot` makes.
-- **One `timeout`** covers going down and coming back. Ansible splits it in two, which mostly helps it word its errors.
-- **It escalates like any command,** through the `sudo` function, so the host declares `sudo` on `host()` (see
-  [Transport](./transport.md#sudo)).
-- **`@local` refuses it,** with `can't reboot @local, because it's the machine tsinfra runs on`.
-- **It's a top-level step.** A fix that installs a kernel doesn't reboot by itself, and the script follows that step
-  with `h.reboot`.
-- **It returns a `ChangeStepResult<"reboot">`,** so a run can follow it. Like a run's, it can't be needed, because nothing
-  about the host's state says a reboot happened.
 
 ## Failure
 

@@ -8,8 +8,15 @@ import { formatEnsureValues } from "#report/format/details/ensure.ts"
 import { formatFileValues } from "#report/format/details/file.ts"
 import { formatLinkValues } from "#report/format/details/link.ts"
 import { formatOptions } from "#report/format/details/options.ts"
+import {
+  formatFailedCommandLine,
+  formatHint,
+  formatNote,
+  formatStderrLine,
+  formatWarningLabel,
+  formatWarningValue,
+} from "#report/format/elements/elements.ts"
 import type { Detail, StepWarning } from "#report/host-block/host-block.ts"
-import { styleError, styleHint, styleNote, styleValue, styleWarning } from "#styles.ts"
 import { splitNonEmptyLines } from "#utils.ts"
 
 export type { AlignedRow } from "#report/format/details/aligned-row.ts"
@@ -24,20 +31,19 @@ export { DEFAULT_DIFF_LIMITS } from "#report/format/details/diff.ts"
 export type DetailRows = { kind: "aligned"; rows: AlignedRow[] } | { kind: "unaligned"; rows: string[] }
 
 /**
- * Formats a warning, like `warning: nothing exists at target -> /x`, with the value it's about after its words. Colors
+ * Formats a warning, like `warning: nothing exists at target -> /x`, with the value it's about after its words. Styles
  * only the label and the value, so the words read like the rest of the details.
  */
 const formatWarning = (warning: StepWarning): string => {
   const { text, value } = warning
-  const valueText = value === undefined ? "" : ` ${styleValue(value)}`
-  return `${styleWarning("warning:")} ${text}${valueText}`
+  const valueText = value === undefined ? "" : ` ${formatWarningValue(value)}`
+  return `${formatWarningLabel()} ${text}${valueText}`
 }
 
 /** Formats a command's stderr as two rows, a `command:` row and a `stderr:` row, so each label names its own value. */
 const formatStderr = (command: string, stderr: string): AlignedRow[] => {
-  const commandLines = command.split("\n").map((commandLine) => styleValue(commandLine))
-  // Color stderr like an error, so it stands apart from its command.
-  const stderrLines = splitNonEmptyLines(stderr).map((stderrLine) => styleError(stderrLine))
+  const commandLines = command.split("\n").map((commandLine) => formatFailedCommandLine(commandLine))
+  const stderrLines = splitNonEmptyLines(stderr).map((stderrLine) => formatStderrLine(stderrLine))
   return [formatAlignedRow("command", commandLines), formatAlignedRow("stderr", stderrLines)]
 }
 
@@ -47,12 +53,12 @@ export const formatDetail = (detail: Detail, diffLimits: DiffLimits | undefined)
   if (detail.kind === "diff") return { kind: "unaligned", rows: formatDiff(detail.got, detail.want, diffLimits) }
   if (detail.kind === "fileComparisonValues") return { kind: "aligned", rows: formatFileValues(detail.values) }
   if (detail.kind === "linkComparisonValues") return { kind: "aligned", rows: formatLinkValues(detail.values) }
-  if (detail.kind === "ensureComparisonValues") return { kind: "aligned", rows: formatEnsureValues(detail.values) }
+  if (detail.kind === "ensureComparisonValues") return formatEnsureValues(detail.values, diffLimits)
   if (detail.kind === "stderr") return { kind: "aligned", rows: formatStderr(detail.command, detail.stderr) }
-  if (detail.kind === "note") return { kind: "unaligned", rows: [styleNote(detail.text)] }
+  if (detail.kind === "note") return { kind: "unaligned", rows: [formatNote(detail.text)] }
   if (detail.kind === "warning") return { kind: "unaligned", rows: [formatWarning(detail.warning)] }
   if (detail.kind === "commands") return { kind: "unaligned", rows: formatCommands(detail.commands) }
   if (detail.kind === "commandOutput") return { kind: "unaligned", rows: formatCommandOutputLines(detail.output, "") }
 
-  return { kind: "unaligned", rows: [styleHint(detail.text)] }
+  return { kind: "unaligned", rows: [formatHint(detail.text)] }
 }

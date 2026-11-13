@@ -1,46 +1,26 @@
+import {
+  formatHeading,
+  formatOptionKey,
+  formatOptionEntries,
+  formatOptionName,
+  formatOptionValueLines,
+} from "#report/format/elements/elements.ts"
 import { INDENT } from "#report/format/layout.ts"
 import type { StepOption } from "#report/host-block/host-block.ts"
-import { MASKED_VALUE } from "#session/session.ts"
-import { styleAside, styleLabel, styleNote, styleUnquotedValue, styleValue } from "#styles.ts"
 import { getMaxWidth, padToWidth } from "#utils.ts"
 
 /** Reports whether any of `options`, or any of their entries, kept a value through the filter. */
 const hasValues = (options: StepOption[]): boolean =>
   options.some(({ value, entries }) => value !== undefined || hasValues(entries))
 
-/**
- * Formats one option for the options line: its name, and its entries' names in braces after it, like `env { URL, PORT
- * }`. Use braces, because a colon inside the line would nest under `options:`, and the braces keep one option's names
- * apart from the next option's.
- */
-const formatOptionsLinePart = ({ name, entries }: StepOption): string => {
-  const entryNames = entries.map(({ name: entryName }) => styleValue(entryName))
-  const entriesText = `${styleLabel("{")} ${entryNames.join(", ")} ${styleLabel("}")}`
-  return entries.length > 0 ? `${styleLabel(name)} ${entriesText}` : styleLabel(name)
-}
-
 /** Formats the options line, like `options: env { URL, PORT }, secretEnv { TOKEN }`. */
 const formatOptionsLine = (options: StepOption[]): string => {
-  const optionsLineParts = options.map((option) => formatOptionsLinePart(option))
-  return `${styleNote("options:")} ${optionsLineParts.join(", ")}`
-}
-
-/**
- * Formats a value as its lines. Italicizes a boolean, because it isn't quoted. Dims a masked value, unquoted, because
- * it's tsinfra's marker, not a value the script gave. Quotes any other string with the quotes uncolored, so an empty
- * one still shows.
- */
-const formatValueLines = (value: string | boolean): string[] => {
-  if (typeof value === "boolean") return [styleUnquotedValue(String(value))]
-  if (value === MASKED_VALUE) return [styleAside(value)]
-
-  const valueLines = value.split("\n")
-  const lastIndex = valueLines.length - 1
-  return valueLines.map((valueLine, index) => {
-    const openingQuote = index === 0 ? "'" : ""
-    const closingQuote = index === lastIndex ? "'" : ""
-    return `${openingQuote}${styleValue(valueLine)}${closingQuote}`
-  })
+  const optionsLineParts = options.map(({ name, entries }) =>
+    entries.length > 0
+      ? `${formatOptionName(name)} ${formatOptionEntries(entries.map((entry) => entry.name))}`
+      : formatOptionName(name),
+  )
+  return `${formatHeading("options")} ${optionsLineParts.join(", ")}`
 }
 
 /**
@@ -49,13 +29,14 @@ const formatValueLines = (value: string | boolean): string[] => {
  * and lines up a value's later lines under its first line's text.
  */
 const formatOptionsBlockRows = (options: StepOption[], indent: string): string[] => {
-  const valueLabels = options.flatMap(({ name, value }) => (value === undefined ? [] : [`${name}: `]))
+  // Measure each key as it's formatted, with the space after it, so the width follows the key's own text.
+  const valueLabels = options.flatMap(({ name, value }) => (value === undefined ? [] : [`${formatOptionKey(name)} `]))
   const labelWidth = getMaxWidth(valueLabels)
   const continuationIndent = " ".repeat(labelWidth)
 
   return options.flatMap(({ name, value, entries }) => {
-    const label = styleLabel(`${name}:`)
-    const valueLines = value === undefined ? [] : formatValueLines(value.value)
+    const label = formatOptionKey(name)
+    const valueLines = value === undefined ? [] : formatOptionValueLines(value.value)
     const valueRows = valueLines.map((valueLine, index) => {
       const lineStart = index === 0 ? padToWidth(label, labelWidth) : continuationIndent
       return `${indent}${lineStart}${valueLine}`
@@ -72,5 +53,5 @@ const formatOptionsBlockRows = (options: StepOption[], indent: string): string[]
  */
 export const formatOptions = (options: StepOption[]): string[] =>
   hasValues(options)
-    ? [styleNote("options:"), ...formatOptionsBlockRows(options, INDENT)]
+    ? [formatHeading("options"), ...formatOptionsBlockRows(options, INDENT)]
     : [formatOptionsLine(options)]

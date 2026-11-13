@@ -3,6 +3,7 @@ import prettyBytes from "pretty-bytes"
 import type { AlignedRow } from "#report/format/details/aligned-row.ts"
 import { formatAlignedRow } from "#report/format/details/aligned-row.ts"
 import { formatOwnerChange } from "#report/format/details/owner.ts"
+import { formatChange, formatChangeDescription, formatWantValue } from "#report/format/elements/elements.ts"
 import type {
   FileComparisonValues,
   ContentComparison,
@@ -12,7 +13,6 @@ import type {
   ModeBits,
 } from "#session/session.ts"
 import { toOctalMode, toSymbolicMode } from "#session/session.ts"
-import { styleDescription, styleGot, styleWant } from "#styles.ts"
 
 // Spell out a size in bytes, because a lone `B` reads like "billion".
 const BYTE_UNIT = / B$/v
@@ -35,10 +35,10 @@ const isSizeComparison = (content: ContentComparison): content is SizeComparison
 /** Formats a note in place of a diff, like `binary, 12 kB -> 14 kB`, or `new file, 2 kB` when there's no file yet. */
 const formatSizeComparison = (sizeComparison: SizeComparison): string => {
   const { kind, gotSize, wantSize } = sizeComparison
-  // Color the sizes like `got` and `want`, because they're the change, like an attribute's values.
-  const wantText = styleWant(formatSize(wantSize))
-  const sizes = gotSize === undefined ? wantText : `${styleGot(formatSize(gotSize))} -> ${wantText}`
-  return `${styleDescription(SIZE_COMPARISON_WORDS[kind])}, ${sizes}`
+  // Show the sizes as a change, because they're what changed, like an attribute's values.
+  const wantText = formatWantValue(formatSize(wantSize))
+  const sizes = gotSize === undefined ? wantText : formatChange(formatSize(gotSize), formatSize(wantSize))
+  return `${formatChangeDescription(SIZE_COMPARISON_WORDS[kind])}, ${sizes}`
 }
 
 /** Formats mode bits as both notations, like `rw-r--r-- (644)`, because a script can write either one. */
@@ -48,7 +48,7 @@ const formatAttributeChange = (attributeChange: AttributeChange): AlignedRow => 
   if (attributeChange.name !== "mode") return formatOwnerChange(attributeChange)
 
   const { name, got, want } = attributeChange
-  return formatAlignedRow(name, [`${styleGot(formatMode(got))} -> ${styleWant(formatMode(want))}`])
+  return formatAlignedRow(name, [formatChange(formatMode(got), formatMode(want))])
 }
 
 /** Formats how a file differs as its rows: a note for content the output can't diff, then each attribute that changes. */

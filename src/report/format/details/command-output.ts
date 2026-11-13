@@ -2,10 +2,15 @@ import { messageChain } from "ts-explicit-errors"
 
 import type { AlignedRow } from "#report/format/details/aligned-row.ts"
 import { formatAlignedRow } from "#report/format/details/aligned-row.ts"
+import {
+  formatErrorLine,
+  formatExitCode,
+  formatHeading,
+  formatStderrLine,
+  formatStdoutLine,
+} from "#report/format/elements/elements.ts"
 import { INDENT } from "#report/format/layout.ts"
 import type { CommandOutputDetail } from "#report/host-block/host-block.ts"
-import type { Style } from "#styles.ts"
-import { styleError, styleNote, styleUnquotedValue, styleValue } from "#styles.ts"
 import { getMaxWidth, padToWidth, splitNonEmptyLines } from "#utils.ts"
 
 /**
@@ -13,9 +18,9 @@ import { getMaxWidth, padToWidth, splitNonEmptyLines } from "#utils.ts"
  * the rows are for reading the output, not for its exact value, and keeps its leading whitespace, because that can line
  * up the output.
  */
-const formatStreamRows = (label: string, stream: string, style: Style): AlignedRow[] => {
+const formatStreamRows = (label: string, stream: string, formatLine: (line: string) => string): AlignedRow[] => {
   const trimmedStream = stream.trimEnd()
-  const streamLines = trimmedStream.split("\n").map((streamLine) => style(streamLine))
+  const streamLines = trimmedStream.split("\n").map((streamLine) => formatLine(streamLine))
   return trimmedStream === "" ? [] : [formatAlignedRow(label, streamLines)]
 }
 
@@ -26,14 +31,17 @@ const formatStreamRows = (label: string, stream: string, style: Style): AlignedR
  */
 const formatCommandOutputRows = (output: CommandOutputDetail): AlignedRow[] => {
   if (output.kind === "failed") {
-    const errorLines = splitNonEmptyLines(messageChain(output.error)).map((errorLine) => styleError(errorLine))
+    const errorLines = splitNonEmptyLines(messageChain(output.error)).map((errorLine) => formatErrorLine(errorLine))
     return [formatAlignedRow("error", errorLines)]
   }
 
   const { exitCode, stdout, stderr } = output
-  const exitRow = formatAlignedRow("exit", [styleUnquotedValue(String(exitCode))])
-  // Color stderr like an error, like the stderr row under a step that still differs.
-  return [exitRow, ...formatStreamRows("stdout", stdout, styleValue), ...formatStreamRows("stderr", stderr, styleError)]
+  const exitRow = formatAlignedRow("exit", [formatExitCode(exitCode)])
+  return [
+    exitRow,
+    ...formatStreamRows("stdout", stdout, formatStdoutLine),
+    ...formatStreamRows("stderr", stderr, formatStderrLine),
+  ]
 }
 
 /**
@@ -52,5 +60,5 @@ export const formatCommandOutputLines = (output: CommandOutputDetail, indent: st
       return `${indent}${INDENT}${lineStart}${valueLine}`
     }),
   )
-  return [`${indent}${styleNote("output:")}`, ...rowLines]
+  return [`${indent}${formatHeading("output")}`, ...rowLines]
 }

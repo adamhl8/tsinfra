@@ -338,6 +338,8 @@ const formatFailedCheck = async <T extends Want>(options: EnsureOptions<T>) => {
   return hostBlock?.split("\n").slice(3)
 }
 
+const numberedLines = (prefix: string) => Array.from({ length: 20_000 }, (_, index) => `${prefix}${index}`)
+
 describe("renderHostBlock for a step that would change a string", () => {
   it("should show got and want under the step for a single-line value", async () => {
     const hostBlock = await formatBlock(async (h) => {
@@ -345,56 +347,87 @@ describe("renderHostBlock for a step that would change a string", () => {
     }, "plan")
 
     expect(hostBlock).toBe(
-      ["a", "  ~ change: (ensure) Start Sonarr", "      got:  'inactive'", "      want: 'active'"].join("\n"),
+      ["a", "  ~ change: (ensure) Start Sonarr", "      got:  inactive", "      want: active"].join("\n"),
     )
   })
 
-  it("should show a diff under the step for a multi-line value", async () => {
+  it("should show only the lines that differ, as got and want, for a multi-line value", async () => {
     const hostBlock = await formatBlock(async (h) => {
       await h.ensure("Write the config", { check: String.raw`printf 'a\nb\nc\n'`, want: "a\nB\nc", fix: "true" })
     }, "plan")
 
-    expect(hostBlock).toBe(
-      [
-        "a",
-        "  ~ change: (ensure) Write the config",
-        `      ${"─".repeat(4)}`,
-        "      1  a",
-        "        -b",
-        "      2 +B",
-        "      3  c",
-        `      ${"─".repeat(4)}`,
-      ].join("\n"),
-    )
+    expect(hostBlock).toBe(["a", "  ~ change: (ensure) Write the config", "      got:  b", "      want: B"].join("\n"))
   })
 
-  it("should number lines by want, leave removed lines unnumbered, and rule off each hunk", async () => {
-    const lines = Array.from({ length: 20 }, (_, index) => `line ${index + 1}`)
-    const wanted = [...lines.slice(0, -1), "line twenty"]
-    wanted[0] = "line one"
+  it("should line up each differing line under the first, and show an empty want as a marker", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Upgrade packages", { check: String.raw`printf 'fd\nripgrep\n'`, want: "", fix: "true" })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
+      "      got:  fd",
+      "            ripgrep",
+      "      want: (empty)",
+    ])
+  })
+
+  it("should leave out the row of a side whose lines are all in the other", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Install packages", { check: String.raw`printf 'fd\njq\n'`, want: "fd\njq\nripgrep", fix: "true" })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      want: ripgrep"])
+  })
+
+  it("should show a differing empty line as a marker", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Write the config", { check: String.raw`printf 'a\n\nb\n'`, want: "a\nb", fix: "true" })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      got: (empty)"])
+  })
+
+  it("should quote a value with whitespace at either end, and only that value", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Start Sonarr", { check: "printf 'active '", want: "active", fix: "true" })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      got:  'active '", "      want: active"])
+  })
+
+  it("should quote a line of only whitespace", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Write the config", { check: String.raw`printf 'a\n  \nb\n'`, want: "a\nb", fix: "true" })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      got: '  '"])
+  })
+
+  it("should show a note for more than 15 differing lines, and every line with --verbose", async () => {
+    const lines = Array.from({ length: 16 }, (_, index) => `pkg${index}`)
+    const upgrade = async (h: Host) => {
+      await h.ensure("Upgrade packages", { check: `printf '%s\\n' ${lines.join(" ")}`, want: "", fix: "true" })
+    }
+
+    const hostBlock = await formatBlock(upgrade, "plan")
+    const verboseLines = (await formatVerboseBlock(upgrade))?.split("\n").slice(2)
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      16 lines differ, run with --verbose to see them"])
+    expect([verboseLines?.length, verboseLines?.at(-1)]).toStrictEqual([17, "      want: (empty)"])
+  })
+
+  it("should show a note when the lines take too long to compare", async () => {
     const hostBlock = await formatBlock(async (h) => {
       await h.ensure("Write the config", {
-        check: `printf '%s\\n' ${lines.map((line) => `'${line}'`).join(" ")}`,
-        want: wanted.join("\n"),
+        check: "seq -f 'a%g' 0 19999",
+        want: numberedLines("b").join("\n"),
         fix: "true",
       })
     }, "plan")
 
-    expect(hostBlock).toBe(
-      [
-        "a",
-        "  ~ change: (ensure) Write the config",
-        `      ${"─".repeat(15)}`,
-        "         -line 1",
-        "       1 +line one",
-        "       2  line 2",
-        `      ${"─".repeat(15)}`,
-        "      19  line 19",
-        "         -line 20",
-        "      20 +line twenty",
-        `      ${"─".repeat(15)}`,
-      ].join("\n"),
-    )
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
+      "      values took too long to compare, run with --verbose to see them",
+    ])
   })
 })
 
@@ -419,6 +452,29 @@ describe("renderHostBlock for a file step", () => {
         "      mode: rw------- (600) -> rw-r--r-- (644)",
       ].join("\n"),
     )
+  })
+
+  it("should number lines by want, leave removed lines unnumbered, and rule off each hunk", async () => {
+    const lines = Array.from({ length: 20 }, (_, index) => `line ${index + 1}`)
+    const wanted = [...lines.slice(0, -1), "line twenty"]
+    wanted[0] = "line one"
+    const filePath = path.join(await makeTempDir(), "app.conf")
+    await bun.write(filePath, `${lines.join("\n")}\n`)
+    const hostBlock = await formatBlock(async (h) => {
+      await h.file(filePath, `${wanted.join("\n")}\n`)
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
+      `      ${"─".repeat(15)}`,
+      "         -line 1",
+      "       1 +line one",
+      "       2  line 2",
+      `      ${"─".repeat(15)}`,
+      "      19  line 19",
+      "         -line 20",
+      "      20 +line twenty",
+      `      ${"─".repeat(15)}`,
+    ])
   })
 
   it.each([
@@ -477,6 +533,31 @@ describe("renderHostBlock for a file step", () => {
     }, "plan")
 
     expect(hostBlock).toBe(["a", `  ~ change: (link) ${linkPath}`, `      target: /old -> ${directory}`].join("\n"))
+  })
+
+  it("should quote a missing target with whitespace at either end, in its row and its warning", async () => {
+    const directory = await makeTempDir()
+    const linkPath = path.join(directory, "link")
+    const target = path.join(directory, "target ")
+    const hostBlock = await formatBlock(async (h) => {
+      await h.link(linkPath, target)
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
+      `      target: new link to '${target}'`,
+      `      warning: nothing exists at target -> '${target}'`,
+    ])
+  })
+
+  it("should quote a link target with whitespace at either end", async () => {
+    const directory = await makeTempDir()
+    const linkPath = path.join(directory, "link")
+    await symlink("/old ", linkPath)
+    const hostBlock = await formatBlock(async (h) => {
+      await h.link(linkPath, directory)
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([`      target: '/old ' -> ${directory}`])
   })
 
   it.each([
@@ -554,17 +635,17 @@ describe("renderHostBlock for a host state that still differs after the fix", ()
     expect(lines).toStrictEqual(["        got:  false", "        want: true"])
   })
 
-  it("should quote both values of a string check", async () => {
+  it("should show both values of a string check", async () => {
     expect(await formatFailedCheck({ check: "echo v1", want: "v2", fix: "true" })).toStrictEqual([
-      "        got:  'v1'",
-      "        want: 'v2'",
+      "        got:  v1",
+      "        want: v2",
     ])
   })
 
-  it("should quote an empty value so it shows", async () => {
+  it("should show an empty value as a marker", async () => {
     expect(await formatFailedCheck({ check: "true", want: "v2", fix: "true" })).toStrictEqual([
-      "        got:  ''",
-      "        want: 'v2'",
+      "        got:  (empty)",
+      "        want: v2",
     ])
   })
 
@@ -572,8 +653,8 @@ describe("renderHostBlock for a host state that still differs after the fix", ()
     const lines = await formatFailedCheck({ check: "echo v1; echo oops >&2; exit 3", want: "v2", fix: "true" })
 
     expect(lines).toStrictEqual([
-      "        got:     'v1'",
-      "        want:    'v2'",
+      "        got:     v1",
+      "        want:    v2",
       "        command: echo v1; echo oops >&2; exit 3",
       "        stderr:  oops",
     ])
@@ -607,16 +688,13 @@ describe("renderHostBlock for a host state that still differs after the fix", ()
     ])
   })
 
-  it("should show a multi-line value as a diff, with stderr after it", async () => {
+  it("should show a multi-line value's differing lines lined up with its stderr", async () => {
     const check = String.raw`printf 'a\nb\n'; echo warn >&2`
     const lines = await formatFailedCheck({ check, want: "a\nc", fix: "true" })
 
     expect(lines).toStrictEqual([
-      `        ${"─".repeat(4)}`,
-      "        1  a",
-      "          -b",
-      "        2 +c",
-      `        ${"─".repeat(4)}`,
+      "        got:     b",
+      "        want:    c",
       `        command: ${check}`,
       "        stderr:  warn",
     ])
@@ -771,7 +849,7 @@ describe("renderHostBlock for the stderr of a step that still differs", () => {
       fix: `touch '${marker}'`,
     })
 
-    expect(lines).toStrictEqual(["        got:  'old'", "        want: 'new'"])
+    expect(lines).toStrictEqual(["        got:  old", "        want: new"])
   })
 
   it("should leave out the stderr of commands tsinfra wrote itself", async () => {
@@ -804,7 +882,7 @@ describe("renderHostBlock for a step that failed before it could compare again",
     const hostRecord = await runNamedHost("a", fn, "apply")
     const lines = renderRecord(hostRecord, 1)?.split("\n").slice(3)
 
-    expect(lines).toStrictEqual(["        values before the fix", "        got:  'old'", "        want: 'new'"])
+    expect(lines).toStrictEqual(["        values before the fix", "        got:  old", "        want: new"])
   })
 
   it("should show no details when the last compare was in sync, because a caught failure failed the step", async () => {
@@ -1188,7 +1266,7 @@ describe("renderHostBlock for what a command printed", () => {
       "  · observed: (read) true",
       "      options:",
       "        env:",
-      "          A: '1'",
+      "          A: 1",
       "      output:",
       "        exit: 0",
     ])
@@ -1222,8 +1300,8 @@ describe("renderHostBlock for a step's commands", () => {
     expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")).toStrictEqual([
       "a",
       "  ~ change: (ensure) Set the hostname",
-      "      got:  ''",
-      "      want: 'web1'",
+      "      got:  (empty)",
+      "      want: web1",
       "      commands:",
       `        $ cat '${filePath}' 2>/dev/null || true`,
       `        $ printf web1 > '${filePath}'`,
@@ -1398,8 +1476,8 @@ describe("renderHostBlock for a step's options", () => {
       "  · observed: (read) true",
       "      options:",
       "        env:",
-      "          URL:  'u'",
-      "          PORT: '1'",
+      "          URL:  u",
+      "          PORT: 1",
       "        secretEnv:",
       "          LONG_TOKEN: [MASKED]",
       "      output:",
@@ -1414,8 +1492,21 @@ describe("renderHostBlock for a step's options", () => {
     expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(2)).toStrictEqual([
       "      options:",
       "        env:",
-      "          KEY: 'first",
-      "               second'",
+      "          KEY: first",
+      "               second",
+    ])
+  })
+
+  it("should show an empty value as a marker, and quote one with whitespace at either end", async () => {
+    const hostSession = await createSession()
+    await hostSession.host.read("true", { env: { EMPTY: "", PADDED: " a", PLAIN: "a" } })
+
+    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(2)).toStrictEqual([
+      "      options:",
+      "        env:",
+      "          EMPTY:  (empty)",
+      "          PADDED: ' a'",
+      "          PLAIN:  a",
     ])
   })
 
@@ -1444,7 +1535,7 @@ describe("renderHostBlock for a step's options", () => {
     ])
     expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(2, 6)).toStrictEqual([
       "      options:",
-      `        validate:  'test -s "$tmppath"'`,
+      `        validate:  test -s "$tmppath"`,
       "        secret:    true",
       "        overwrite: false",
     ])
@@ -1488,7 +1579,7 @@ describe("renderHostBlock for a step's options", () => {
 
     expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(3, 5)).toStrictEqual([
       "        options:",
-      `          validate: 'false "$tmppath"'`,
+      `          validate: false "$tmppath"`,
     ])
   })
 

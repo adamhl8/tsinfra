@@ -9,7 +9,7 @@ import {
   SUDO_PASSWORD_CHECK_FAILED_MESSAGE,
 } from "#hosts/prepare/host-details/host-sudo/check-password.ts"
 import { readHiddenLine } from "#hosts/prepare/host-details/host-sudo/read-hidden-line.ts"
-import { styleAside, styleValue, styleWarning } from "#styles.ts"
+import { styleMuted, styleValue, styleWarning } from "#styles.ts"
 import type { Shell } from "#transport/transport.ts"
 
 const SUDO_PASSWORD_TRIES = 3
@@ -17,9 +17,18 @@ const PASSWORD_PROMPT = "Password: "
 const SKIPPED_SUDO_PASSWORD_PROMPT_MESSAGE = "skipped sudo password prompt"
 const SKIPPING_HOST = "skipping host"
 
+/** Formats the prompt's keys, muted so the question after them stands out. */
+const formatPromptKeys = (): string => styleMuted("Ctrl-D to skip this host · Ctrl-C to cancel the entire run")
+
+/** Formats a name in the prompt, like the host's or the user's, in the value color, because it's the script's. */
+const formatPromptName = (name: string): string => styleValue(name)
+
+/** Formats a warning that the prompt moves on, in the warning color. */
+const formatPromptWarning = (warning: string): string => styleWarning(warning)
+
 /** Warns that preparation moves on to the next host, with a blank line before that host's prompt. */
 const warnSkippingHost = (warning: string) => {
-  process.stderr.write(`${styleWarning(warning)}\n\n`)
+  process.stderr.write(`${formatPromptWarning(warning)}\n\n`)
 }
 
 /**
@@ -31,8 +40,8 @@ export const promptForSudoPassword = async (shell: Shell, name: string, user: st
   // Say which host and user once, then ask with only `Password:` on each try, so the prompt reads like sudo's own.
   // Pass them as part of the first prompt, because the reader prints its prompt only once nothing typed is echoed.
   const promptHeader = [
-    styleAside("Ctrl-D to skip this host · Ctrl-C to cancel the entire run"),
-    `To run host '${styleValue(name)}', enter the sudo password for user '${styleValue(user)}'.`,
+    formatPromptKeys(),
+    `To run host '${formatPromptName(name)}', enter the sudo password for user '${formatPromptName(user)}'.`,
   ].join("\n")
 
   for (let tryNumber = 1; tryNumber <= SUDO_PASSWORD_TRIES; tryNumber++) {
