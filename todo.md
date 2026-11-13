@@ -10,14 +10,14 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
    plan in `docs/superpowers/plans/`, written when it starts. Every step ends with `tsc` and `bask lint` passing, and a
    step that changes what's recorded also runs `bask test-docker`. Check the level by eye with
    `bun report-preview.ts -vvv`:
-   1. **`-vvv`.** `exit:`, `stdout:`, and `stderr:` rows under each command, each stream cut off after 20 lines, and
+   1. **`-vvv`.** `exit:`, `stdout:`, and `stderr:` rows under each command, each stream in full, and
       the phase before each command in a step that compares. A failure's note already tells people to run with
       `-vvv`, so `-vvv` has to show the stderr that note promises, and the note itself goes away at `-vvv`. The steps:
       1. **Exit rows** (built 2026-11-12). An `exit:` row from 3 under each command, even for 0, and the error in its place for a command
          that couldn't run. The rows are pieces inside each `StepCommand`, from 3, the way an option's value is a piece
          inside the option, built from each command's recorded output, which is already masked. A read or inspect,
          which lists no commands, shows its one command's rows right under its status line.
-      2. **stdout and stderr rows,** each cut off after 20 lines, with a note saying how many were left out.
+      2. **stdout and stderr rows** (built 2026-11-12), in full, with trailing whitespace trimmed.
       3. **Phases.** In a step that compares, each command starts with its phase, like `before $ cmd`, and its rows
          line up past it, as in the docs' example. It's the hardest alignment in the feature, so it's a step of its
          own.

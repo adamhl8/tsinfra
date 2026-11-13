@@ -213,9 +213,10 @@ describe("renderHostBlock", () => {
         "a",
         "  ! failed: (ensure) Make it",
         "      the host's state still differs after the fix",
-        "        got:    exit code 1",
-        "        want:   exit code 0",
-        "        stderr: echo missing >&2; false -> missing",
+        "        got:     exit code 1",
+        "        want:    exit code 0",
+        "        command: echo missing >&2; false",
+        "        stderr:  missing",
       ].join("\n"),
     )
   })
@@ -571,9 +572,10 @@ describe("renderHostBlock for a host state that still differs after the fix", ()
     const lines = await formatFailedCheck({ check: "echo v1; echo oops >&2; exit 3", want: "v2", fix: "true" })
 
     expect(lines).toStrictEqual([
-      "        got:    'v1'",
-      "        want:   'v2'",
-      "        stderr: echo v1; echo oops >&2; exit 3 -> oops",
+      "        got:     'v1'",
+      "        want:    'v2'",
+      "        command: echo v1; echo oops >&2; exit 3",
+      "        stderr:  oops",
     ])
   })
 
@@ -581,10 +583,11 @@ describe("renderHostBlock for a host state that still differs after the fix", ()
     const lines = await formatFailedCheck({ check: "echo one >&2; echo two >&2; false", want: true, fix: "true" })
 
     expect(lines).toStrictEqual([
-      "        got:    exit code 1",
-      "        want:   exit code 0",
-      "        stderr: echo one >&2; echo two >&2; false -> one",
-      "                two",
+      "        got:     exit code 1",
+      "        want:    exit code 0",
+      "        command: echo one >&2; echo two >&2; false",
+      "        stderr:  one",
+      "                 two",
     ])
   })
 
@@ -596,10 +599,11 @@ describe("renderHostBlock for a host state that still differs after the fix", ()
     })
 
     expect(lines).toStrictEqual([
-      "        got:    exit code 1",
-      "        want:   exit code 0",
-      "        stderr: echo one >&2; echo >&2; echo two >&2; false -> one",
-      "                two",
+      "        got:     exit code 1",
+      "        want:    exit code 0",
+      "        command: echo one >&2; echo >&2; echo two >&2; false",
+      "        stderr:  one",
+      "                 two",
     ])
   })
 
@@ -613,7 +617,8 @@ describe("renderHostBlock for a host state that still differs after the fix", ()
       "          -b",
       "        2 +c",
       `        ${"─".repeat(4)}`,
-      `        stderr: ${check} -> warn`,
+      `        command: ${check}`,
+      "        stderr:  warn",
     ])
   })
 })
@@ -643,7 +648,7 @@ describe("renderHostBlock for the stderr of a step that still differs", () => {
     const check = "echo warn >&2"
     const lines = await formatFailedCheck({ check, want: "x", fix: "true" })
 
-    expect(lines).toContain(`        stderr: ${check} -> warn`)
+    expect(lines?.slice(-2)).toStrictEqual([`        command: ${check}`, "        stderr:  warn"])
   })
 
   it("should show a fix's stderr, then the check's, each with its command", async () => {
@@ -651,7 +656,12 @@ describe("renderHostBlock for the stderr of a step that still differs", () => {
     const check = "echo warn >&2; false"
     const lines = await formatFailedCheck({ check, want: true, fix })
 
-    expect(lines?.slice(2)).toStrictEqual([`        stderr: ${fix} -> ignored`, `        stderr: ${check} -> warn`])
+    expect(lines?.slice(2)).toStrictEqual([
+      `        command: ${fix}`,
+      "        stderr:  ignored",
+      `        command: ${check}`,
+      "        stderr:  warn",
+    ])
   })
 
   it("should show the stderr of a check function that runs one command", async () => {
@@ -662,7 +672,12 @@ describe("renderHostBlock for the stderr of a step that still differs", () => {
       fix: "true",
     })
 
-    expect(lines).toStrictEqual(["        got:    false", "        want:   true", `        stderr: ${cmd} -> refused`])
+    expect(lines).toStrictEqual([
+      "        got:     false",
+      "        want:    true",
+      `        command: ${cmd}`,
+      "        stderr:  refused",
+    ])
   })
 
   it("should show the note for a check function that runs several commands", async () => {
@@ -722,7 +737,7 @@ describe("renderHostBlock for the stderr of a step that still differs", () => {
       fix,
     })
 
-    expect(lines?.slice(2)).toStrictEqual([`        stderr: ${fix} -> ignored`, AFTER_FIX_NOTE])
+    expect(lines?.slice(2)).toStrictEqual([`        command: ${fix}`, "        stderr:  ignored", AFTER_FIX_NOTE])
   })
 
   it("should leave out the stderr from before the fix", async () => {
@@ -1046,6 +1061,38 @@ describe("renderHostBlock for what a command printed", () => {
       "        $ exit 3",
       "            output:",
       "              exit: 3",
+    ])
+  })
+
+  it("should show stdout and stderr after the exit code, lined up, with later lines under the first", async () => {
+    const hostSession = await createSession("apply")
+    await hostSession.host.run("Print it", String.raw`printf '  one\ntwo  \n\n'; echo oops >&2`, { after: "always" })
+
+    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(4)).toStrictEqual([
+      "            output:",
+      "              exit:   0",
+      "              stdout:   one",
+      "                      two",
+      "              stderr: oops",
+    ])
+  })
+
+  it("should show every line of a long stdout", async () => {
+    const hostSession = await createSession()
+    await hostSession.host.read("seq 25")
+
+    const lines = renderRecord(hostSession.hostRecord, 3)?.split("\n")
+    expect([lines?.length, lines?.at(-1)]).toStrictEqual([29, "                25"])
+  })
+
+  it("should show a secret in a command's output as [MASKED]", async () => {
+    const hostSession = await createSession()
+    await hostSession.host.read('printf %s "$TOKEN"', { secretEnv: { TOKEN: "s3cret-value" } })
+
+    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(-3)).toStrictEqual([
+      "      output:",
+      "        exit:   0",
+      "        stdout: [MASKED]",
     ])
   })
 

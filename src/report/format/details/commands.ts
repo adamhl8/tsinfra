@@ -1,7 +1,7 @@
 import { formatCommandOutputLines } from "#report/format/details/command-output.ts"
 import { INDENT } from "#report/format/layout.ts"
 import type { StepCommand } from "#report/host-block/host-block.ts"
-import { styleCommand, styleNote } from "#styles.ts"
+import { styleCommand, styleCommandPrompt, styleNote } from "#styles.ts"
 
 const COMMAND_PROMPT = "$ "
 // Start a command's later lines and its output rows under its text, past the prompt.
@@ -19,7 +19,7 @@ const formatCommandLines = ({ cmd, label, output }: StepCommand): string[] => {
     .split("\n")
     .map(
       (textLine, index) =>
-        `${INDENT}${styleCommand(`${index === 0 ? COMMAND_PROMPT : COMMAND_TEXT_INDENT}${textLine}`)}`,
+        `${INDENT}${index === 0 ? styleCommandPrompt(COMMAND_PROMPT) : COMMAND_TEXT_INDENT}${styleCommand(textLine)}`,
     )
   const outputLines =
     output === undefined ? [] : formatCommandOutputLines(output, `${INDENT}${COMMAND_TEXT_INDENT}${INDENT}`)

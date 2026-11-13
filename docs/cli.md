@@ -106,13 +106,13 @@ levels only change what's printed:
   commands would repeat in every block.
 - **`-vvv`** also shows what each command printed, as `exit:`, `stdout:`, and `stderr:` rows under a dim italic
   `output:` heading, one level past the command's text, with their values lined up. The heading keeps the rows from
-  reading like more of a multi-line command. A read or inspect, which lists no command, shows its `output:` heading
-  and rows right under its line, after any options. Every command
-  shows its exit code, even 0, and a command that couldn't run at all shows its error in place of the three rows.
-  stdout and stderr are each cut off after 20 lines, with a note saying how many lines were left out. In a step that
-  compares the host's state, each command starts with its phase, `before`, `fix`, or `after`, because the same check
-  runs before and after the fix, and its output can differ. tsinfra's own commands keep their label, so their text
-  never shows. It's in the source, and in the [diagnostic logs](#diagnostic-logs).
+  reading like more of a multi-line command. A read or inspect, which lists no command, shows its `output:` heading and
+  rows right under its line, after any options. Every command shows its exit code, even 0, and a command that couldn't
+  run at all shows its error in place of the three rows. stdout and stderr show in full, because this level is for
+  seeing everything, and only when the command printed something. Each has its trailing whitespace trimmed, and keeps
+  its leading whitespace. In a step that compares the host's state, each command starts with its phase, `before`, `fix`,
+  or `after`, because the same check runs before and after the fix, and its output can differ. tsinfra's own commands
+  keep their label, so their text never shows. It's in the source, and in the [diagnostic logs](#diagnostic-logs).
 - **Secrets never show.** A secret reaches a command through the step's `secretEnv`, so the command's text never holds
   it, and `-vv` shows `"$TOKEN"` where it's used. The step's record keeps its variables, with each secret as
   `[MASKED]`, and the output and errors of that command and of every later command on the host are masked the same
@@ -248,8 +248,9 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   it. A host that leaves `sudo` off and fails in a step whose own `sudo` needed a password gets "sudo needs a
   password on this host, so set the sudo option on host()" under that step (see [Transport](./transport.md#sudo)).
 - **Failure details.** A failure that still differs after its fix shows its `after` values, then any stderr that can
-  explain it, from its `fix` and `after` phases. A phase that ran one command, which wrote to stderr, gets a
-  `stderr: <command> -> <stderr>` row. It's clear what that stderr relates to, because that command is all the phase ran.
+  explain it, from its `fix` and `after` phases. A phase that ran one command, which wrote to stderr, gets a `command:`
+  row and a `stderr:` row, so each label names its own value. It's clear what that stderr relates to, because that
+  command is all the phase ran.
   A phase that ran several commands, any of which wrote to stderr, can't say which one matters, so it gets a note
   instead: "some commands during the fix wrote to stderr, run with -vvv to see what they printed", or "after the fix"
   for the `after` phase. `-vvv` leaves the note out, because each command's stderr already shows under it. Commands

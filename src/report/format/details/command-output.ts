@@ -4,12 +4,25 @@ import type { AlignedRow } from "#report/format/details/aligned-row.ts"
 import { formatAlignedRow } from "#report/format/details/aligned-row.ts"
 import { INDENT } from "#report/format/layout.ts"
 import type { CommandOutputDetail } from "#report/host-block/host-block.ts"
-import { styleError, styleNote, styleUnquotedValue } from "#styles.ts"
+import type { Style } from "#styles.ts"
+import { styleError, styleNote, styleUnquotedValue, styleValue } from "#styles.ts"
 import { getMaxWidth, padToWidth, splitNonEmptyLines } from "#utils.ts"
 
 /**
- * Formats what a command printed as aligned rows: its exit code, even 0, or the error it failed with when it couldn't
- * run at all, in place of its other rows.
+ * Formats a stream as a row, each line styled, or none when it printed nothing. Trims its trailing whitespace, because
+ * the rows are for reading the output, not for its exact value, and keeps its leading whitespace, because that can line
+ * up the output.
+ */
+const formatStreamRows = (label: string, stream: string, style: Style): AlignedRow[] => {
+  const trimmedStream = stream.trimEnd()
+  const streamLines = trimmedStream.split("\n").map((streamLine) => style(streamLine))
+  return trimmedStream === "" ? [] : [formatAlignedRow(label, streamLines)]
+}
+
+/**
+ * Formats what a command printed as aligned rows: its exit code, even 0, then its stdout and stderr when it printed
+ * anything. Shows every line, because the level that shows them is for seeing everything. A command that couldn't run
+ * at all shows the error it failed with, in place of its other rows.
  */
 const formatCommandOutputRows = (output: CommandOutputDetail): AlignedRow[] => {
   if (output.kind === "failed") {
@@ -17,7 +30,10 @@ const formatCommandOutputRows = (output: CommandOutputDetail): AlignedRow[] => {
     return [formatAlignedRow("error", errorLines)]
   }
 
-  return [formatAlignedRow("exit", [styleUnquotedValue(String(output.exitCode))])]
+  const { exitCode, stdout, stderr } = output
+  const exitRow = formatAlignedRow("exit", [styleUnquotedValue(String(exitCode))])
+  // Color stderr like an error, like the stderr row under a step that still differs.
+  return [exitRow, ...formatStreamRows("stdout", stdout, styleValue), ...formatStreamRows("stderr", stderr, styleError)]
 }
 
 /**

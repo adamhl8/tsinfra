@@ -93,6 +93,12 @@ export const styleAside = (text: string): string => pc.dim(text)
 /** Dims a command a step ran, so the commands read as background next to the details. */
 export const styleCommand = (text: string): string => pc.dim(text)
 
+/**
+ * Colors a command's `$` magenta, the one color the report uses for nothing else, so it reads apart from the command
+ * and only ever means that a command starts there.
+ */
+export const styleCommandPrompt = (text: string): string => pc.magenta(text)
+
 /** Dims a diff's line numbers and rules, so the lines of the diff stand out. */
 export const styleDiffFrame = (text: string): string => pc.dim(text)
 

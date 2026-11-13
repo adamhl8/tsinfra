@@ -19,9 +19,13 @@ const LISTS_COMMANDS: Record<StepKind, boolean> = {
   run: true,
 }
 
-/** Returns what a command printed: its exit code, or the error it failed with when it couldn't run at all. */
-const toCommandOutputDetail = (output: NonNullable<CommandRecord["output"]>): CommandOutputDetail =>
-  isErr(output) ? { kind: "failed", error: output } : { kind: "exited", exitCode: output.exitCode }
+/** Returns what a command printed: its exit code and both streams, or the error it failed with when it couldn't run. */
+const toCommandOutputDetail = (output: NonNullable<CommandRecord["output"]>): CommandOutputDetail => {
+  if (isErr(output)) return { kind: "failed", error: output }
+
+  const { exitCode, stdout, stderr } = output
+  return { kind: "exited", exitCode, stdout, stderr }
+}
 
 /** Returns a command with what it printed as a piece of its own, from level 3, when its output was recorded. */
 const toStepCommand = ({ cmd, label, output }: CommandRecord): StepCommand => ({

@@ -111,8 +111,10 @@ export interface StepCommand {
   output?: PieceLevels & CommandOutputDetail
 }
 
-/** What a command printed: its exit code, or the error it failed with when it couldn't run at all. */
-export type CommandOutputDetail = { kind: "exited"; exitCode: number } | { kind: "failed"; error: Error }
+/** What a command printed: its exit code and both streams, or the error it failed with when it couldn't run at all. */
+export type CommandOutputDetail =
+  | { kind: "exited"; exitCode: number; stdout: string; stderr: string }
+  | { kind: "failed"; error: Error }
 
 /** Something that worked but needs a look, with the value it's about, like a path, when there is one. */
 export interface StepWarning {

@@ -9,7 +9,6 @@ import { formatFileValues } from "#report/format/details/file.ts"
 import { formatLinkValues } from "#report/format/details/link.ts"
 import { formatOptions } from "#report/format/details/options.ts"
 import type { Detail, StepWarning } from "#report/host-block/host-block.ts"
-import type { Style } from "#styles.ts"
 import { styleError, styleHint, styleNote, styleValue, styleWarning } from "#styles.ts"
 import { splitNonEmptyLines } from "#utils.ts"
 
@@ -24,13 +23,6 @@ export { DEFAULT_DIFF_LIMITS } from "#report/format/details/diff.ts"
  */
 export type DetailRows = { kind: "aligned"; rows: AlignedRow[] } | { kind: "unaligned"; rows: string[] }
 
-/** Styles each line of `text` on its own, so a continuation line starts in the color too. */
-const styleLines = (text: string, style: Style): string =>
-  text
-    .split("\n")
-    .map((textLine) => style(textLine))
-    .join("\n")
-
 /**
  * Formats a warning, like `warning: nothing exists at target -> /x`, with the value it's about after its words. Colors
  * only the label and the value, so the words read like the rest of the details.
@@ -41,11 +33,12 @@ const formatWarning = (warning: StepWarning): string => {
   return `${styleWarning("warning:")} ${text}${valueText}`
 }
 
-/** Formats a command's stderr as a `stderr:` row, like `stderr: <command> -> <stderr>`. */
-const formatStderr = (command: string, stderr: string): AlignedRow => {
-  // Color stderr like an error, so it stands apart from its command, and leave the arrow between them uncolored.
-  const valueText = `${styleLines(command, styleValue)} -> ${styleLines(stderr, styleError)}`
-  return formatAlignedRow("stderr", splitNonEmptyLines(valueText))
+/** Formats a command's stderr as two rows, a `command:` row and a `stderr:` row, so each label names its own value. */
+const formatStderr = (command: string, stderr: string): AlignedRow[] => {
+  const commandLines = command.split("\n").map((commandLine) => styleValue(commandLine))
+  // Color stderr like an error, so it stands apart from its command.
+  const stderrLines = splitNonEmptyLines(stderr).map((stderrLine) => styleError(stderrLine))
+  return [formatAlignedRow("command", commandLines), formatAlignedRow("stderr", stderrLines)]
 }
 
 /** Formats a detail as the rows it prints as, aligned or not. Checks each kind in the order the details show. */
@@ -55,7 +48,7 @@ export const formatDetail = (detail: Detail, diffLimits: DiffLimits | undefined)
   if (detail.kind === "fileComparisonValues") return { kind: "aligned", rows: formatFileValues(detail.values) }
   if (detail.kind === "linkComparisonValues") return { kind: "aligned", rows: formatLinkValues(detail.values) }
   if (detail.kind === "ensureComparisonValues") return { kind: "aligned", rows: formatEnsureValues(detail.values) }
-  if (detail.kind === "stderr") return { kind: "aligned", rows: [formatStderr(detail.command, detail.stderr)] }
+  if (detail.kind === "stderr") return { kind: "aligned", rows: formatStderr(detail.command, detail.stderr) }
   if (detail.kind === "note") return { kind: "unaligned", rows: [styleNote(detail.text)] }
   if (detail.kind === "warning") return { kind: "unaligned", rows: [formatWarning(detail.warning)] }
   if (detail.kind === "commands") return { kind: "unaligned", rows: formatCommands(detail.commands) }
