@@ -1096,6 +1096,52 @@ describe("renderHostBlock for what a command printed", () => {
     ])
   })
 
+  it("should start each command of a step that compares with its phase, with the prompts lined up", async () => {
+    const filePath = path.join(await makeTempDir(), "hostname")
+    const hostSession = await createSession("apply")
+    await hostSession.host.ensure("Set the hostname", {
+      check: `cat '${filePath}' 2>/dev/null || true`,
+      want: "web1",
+      fix: `printf web1 > '${filePath}'`,
+    })
+
+    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(4)).toStrictEqual([
+      "      commands:",
+      `        (before) $ cat '${filePath}' 2>/dev/null || true`,
+      "                     output:",
+      "                       exit: 0",
+      `        (fix)    $ printf web1 > '${filePath}'`,
+      "                     output:",
+      "                       exit: 0",
+      `        (after)  $ cat '${filePath}' 2>/dev/null || true`,
+      "                     output:",
+      "                       exit:   0",
+      "                       stdout: web1",
+    ])
+  })
+
+  it("should leave the phases out with -vv", async () => {
+    const hostSession = await createSession("apply")
+    await hostSession.host.ensure("Check it", { check: "true", want: true, fix: "true" })
+
+    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(2)).toStrictEqual([
+      "      commands:",
+      "        $ true",
+    ])
+  })
+
+  it("should line up a multi-line command's later lines past its phase", async () => {
+    const hostSession = await createSession("apply")
+    await hostSession.host.ensure("Check it", { check: "echo hi\ntrue", want: true, fix: "true" })
+
+    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(2, 6)).toStrictEqual([
+      "      commands:",
+      "        (before) $ echo hi",
+      "                   true",
+      "                     output:",
+    ])
+  })
+
   it("should leave the exit codes out with -vv", async () => {
     const hostSession = await createSession("apply")
     await hostSession.host.run("Check it", "true", { after: "always" })

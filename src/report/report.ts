@@ -32,15 +32,20 @@ const keepShownOptionValues = (option: StepOption, verbosity: Verbosity): StepOp
   return { name, ...(value && isShownAt(value, verbosity) && { value }), entries }
 }
 
-/** Returns `command` with what it printed only when that shows at `verbosity`. */
-const keepShownCommandOutput = (command: StepCommand, verbosity: Verbosity): StepCommand => {
-  const { output, ...commandText } = command
-  return output && isShownAt(output, verbosity) ? command : commandText
+/** Returns `command` with its phase and what it printed only when each shows at `verbosity`. */
+const keepShownCommandPieces = (command: StepCommand, verbosity: Verbosity): StepCommand => {
+  const { cmd, label, phase, output } = command
+  return {
+    cmd,
+    ...(label !== undefined && { label }),
+    ...(phase && isShownAt(phase, verbosity) && { phase }),
+    ...(output && isShownAt(output, verbosity) && { output }),
+  }
 }
 
 /**
- * Returns `detail` with only the pieces inside it that show at `verbosity`: an option's values, and what a command
- * printed.
+ * Returns `detail` with only the pieces inside it that show at `verbosity`: an option's values, and a command's phase
+ * and what it printed.
  */
 const keepShownInDetail = (detail: Detail, verbosity: Verbosity): Detail => {
   if (detail.kind === "options") {
@@ -49,7 +54,7 @@ const keepShownInDetail = (detail: Detail, verbosity: Verbosity): Detail => {
   }
 
   if (detail.kind === "commands") {
-    const commands = detail.commands.map((command) => keepShownCommandOutput(command, verbosity))
+    const commands = detail.commands.map((command) => keepShownCommandPieces(command, verbosity))
     return { ...detail, commands }
   }
 

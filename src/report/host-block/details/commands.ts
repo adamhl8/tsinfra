@@ -6,7 +6,8 @@ import type { CommandRecord, StepKind, StepRecord } from "#session/session.ts"
 
 // List the commands from level 2, because they say how the work was done, which matters only when looking closely.
 const COMMANDS_LEVEL: Verbosity = 2
-// Show what each command printed from level 3, because it's the most detail there is, for when something looks wrong.
+// Show what each command printed, and its phase, from level 3, because it's the most detail there is, for when
+// something looks wrong.
 const OUTPUT_LEVEL: Verbosity = 3
 
 // List no commands for a read or an inspect, because its name is its command.
@@ -27,10 +28,11 @@ const toCommandOutputDetail = (output: NonNullable<CommandRecord["output"]>): Co
   return { kind: "exited", exitCode, stdout, stderr }
 }
 
-/** Returns a command with what it printed as a piece of its own, from level 3, when its output was recorded. */
-const toStepCommand = ({ cmd, label, output }: CommandRecord): StepCommand => ({
+/** Returns a command with its phase and what it printed as pieces of their own, from level 3, when each was recorded. */
+const toStepCommand = ({ cmd, label, phase, output }: CommandRecord): StepCommand => ({
   cmd,
   ...(label !== undefined && { label }),
+  ...(phase !== undefined && { phase: { phase, from: OUTPUT_LEVEL } }),
   ...(output !== undefined && { output: { ...toCommandOutputDetail(output), from: OUTPUT_LEVEL } }),
 })
 

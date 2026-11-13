@@ -1,6 +1,7 @@
 import { toHostBlockEntries } from "#report/host-block/entries.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 import type {
+  ConvergePhase,
   EnsureComparisonValues,
   FileComparisonValues,
   HostRecord,
@@ -102,12 +103,14 @@ export interface OptionValue extends PieceLevels {
 }
 
 /**
- * A command a step ran, and its label when tsinfra wrote it, with any secret in its text masked. What it printed is a
- * piece of its own, which the filter leaves out below its level.
+ * A command a step ran, and its label when tsinfra wrote it, with any secret in its text masked. Its phase and what it
+ * printed are pieces of their own, which the filter leaves out below their level.
  */
 export interface StepCommand {
   cmd: string
   label?: string
+  /** The part of a step that compares the host's state that ran the command. Unset for a step that doesn't compare. */
+  phase?: PieceLevels & { phase: ConvergePhase }
   output?: PieceLevels & CommandOutputDetail
 }
 

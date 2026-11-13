@@ -18,7 +18,7 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
          inside the option, built from each command's recorded output, which is already masked. A read or inspect,
          which lists no commands, shows its one command's rows right under its status line.
       2. **stdout and stderr rows** (built 2026-11-12), in full, with trailing whitespace trimmed.
-      3. **Phases.** In a step that compares, each command starts with its phase, like `before $ cmd`, and its rows
+      3. **Phases** (built 2026-11-12). In a step that compares, each command starts with its phase, like `(before) $ cmd`, and its rows
          line up past it, as in the docs' example. It's the hardest alignment in the feature, so it's a step of its
          own.
       4. **`until`.** The "run with -vvv" note gets `until: 2` from `PieceLevels`, so it goes away at 3.
