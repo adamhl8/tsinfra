@@ -5,7 +5,7 @@ import process from "node:process"
 
 import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
-import { attempt } from "ts-explicit-errors"
+import { attempt, err } from "ts-explicit-errors"
 
 import {
   UNREACHABLE_TARGET,
@@ -1024,6 +1024,75 @@ const createSudoPaths = async () => {
   return { directory, oldPath, newPath: path.join(directory, "new.conf") }
 }
 
+describe("renderHostBlock for what a command printed", () => {
+  it("should show each command's exit code under it with -vvv", async () => {
+    const hostSession = await createSession("apply")
+    await hostSession.host.run(
+      "Check it",
+      async ({ exec, inspect }) => {
+        await exec("true")
+        await inspect("exit 3")
+      },
+      { after: "always" },
+    )
+
+    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n")).toStrictEqual([
+      "a",
+      "  > triggered: (run) Check it",
+      "      commands:",
+      "        $ true",
+      "            output:",
+      "              exit: 0",
+      "        $ exit 3",
+      "            output:",
+      "              exit: 3",
+    ])
+  })
+
+  it("should leave the exit codes out with -vv", async () => {
+    const hostSession = await createSession("apply")
+    await hostSession.host.run("Check it", "true", { after: "always" })
+
+    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(2)).toStrictEqual([
+      "      commands:",
+      "        $ true",
+    ])
+  })
+
+  it("should show a read's exit code right under its line, after its options", async () => {
+    const hostSession = await createSession()
+    await hostSession.host.read("true")
+    await hostSession.host.read("true", { env: { A: "1" } })
+
+    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n")).toStrictEqual([
+      "a",
+      "  · observed: (read) true",
+      "      output:",
+      "        exit: 0",
+      "  · observed: (read) true",
+      "      options:",
+      "        env:",
+      "          A: '1'",
+      "      output:",
+      "        exit: 0",
+    ])
+  })
+
+  it("should show a command's error in place of its exit code when it couldn't run", async () => {
+    // Stand in for a transport that can't reach the host, so no command runs at all.
+    // oxlint-disable-next-line typescript/require-await - a transport returns a promise, and this one fails without awaiting
+    const hostSession = await createWrappedSession("apply", () => async () => err("the connection dropped", undefined))
+    await attempt(async () => hostSession.host.run("Check it", "true", { after: "always" }))
+
+    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(3)).toStrictEqual([
+      "        commands:",
+      "          $ true",
+      "              output:",
+      "                error: the connection dropped",
+    ])
+  })
+})
+
 describe("renderHostBlock for a step's commands", () => {
   it("should list a step's commands under a commands heading with -vv, after its other details", async () => {
     const filePath = path.join(await makeTempDir(), "hostname")
@@ -1217,6 +1286,8 @@ describe("renderHostBlock for a step's options", () => {
       "          PORT: '1'",
       "        secretEnv:",
       "          LONG_TOKEN: [MASKED]",
+      "      output:",
+      "        exit: 0",
     ])
   })
 

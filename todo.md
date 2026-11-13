@@ -5,42 +5,23 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
 
 ## Next
 
-1. **Verbosity levels.** The levels, `-v`, and values and secrets in commands are done. The `[sudo]` column is built,
-   and the `-vv` piece replaces it with an `options:` line. The rest comes in two pieces, each reviewed before the next (the design is in [CLI](./docs/cli.md#output)). Each piece
-   gets its own plan in `docs/superpowers/plans/`, written when it starts, and each step in it is reviewed on its own.
-   Every step ends with `tsc` and `bask lint` passing, and a step that changes what's recorded also runs
-   `bask test-docker`. Each piece checks its level by eye with the preview's `-v` flags, like
-   `bun report-preview.ts -vv`:
-   1. **`-vv`.** Each step's options as a block, and its commands under its details, tsinfra's own by their label,
-      and the `file` write script's label followed by its `validate` command. A preparation failure lists
-      preparation's commands by their labels. The steps:
-      1. **`shellOptions`** (built 2026-11-12). Rename `StepRecord.options` to `shellOptions`, which leaves `options` for the step's own
-         options when the report first shows one.
-      2. **The options line** (built 2026-11-12). Replace the `[sudo]` column with an `options:` line from 1, naming the options the step
-         set, with variable names but no values, like `options: env { URL, PORT }, secretEnv { TOKEN }`. Check it with
-         `bun report-preview.ts -v`.
-      3. **The options block** (built 2026-11-12). From 2, the line becomes a block with each variable's value, and `[MASKED]` for each
-         secret. Only one of the line and the block shows, so the line gets an `until` level here, ahead of the
-         `-vvv` piece's `until` step.
-      4. **Command parts** (built 2026-11-12). Each command a step ran is a part from 2, shown dimmed as `$ cmd` under the details. One
-         with a label shows as `$ <label>`, and a read or inspect lists none. A failed step's commands go under its
-         error with its other details. Check it with `bun report-preview.ts -vv`.
-      5. **Step options** (built 2026-11-12). `StepRecord.options` is one generic record of the options a step set,
-         replacing `shellOptions`: `getStepShells` adds the shell options, and each handler adds its own through
-         `ctx.recordOptions`, like `file`'s `validate` as the command it built. The report shows them all the same way.
-      6. **Preparation's commands** (built 2026-11-12). The `(preparation)` entry lists them as labelled command parts from 2.
-      7. **A docs check,** and mark the piece built.
-   2. **`-vvv`.** `exit:`, `stdout:`, and `stderr:` rows under each command, each stream cut off after 20 lines, and
+1. **Verbosity levels.** The levels, `-v`, values and secrets in commands, and `-vv` are done. The rest is one piece,
+   `-vvv`, with its steps each reviewed before the next (the design is in [CLI](./docs/cli.md#output)). It gets its own
+   plan in `docs/superpowers/plans/`, written when it starts. Every step ends with `tsc` and `bask lint` passing, and a
+   step that changes what's recorded also runs `bask test-docker`. Check the level by eye with
+   `bun report-preview.ts -vvv`:
+   1. **`-vvv`.** `exit:`, `stdout:`, and `stderr:` rows under each command, each stream cut off after 20 lines, and
       the phase before each command in a step that compares. A failure's note already tells people to run with
       `-vvv`, so `-vvv` has to show the stderr that note promises, and the note itself goes away at `-vvv`. The steps:
-      1. **Exit rows.** An `exit:` row from 3 under each command, even for 0, and the error in its place for a command
-         that couldn't run. A read or inspect shows its rows right under its status line.
+      1. **Exit rows** (built 2026-11-12). An `exit:` row from 3 under each command, even for 0, and the error in its place for a command
+         that couldn't run. The rows are pieces inside each `StepCommand`, from 3, the way an option's value is a piece
+         inside the option, built from each command's recorded output, which is already masked. A read or inspect,
+         which lists no commands, shows its one command's rows right under its status line.
       2. **stdout and stderr rows,** each cut off after 20 lines, with a note saying how many were left out.
       3. **Phases.** In a step that compares, each command starts with its phase, like `before $ cmd`, and its rows
          line up past it, as in the docs' example. It's the hardest alignment in the feature, so it's a step of its
          own.
-      4. **`until`.** The "run with -vvv" note uses the `until` level from the `-vv` piece to go away at 3. Check it with
-         `bun report-preview.ts -vvv`.
+      4. **`until`.** The "run with -vvv" note gets `until: 2` from `PieceLevels`, so it goes away at 3.
       5. **A docs check,** and mark this item built.
 
 ## Port

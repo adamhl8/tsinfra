@@ -1,5 +1,6 @@
 import type { AlignedRow } from "#report/format/details/aligned-row.ts"
 import { formatAlignedRow } from "#report/format/details/aligned-row.ts"
+import { formatCommandOutputLines } from "#report/format/details/command-output.ts"
 import { formatCommands } from "#report/format/details/commands.ts"
 import type { DiffLimits } from "#report/format/details/diff.ts"
 import { formatDiff } from "#report/format/details/diff.ts"
@@ -58,6 +59,7 @@ export const formatDetail = (detail: Detail, diffLimits: DiffLimits | undefined)
   if (detail.kind === "note") return { kind: "unaligned", rows: [styleNote(detail.text)] }
   if (detail.kind === "warning") return { kind: "unaligned", rows: [formatWarning(detail.warning)] }
   if (detail.kind === "commands") return { kind: "unaligned", rows: formatCommands(detail.commands) }
+  if (detail.kind === "commandOutput") return { kind: "unaligned", rows: formatCommandOutputLines(detail.output, "") }
 
   return { kind: "unaligned", rows: [styleHint(detail.text)] }
 }

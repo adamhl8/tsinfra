@@ -1,7 +1,7 @@
 import { INDENT } from "#report/format/layout.ts"
 import type { StepOption } from "#report/host-block/host-block.ts"
 import { MASKED_VALUE } from "#session/session.ts"
-import { styleAside, styleLabel, styleNote, styleValue, styleValueBoolean } from "#styles.ts"
+import { styleAside, styleLabel, styleNote, styleUnquotedValue, styleValue } from "#styles.ts"
 import { getMaxWidth, padToWidth } from "#utils.ts"
 
 /** Reports whether any of `options`, or any of their entries, kept a value through the filter. */
@@ -31,7 +31,7 @@ const formatOptionsLine = (options: StepOption[]): string => {
  * one still shows.
  */
 const formatValueLines = (value: string | boolean): string[] => {
-  if (typeof value === "boolean") return [styleValueBoolean(String(value))]
+  if (typeof value === "boolean") return [styleUnquotedValue(String(value))]
   if (value === MASKED_VALUE) return [styleAside(value)]
 
   const valueLines = value.split("\n")

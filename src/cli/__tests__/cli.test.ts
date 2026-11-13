@@ -52,19 +52,27 @@ describe("tsinfra", () => {
     expect(stdout).toBe("a\n  · observed:  (read)   true\n  = unchanged: (ensure) Install git\n\na   unchanged")
   })
 
-  it.each([["-vv"], ["-v", "-v"], ["-vvvv"]])(
-    "should count %s as level 2 or more, and list commands",
-    async (...flags) => {
-      const { run } = await createProject()
+  it.each([["-vv"], ["-v", "-v"]])("should count %s as level 2, and list commands", async (...flags) => {
+    const { run } = await createProject()
 
-      const { stdout, exitCode } = await run`tsinfra plan --hosts-dir hosts-select ${flags} a`.nothrow()
+    const { stdout, exitCode } = await run`tsinfra plan --hosts-dir hosts-select ${flags} a`.nothrow()
 
-      expect(exitCode).toBe(0)
-      expect(stdout).toBe(
-        "a\n  · observed:  (read)   true\n  = unchanged: (ensure) Install git\n      commands:\n        $ true\n\na   unchanged",
-      )
-    },
-  )
+    expect(exitCode).toBe(0)
+    expect(stdout).toBe(
+      "a\n  · observed:  (read)   true\n  = unchanged: (ensure) Install git\n      commands:\n        $ true\n\na   unchanged",
+    )
+  })
+
+  it("should count more than three -v flags as level 3, and show what each command printed", async () => {
+    const { run } = await createProject()
+
+    const { stdout, exitCode } = await run`tsinfra plan --hosts-dir hosts-select -vvvv a`.nothrow()
+
+    expect(exitCode).toBe(0)
+    expect(stdout).toBe(
+      "a\n  · observed:  (read)   true\n      output:\n        exit: 0\n  = unchanged: (ensure) Install git\n      commands:\n        $ true\n            output:\n              exit: 0\n\na   unchanged",
+    )
+  })
 
   it("should print a failed host's error on stdout and exit 1, even with drift on another host", async () => {
     const { run } = await createProject()

@@ -80,6 +80,8 @@ export type Detail = PieceLevels
     | { kind: "warning"; warning: StepWarning }
     // The commands the step ran, in the order they ran.
     | { kind: "commands"; commands: StepCommand[] }
+    // What a read or inspect step's one command printed, because the step lists no commands to show it under.
+    | { kind: "commandOutput"; output: CommandOutputDetail }
     // How to fix a failure, like setting the host's `sudo` option.
     | { kind: "hint"; text: string }
   )
@@ -99,11 +101,18 @@ export interface OptionValue extends PieceLevels {
   value: string | boolean
 }
 
-/** A command a step ran, and its label when tsinfra wrote it, with any secret in its text masked. */
+/**
+ * A command a step ran, and its label when tsinfra wrote it, with any secret in its text masked. What it printed is a
+ * piece of its own, which the filter leaves out below its level.
+ */
 export interface StepCommand {
   cmd: string
   label?: string
+  output?: PieceLevels & CommandOutputDetail
 }
+
+/** What a command printed: its exit code, or the error it failed with when it couldn't run at all. */
+export type CommandOutputDetail = { kind: "exited"; exitCode: number } | { kind: "failed"; error: Error }
 
 /** Something that worked but needs a look, with the value it's about, like a path, when there is one. */
 export interface StepWarning {

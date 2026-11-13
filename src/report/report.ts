@@ -1,5 +1,12 @@
 import { DEFAULT_DIFF_LIMITS, formatHostBlock } from "#report/format/format.ts"
-import type { Detail, HostBlock, HostBlockEntry, PieceLevels, StepOption } from "#report/host-block/host-block.ts"
+import type {
+  Detail,
+  HostBlock,
+  HostBlockEntry,
+  PieceLevels,
+  StepCommand,
+  StepOption,
+} from "#report/host-block/host-block.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 
 export { toHostBlock } from "#report/host-block/host-block.ts"
@@ -25,12 +32,28 @@ const keepShownOptionValues = (option: StepOption, verbosity: Verbosity): StepOp
   return { name, ...(value && isShownAt(value, verbosity) && { value }), entries }
 }
 
-/** Returns `detail` with only the pieces inside it that show at `verbosity`, which only the options detail has. */
-const keepShownInDetail = (detail: Detail, verbosity: Verbosity): Detail => {
-  if (detail.kind !== "options") return detail
+/** Returns `command` with what it printed only when that shows at `verbosity`. */
+const keepShownCommandOutput = (command: StepCommand, verbosity: Verbosity): StepCommand => {
+  const { output, ...commandText } = command
+  return output && isShownAt(output, verbosity) ? command : commandText
+}
 
-  const options = detail.options.map((option) => keepShownOptionValues(option, verbosity))
-  return { ...detail, options }
+/**
+ * Returns `detail` with only the pieces inside it that show at `verbosity`: an option's values, and what a command
+ * printed.
+ */
+const keepShownInDetail = (detail: Detail, verbosity: Verbosity): Detail => {
+  if (detail.kind === "options") {
+    const options = detail.options.map((option) => keepShownOptionValues(option, verbosity))
+    return { ...detail, options }
+  }
+
+  if (detail.kind === "commands") {
+    const commands = detail.commands.map((command) => keepShownCommandOutput(command, verbosity))
+    return { ...detail, commands }
+  }
+
+  return detail
 }
 
 /** Keeps the entries that show at `verbosity`, each with only the note parts and details that show. */

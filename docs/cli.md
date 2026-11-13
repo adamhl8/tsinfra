@@ -104,8 +104,10 @@ levels only change what's printed:
   `sudo: true` wraps them in. A preparation failure lists the commands preparation ran, by their labels, like
   `$ <home directory>`, so it shows how far preparation got. A host that was prepared lists none, because the same
   commands would repeat in every block.
-- **`-vvv`** also shows what each command printed, as `exit:`, `stdout:`, and `stderr:` rows under it, lined up like a
-  step's other details. A read or inspect, which lists no command, shows its rows right under its line. Every command
+- **`-vvv`** also shows what each command printed, as `exit:`, `stdout:`, and `stderr:` rows under a dim italic
+  `output:` heading, one level past the command's text, with their values lined up. The heading keeps the rows from
+  reading like more of a multi-line command. A read or inspect, which lists no command, shows its `output:` heading
+  and rows right under its line, after any options. Every command
   shows its exit code, even 0, and a command that couldn't run at all shows its error in place of the three rows.
   stdout and stderr are each cut off after 20 lines, with a note saying how many lines were left out. In a step that
   compares the host's state, each command starts with its phase, `before`, `fix`, or `after`, because the same check
@@ -155,26 +157,30 @@ sonarr                                                    # -vv
 
 sonarr                                                    # -vvv
   · observed:  (read)   uname -m
-      exit:   0
-      stdout: x86_64
+      output:
+        exit:   0
+        stdout: x86_64
   = unchanged: (ensure) Install sonarr
       commands:
         before $ command -v sonarr
-                 exit:   0
-                 stdout: /usr/bin/sonarr
+                   output:
+                     exit:   0
+                     stdout: /usr/bin/sonarr
   ~ change:    (file)   /etc/systemd/system/sonarr.service
       options:
         sudo: true
       <diff>
       commands:
         before $ <file details script>
-                 exit:   0
-                 stdout: <the file's details>
+                   output:
+                     exit:   0
+                     stdout: <the file's details>
         ...
   > triggered: (run)    Reload systemd
       commands:
         $ sudo systemctl daemon-reload
-          exit: 0
+            output:
+              exit: 0
 ```
 
 ```
@@ -271,6 +277,13 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   look the same as one that didn't. `want`, `content`, `mode`, `user`, `group`, `needs`, and `after` already show as
   values, diffs, attribute rows, notes, or a status, and `check` and `fix` show as commands. The shell options come
   first, then the step's own, in the order they were recorded.
+- **Commands.** From 2, a step's commands show under a dim italic `commands:` heading, each on its own dim line as
+  `$ cmd`, in the order they ran, so they read as background next to the details. A command tsinfra wrote itself shows
+  as its label in angle brackets, like `$ <file details script>`, and its later lines line up under its first line's
+  text. From 3, what each command printed goes under it, under an `output:` heading one level past its text. They
+  come after a step's other details, warnings included, and before any hint. A read or inspect lists none,
+  because its name is its command. A preparation failure lists the commands preparation ran, under its error and
+  before any hint, and a host that was prepared lists none.
 - **Warnings.** A step that worked but needs a look, like a link to a missing path, gets a `warning:` line under its
   details, with the label in bright yellow, so it stands apart from the plain yellow of a change. A warning makes its
   step show even when it was already right, without `--verbose`. The report decides what's a warning from the facts
