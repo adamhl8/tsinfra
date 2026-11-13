@@ -59,7 +59,7 @@
   },
   "devDependencies": {
     "@adamhl8/bask": "^0.6.1",
-    "@adamhl8/configs": "^4.1.0",
+    "@adamhl8/configs": "^4.1.1",
     "@arethetypeswrong/core": "^0.18.5",
     "@commitlint/cli": "^21.2.4",
     "@commitlint/config-conventional": "^21.2.4",
@@ -68,7 +68,7 @@
     "markdown-toc": "^1.2.0",
     "oxfmt": "^0.78.0",
     "oxlint": "^1.93.0",
-    "oxlint-tsgolint": "^7.0.2006",
+    "oxlint-tsgolint": "^7.0.2007",
     "publint": "^0.3.25",
     "release-it": "^21.1.2",
     "release-it-git-cliff": "^0.2.1",
