@@ -21,7 +21,7 @@ What's left before tsinfra can run the homelab, in order, then the ports that de
       3. **Phases** (built 2026-11-12). In a step that compares, each command starts with its phase, like `(before) $ cmd`, and its rows
          line up past it, as in the docs' example. It's the hardest alignment in the feature, so it's a step of its
          own.
-      4. **`until`.** The "run with -vvv" note gets `until: 2` from `PieceLevels`, so it goes away at 3.
+      4. **`until`** (built 2026-11-12). The "run with -vvv" note gets `until: 2` from `PieceLevels`, so it goes away at 3.
       5. **A docs check,** and mark this item built.
 
 ## Port

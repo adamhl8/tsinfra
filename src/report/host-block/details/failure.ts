@@ -37,7 +37,8 @@ const toPhaseStderrDetails = (commandRecords: CommandRecord[], phase: StillDiffe
   if (phaseCommandRecords.length > 1) {
     const hasStderr = phaseCommandRecords.some((commandRecord) => getCommandStderr(commandRecord) !== undefined)
     const text = `some commands ${PHASE_DESCRIPTIONS[phase]} wrote to stderr, run with -vvv to see what they printed`
-    return hasStderr ? [{ kind: "note", text, from: 0 }] : []
+    // Leave the note out from level 3, because each command's stderr shows under it there.
+    return hasStderr ? [{ kind: "note", text, from: 0, until: 2 }] : []
   }
 
   const [onlyCommandRecord] = phaseCommandRecords

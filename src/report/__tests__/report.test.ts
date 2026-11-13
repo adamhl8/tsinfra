@@ -708,6 +708,29 @@ describe("renderHostBlock for the stderr of a step that still differs", () => {
     expect(lines).toStrictEqual(["        got:  false", "        want: true"])
   })
 
+  it("should leave the notes out with -vvv, where each command's stderr shows under it", async () => {
+    const hostRecord = await runNamedHost(
+      "a",
+      async (h) => {
+        await h.ensure("Make it", {
+          check: async ({ inspect }) => {
+            await inspect("echo warn >&2")
+            await inspect("true")
+            return false
+          },
+          want: true,
+          fix: "true",
+        })
+      },
+      "apply",
+    )
+
+    expect(renderRecord(hostRecord, 2)).toContain("run with -vvv to see what they printed")
+    const verboseBlock = renderRecord(hostRecord, 3)
+    expect(verboseBlock).not.toContain("run with -vvv")
+    expect(verboseBlock).toContain("stderr: warn")
+  })
+
   it("should show a note for each phase that ran several commands", async () => {
     const lines = await formatFailedCheck({
       check: async ({ inspect }) => {
