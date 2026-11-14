@@ -6,8 +6,17 @@ import bun from "bun"
 import { attempt } from "ts-explicit-errors"
 
 import { castInvalid, createSession, ensureOrMessage, getFailureMessage, throwBoom } from "#__tests__/session.ts"
-import type { Want } from "#session/handlers/ensure/check.ts"
+import type { Want } from "#session/handlers/ensure/want.ts"
 import type { ChangeTools } from "#session/handlers/tools.ts"
+
+// Read `key=value` lines into a record, the shape a record check returns.
+const toRecord = (text: string) =>
+  Object.fromEntries(
+    text.split("\n").map((line) => {
+      const [key = "", value = ""] = line.split("=")
+      return [key, value] as const
+    }),
+  )
 
 // Widen `want` to the union, which lets a mismatched check through the types, as an untyped host script would.
 const toLooseWant = (value: Want) => value
@@ -108,7 +117,7 @@ describe("h.ensure", () => {
     })
 
     expect(result).toBe(
-      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> it's of type boolean, but want is of type string",
+      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> it's of type 'boolean', but want is of type 'string'",
     )
   })
 
@@ -129,7 +138,7 @@ describe("h.ensure", () => {
     })
 
     expect(result).toBe(
-      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> it's of type object, but want is of type boolean",
+      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> it's of type 'object', but want is of type 'boolean'",
     )
   })
 
@@ -310,7 +319,64 @@ describe("h.ensure with a list want", () => {
     })
 
     expect(result).toBe(
-      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> it's of type string, but want is of type array",
+      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> it's of type 'string', but want is of type 'array'",
+    )
+  })
+})
+
+describe("h.ensure with an object want", () => {
+  it("should compare a function's record by key, so key order doesn't count", async () => {
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, {
+      want: { a: "1", b: "2" },
+      check: async ({ read }) => toRecord(await read(String.raw`printf 'b=2\na=1\n'`)),
+      fix: "exit 1",
+    })
+
+    expect(result).toMatchObject({ changed: false })
+  })
+
+  it("should give the fix what's missing, extra, and changed, and return changed once they're gone", async () => {
+    const marker = path.join(await makeTempDir(), "versions")
+    const { host: h } = await createSession()
+    const differences: unknown[] = []
+    const result = await ensureOrMessage(h, {
+      want: { a: "1", b: "2", d: "4" },
+      check: async ({ read }) =>
+        toRecord(await read(String.raw`cat '${marker}' 2>/dev/null || printf 'a=1\nc=3\nb=9\n'`)),
+      fix: async ({ exec }, difference) => {
+        differences.push(difference)
+        await exec(String.raw`printf 'a=1\nb=2\nd=4\n' > '${marker}'`)
+      },
+    })
+
+    expect([result, differences]).toStrictEqual([
+      { name: "Make marker", kind: "ensure", changed: true },
+      [{ missing: { d: "4" }, extra: { c: "3" }, changed: { b: { got: "9", want: "2" } } }],
+    ])
+  })
+
+  it("should refuse a command check for an object want without running it", async () => {
+    const { marker } = await createMarkerStep()
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, { want: { a: "1" }, check: castInvalid(`touch '${marker}'`), fix: "true" })
+
+    expect([result, await bun.file(marker).exists()]).toStrictEqual([
+      "failed to validate the options given to 'ensure' -> check must be a check function for an object want (was a command)",
+      false,
+    ])
+  })
+
+  it("should fail validation when a function check returns an array for an object want", async () => {
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, {
+      want: toLooseWant({ a: "1" }),
+      check: async ({ read }) => (await read("echo a")).split("\n"),
+      fix: "true",
+    })
+
+    expect(result).toBe(
+      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> it's of type 'array', but want is of type 'object'",
     )
   })
 })
@@ -519,9 +585,14 @@ describe("h.ensure with a fix function", () => {
 describe("h.ensure with invalid input", () => {
   it.each([
     {
-      description: "whose want is neither a boolean, a string, nor an array of strings",
+      description: "whose want is none of the kinds it can be",
       options: { want: 1, check: "true", fix: "true" },
-      message: "want must be a boolean, a string, or an array of strings (was a number)",
+      message: "want must be a boolean, a string, an array of strings, or an object of strings (was a number)",
+    },
+    {
+      description: "whose want is an object with a value that isn't a string",
+      options: { want: { a: 1 }, check: "true", fix: "true" },
+      message: "want.a must be a string (was a number)",
     },
     {
       description: "whose want is a list with an item that isn't a string",

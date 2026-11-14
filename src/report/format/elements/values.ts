@@ -7,6 +7,8 @@ type Value = string | boolean | number
 
 // Say "empty", not "blank", because a string of only whitespace shows quoted, not as a marker.
 const EMPTY_MARKER = "(empty)"
+// Mark a side of a change that has no value, like a key only one side of a record has, without saying what the fix does.
+const NONE_MARKER = "(none)"
 const EDGE_WHITESPACE = /^\s|\s$/v
 
 /**
@@ -39,8 +41,12 @@ export const gotValueElement: FormatSideValue = (value: Value, describe?: (value
 export const wantValueElement: FormatSideValue = (value: Value, describe?: (value: boolean | number) => string) =>
   applyValueRules(value, styleWanted, describe)
 
-/** Formats a value that changes, like `alice -> bob`. */
-export const changeElement = (got: Value, want: Value): string => `${gotValueElement(got)} -> ${wantValueElement(want)}`
+/** Formats a value that changes, like `alice -> bob`, with a muted `(none)` for a side that has no value. */
+export const changeElement = (got: Value | undefined, want: Value | undefined): string => {
+  const gotText = got === undefined ? styleMuted(NONE_MARKER) : gotValueElement(got)
+  const wantText = want === undefined ? styleMuted(NONE_MARKER) : wantValueElement(want)
+  return `${gotText} -> ${wantText}`
+}
 
 /** Formats an option's value as its lines, and a masked one as a muted marker, because it's tsinfra's, not the script's. */
 export const optionValueLineElements = (value: string | boolean): string[] => {

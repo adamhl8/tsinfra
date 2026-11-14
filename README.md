@@ -92,11 +92,17 @@ bunx tsinfra plan sonarr   # just this one
 ```
 sonarr
   ~ change: (file) /etc/systemd/system/sonarr.service
-      -Restart=always
-      +Restart=on-failure
+      ───────────────────────────────
+      5  ExecStart=/opt/Sonarr/Sonarr
+        -Restart=always
+      6 +Restart=on-failure
+      7
+      ───────────────────────────────
   > triggered: (run) Reload systemd
 
-sonarr    2 changes
+Steps after a change were checked without that change, so apply may differ.
+
+sonarr   2 changes
 ```
 
 Then make the changes:
@@ -229,9 +235,12 @@ it worked. `plan` only runs `check`.
   - A string: compared with `check`'s stdout (or the function's return value). Trailing newlines are ignored.
   - A list of strings: compared with `check`'s lines, blank ones left out (or the function's array), as a set, so order
     and duplicates don't count. `[]` means nothing is left to do.
+  - An object of string keys and string values: compared with the function's object by key. It needs a check
+    function.
 - `check`: a command, or an async function given `{ read, inspect }` that returns the answer
 - `fix`: a command, or an async function given `{ exec, inspect }`. The function also gets what `check` found:
-  `{ got }` for a string `want`, and `{ missing, extra }` for a list. It only runs in `apply`.
+  `{ got }` for a string `want`, `{ missing, extra }` for a list, and `{ missing, extra, changed }` for an object. It
+  only runs in `apply`.
 - `verify` (default: `true`): run `check` again after `fix`, and fail if the state still differs
 - `env`, `secretEnv`: see [Values and secrets](#values-and-secrets)
 - `needs`: see [Needs](#needs)
@@ -247,12 +256,73 @@ await h.ensure("Start Sonarr", {
 })
 ```
 
-A string `want` shows the difference in the output as `got:` and `want:` rows. For a multi-line value, the rows hold
-only the lines that differ. A boolean shows only the step's name.
+How a change shows depends on `want`:
+
+- A boolean shows only the step's name.
+- A string shows `got:` and `want:` rows. For a multi-line value, the rows hold only the lines that differ.
+- A list shows `missing:` and `extra:` rows.
+- An object shows a row per key that differs.
+
+**A list** is for a set of things, like packages:
+
+```ts
+await h.ensure("Install packages", {
+  want: ["fd-find", "jq", "ripgrep"],
+  check: "dpkg-query -W -f='${Package}\\n' fd-find jq ripgrep 2>/dev/null",
+  fix: async ({ exec }, { missing }) => {
+    await exec(`sudo apt-get install -y ${missing.join(" ")}`)
+  },
+})
+
+await h.ensure("Upgrade brew packages", { want: [], check: "brew outdated --quiet", fix: "brew upgrade" })
+```
+
+```
+  ~ change: (ensure) Install packages
+      missing: ripgrep
+  ~ change: (ensure) Upgrade brew packages
+      extra: node
+             python@3.13
+```
+
+- It's compared as a set, so order and duplicates don't count, and neither side needs sorting.
+- A command `check`'s output is split into lines, and blank lines are left out.
+- `missing` is what `want` has that the check didn't find. `extra` is what the check found that `want` doesn't have.
+- `want: []` is for a check that lists what's left to do, like outdated packages, so everything it lists is `extra`.
+
+**An object** of string keys and string values is for names with a value each, like packages on a version each:
+
+```ts
+// The newest version each package's range allows, read from the registry.
+const wanted: Record<string, string> = { pnpm: "11.2.0", turbo: "2.5.4", zx: "8.8.1" }
+
+await h.ensure("Sync bun global packages", {
+  want: wanted,
+  check: async ({ read }) => toVersions(await read("bun pm ls -g")), // { name: version } for each installed package
+  fix: async ({ exec }, { missing, extra, changed }) => {
+    const installs = [...Object.keys(missing), ...Object.keys(changed)].map((name) => `${name}@${wanted[name]}`)
+    if (installs.length > 0) await exec(`bun add -g ${installs.join(" ")}`)
+    if (Object.keys(extra).length > 0) await exec(`bun remove -g ${Object.keys(extra).join(" ")}`)
+  },
+})
+```
+
+```
+  ~ change: (ensure) Sync bun global packages
+      pnpm:       11.1.0 -> 11.2.0
+      zx:         (none) -> 8.8.1
+      typescript: 5.9.2 -> (none)
+```
+
+- It needs a check function, because a command's output has no keys.
+- Each key's value is compared exactly, and key order doesn't count.
+- A row goes from the host's value to the wanted one. `(none)` marks a side that doesn't have the key.
+- `missing` maps a key to its wanted value, `extra` maps a key to its current value, and `changed` maps a key to
+  `{ got, want }`.
 
 > [!TIP]
-> For a list of things, like packages, make `want` the whole state you want, sorted, and have the check print the
-> host's state the same way. `plan` then shows exactly which lines the fix will change. See
+> Make `want` the state you want, and have the check report the host's state in the same shape, without comparing.
+> Keep a spec like `"latest"` as your helper's input, and resolve it to a version for `want` before the step. See
 > [the state you want, or what's left to do](./docs/recipes.md#the-state-you-want-or-whats-left-to-do).
 
 Use a check function to work out the answer in TypeScript:
@@ -273,7 +343,7 @@ await h.ensure("Update Caddy", {
 - `check` also runs in `plan`, so it must not change anything your script manages.
 - A command `check` never fails on a non-zero exit, because that's an answer. A `read` inside a check function does
   fail on one, so use `inspect` when a non-zero exit is an answer.
-- A check that exits non-zero but still prints `want` fails the step, so a broken check can't look converged.
+- A command check that exits non-zero but still matches `want` fails the step, so a broken check can't look converged.
 - `fix` re-runs every command each time `check` fails. If one command's effect can be in place while `check` still
   fails, give that effect its own step.
 

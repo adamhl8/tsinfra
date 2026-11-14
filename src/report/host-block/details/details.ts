@@ -5,13 +5,14 @@ import { toOptionsDetails } from "#report/host-block/details/options.ts"
 import type { Detail } from "#report/host-block/host-block.ts"
 import type { CommandRecord, ComparisonValues, FailureHint, FinishedStepRecord, StepRecord } from "#session/session.ts"
 
-// Show how a string, a list, a file, or a link would change, because the step's name doesn't say.
+// Show how a string, a list, a record, a file, or a link would change, because the step's name doesn't say.
 // An exit code or a boolean needs no details, because the name already says what yes and no mean.
 const SHOWS_CHANGE_DETAILS: Record<ComparisonValues["kind"], boolean> = {
   exit: false,
   boolean: false,
   string: true,
   list: true,
+  record: true,
   file: true,
   link: true,
 }

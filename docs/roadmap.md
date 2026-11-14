@@ -5,8 +5,6 @@ describe tsinfra as it is.
 
 <!-- toc -->
 
-- [Next](#next)
-  - [Records in `ensure`](#records-in-ensure)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
   - [Live progress](#live-progress)
@@ -35,40 +33,6 @@ describe tsinfra as it is.
 - [Rejected](#rejected)
 
 <!-- tocstop -->
-
-## Next
-
-In the order they'll be built.
-
-### Records in `ensure`
-
-`want: Record<string, string>` compares values by key, like a package name to its version, or a config's settings.
-
-- **Only a check function can return one,** because a command's stdout has no natural key and value format.
-  `Check<T>` drops the command form when `T` is a record, so `check: "..."` is a type error at the call site.
-- **The comparison computes `missing`, `extra`, and `changed`,** which the report shows. A fix function gets them as
-  its `FixDifference`, `{ missing, extra, changed }`, and no `got`, because it can be rebuilt from `want` and the
-  parts. Each part carries the values it can: `missing` maps a key to its wanted value, because the host doesn't have
-  it, `extra` maps a key to its current value, because `want` doesn't have it, and `changed` maps a key to
-  `{ got, want }`, because the pairing is the difference.
-- **The report shows one row per key that differs,** current value to wanted, like the `file` attribute rows:
-
-  ```
-    ~ change: (ensure) Sync bun global packages
-        pnpm:  11.1.0 -> 11.2.0
-        turbo: 2.5.0 -> 2.5.4
-        zx:    (missing) -> 8.8.1
-  ```
-
-  How a missing or extra key shows is still open, like `(missing)` as a dim marker.
-
-- **A check reports the host's state, and never compares.** Its job is to return the same shape as `want`, filled with
-  what's on the host. A check that returns the spec, like `"latest"`, when a package is current, and a version
-  otherwise, does the comparison itself, and its row hides the installed version. Keep specs like `"latest"` or `"11"`
-  as a helper's input, resolve them to versions for `want` before the step, and have the check read the installed
-  versions. The docs should say this with the record shape's example.
-- **Update the docs once it's built,** the same places as lists, plus the Bun example in
-  [the recipe](./recipes.md#the-state-you-want-or-whats-left-to-do), which becomes a record.
 
 ## Planned
 

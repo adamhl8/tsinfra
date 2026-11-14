@@ -12,7 +12,7 @@ export {
   headingElement,
   labelElement,
   optionEntriesElement,
-  optionKeyElement,
+  keyElement,
   optionNameElement,
 } from "#report/format/elements/labels.ts"
 export {

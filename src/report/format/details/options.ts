@@ -1,6 +1,6 @@
 import {
   headingElement,
-  optionKeyElement,
+  keyElement,
   optionEntriesElement,
   optionNameElement,
   optionValueLineElements,
@@ -30,12 +30,12 @@ const formatOptionsLine = (options: StepOption[]): string => {
  */
 const formatOptionsBlockRows = (options: StepOption[], indent: string): string[] => {
   // Measure each key as it's formatted, with the space after it, so the width follows the key's own text.
-  const valueLabels = options.flatMap(({ name, value }) => (value === undefined ? [] : [`${optionKeyElement(name)} `]))
+  const valueLabels = options.flatMap(({ name, value }) => (value === undefined ? [] : [`${keyElement(name)} `]))
   const labelWidth = getMaxWidth(valueLabels)
   const continuationIndent = " ".repeat(labelWidth)
 
   return options.flatMap(({ name, value, entries }) => {
-    const label = optionKeyElement(name)
+    const label = keyElement(name)
     const valueLines = value === undefined ? [] : optionValueLineElements(value.value)
     const valueRows = valueLines.map((valueLine, index) => {
       const lineStart = index === 0 ? padToWidth(label, labelWidth) : continuationIndent

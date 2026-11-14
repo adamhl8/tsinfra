@@ -630,14 +630,16 @@ manages first.
 
 ```ts
 // `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string.
-type EnsureOptions<T extends boolean | string | readonly string[]> = {
+type EnsureOptions<T extends boolean | string | readonly string[] | Readonly<Record<string, string>>> = {
   // `true` means exit 0, or a function returning true, is already right. `false` means the opposite.
   // A string is compared to the command's stdout, or the function's value.
   // A list is compared to the command's lines, or the function's array, as a set.
+  // An object is compared to the function's object, by key.
   want: T
+  // An object `want` takes only a function, because a command's output has no keys.
   check: string | ((tools: ReadTools) => Promise<T>)
-  // A function also gets what the check found: `{ got }` for a string `want`, and `{ missing, extra }` for a list.
-  // See `FixDifference`.
+  // A function also gets what the check found: `{ got }` for a string `want`, `{ missing, extra }` for a list, and
+  // `{ missing, extra, changed }` for an object. See `FixDifference`.
   fix: string | ((tools: ChangeTools, difference: FixDifference<T>) => Promise<void>)
   verify?: boolean // default true
   env?: Record<string, string> // see EnvOptions
@@ -707,6 +709,45 @@ what's left shows under `extra:`, because you want none of it.
       extra: node
              python
 ```
+
+**An object `want`**, of string keys and string values, compares values by key, like a package name to its version, or a config's settings. Key order
+doesn't count, and each value is compared exactly. Only a check function can return one, because a command's output
+has no keys, so `check: "..."` with an object `want` is a type error, and refused before it runs for a script that gets
+past the types. The values are strings, so a version of `11` is `"11"`.
+
+```ts
+const wanted: Record<string, string> = {}
+for (const [name, spec] of Object.entries(specs)) {
+  wanted[name] = await h.read('bun pm view "$SPEC" version', { env: { SPEC: `${name}@${spec}` } })
+}
+
+await h.ensure("Sync bun global packages", {
+  want: wanted,
+  check: async ({ read }) => toVersions(await read("bun pm ls -g")),
+  fix: async ({ exec }, { missing, extra, changed }) => {
+    const installs = [...Object.entries(missing), ...Object.entries(changed).map(([name, { want }]) => [name, want])]
+    if (installs.length > 0)
+      await exec(`bun add -g ${installs.map(([name, version]) => `${name}@${version}`).join(" ")}`)
+    if (Object.keys(extra).length > 0) await exec(`bun remove -g ${Object.keys(extra).join(" ")}`)
+  },
+})
+```
+
+The report shows a row per key that differs, from the host's value to the wanted one, in `want`'s key order, then the
+keys only the check found. A side without the key shows `(none)`, which says it has no value without saying what the fix
+does:
+
+```
+  ~ change: (ensure) Sync bun global packages
+      zx:         (none) -> 8.8.1
+      pnpm:       11.1.0 -> 11.2.0
+      typescript: 5.9.2 -> (none)
+```
+
+**A check reports the host's state, and never compares.** Its job is to return the same shape as `want`, filled with
+what's on the host. A check that returns a spec like `"latest"` when a package is current, and a version otherwise,
+does the comparison itself, and its row hides the installed version. Keep specs like `"latest"` or `"11"` as a helper's
+input, resolve them to versions for `want` before the step, as above, and have the check read the installed versions.
 
 A command check is shorthand for calling `inspect` in a check function, so a non-zero exit is an answer, not a failure.
 `read` is the one that fails on a non-zero exit.
@@ -830,8 +871,10 @@ fix: async ({ exec }) => {
 The fix function only runs in `apply`, so it can change things and do work on the control machine.
 
 **What the check found.** A fix function gets a second argument after its tools, with what the check found: `{ got }` for
-a string `want`, what the check answered, and `{ missing, extra }` for a list, the same items the report shows. A fix
-can act on it without reading the host again:
+a string `want`, what the check answered, `{ missing, extra }` for a list, and `{ missing, extra, changed }` for a
+object, the same items and keys the report shows. An object's `missing` maps a key to its wanted value, `extra` maps a
+key to its current value, and `changed` maps a key to `{ got, want }`. A fix can act on it without reading the host
+again:
 
 ```ts
 await h.ensure("Update Caddy", {
@@ -845,7 +888,7 @@ await h.ensure("Update Caddy", {
 
 - **It holds only what the fix can't work out from `want`.** `want` is already in the script, so a string comparison,
   which is plain equality, adds only `got`. A list's `got` isn't passed, because it's `want` minus `missing`, plus
-  `extra`, and passing it would only invite redoing the comparison.
+  `extra`, and passing it would only invite redoing the comparison. An object's `got` isn't passed for the same reason.
 - **A boolean `want` gives nothing more,** because `got` is just `!want`. A fix function that declares a second argument
   for one is a type error. A `want` typed as the full `Want` union gets the union of the three.
 - **It's a second argument, not part of the tools,** because the tools are what a fix can call, and this is data about

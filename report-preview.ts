@@ -127,6 +127,7 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
       // Every element on steps that succeed. `ensure` strings: `got:` and `want:` rows, multi-line rows with a lone side,
       // `(empty)` for a value and a line, a quoted trailing space, and the notes for too many lines and a slow compare.
       // `ensure` lists: `missing:` and `extra:` rows, and `want: []` with only `extra:`.
+      // `ensure` records: a row per key that differs, with `(none)` for a key only one side has.
       // `file`: a diff with two hunks, `mode:` and a numeric `group:`, the note for a long diff and a slow one, and each
       // content description. `link`: a changed target, both replacements, and a missing target with its warning, on a
       // step that changes and one that was already right. A triggered multi-line run and one that didn't trigger.
@@ -167,6 +168,21 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
           want: [],
           check: `cat '${marker("outdated-list")}' 2>/dev/null || printf 'node\\npython\\n'`,
           fix: `: > '${marker("outdated-list")}'`,
+        })
+        await h.ensure("Sync the versions", {
+          want: { zx: "8.8.1", pnpm: "11.2.0", fd: "10.0.0" },
+          check: async ({ read }) => {
+            const listing = await read(
+              `cat '${marker("versions")}' 2>/dev/null || echo 'typescript=5.9.2 pnpm=11.1.0 fd=10.0.0'`,
+            )
+            return Object.fromEntries(
+              listing.split(" ").map((entry) => {
+                const [name = "", version = ""] = entry.split("=")
+                return [name, version] as const
+              }),
+            )
+          },
+          fix: `echo 'zx=8.8.1 pnpm=11.2.0 fd=10.0.0' > '${marker("versions")}'`,
         })
         await h.ensure(
           "Write the hosts list",

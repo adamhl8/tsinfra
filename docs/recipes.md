@@ -99,46 +99,49 @@ await docker(h, { present: false })
 
 ## The state you want, or what's left to do
 
-A `want` for several things, like packages, is a list, and it takes one of two shapes. Either it's the state you want,
-and the check lists the host's state the same way, or it's `[]`, and the check lists what's left to do. Prefer the
-state you want, because `plan` then shows exactly which items the fix will change.
+A `want` for several things, like packages, is a list or an object, and it takes one of two shapes. Either it's the
+state you want, and the check returns the host's state the same way, or it's `[]`, and the check lists what's left to
+do. Prefer the state you want, because `plan` then shows exactly which items the fix will change.
 
 **Compute the state you want** whenever you can work it out before the step. `want` is a plain value, so it can come
-from a constant, a `fetch` on the control machine, or an `h.read` before the step. For global Bun packages, each on the
-newest version its spec allows:
+from a constant, a `fetch` on the control machine, or an `h.read` before the step. A list suits a set of names, like
+packages that should be installed. An object suits names with a value each, like packages on a version each. For
+global Bun packages, each on the newest version its spec allows:
 
 ```ts
-const wanted: string[] = []
-for (const spec of specs) {
-  const version = await h.read('bun pm view "$SPEC" version', { env: { SPEC: spec } })
-  wanted.push(`${packageName(spec)}@${version}`)
+const wanted: Record<string, string> = {}
+for (const [name, spec] of Object.entries(specs)) {
+  wanted[name] = await h.read('bun pm view "$SPEC" version', { env: { SPEC: `${name}@${spec}` } })
 }
 
 await h.ensure("Sync bun global packages", {
   want: wanted,
-  check: async ({ read }) => toGlobals(await read("bun pm ls -g")),
-  fix: async ({ exec }, { missing, extra }) => {
-    if (missing.length > 0) await exec(`bun add -g ${missing.join(" ")}`)
-    const unwanted = extra.filter((global) => !wanted.some((spec) => sameName(spec, global)))
-    if (unwanted.length > 0) await exec(`bun remove -g ${unwanted.map(packageName).join(" ")}`)
+  check: async ({ read }) => toVersions(await read("bun pm ls -g")),
+  fix: async ({ exec }, { missing, extra, changed }) => {
+    const installs = {
+      ...missing,
+      ...Object.fromEntries(Object.entries(changed).map(([name, { want }]) => [name, want])),
+    }
+    if (Object.keys(installs).length > 0)
+      await exec(
+        `bun add -g ${Object.entries(installs)
+          .map(([name, version]) => `${name}@${version}`)
+          .join(" ")}`,
+      )
+    if (Object.keys(extra).length > 0) await exec(`bun remove -g ${Object.keys(extra).join(" ")}`)
   },
 })
 ```
 
-`packageName` drops a spec's version, like `pnpm@11` -> `pnpm`, `sameName` compares two by their names, and `toGlobals`
-turns the listing into `name@version` items, the same shape as `want`. A list compares as a set, so neither side needs
-sorting. `plan` shows only the items that differ: a missing package or version under `missing:`, and an extra one
-under `extra:`, so an update shows under both:
+`specs` maps each package to its range, like `{ pnpm: "11", turbo: "latest" }`, and `toVersions` turns the listing into
+the same name-to-version shape. `plan` shows a row per package that differs:
 
 ```
   ~ change: (ensure) Sync bun global packages
-      missing: turbo@2.5.4
-               zx@8.8.1
-      extra:   turbo@2.5.0
-               typescript@5.9.2
+      zx:         (none) -> 8.8.1
+      pnpm:       11.1.0 -> 11.2.0
+      typescript: 5.9.2 -> (none)
 ```
-
-`bun add` replaces an old version, so the fix only removes the extras whose package isn't wanted at all.
 
 **List what's left, with `want: []`,** when the tool works out the difference itself, like `brew outdated`,
 `apt list --upgradable`, or a newer image digest (see

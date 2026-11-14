@@ -1,11 +1,11 @@
 import { diffArrays } from "diff"
 
 import type { AlignedRow } from "#report/format/details/aligned-row.ts"
-import { formatAlignedRow } from "#report/format/details/aligned-row.ts"
+import { formatAlignedRow, formatKeyRow } from "#report/format/details/aligned-row.ts"
 import type { DetailRows } from "#report/format/details/details.ts"
 import type { DiffLimits } from "#report/format/details/diff.ts"
 import { FULL_DIFF_TIMEOUT_MS, LINE_LIMIT_FLAG, TIME_LIMIT_FLAG } from "#report/format/details/diff.ts"
-import { gotValueElement, noteElement, wantValueElement } from "#report/format/elements/elements.ts"
+import { changeElement, gotValueElement, noteElement, wantValueElement } from "#report/format/elements/elements.ts"
 import type { EnsureComparisonValues } from "#session/session.ts"
 import { splitLines } from "#utils.ts"
 
@@ -26,6 +26,11 @@ const formatManyItemsNote = (itemCount: number): string =>
 
 type BooleanWantValues = Extract<EnsureComparisonValues, { kind: "exit" | "boolean" }>
 type ListValues = Extract<EnsureComparisonValues, { kind: "list" }>
+type RecordValues = Extract<EnsureComparisonValues, { kind: "record" }>
+
+/** Formats the note in place of `keyCount` differing keys of a record, which are too many to show. */
+const formatManyKeysNote = (keyCount: number): string =>
+  noteElement(`${keyCount} keys differ, run with ${LINE_LIMIT_FLAG} to see them`)
 
 // Describe an exit code in words, because a bare `1` would be hard to read.
 const describeExitCode = (exitCode: number) => `exit code ${exitCode}`
@@ -114,12 +119,33 @@ const formatListValues = ({ missing, extra }: ListValues, diffLimits: DiffLimits
 }
 
 /**
- * Formats what an `ensure` compared: `got` and `want` rows, a list's `missing` and `extra` rows, or a note when the
- * lines or items can't show.
+ * Formats a record's rows, one per key that differs, from the host's value to the wanted one, with `(none)` for a side
+ * without the key. Shows the keys in `want`'s order, then the extra ones in the check's order. More keys than
+ * `diffLimits` allows become a note.
+ */
+const formatRecordValues = ({ want, missing, extra, changed }: RecordValues, diffLimits: DiffLimits): DetailRows => {
+  const wantRows = Object.keys(want).flatMap((key) => {
+    const changedValues = changed[key]
+    if (changedValues) return [formatKeyRow(key, [changeElement(changedValues.got, changedValues.want)])]
+    return Object.hasOwn(missing, key) ? [formatKeyRow(key, [changeElement(undefined, missing[key])])] : []
+  })
+  const extraRows = Object.entries(extra).map(([key, value]) => formatKeyRow(key, [changeElement(value, undefined)]))
+  const rows = [...wantRows, ...extraRows]
+
+  if (diffLimits.maxLines !== undefined && rows.length > diffLimits.maxLines)
+    return { kind: "unaligned", rows: [formatManyKeysNote(rows.length)] }
+
+  return { kind: "aligned", rows }
+}
+
+/**
+ * Formats what an `ensure` compared: `got` and `want` rows, a list's `missing` and `extra` rows, a record's row per
+ * key, or a note when the lines, items, or keys can't show.
  */
 export const formatEnsureValues = (values: EnsureComparisonValues, diffLimits: DiffLimits): DetailRows => {
   if (values.kind === "exit" || values.kind === "boolean")
     return { kind: "aligned", rows: formatBooleanWantRows(values) }
   if (values.kind === "string") return formatStringValues(values.got, values.want, diffLimits)
-  return formatListValues(values, diffLimits)
+  if (values.kind === "list") return formatListValues(values, diffLimits)
+  return formatRecordValues(values, diffLimits)
 }

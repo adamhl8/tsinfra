@@ -256,8 +256,10 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   | Empty, a whole value or one of its lines    | `(empty)`   |
   | Only whitespace, like `"  "`                | `'  '`      |
   | Leading or trailing whitespace, `" active"` | `' active'` |
+  | A side of a change that has no value        | `(none)`    |
 
-  The marker is dim, like `[MASKED]`, because it's tsinfra's word, not the value. It says "empty", not "blank", because a
+  The markers are dim, like `[MASKED]`, because they're tsinfra's words, not the value. `(none)` is for a key only one
+  side of an object has. `(empty)` says "empty", not "blank", because a
   value of only whitespace shows quoted, so `""` and `"  "` never look the same. The quotes stay uncolored, so they
   don't read as part of the value.
 
@@ -333,6 +335,9 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   order, then an `extra:` row, with what the check found that `want` doesn't have, in the check's order. A side with
   nothing has no row. Each item follows the rules in Values, in the wanted color for `missing` and the current color for
   `extra`. More than 15 differing items show "N items differ", which suggests `--verbose`.
+- **An object `ensure` value** shows a row per key that differs, labeled by the key like an option's key, from the
+  host's value to the wanted one, in `want`'s key order, then the keys only the check found. A side without the key
+  shows `(none)`. More than 15 differing keys show "N keys differ", which suggests `--verbose`.
 
 There's no `--json` mode yet (see [Maybe later](./roadmap.md#maybe-later)).
 

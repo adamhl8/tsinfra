@@ -22,9 +22,9 @@ import type { Mode } from "#mode.ts"
 import { getExitCode, renderHostBlock, renderSummary, toHostBlock } from "#report/report.ts"
 import { hasDrift } from "#report/summary.ts"
 import type { Verbosity } from "#report/verbosity.ts"
-import type { Want } from "#session/handlers/ensure/check.ts"
 import type { EnsureOptions } from "#session/handlers/ensure/ensure.ts"
-import type { Host, HostRecord } from "#session/session.ts"
+import type { Want } from "#session/handlers/ensure/want.ts"
+import type { Exec, Host, HostRecord } from "#session/session.ts"
 
 const runNamedHost = async (name: string, fn: HostFunction, mode: Mode) =>
   prepareAndRunHost(toLoadedHost(name, host("@local", fn)), mode)
@@ -476,6 +476,46 @@ describe("renderHostBlock for a step that would change a list", () => {
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      16 items differ, run with --verbose to see them"])
     expect([verboseLines?.length, verboseLines?.[0]]).toStrictEqual([16, "      extra: pkg0"])
+  })
+})
+
+// Read `key=value` lines into a record, the shape a record check returns.
+const readRecord = async (read: Exec, lines: string) =>
+  Object.fromEntries(
+    (await read(`printf '%s\\n' ${lines}`)).split("\n").map((line) => {
+      const [key = "", value = ""] = line.split("=")
+      return [key, value] as const
+    }),
+  )
+
+describe("renderHostBlock for a step that would change a record", () => {
+  it("should show a row per key that differs, in want's order, then the extra keys, with (none) for an absent side", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Sync versions", {
+        want: { zx: "8.8.1", pnpm: "11.2.0", fd: "10.0.0" },
+        check: async ({ read }) => readRecord(read, "typescript=5.9.2 pnpm=11.1.0 fd=10.0.0"),
+        fix: "true",
+      })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
+      "      zx:         (none) -> 8.8.1",
+      "      pnpm:       11.1.0 -> 11.2.0",
+      "      typescript: 5.9.2 -> (none)",
+    ])
+  })
+
+  it("should show a note for more than 15 differing keys, and every key with --verbose", async () => {
+    const want = Object.fromEntries(Array.from({ length: 16 }, (_, index) => [`key${index}`, "new"]))
+    const sync = async (h: Host) => {
+      await h.ensure("Sync versions", { want, check: async ({ read }) => readRecord(read, "other=1"), fix: "true" })
+    }
+
+    const hostBlock = await formatBlock(sync, "plan")
+    const verboseLines = (await formatVerboseBlock(sync))?.split("\n").slice(2)
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      17 keys differ, run with --verbose to see them"])
+    expect([verboseLines?.length, verboseLines?.at(-1)]).toStrictEqual([17, "      other: 1 -> (none)"])
   })
 })
 
