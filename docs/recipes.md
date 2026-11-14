@@ -62,13 +62,13 @@ Check `test -e path || test -L path` with `want: false`, because `test -e` is fa
 
 ## A directory with `ensure`
 
-When only its existence matters, check `test -d path` with `want: true`, and fix with `mkdir -p path`. When its mode or
+When only its existence matters, use `want: true` with the check `test -d path`, and fix with `mkdir -p path`. When its mode or
 owner matters too, compare them as a string:
 
 ```ts
 await h.ensure("Create /srv/sonarr", {
-  check: "test -d /srv/sonarr && stat -c '%a %U %G' /srv/sonarr",
   want: "750 sonarr sonarr",
+  check: "test -d /srv/sonarr && stat -c '%a %U %G' /srv/sonarr",
   fix: "sudo install -d -m 750 -o sonarr -g sonarr /srv/sonarr",
 })
 ```
@@ -88,8 +88,8 @@ side:
 // lib/docker.ts
 export const docker = async (h: Host, { present }: { present: boolean }) =>
   h.ensure(present ? "Install Docker" : "Remove Docker", {
-    check: "command -v docker",
     want: present,
+    check: "command -v docker",
     fix: present ? INSTALL_DOCKER : REMOVE_DOCKER,
   })
 
@@ -115,8 +115,8 @@ for (const spec of specs) {
 }
 
 await h.ensure("Sync bun global packages", {
-  check: async ({ read }) => toSortedLines(await read("bun pm ls -g")),
   want: wanted.toSorted().join("\n"),
+  check: async ({ read }) => toSortedLines(await read("bun pm ls -g")),
   fix: syncGlobals,
 })
 ```
@@ -153,6 +153,7 @@ each running container started from, because pulling in a check breaks the rule 
 
 ```ts
 await h.ensure("Run the latest images", {
+  want: "",
   check: async ({ read }) => {
     const outdated: string[] = []
     for (const { service, image } of services) {
@@ -162,7 +163,6 @@ await h.ensure("Run the latest images", {
     }
     return outdated.join("\n")
   },
-  want: "",
   fix: "docker compose pull && docker compose up -d",
 })
 ```
@@ -177,6 +177,7 @@ Hub's pull limit, which an hourly drift check can reach. Use it only if those co
 
 ```ts
 await h.ensure("Run the latest images", {
+  want: "",
   check: async ({ read }) => {
     await read("docker compose pull")
     const outdated: string[] = []
@@ -187,7 +188,6 @@ await h.ensure("Run the latest images", {
     }
     return outdated.join("\n")
   },
-  want: "",
   fix: "docker compose up -d",
 })
 ```
@@ -200,8 +200,8 @@ purpose:
 
 ```ts
 await h.ensure("Reboot to load ZFS", {
-  check: "test -e /sys/module/zfs",
   want: true,
+  check: "test -e /sys/module/zfs",
   fix: "sudo systemd-run --on-active=5 systemctl reboot && echo 'rebooting, rerun in a minute' >&2 && exit 1",
 })
 ```
@@ -225,8 +225,8 @@ await h.file(configPath, `<Config><Port>8000</Port><ApiKey>${sonarrApiKey}</ApiK
   overwrite: false,
 })
 await h.ensure("Set Sonarr's port", {
-  check: `grep -o '<Port>[0-9]*</Port>' ${configPath}`,
   want: "<Port>8000</Port>",
+  check: `grep -o '<Port>[0-9]*</Port>' ${configPath}`,
   fix: `sed -i 's|<Port>[0-9]*</Port>|<Port>8000</Port>|' ${configPath} && sudo systemctl restart sonarr`,
 })
 ```

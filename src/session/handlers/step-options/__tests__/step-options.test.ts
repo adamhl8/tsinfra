@@ -64,14 +64,14 @@ describe("env and secretEnv", () => {
     const stepEnv = { env: { FILE: filePath }, secretEnv: { TOKEN: SECRET } }
 
     const written = await h.ensure("Write the token", {
-      check: 'grep -qxF "$TOKEN" "$FILE"',
       want: true,
+      check: 'grep -qxF "$TOKEN" "$FILE"',
       fix: String.raw`printf "%s\n" "$TOKEN" > "$FILE"`,
       ...stepEnv,
     })
     const read = await h.ensure("Read the token", {
-      check: async ({ read: readTool }) => readTool('cat "$FILE"'),
       want: SECRET,
+      check: async ({ read: readTool }) => readTool('cat "$FILE"'),
       fix: "false",
       ...stepEnv,
     })
@@ -156,8 +156,8 @@ describe("maskOutput", () => {
   it("should mask a tool's output in the record", async () => {
     const hostSession = await createSession("plan")
     await hostSession.host.ensure("Have a secret", {
-      check: async ({ read }) => (await read(PRINT_SECRET, { maskOutput: true })) === SECRET,
       want: true,
+      check: async ({ read }) => (await read(PRINT_SECRET, { maskOutput: true })) === SECRET,
       fix: "false",
     })
 
@@ -176,8 +176,8 @@ describe("maskOutput", () => {
     const hostSession = await createSession("plan")
     await attempt(async () =>
       hostSession.host.ensure("Have a secret", {
-        check: async ({ read }) => read("true", { maskOutput: castInvalid("yes") }),
         want: "",
+        check: async ({ read }) => read("true", { maskOutput: castInvalid("yes") }),
         fix: "false",
       }),
     )

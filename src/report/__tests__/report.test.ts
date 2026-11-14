@@ -47,7 +47,7 @@ const formatBlock = async (fn: HostFunction, mode: Mode) => renderRecord(await r
 const formatVerboseBlock = async (fn: HostFunction) => renderRecord(await runNamedHost("a", fn, "plan"), 1)
 
 const changeAndRun = async (h: Host) => {
-  await h.ensure("Write the unit", { check: "false", want: true, fix: "true" })
+  await h.ensure("Write the unit", { want: true, check: "false", fix: "true" })
   await h.run("Reload systemd", "true", { after: "always" })
   await h.run("Prune", "true", { after: "always" })
 }
@@ -57,24 +57,24 @@ const runOnce = async (h: Host) => {
 }
 
 const stayRight = async (h: Host) => {
-  const caddy = await h.ensure("Install Caddy", { check: "true", want: true, fix: "true" })
+  const caddy = await h.ensure("Install Caddy", { want: true, check: "true", fix: "true" })
   await h.read("true")
   await h.run("Reload systemd", "true", { after: [caddy] })
 }
 
 const failVerify = async (h: Host) => {
-  await h.ensure("Make it", { check: "echo missing >&2; false", want: true, fix: "true" })
+  await h.ensure("Make it", { want: true, check: "echo missing >&2; false", fix: "true" })
 }
 
 const waitOnBrew = async (h: Host) => {
-  const brew = await h.ensure("Install brew packages", { check: "false", want: true, fix: "true" })
-  await h.ensure("Install fish plugins", { needs: [brew], check: "true", want: true, fix: "true" })
+  const brew = await h.ensure("Install brew packages", { want: true, check: "false", fix: "true" })
+  await h.ensure("Install fish plugins", { needs: [brew], want: true, check: "true", fix: "true" })
 }
 
 const waitTwiceOnBrew = async (h: Host) => {
-  const brew = await h.ensure("Install brew packages", { check: "false", want: true, fix: "true" })
-  await h.ensure("Install fish", { needs: [brew], check: "true", want: true, fix: "true" })
-  await h.ensure("Install fish plugins", { needs: [brew], check: "true", want: true, fix: "true" })
+  const brew = await h.ensure("Install brew packages", { want: true, check: "false", fix: "true" })
+  await h.ensure("Install fish", { needs: [brew], want: true, check: "true", fix: "true" })
+  await h.ensure("Install fish plugins", { needs: [brew], want: true, check: "true", fix: "true" })
 }
 
 const failRead = async (h: Host) => {
@@ -82,31 +82,31 @@ const failRead = async (h: Host) => {
 }
 
 const changeThenThrow = async (h: Host) => {
-  await h.ensure("Pending", { check: "false", want: true, fix: "true" })
+  await h.ensure("Pending", { want: true, check: "false", fix: "true" })
   throw new Error("boom")
 }
 
 const runStepsAtOnce = async (h: Host) => {
   await Promise.allSettled([
-    h.ensure("First", { check: "sleep 0.1", want: true, fix: "true" }),
-    h.ensure("Second", { check: "true", want: true, fix: "true" }),
+    h.ensure("First", { want: true, check: "sleep 0.1", fix: "true" }),
+    h.ensure("Second", { want: true, check: "true", fix: "true" }),
   ])
 }
 
 const nestStep = async (h: Host) => {
   await h.ensure("Outer", {
-    check: "false",
     want: true,
+    check: "false",
     fix: async () => {
-      await h.ensure("Inner", { check: "true", want: true, fix: "true" })
+      await h.ensure("Inner", { want: true, check: "true", fix: "true" })
     },
   })
 }
 
 const catchFailedExec = async (h: Host) => {
   await h.ensure("Make marker", {
-    check: "false",
     want: true,
+    check: "false",
     fix: async ({ exec }) => {
       await attempt(async () => exec("exit 1"))
     },
@@ -114,18 +114,18 @@ const catchFailedExec = async (h: Host) => {
 }
 
 const changeOnce = async (h: Host) => {
-  await h.ensure("Pending", { check: "false", want: true, fix: "true" })
+  await h.ensure("Pending", { want: true, check: "false", fix: "true" })
 }
 
 const failFix = async (h: Host) => {
-  await h.ensure("Make it", { check: "echo early >&2; echo old", want: "new", fix: "exit 1" })
+  await h.ensure("Make it", { want: "new", check: "echo early >&2; echo old", fix: "exit 1" })
 }
 
 const failSecondCompare = async (h: Host) => {
   const marker = path.join(await makeTempDir(), "marker")
   await h.ensure("Make it", {
-    check: async ({ read }) => read(`test ! -f '${marker}' && echo old`),
     want: "new",
+    check: async ({ read }) => read(`test ! -f '${marker}' && echo old`),
     fix: `touch '${marker}'`,
   })
 }
@@ -342,7 +342,7 @@ const numberedLines = (prefix: string) => Array.from({ length: 20_000 }, (_, ind
 describe("renderHostBlock for a step that would change a string", () => {
   it("should show got and want under the step for a single-line value", async () => {
     const hostBlock = await formatBlock(async (h) => {
-      await h.ensure("Start Sonarr", { check: "echo inactive", want: "active", fix: "true" })
+      await h.ensure("Start Sonarr", { want: "active", check: "echo inactive", fix: "true" })
     }, "plan")
 
     expect(hostBlock).toBe(
@@ -352,7 +352,7 @@ describe("renderHostBlock for a step that would change a string", () => {
 
   it("should show only the lines that differ, as got and want, for a multi-line value", async () => {
     const hostBlock = await formatBlock(async (h) => {
-      await h.ensure("Write the config", { check: String.raw`printf 'a\nb\nc\n'`, want: "a\nB\nc", fix: "true" })
+      await h.ensure("Write the config", { want: "a\nB\nc", check: String.raw`printf 'a\nb\nc\n'`, fix: "true" })
     }, "plan")
 
     expect(hostBlock).toBe(["a", "  ~ change: (ensure) Write the config", "      got:  b", "      want: B"].join("\n"))
@@ -360,7 +360,7 @@ describe("renderHostBlock for a step that would change a string", () => {
 
   it("should line up each differing line under the first, and show an empty want as a marker", async () => {
     const hostBlock = await formatBlock(async (h) => {
-      await h.ensure("Upgrade packages", { check: String.raw`printf 'fd\nripgrep\n'`, want: "", fix: "true" })
+      await h.ensure("Upgrade packages", { want: "", check: String.raw`printf 'fd\nripgrep\n'`, fix: "true" })
     }, "plan")
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
@@ -372,7 +372,7 @@ describe("renderHostBlock for a step that would change a string", () => {
 
   it("should leave out the row of a side whose lines are all in the other", async () => {
     const hostBlock = await formatBlock(async (h) => {
-      await h.ensure("Install packages", { check: String.raw`printf 'fd\njq\n'`, want: "fd\njq\nripgrep", fix: "true" })
+      await h.ensure("Install packages", { want: "fd\njq\nripgrep", check: String.raw`printf 'fd\njq\n'`, fix: "true" })
     }, "plan")
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      want: ripgrep"])
@@ -380,7 +380,7 @@ describe("renderHostBlock for a step that would change a string", () => {
 
   it("should show a differing empty line as a marker", async () => {
     const hostBlock = await formatBlock(async (h) => {
-      await h.ensure("Write the config", { check: String.raw`printf 'a\n\nb\n'`, want: "a\nb", fix: "true" })
+      await h.ensure("Write the config", { want: "a\nb", check: String.raw`printf 'a\n\nb\n'`, fix: "true" })
     }, "plan")
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      got: (empty)"])
@@ -388,7 +388,7 @@ describe("renderHostBlock for a step that would change a string", () => {
 
   it("should quote a value with whitespace at either end, and only that value", async () => {
     const hostBlock = await formatBlock(async (h) => {
-      await h.ensure("Start Sonarr", { check: "printf 'active '", want: "active", fix: "true" })
+      await h.ensure("Start Sonarr", { want: "active", check: "printf 'active '", fix: "true" })
     }, "plan")
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      got:  'active '", "      want: active"])
@@ -396,7 +396,7 @@ describe("renderHostBlock for a step that would change a string", () => {
 
   it("should quote a line of only whitespace", async () => {
     const hostBlock = await formatBlock(async (h) => {
-      await h.ensure("Write the config", { check: String.raw`printf 'a\n  \nb\n'`, want: "a\nb", fix: "true" })
+      await h.ensure("Write the config", { want: "a\nb", check: String.raw`printf 'a\n  \nb\n'`, fix: "true" })
     }, "plan")
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      got: '  '"])
@@ -405,7 +405,7 @@ describe("renderHostBlock for a step that would change a string", () => {
   it("should show a note for more than 15 differing lines, and every line with --verbose", async () => {
     const lines = Array.from({ length: 16 }, (_, index) => `pkg${index}`)
     const upgrade = async (h: Host) => {
-      await h.ensure("Upgrade packages", { check: `printf '%s\\n' ${lines.join(" ")}`, want: "", fix: "true" })
+      await h.ensure("Upgrade packages", { want: "", check: `printf '%s\\n' ${lines.join(" ")}`, fix: "true" })
     }
 
     const hostBlock = await formatBlock(upgrade, "plan")
@@ -418,9 +418,9 @@ describe("renderHostBlock for a step that would change a string", () => {
   it("should show a note when the lines take too long to compare", async () => {
     const hostBlock = await formatBlock(async (h) => {
       await h.ensure("Write the config", {
+        want: numberedLines("b").join("\n"),
         // Print the lines with `awk`, because BusyBox's `seq` has no `-f`.
         check: "awk 'BEGIN { for (i = 0; i < 20000; i++) print \"a\" i }'",
-        want: numberedLines("b").join("\n"),
         fix: "true",
       })
     }, "plan")
@@ -619,7 +619,7 @@ describe("renderHostBlock for a file step", () => {
 
 describe("renderHostBlock for a host state that still differs after the fix", () => {
   it("should show the exit codes when a want: false check still exits 0", async () => {
-    expect(await formatFailedCheck({ check: "true", want: false, fix: "true" })).toStrictEqual([
+    expect(await formatFailedCheck({ want: false, check: "true", fix: "true" })).toStrictEqual([
       "        got:  exit code 0",
       "        want: a non-zero exit code",
     ])
@@ -627,8 +627,8 @@ describe("renderHostBlock for a host state that still differs after the fix", ()
 
   it("should show the booleans a function check compared", async () => {
     const lines = await formatFailedCheck({
-      check: async ({ read }) => (await read("echo no")) === "yes",
       want: true,
+      check: async ({ read }) => (await read("echo no")) === "yes",
       fix: "true",
     })
 
@@ -636,21 +636,21 @@ describe("renderHostBlock for a host state that still differs after the fix", ()
   })
 
   it("should show both values of a string check", async () => {
-    expect(await formatFailedCheck({ check: "echo v1", want: "v2", fix: "true" })).toStrictEqual([
+    expect(await formatFailedCheck({ want: "v2", check: "echo v1", fix: "true" })).toStrictEqual([
       "        got:  v1",
       "        want: v2",
     ])
   })
 
   it("should show an empty value as a marker", async () => {
-    expect(await formatFailedCheck({ check: "true", want: "v2", fix: "true" })).toStrictEqual([
+    expect(await formatFailedCheck({ want: "v2", check: "true", fix: "true" })).toStrictEqual([
       "        got:  (empty)",
       "        want: v2",
     ])
   })
 
   it("should show stderr when a string check exits non-zero", async () => {
-    const lines = await formatFailedCheck({ check: "echo v1; echo oops >&2; exit 3", want: "v2", fix: "true" })
+    const lines = await formatFailedCheck({ want: "v2", check: "echo v1; echo oops >&2; exit 3", fix: "true" })
 
     expect(lines).toStrictEqual([
       "        got:     v1",
@@ -661,7 +661,7 @@ describe("renderHostBlock for a host state that still differs after the fix", ()
   })
 
   it("should line up a multi-line stderr under its first line", async () => {
-    const lines = await formatFailedCheck({ check: "echo one >&2; echo two >&2; false", want: true, fix: "true" })
+    const lines = await formatFailedCheck({ want: true, check: "echo one >&2; echo two >&2; false", fix: "true" })
 
     expect(lines).toStrictEqual([
       "        got:     exit code 1",
@@ -674,8 +674,8 @@ describe("renderHostBlock for a host state that still differs after the fix", ()
 
   it("should leave the empty lines out of a multi-line stderr", async () => {
     const lines = await formatFailedCheck({
-      check: "echo one >&2; echo >&2; echo two >&2; false",
       want: true,
+      check: "echo one >&2; echo >&2; echo two >&2; false",
       fix: "true",
     })
 
@@ -690,7 +690,7 @@ describe("renderHostBlock for a host state that still differs after the fix", ()
 
   it("should show a multi-line value's differing lines lined up with its stderr", async () => {
     const check = String.raw`printf 'a\nb\n'; echo warn >&2`
-    const lines = await formatFailedCheck({ check, want: "a\nc", fix: "true" })
+    const lines = await formatFailedCheck({ want: "a\nc", check, fix: "true" })
 
     expect(lines).toStrictEqual([
       "        got:     b",
@@ -717,14 +717,14 @@ describe("renderHostBlock for the stderr of a step that still differs", () => {
   const DURING_FIX_NOTE = "        some commands during the fix wrote to stderr, run with -vvv to see what they printed"
 
   it("should show nothing extra when no command wrote to stderr", async () => {
-    const lines = await formatFailedCheck({ check: "false", want: true, fix: "true" })
+    const lines = await formatFailedCheck({ want: true, check: "false", fix: "true" })
 
     expect(lines).toStrictEqual(["        got:  exit code 1", "        want: exit code 0"])
   })
 
   it("should show the stderr of a check that exits 0", async () => {
     const check = "echo warn >&2"
-    const lines = await formatFailedCheck({ check, want: "x", fix: "true" })
+    const lines = await formatFailedCheck({ want: "x", check, fix: "true" })
 
     expect(lines?.slice(-2)).toStrictEqual([`        command: ${check}`, "        stderr:  warn"])
   })
@@ -732,7 +732,7 @@ describe("renderHostBlock for the stderr of a step that still differs", () => {
   it("should show a fix's stderr, then the check's, each with its command", async () => {
     const fix = "echo ignored >&2"
     const check = "echo warn >&2; false"
-    const lines = await formatFailedCheck({ check, want: true, fix })
+    const lines = await formatFailedCheck({ want: true, check, fix })
 
     expect(lines?.slice(2)).toStrictEqual([
       `        command: ${fix}`,
@@ -745,8 +745,8 @@ describe("renderHostBlock for the stderr of a step that still differs", () => {
   it("should show the stderr of a check function that runs one command", async () => {
     const cmd = "echo refused >&2; exit 7"
     const lines = await formatFailedCheck({
-      check: async ({ inspect }) => (await inspect(cmd)).exitCode === 0,
       want: true,
+      check: async ({ inspect }) => (await inspect(cmd)).exitCode === 0,
       fix: "true",
     })
 
@@ -760,12 +760,12 @@ describe("renderHostBlock for the stderr of a step that still differs", () => {
 
   it("should show the note for a check function that runs several commands", async () => {
     const lines = await formatFailedCheck({
+      want: true,
       check: async ({ inspect }) => {
         await inspect("echo warn >&2")
         await inspect("true")
         return false
       },
-      want: true,
       fix: "true",
     })
 
@@ -774,12 +774,12 @@ describe("renderHostBlock for the stderr of a step that still differs", () => {
 
   it("should show nothing extra when several commands wrote no stderr", async () => {
     const lines = await formatFailedCheck({
+      want: true,
       check: async ({ inspect }) => {
         await inspect("true")
         await inspect("true")
         return false
       },
-      want: true,
       fix: "true",
     })
 
@@ -791,12 +791,12 @@ describe("renderHostBlock for the stderr of a step that still differs", () => {
       "a",
       async (h) => {
         await h.ensure("Make it", {
+          want: true,
           check: async ({ inspect }) => {
             await inspect("echo warn >&2")
             await inspect("true")
             return false
           },
-          want: true,
           fix: "true",
         })
       },
@@ -811,12 +811,12 @@ describe("renderHostBlock for the stderr of a step that still differs", () => {
 
   it("should show a note for each phase that ran several commands", async () => {
     const lines = await formatFailedCheck({
+      want: true,
       check: async ({ inspect }) => {
         await inspect("echo warn >&2")
         await inspect("true")
         return false
       },
-      want: true,
       fix: async ({ exec }) => {
         await exec("echo warn >&2")
         await exec("true")
@@ -829,12 +829,12 @@ describe("renderHostBlock for the stderr of a step that still differs", () => {
   it("should show a phase's stderr next to a note for the phase it can't explain", async () => {
     const fix = "echo ignored >&2"
     const lines = await formatFailedCheck({
+      want: true,
       check: async ({ inspect }) => {
         await inspect("echo warn >&2")
         await inspect("true")
         return false
       },
-      want: true,
       fix,
     })
 
@@ -844,8 +844,8 @@ describe("renderHostBlock for the stderr of a step that still differs", () => {
   it("should leave out the stderr from before the fix", async () => {
     const marker = path.join(await makeTempDir(), "marker")
     const lines = await formatFailedCheck({
-      check: `test -f '${marker}' || echo early >&2; echo old`,
       want: "new",
+      check: `test -f '${marker}' || echo early >&2; echo old`,
       fix: `touch '${marker}'`,
     })
 
@@ -889,8 +889,8 @@ describe("renderHostBlock for a step that failed before it could compare again",
     const marker = path.join(await makeTempDir(), "marker")
     const hostBlock = await formatBlock(async (h) => {
       await h.ensure("Make it", {
-        check: `test -f '${marker}'`,
         want: true,
+        check: `test -f '${marker}'`,
         fix: async ({ exec }) => {
           await exec(`touch '${marker}'`)
           await attempt(async () => exec("exit 1"))
@@ -905,7 +905,7 @@ describe("renderHostBlock for a step that failed before it could compare again",
 
   it("should leave the empty lines out of a multi-line error", async () => {
     const hostBlock = await formatBlock(async (h) => {
-      await h.ensure("Make it", { check: "false", want: true, fix: "echo one >&2; echo >&2; echo two >&2; exit 1" })
+      await h.ensure("Make it", { want: true, check: "false", fix: "echo one >&2; echo >&2; echo two >&2; exit 1" })
     }, "apply")
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
@@ -1201,8 +1201,8 @@ describe("renderHostBlock for what a command printed", () => {
     const filePath = path.join(await makeTempDir(), "hostname")
     const hostSession = await createSession("apply")
     await hostSession.host.ensure("Set the hostname", {
-      check: `cat '${filePath}' 2>/dev/null || true`,
       want: "web1",
+      check: `cat '${filePath}' 2>/dev/null || true`,
       fix: `printf web1 > '${filePath}'`,
     })
 
@@ -1223,7 +1223,7 @@ describe("renderHostBlock for what a command printed", () => {
 
   it("should leave the phases out with -vv", async () => {
     const hostSession = await createSession("apply")
-    await hostSession.host.ensure("Check it", { check: "true", want: true, fix: "true" })
+    await hostSession.host.ensure("Check it", { want: true, check: "true", fix: "true" })
 
     expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(2)).toStrictEqual([
       "      commands:",
@@ -1233,7 +1233,7 @@ describe("renderHostBlock for what a command printed", () => {
 
   it("should line up a multi-line command's later lines past its phase", async () => {
     const hostSession = await createSession("apply")
-    await hostSession.host.ensure("Check it", { check: "echo hi\ntrue", want: true, fix: "true" })
+    await hostSession.host.ensure("Check it", { want: true, check: "echo hi\ntrue", fix: "true" })
 
     expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(2, 6)).toStrictEqual([
       "      commands:",
@@ -1292,8 +1292,8 @@ describe("renderHostBlock for a step's commands", () => {
     const filePath = path.join(await makeTempDir(), "hostname")
     const hostSession = await createSession("apply")
     await hostSession.host.ensure("Set the hostname", {
-      check: `cat '${filePath}' 2>/dev/null || true`,
       want: "web1",
+      check: `cat '${filePath}' 2>/dev/null || true`,
       fix: `printf web1 > '${filePath}'`,
     })
 
@@ -1349,7 +1349,7 @@ describe("renderHostBlock for a step's commands", () => {
   it("should list a failed step's commands under its error, after what it found and before its hint", async () => {
     const hostSession = await createSession("apply")
     await attempt(async () =>
-      hostSession.host.ensure("Set it", { check: "false", want: true, fix: NEEDS_PASSWORD_CMD }),
+      hostSession.host.ensure("Set it", { want: true, check: "false", fix: NEEDS_PASSWORD_CMD }),
     )
 
     expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(3)).toStrictEqual([
@@ -1383,7 +1383,7 @@ describe("renderHostBlock for a step's options", () => {
     const { hostSession } = await createFakeSudoSession("plan")
     await hostSession.host.file(oldPath, "a\n", { sudo: true })
     await hostSession.host.file(newPath, "a\n", { sudo: true })
-    await hostSession.host.ensure("Install git", { check: "true", want: true, fix: "true" })
+    await hostSession.host.ensure("Install git", { want: true, check: "true", fix: "true" })
 
     expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")).toStrictEqual([
       "a",
@@ -1417,9 +1417,9 @@ describe("renderHostBlock for a step's options", () => {
   it("should show a waiting step's options under it", async () => {
     const { newPath } = await createSudoPaths()
     const { hostSession } = await createFakeSudoSession("plan")
-    const brew = await hostSession.host.ensure("Install brew packages", { check: "false", want: true, fix: "true" })
+    const brew = await hostSession.host.ensure("Install brew packages", { want: true, check: "false", fix: "true" })
     await hostSession.host.file(newPath, "a\n", { needs: [brew], sudo: true })
-    await hostSession.host.ensure("Install fish", { needs: [brew], check: "true", want: true, fix: "true" })
+    await hostSession.host.ensure("Install fish", { needs: [brew], want: true, check: "true", fix: "true" })
 
     expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")).toStrictEqual([
       "a",
@@ -1561,7 +1561,7 @@ describe("renderHostBlock for a step's options", () => {
     const linkPath = path.join(directory, "link")
     const hostSession = await createSession("plan")
     await hostSession.host.link(linkPath, directory, { force: true })
-    await hostSession.host.ensure("Reboot", { check: "true", want: true, fix: "true", verify: false })
+    await hostSession.host.ensure("Reboot", { want: true, check: "true", fix: "true", verify: false })
 
     const lines = renderRecord(hostSession.hostRecord, 3)?.split("\n")
     const linkLines = lines?.slice(1, 5)

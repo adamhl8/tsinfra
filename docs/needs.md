@@ -13,12 +13,12 @@ or fail outright.
 <!-- tocstop -->
 
 ```ts
-const brew = await h.ensure("Install brew packages", { check: "brew bundle check", want: true, fix: "brew bundle" })
+const brew = await h.ensure("Install brew packages", { want: true, check: "brew bundle check", fix: "brew bundle" })
 
 await h.ensure("Install fish plugins", {
   needs: [brew],
-  check: async ({ read }) => (await read("fish -c 'fisher list'")).includes("jorgebucaran/fisher"),
   want: true,
+  check: async ({ read }) => (await read("fish -c 'fisher list'")).includes("jorgebucaran/fisher"),
   fix: "fish -c 'fisher update'",
 })
 ```

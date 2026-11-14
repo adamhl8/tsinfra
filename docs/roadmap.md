@@ -6,7 +6,6 @@ describe tsinfra as it is.
 <!-- toc -->
 
 - [Next](#next)
-  - [`want` before `check`](#want-before-check)
   - [Passing the difference to the fix](#passing-the-difference-to-the-fix)
   - [Lists in `ensure`](#lists-in-ensure)
   - [Records in `ensure`](#records-in-ensure)
@@ -42,16 +41,6 @@ describe tsinfra as it is.
 ## Next
 
 In the order they'll be built.
-
-### `want` before `check`
-
-Write `want` first in `EnsureOptions` and in every example. It says what the step is after, and it decides how the
-check is read, so the check reads as "do we have it?". It helps most when a long check function would push `want` to
-the bottom. A boolean `want: true` reads less well first, but it's one short line. This is a convention only: the
-`EnsureOptions` interface and the examples change, and the code doesn't.
-
-The report keeps `got` before `want`. Every comparison there reads current to wanted, like `mode: 600 -> 644` and a
-diff's `-` then `+`. `missing` before `extra` doesn't break this, because those are two sets, not a before and after.
 
 ### Passing the difference to the fix
 
@@ -264,8 +253,8 @@ updating it use the same steps, but an update shouldn't happen every time the co
 ```ts
 const update = task("update", async (h) => {
   await h.ensure("Upgrade packages", {
-    check: "sudo apt-get update && apt list --upgradable | tail -n +2",
     want: "",
+    check: "sudo apt-get update && apt list --upgradable | tail -n +2",
     fix: "sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y",
   })
 })
@@ -468,7 +457,7 @@ normalize the common ones. A fact helper only reads something no step can change
 import { arch } from "tsinfra/facts"
 
 const cpu = await arch(h)
-await h.ensure("Install the arm build", { check: "...", want: true, fix: `... ${cpu} ...` })
+await h.ensure("Install the arm build", { want: true, check: "...", fix: `... ${cpu} ...` })
 ```
 
 - **Each takes `h` and runs at the top level only.** A helper is an ordinary `h.read` with the
@@ -658,7 +647,7 @@ Opt-in features with no real case yet:
     prepend to it in every command on the host.
 - **A manual step,** for work no command can do: pressing a pairing button, a login URL from `tailscale up`, an App
   Store sign-in for `mas`, or a macOS permission like Full Disk Access. It's shaped like `ensure` with instructions in
-  place of a fix, like `h.manual(name, { check, want, instructions })`. `plan` shows the instructions under `~ change`.
+  place of a fix, like `h.manual(name, { want, check, instructions })`. `plan` shows the instructions under `~ change`.
   `apply` prints them, waits for Enter, then checks again. A step with a check stops prompting once the work is done,
   which an unconditional pause like Ansible's `pause` can't do. An unconditional pause also makes a second `apply`
   stop again, and hangs an unattended run. Today an `ensure` whose fix fails with the instructions does the same job

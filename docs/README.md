@@ -83,7 +83,7 @@ that already exist.
 What that costs:
 
 - **Removing a step does not undo it.** A file or package the script stops managing stays on the machine. Removing it
-  takes a step that removes it, like `check: "test -e /etc/sonarr.conf"` and `want: false`, with
+  takes a step that removes it, like `want: false` and `check: "test -e /etc/sonarr.conf"`, with
   `fix: "sudo rm /etc/sonarr.conf"`.
 - **`plan` cannot say why something differs.** A hand edit on the machine and an edit to the script look the same,
   because there is no record of the last apply.
@@ -122,8 +122,8 @@ export default host("sonarr.lan", async (h) => {
   await base(h)
 
   await h.ensure("Install Sonarr", {
-    check: "test -x ~/Sonarr/Sonarr",
     want: true,
+    check: "test -x ~/Sonarr/Sonarr",
     fix: async ({ exec }) => {
       await exec(
         "curl -fsSLo sonarr.tar.gz 'https://services.sonarr.tv/v1/download/main/latest?version=4&os=linux&arch=x64'",
@@ -141,8 +141,8 @@ export default host("sonarr.lan", async (h) => {
   await h.run("Reload systemd", "sudo systemctl daemon-reload", { after: [unit] })
 
   await h.ensure("Start Sonarr", {
-    check: "systemctl is-active sonarr",
     want: "active",
+    check: "systemctl is-active sonarr",
     fix: "sudo systemctl enable --now sonarr",
   })
 })

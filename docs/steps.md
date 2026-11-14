@@ -123,7 +123,7 @@ fix, the drift exit code, and the step's status line in verbose output when dock
 which is why the table matters. The same step as an `ensure`:
 
 ```ts
-await h.ensure("Install docker", { check: "command -v docker", want: true, fix: installDocker })
+await h.ensure("Install docker", { want: true, check: "command -v docker", fix: installDocker })
 ```
 
 ## Commands
@@ -631,10 +631,10 @@ manages first.
 ```ts
 // `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string.
 type EnsureOptions<T extends string | boolean> = {
-  check: string | ((tools: ReadTools) => Promise<T>)
   // `true` means exit 0, or a function returning true, is already right. `false` means the opposite.
   // A string is compared to the command's stdout, or the function's value.
   want: T
+  check: string | ((tools: ReadTools) => Promise<T>)
   fix: string | ((tools: ChangeTools) => Promise<void>)
   verify?: boolean // default true
   env?: Record<string, string> // see EnvOptions
@@ -643,8 +643,11 @@ type EnsureOptions<T extends string | boolean> = {
 }
 ```
 
-`check` runs on the host, and `want` is the answer it gives when the state is already right. When they match, nothing
-happens. Otherwise the fix runs. `want` is always written out, so the rule a check follows is visible at the call site.
+`want` is the answer `check` gives when the state is already right, and `check` runs on the host. When they match,
+nothing happens. Otherwise the fix runs. `want` comes first, in the type and in every example, because it says what the
+step is after and decides how the check is read, so the check reads as "do we have it?". That matters most when a long
+check function would push `want` to the bottom. The report still shows `got:` before `want:`, because every comparison
+there reads from what's on the host to what the script wants, like `mode: 600 -> 644` and a diff's `-` then `+`. `want` is always written out, so the rule a check follows is visible at the call site.
 The field is `check`, not `read`, because `h.read` fails on a non-zero exit and a check never does.
 
 **`want: true` or `false`** compares the exit status. `true` means exit 0 is already right, and `false` means a
@@ -652,8 +655,8 @@ non-zero exit is. There is nothing to diff, so `plan` shows only the step's name
 yes or no, like `brew bundle check`. `false` suits state that should be absent.
 
 ```ts
-await h.ensure("Install Caddy", { check: "dpkg -s caddy", want: true, fix: "sudo apt-get install -y caddy" })
-await h.ensure("Remove the old user", { check: "id olduser", want: false, fix: "sudo userdel olduser" })
+await h.ensure("Install Caddy", { want: true, check: "dpkg -s caddy", fix: "sudo apt-get install -y caddy" })
+await h.ensure("Remove the old user", { want: false, check: "id olduser", fix: "sudo userdel olduser" })
 ```
 
 **A string `want`** is compared to the command's stdout. `want` is computed in your script on the control machine.
@@ -665,8 +668,8 @@ hold only the lines that differ (see [CLI](./cli.md#how-the-report-is-built)). F
 
 ```ts
 await h.ensure("Start Sonarr", {
-  check: "systemctl is-active sonarr",
   want: "active",
+  check: "systemctl is-active sonarr",
   fix: "sudo systemctl enable --now sonarr",
 })
 ```
@@ -687,8 +690,8 @@ compared in TypeScript or shown as `got:` and `want:`:
 
 ```ts
 await h.ensure("Set the API token", {
-  check: 'grep -qxF "$TOKEN" ~/.config/app/token',
   want: true,
+  check: 'grep -qxF "$TOKEN" ~/.config/app/token',
   fix: 'printf "%s\\n" "$TOKEN" > ~/.config/app/token',
   secretEnv: { TOKEN: token },
 })
@@ -703,15 +706,15 @@ string for a string `want`.
 
 ```ts
 await h.ensure("Enable the app", {
-  check: async ({ read }) => JSON.parse(await read("cat /etc/app/config.json")).enabled === true,
   want: true,
+  check: async ({ read }) => JSON.parse(await read("cat /etc/app/config.json")).enabled === true,
   fix: "...",
 })
 
 const latest = await latestCaddyVersion() // fetch() on the control machine
 await h.ensure("Update Caddy", {
-  check: async ({ read }) => (await read("caddy version")).split(" ")[0] ?? "",
   want: latest,
+  check: async ({ read }) => (await read("caddy version")).split(" ")[0] ?? "",
   fix: buildCaddy,
 })
 ```
@@ -721,6 +724,7 @@ string `want` means equal, so a check that is not an equality returns a boolean,
 
 ```ts
 await h.ensure("Install Caddy 2.8 or newer", {
+  want: true,
   check: async ({ inspect }) => {
     const { stdout, exitCode } = await inspect("caddy version")
     if (exitCode !== 0) return false
@@ -728,7 +732,6 @@ await h.ensure("Install Caddy 2.8 or newer", {
     const [version = ""] = stdout.split(" ")
     return Bun.semver.satisfies(version, ">=2.8.0")
   },
-  want: true,
   fix: buildCaddy,
 })
 ```
@@ -768,8 +771,8 @@ that takes more than one command, where the halfway state is not something you w
 
 ```ts
 await h.ensure("Install Caddy", {
-  check: "dpkg -s caddy",
   want: true,
+  check: "dpkg -s caddy",
   fix: async ({ exec }) => {
     await exec("sudo apt-get update")
     await exec("sudo apt-get install -y caddy")
@@ -797,8 +800,8 @@ package index does not matter, so running `apt-get update` again is harmless. Th
 
 ```ts
 await h.ensure("Set up Sonarr", {
-  check: "systemctl is-active sonarr",
   want: "active",
+  check: "systemctl is-active sonarr",
   fix: async ({ exec }) => {
     await exec("sudo useradd --system sonarr")
     await exec("sudo install -d -o sonarr /var/lib/sonarr")
@@ -813,15 +816,15 @@ the step can never finish. The check only covers the last piece, so a data dir w
 check, and each fix runs only when its own state is wrong:
 
 ```ts
-await h.ensure("Create the sonarr user", { check: "id sonarr", want: true, fix: "sudo useradd --system sonarr" })
+await h.ensure("Create the sonarr user", { want: true, check: "id sonarr", fix: "sudo useradd --system sonarr" })
 await h.ensure("Create the sonarr data dir", {
-  check: "stat -c %U /var/lib/sonarr",
   want: "sonarr",
+  check: "stat -c %U /var/lib/sonarr",
   fix: "sudo install -d -o sonarr /var/lib/sonarr",
 })
 await h.ensure("Start Sonarr", {
-  check: "systemctl is-active sonarr",
   want: "active",
+  check: "systemctl is-active sonarr",
   fix: "sudo systemctl enable --now sonarr",
 })
 ```
@@ -855,8 +858,8 @@ run's check confirms it. Before reaching for it, try these:
 
   ```ts
   await h.ensure("Resize swap", {
-    check: "swapon --show=SIZE --noheadings --raw",
     want: "8G",
+    check: "swapon --show=SIZE --noheadings --raw",
     fix: async ({ exec }) => {
       await exec("sudo swapoff /swapfile")
       await exec("sudo fallocate -l 8G /swapfile")
@@ -874,8 +877,8 @@ run's check confirms it. Before reaching for it, try these:
   const unit = await h.file("/etc/systemd/system/sonarr.service", sonarrUnit, { sudo: true })
   await h.run("Reload systemd", "sudo systemctl daemon-reload", { after: [unit] })
   await h.ensure("Start Sonarr", {
-    check: "systemctl is-active sonarr",
     want: "active",
+    check: "systemctl is-active sonarr",
     fix: "sudo systemctl enable --now sonarr",
   })
   ```

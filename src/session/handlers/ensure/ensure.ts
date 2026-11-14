@@ -18,15 +18,15 @@ export type { EnsureComparisonValues } from "#session/handlers/ensure/comparison
 /** `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string. */
 export interface EnsureOptions<T extends Want> extends NeedsOptions, EnvOptions {
   /**
-   * A command, or a function given `read` that returns the value to compare. It also runs during `plan`, so it must not
-   * change what the script manages.
-   */
-  check: Check<T>
-  /**
    * The answer `check` gives when already right. `true` means a command exits 0, and `false` means it exits non-zero. A
    * string is compared to a command's stdout. Trailing newlines are ignored on both sides.
    */
   want: T
+  /**
+   * A command, or a function given `read` that returns the value to compare. It also runs during `plan`, so it must not
+   * change what the script manages.
+   */
+  check: Check<T>
   /** A command, or a function that runs several commands by calling `exec`. It only runs in `apply`. */
   fix: Change
   /**
@@ -40,7 +40,7 @@ export interface EnsureOptions<T extends Want> extends NeedsOptions, EnvOptions 
 // Set the defaults in a pipe, because ArkType only allows a default on a required key.
 const ensureOptionsSchema = type
   .declare<HandlerOptions<EnsureOptions<Want>>>()
-  .type(needsOptionsSchema.merge({ check: checkSchema, want: wantSchema, fix: changeSchema, "verify?": "boolean" }))
+  .type(needsOptionsSchema.merge({ want: wantSchema, check: checkSchema, fix: changeSchema, "verify?": "boolean" }))
   .pipe((options) => ({ verify: true, needs: NO_NEEDS, ...options }))
 
 export const handleEnsure = async (
@@ -52,7 +52,7 @@ export const handleEnsure = async (
   const validOptions = validateInput(options, ensureOptionsSchema, { inputLabel: "options", givenTo: kind })
   if (isErr(validOptions)) return validOptions
 
-  const { check, want, fix, verify, needs } = validOptions
+  const { want, check, fix, verify, needs } = validOptions
   recordOptions({ verify })
 
   const status = await converge({

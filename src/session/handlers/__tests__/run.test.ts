@@ -38,8 +38,8 @@ describe("h.run", () => {
   it("should run after a step that changed", async () => {
     const marker = await createMarker()
     const { host: h } = await createSession("apply")
-    const unchanged = await h.ensure("Stay right", { check: "true", want: true, fix: "true" })
-    const changed = await h.ensure("Change", { check: "false", want: true, fix: "true", verify: false })
+    const unchanged = await h.ensure("Stay right", { want: true, check: "true", fix: "true" })
+    const changed = await h.ensure("Change", { want: true, check: "false", fix: "true", verify: false })
 
     expect(await runOrMessage(h, `touch '${marker}'`, { after: [unchanged, changed] })).toMatchObject({ changed: true })
     expect(await bun.file(marker).exists()).toBe(true)
@@ -48,7 +48,7 @@ describe("h.run", () => {
   it("should not run after steps that were all unchanged", async () => {
     const marker = await createMarker()
     const { host: h } = await createSession("apply")
-    const unchanged = await h.ensure("Stay right", { check: "true", want: true, fix: "true" })
+    const unchanged = await h.ensure("Stay right", { want: true, check: "true", fix: "true" })
 
     expect(await runOrMessage(h, `touch '${marker}'`, { after: [unchanged] })).toMatchObject({ changed: false })
     expect(await bun.file(marker).exists()).toBe(false)

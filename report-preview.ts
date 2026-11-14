@@ -85,14 +85,14 @@ const OTHER_GROUP_ID = process.getgroups?.().find((gid) => gid !== os.userInfo()
 const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
   const marker = (file: string) => path.join(dir, file)
   const touchStep = (file: string) => ({
-    check: `test -f '${marker(file)}'`,
     want: true,
+    check: `test -f '${marker(file)}'`,
     fix: `touch '${marker(file)}'`,
   })
   // Write `lines` to a marker until it exists, so the check reads `fallback` before the fix and the marker after it.
   const linesStep = (file: string, fallback: string, wanted: string) => ({
-    check: `cat '${marker(file)}' 2>/dev/null || ${fallback}`,
     want: wanted,
+    check: `cat '${marker(file)}' 2>/dev/null || ${fallback}`,
     fix: `printf '%s' '${wanted === "" ? "" : `${wanted}\n`}' > '${marker(file)}'`,
   })
 
@@ -118,7 +118,7 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
       fn: async (h) => {
         const caddy = await h.ensure("Install Caddy", touchStep("caddy"))
         await h.run("Reload Caddy", "true", { after: [caddy] })
-        await h.ensure("Install git", { check: "true", want: true, fix: "true" })
+        await h.ensure("Install git", { want: true, check: "true", fix: "true" })
         await h.read("uname -m")
         await h.inspect("test -d /etc")
       },
@@ -190,7 +190,7 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
         await h.link(marker("broken-link"), marker("missing-dotfile"))
 
         await h.run("Reload the shell", "echo reloading\necho done", { after: [packages] })
-        const git = await h.ensure("Install git", { check: "true", want: true, fix: "true" })
+        const git = await h.ensure("Install git", { want: true, check: "true", fix: "true" })
         await h.run("Configure git", "true", { after: [git] })
 
         await h.read(String.raw`printf '%s\n' "$URL" "$NOTES"; echo 'a warning on stderr' >&2`, {
@@ -216,8 +216,8 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
       pass: "apply",
       fn: async (h) => {
         await h.ensure("Enable the app", {
-          check: "echo 'checking the app'\necho 'appctl: the app is disabled' >&2\nexit 1",
           want: true,
+          check: "echo 'checking the app'\necho 'appctl: the app is disabled' >&2\nexit 1",
           fix: "echo 'appctl: warning: config is read-only' >&2",
         })
       },
@@ -230,12 +230,12 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
       pass: "apply",
       fn: async (h) => {
         await h.ensure("App is healthy", {
+          want: true,
           check: async ({ inspect }) => {
             await inspect("echo 'curl: (7) Failed to connect' >&2; exit 7")
             await inspect("true")
             return false
           },
-          want: true,
           fix: async ({ exec }) => {
             await exec("echo 'appctl: warning: config is read-only' >&2")
             await exec("true")
@@ -251,8 +251,8 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
       pass: "apply",
       fn: async (h) => {
         await h.ensure("Set the timezone", {
-          check: "echo America/New_York",
           want: "UTC",
+          check: "echo America/New_York",
           fix: 'echo "the token $TOKEN was rejected" >&2; exit 1',
           secretEnv: { TOKEN: "s3cret-token" },
         })

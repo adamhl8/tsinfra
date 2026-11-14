@@ -64,8 +64,8 @@ export default host(
   "sonarr.lan",
   async (h) => {
     await h.ensure("Install Caddy", {
-      check: "dpkg -s caddy",
       want: true,
+      check: "dpkg -s caddy",
       fix: "sudo apt-get install -y caddy",
     })
 
@@ -73,8 +73,8 @@ export default host(
     await h.run("Reload systemd", "sudo systemctl daemon-reload", { after: [unit] })
 
     await h.ensure("Start Sonarr", {
-      check: "systemctl is-active sonarr",
       want: "active",
+      check: "systemctl is-active sonarr",
       fix: "sudo systemctl enable --now sonarr",
     })
   },
@@ -129,7 +129,7 @@ Shared setup is an ordinary function that takes `h`, imported from anywhere outs
 import type { Host } from "tsinfra"
 
 export const base = async (h: Host) => {
-  await h.ensure("Install fish", { check: "command -v fish", want: true, fix: "sudo apt-get install -y fish" })
+  await h.ensure("Install fish", { want: true, check: "command -v fish", fix: "sudo apt-get install -y fish" })
 }
 ```
 
@@ -195,7 +195,7 @@ const docker = await h.inspect("command -v docker")
 if (docker.exitCode !== 0) await h.run("Install docker", installDocker, { after: "always" })
 
 // do
-await h.ensure("Install docker", { check: "command -v docker", want: true, fix: installDocker })
+await h.ensure("Install docker", { want: true, check: "command -v docker", fix: installDocker })
 ```
 
 `ensure`, `file`, `link`, and `run` return a `ChangeStepResult`, which you pass to a later step's `after` or `needs`:
@@ -220,26 +220,26 @@ interface ChangeStepResult {
 h.ensure(name: string, options: EnsureOptions): Promise<ChangeStepResult>
 ```
 
-Runs `check`, and compares its answer with `want`. When they differ, `apply` runs `fix`, then runs `check` again to
-make sure it worked. `plan` only runs `check`.
+Compares `want` with what `check` answers. When they differ, `apply` runs `fix`, then runs `check` again to make sure
+it worked. `plan` only runs `check`.
 
-- `check`: a command, or an async function given `{ read, inspect }` that returns the answer
 - `want`: the answer when the state is already right
   - `true`: `check` exits 0 (or the function returns `true`)
   - `false`: `check` exits non-zero (or the function returns `false`)
   - A string: compared with `check`'s stdout (or the function's return value). Trailing newlines are ignored.
+- `check`: a command, or an async function given `{ read, inspect }` that returns the answer
 - `fix`: a command, or an async function given `{ exec, inspect }`. It only runs in `apply`.
 - `verify` (default: `true`): run `check` again after `fix`, and fail if the state still differs
 - `env`, `secretEnv`: see [Values and secrets](#values-and-secrets)
 - `needs`: see [Needs](#needs)
 
 ```ts
-await h.ensure("Install Caddy", { check: "dpkg -s caddy", want: true, fix: "sudo apt-get install -y caddy" })
-await h.ensure("Remove the old user", { check: "id olduser", want: false, fix: "sudo userdel olduser" })
+await h.ensure("Install Caddy", { want: true, check: "dpkg -s caddy", fix: "sudo apt-get install -y caddy" })
+await h.ensure("Remove the old user", { want: false, check: "id olduser", fix: "sudo userdel olduser" })
 
 await h.ensure("Start Sonarr", {
-  check: "systemctl is-active sonarr",
   want: "active",
+  check: "systemctl is-active sonarr",
   fix: "sudo systemctl enable --now sonarr",
 })
 ```
@@ -258,8 +258,8 @@ Use a check function to work out the answer in TypeScript:
 const latest = await fetchLatestCaddyVersion() // runs on your machine
 
 await h.ensure("Update Caddy", {
-  check: async ({ read }) => (await read("caddy version")).split(" ")[0] ?? "",
   want: latest,
+  check: async ({ read }) => (await read("caddy version")).split(" ")[0] ?? "",
   fix: async ({ exec }) => {
     await exec(`curl -fsSLo /tmp/caddy.deb https://example.com/caddy_${latest}.deb`)
     await exec("sudo dpkg -i /tmp/caddy.deb")
@@ -497,8 +497,8 @@ To check a secret, compare it on the host, so it never shows as `got:` and `want
 
 ```ts
 await h.ensure("Set the API token", {
-  check: 'grep -qxF "$TOKEN" ~/.config/app/token',
   want: true,
+  check: 'grep -qxF "$TOKEN" ~/.config/app/token',
   fix: 'printf "%s\\n" "$TOKEN" > ~/.config/app/token',
   secretEnv: { TOKEN: token },
 })
@@ -510,12 +510,12 @@ await h.ensure("Set the API token", {
 the wrong answer, or fail. `needs` names the earlier steps a step's state depends on:
 
 ```ts
-const brew = await h.ensure("Install brew packages", { check: "brew bundle check", want: true, fix: "brew bundle" })
+const brew = await h.ensure("Install brew packages", { want: true, check: "brew bundle check", fix: "brew bundle" })
 
 await h.ensure("Install fish plugins", {
   needs: [brew],
-  check: async ({ read }) => (await read("fish -c 'fisher list'")).includes("jorgebucaran/fisher"),
   want: true,
+  check: async ({ read }) => (await read("fish -c 'fisher list'")).includes("jorgebucaran/fisher"),
   fix: "fish -c 'fisher update'",
 })
 ```
