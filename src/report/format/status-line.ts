@@ -1,8 +1,8 @@
-import { formatEntryName, formatEntryNote, formatKind, formatStatus } from "#report/format/elements/elements.ts"
+import { entryNameElement, entryNoteElement, kindElement, statusElement } from "#report/format/elements/elements.ts"
 import type { EntryStatus, HostBlockEntry, NotePart } from "#report/host-block/host-block.ts"
 import { quoteNames } from "#utils.ts"
 
-/** An entry's status line, with each field formatted, before layout pads them into columns. */
+/** An entry's status line, with each field formatted, before layout puts them on one line. */
 export interface StatusLine {
   status: string
   kind: string
@@ -32,9 +32,9 @@ export const formatStatusLine = (hostBlockEntry: HostBlockEntry): StatusLine => 
 
   return {
     // Leave the colon unstyled, so it reads as punctuation between the status and the kind.
-    status: `${formatStatus(status, STATUS_WORDS[status])}:`,
-    kind: formatKind(kind),
-    name: formatEntryName(name),
-    ...(note.length > 0 && { note: formatEntryNote(noteText) }),
+    status: `${statusElement(status, STATUS_WORDS[status])}:`,
+    kind: kindElement(kind),
+    name: entryNameElement(name),
+    ...(note.length > 0 && { note: entryNoteElement(noteText) }),
   }
 }

@@ -15,7 +15,7 @@ import type { Detail } from "#report/host-block/host-block.ts"
 
 export type { AlignedRow } from "#report/format/details/aligned-row.ts"
 export type { DiffLimits } from "#report/format/details/diff.ts"
-export { DEFAULT_DIFF_LIMITS } from "#report/format/details/diff.ts"
+export { toDiffLimits } from "#report/format/details/diff.ts"
 
 /**
  * A detail's rows, formatted, before layout positions them. A row is one or more lines. Aligned rows line up their
@@ -25,7 +25,7 @@ export { DEFAULT_DIFF_LIMITS } from "#report/format/details/diff.ts"
 export type DetailRows = { kind: "aligned"; rows: AlignedRow[] } | { kind: "unaligned"; rows: string[] }
 
 /** Formats a detail as the rows it prints as, aligned or not. Checks each kind in the order the details show. */
-export const formatDetail = (detail: Detail, diffLimits: DiffLimits | undefined): DetailRows => {
+export const formatDetail = (detail: Detail, diffLimits: DiffLimits): DetailRows => {
   if (detail.kind === "options") return { kind: "unaligned", rows: formatOptions(detail.options) }
   if (detail.kind === "diff") return { kind: "unaligned", rows: formatDiff(detail.got, detail.want, diffLimits) }
   if (detail.kind === "fileComparisonValues") return { kind: "aligned", rows: formatFileValues(detail.values) }

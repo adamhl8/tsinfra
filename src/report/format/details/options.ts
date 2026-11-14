@@ -1,9 +1,9 @@
 import {
-  formatHeading,
-  formatOptionKey,
-  formatOptionEntries,
-  formatOptionName,
-  formatOptionValueLines,
+  headingElement,
+  optionKeyElement,
+  optionEntriesElement,
+  optionNameElement,
+  optionValueLineElements,
 } from "#report/format/elements/elements.ts"
 import { INDENT } from "#report/format/layout.ts"
 import type { StepOption } from "#report/host-block/host-block.ts"
@@ -17,10 +17,10 @@ const hasValues = (options: StepOption[]): boolean =>
 const formatOptionsLine = (options: StepOption[]): string => {
   const optionsLineParts = options.map(({ name, entries }) =>
     entries.length > 0
-      ? `${formatOptionName(name)} ${formatOptionEntries(entries.map((entry) => entry.name))}`
-      : formatOptionName(name),
+      ? `${optionNameElement(name)} ${optionEntriesElement(entries.map((entry) => entry.name))}`
+      : optionNameElement(name),
   )
-  return `${formatHeading("options")} ${optionsLineParts.join(", ")}`
+  return `${headingElement("options")} ${optionsLineParts.join(", ")}`
 }
 
 /**
@@ -30,13 +30,13 @@ const formatOptionsLine = (options: StepOption[]): string => {
  */
 const formatOptionsBlockRows = (options: StepOption[], indent: string): string[] => {
   // Measure each key as it's formatted, with the space after it, so the width follows the key's own text.
-  const valueLabels = options.flatMap(({ name, value }) => (value === undefined ? [] : [`${formatOptionKey(name)} `]))
+  const valueLabels = options.flatMap(({ name, value }) => (value === undefined ? [] : [`${optionKeyElement(name)} `]))
   const labelWidth = getMaxWidth(valueLabels)
   const continuationIndent = " ".repeat(labelWidth)
 
   return options.flatMap(({ name, value, entries }) => {
-    const label = formatOptionKey(name)
-    const valueLines = value === undefined ? [] : formatOptionValueLines(value.value)
+    const label = optionKeyElement(name)
+    const valueLines = value === undefined ? [] : optionValueLineElements(value.value)
     const valueRows = valueLines.map((valueLine, index) => {
       const lineStart = index === 0 ? padToWidth(label, labelWidth) : continuationIndent
       return `${indent}${lineStart}${valueLine}`
@@ -53,5 +53,5 @@ const formatOptionsBlockRows = (options: StepOption[], indent: string): string[]
  */
 export const formatOptions = (options: StepOption[]): string[] =>
   hasValues(options)
-    ? [formatHeading("options"), ...formatOptionsBlockRows(options, INDENT)]
+    ? [headingElement("options"), ...formatOptionsBlockRows(options, INDENT)]
     : [formatOptionsLine(options)]

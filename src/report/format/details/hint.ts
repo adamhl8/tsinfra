@@ -1,4 +1,4 @@
-import { formatHint } from "#report/format/elements/elements.ts"
+import { hintElement } from "#report/format/elements/elements.ts"
 import type { FailureHint } from "#session/session.ts"
 
 // Name both fixes, because `sudo: true` and `sudo: { password }` each give sudo what it needs.
@@ -15,4 +15,4 @@ const getHintWords = (hint: FailureHint): string => {
 }
 
 /** Formats how to fix a failure, in the words for its kind. */
-export const formatFailureHint = (hint: FailureHint): string => formatHint(getHintWords(hint))
+export const formatFailureHint = (hint: FailureHint): string => hintElement(getHintWords(hint))

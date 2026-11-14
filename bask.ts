@@ -12,7 +12,7 @@ lint.before(async ({ sh }) => {
 })
 
 export const reportPreview = task(
-  { desc: "Print the report for one example host per way a block can look" },
+  { desc: "Print the report with every element and message tsinfra writes at least once" },
   async ({ sh }) => {
     await sh`bun report-preview.ts`
   },

@@ -91,10 +91,10 @@ bunx tsinfra plan sonarr   # just this one
 
 ```
 sonarr
-  ~ change:    (file) /etc/systemd/system/sonarr.service
+  ~ change: (file) /etc/systemd/system/sonarr.service
       -Restart=always
       +Restart=on-failure
-  > triggered: (run)  Reload systemd
+  > triggered: (run) Reload systemd
 
 sonarr    2 changes
 ```
@@ -524,7 +524,7 @@ On a fresh machine, fish isn't installed yet, so `plan` shows the step as waitin
 
 ```
 macbook
-  ~ change:  (ensure) Install brew packages
+  ~ change: (ensure) Install brew packages
   ? waiting: (ensure) Install fish plugins   needs 'Install brew packages'
 ```
 
@@ -566,9 +566,9 @@ By default, a block lists only the steps that changed, would change, are waiting
 
 Each `-v` shows more:
 
-- `-v`: every step, every diff and differing line in full, and the options a step set, like `options: sudo`
-- `-vv`: option values (secrets as `[MASKED]`), and every command each step ran
-- `-vvv`: each command's exit code, stdout, and stderr
+- `-v`: every step, and every long diff and differing line in full
+- `-vv`: the options a step set, like `options: sudo`, every command each step ran, and a diff that was slow to compute
+- `-vvv`: option values (secrets as `[MASKED]`), and each command's exit code, stdout, and stderr
 
 ## CLI Reference
 

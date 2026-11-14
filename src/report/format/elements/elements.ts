@@ -1,34 +1,34 @@
 export {
-  formatCommandPrompt,
-  formatCommandText,
-  formatFailedCommandLine,
-  formatPhase,
-  formatStderrLine,
-  formatStdoutLine,
+  commandPromptElement,
+  commandLineElements,
+  failedCommandLineElement,
+  phaseElement,
+  stderrLineElement,
+  stdoutLineElement,
 } from "#report/format/elements/commands.ts"
-export { formatDiffGutter, formatDiffLine, formatDiffRule } from "#report/format/elements/diff.ts"
-export { formatEntryName, formatEntryNote, formatKind, formatStatus } from "#report/format/elements/entry.ts"
+export { diffGutterElement, diffLineElement, diffRuleElement } from "#report/format/elements/diff.ts"
+export { entryNameElement, entryNoteElement, kindElement, statusElement } from "#report/format/elements/entry.ts"
 export {
-  formatHeading,
-  formatLabel,
-  formatOptionEntries,
-  formatOptionKey,
-  formatOptionName,
+  headingElement,
+  labelElement,
+  optionEntriesElement,
+  optionKeyElement,
+  optionNameElement,
 } from "#report/format/elements/labels.ts"
 export {
-  formatChangeDescription,
-  formatErrorLine,
-  formatHint,
-  formatNote,
-  formatPlanReminder,
-  formatWarningLabel,
+  changeDescriptionElement,
+  errorLineElement,
+  hintElement,
+  noteElement,
+  planReminderElement,
+  warningLabelElement,
 } from "#report/format/elements/messages.ts"
-export { formatStatusText, formatWarningCount } from "#report/format/elements/summary.ts"
+export { statusTextElement, warningCountElement } from "#report/format/elements/summary.ts"
 export {
-  formatChange,
-  formatExitCode,
-  formatGotValue,
-  formatOptionValueLines,
-  formatWantValue,
-  formatWarningValue,
+  changeElement,
+  exitCodeElement,
+  gotValueElement,
+  optionValueLineElements,
+  wantValueElement,
+  warningValueElement,
 } from "#report/format/elements/values.ts"

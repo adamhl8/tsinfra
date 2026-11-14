@@ -1,4 +1,4 @@
-import { DEFAULT_DIFF_LIMITS, formatHostBlock } from "#report/format/format.ts"
+import { formatHostBlock, toDiffLimits } from "#report/format/format.ts"
 import type {
   Detail,
   HostBlock,
@@ -79,7 +79,7 @@ const keepShown = (hostBlockEntries: HostBlockEntry[], verbosity: Verbosity): Ho
 export const renderHostBlock = (hostBlock: HostBlock, reportOptions: ReportOptions): string | undefined => {
   const { verbosity } = reportOptions
   // Give the diff limits instead of a level, because computing a full diff only to drop it would be slow.
-  const diffLimits = verbosity >= 1 ? undefined : DEFAULT_DIFF_LIMITS
+  const diffLimits = toDiffLimits(verbosity)
   if (hostBlock.kind === "noSteps") return formatHostBlock(hostBlock, diffLimits)
 
   // Filter before formatting, so nothing hidden is formatted or measured for a column.

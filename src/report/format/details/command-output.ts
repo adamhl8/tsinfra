@@ -3,11 +3,11 @@ import { messageChain } from "ts-explicit-errors"
 import type { AlignedRow } from "#report/format/details/aligned-row.ts"
 import { formatAlignedRow } from "#report/format/details/aligned-row.ts"
 import {
-  formatErrorLine,
-  formatExitCode,
-  formatHeading,
-  formatStderrLine,
-  formatStdoutLine,
+  errorLineElement,
+  exitCodeElement,
+  headingElement,
+  stderrLineElement,
+  stdoutLineElement,
 } from "#report/format/elements/elements.ts"
 import { INDENT } from "#report/format/layout.ts"
 import type { CommandOutputDetail } from "#report/host-block/host-block.ts"
@@ -18,9 +18,9 @@ import { getMaxWidth, padToWidth, splitNonEmptyLines } from "#utils.ts"
  * the rows are for reading the output, not for its exact value, and keeps its leading whitespace, because that can line
  * up the output.
  */
-const formatStreamRows = (label: string, stream: string, formatLine: (line: string) => string): AlignedRow[] => {
+const formatStreamRows = (label: string, stream: string, lineElement: (line: string) => string): AlignedRow[] => {
   const trimmedStream = stream.trimEnd()
-  const streamLines = trimmedStream.split("\n").map((streamLine) => formatLine(streamLine))
+  const streamLines = trimmedStream.split("\n").map((streamLine) => lineElement(streamLine))
   return trimmedStream === "" ? [] : [formatAlignedRow(label, streamLines)]
 }
 
@@ -31,16 +31,16 @@ const formatStreamRows = (label: string, stream: string, formatLine: (line: stri
  */
 const formatCommandOutputRows = (output: CommandOutputDetail): AlignedRow[] => {
   if (output.kind === "failed") {
-    const errorLines = splitNonEmptyLines(messageChain(output.error)).map((errorLine) => formatErrorLine(errorLine))
+    const errorLines = splitNonEmptyLines(messageChain(output.error)).map((errorLine) => errorLineElement(errorLine))
     return [formatAlignedRow("error", errorLines)]
   }
 
   const { exitCode, stdout, stderr } = output
-  const exitRow = formatAlignedRow("exit", [formatExitCode(exitCode)])
+  const exitRow = formatAlignedRow("exit", [exitCodeElement(exitCode)])
   return [
     exitRow,
-    ...formatStreamRows("stdout", stdout, formatStdoutLine),
-    ...formatStreamRows("stderr", stderr, formatStderrLine),
+    ...formatStreamRows("stdout", stdout, stdoutLineElement),
+    ...formatStreamRows("stderr", stderr, stderrLineElement),
   ]
 }
 
@@ -60,5 +60,5 @@ export const formatCommandOutputLines = (output: CommandOutputDetail, indent: st
       return `${indent}${INDENT}${lineStart}${valueLine}`
     }),
   )
-  return [`${indent}${formatHeading("output")}`, ...rowLines]
+  return [`${indent}${headingElement("output")}`, ...rowLines]
 }

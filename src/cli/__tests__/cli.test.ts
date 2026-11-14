@@ -20,8 +20,8 @@ describe("tsinfra", () => {
     expect(stdout).toBe(
       [
         "sonarr",
-        "  ~ change:    (ensure) Make marker",
-        "  > triggered: (run)    Restart",
+        "  ~ change: (ensure) Make marker",
+        "  > triggered: (run) Restart",
         "",
         PLAN_REMINDER,
         "",
@@ -49,7 +49,7 @@ describe("tsinfra", () => {
     const { stdout, exitCode } = await run`tsinfra plan --hosts-dir hosts-select --verbose a`.nothrow()
 
     expect(exitCode).toBe(0)
-    expect(stdout).toBe("a\n  · observed:  (read)   true\n  = unchanged: (ensure) Install git\n\na   unchanged")
+    expect(stdout).toBe("a\n  · observed: (read) true\n  = unchanged: (ensure) Install git\n\na   unchanged")
   })
 
   it.each([["-vv"], ["-v", "-v"]])("should count %s as level 2, and list commands", async (...flags) => {
@@ -59,7 +59,7 @@ describe("tsinfra", () => {
 
     expect(exitCode).toBe(0)
     expect(stdout).toBe(
-      "a\n  · observed:  (read)   true\n  = unchanged: (ensure) Install git\n      commands:\n        $ true\n\na   unchanged",
+      "a\n  · observed: (read) true\n  = unchanged: (ensure) Install git\n      commands:\n        $ true\n\na   unchanged",
     )
   })
 
@@ -70,7 +70,7 @@ describe("tsinfra", () => {
 
     expect(exitCode).toBe(0)
     expect(stdout).toBe(
-      "a\n  · observed:  (read)   true\n      output:\n        exit: 0\n  = unchanged: (ensure) Install git\n      commands:\n        (before) $ true\n                     output:\n                       exit: 0\n\na   unchanged",
+      "a\n  · observed: (read) true\n      output:\n        exit: 0\n  = unchanged: (ensure) Install git\n      commands:\n        (before) $ true\n                     output:\n                       exit: 0\n\na   unchanged",
     )
   })
 

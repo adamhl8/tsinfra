@@ -9,34 +9,13 @@ const DETAIL_INDENT = INDENT.repeat(3)
 export const COLUMN_GAP = "   "
 
 /**
- * The width each status line pads its status, kind, and name to, so the next column starts in one place on every line.
- * The note comes last, so nothing pads it.
+ * Lays out an entry's status line on its own, with no padding to match the other entries, so each entry stands alone.
+ * Puts a gap before the note, so it reads apart from the name.
  */
-interface StatusLineWidths {
-  status: number
-  kind: number
-  name: number
-}
-
-const getStatusLineWidths = (statusLines: StatusLine[]): StatusLineWidths => {
-  const noteLines = statusLines.filter(({ note }) => note !== undefined)
-
-  return {
-    // Pad each status and each kind to the widest in the block, so every kind and every name starts in one column.
-    status: getMaxWidth(statusLines.map(({ status }) => status)),
-    kind: getMaxWidth(statusLines.map(({ kind }) => kind)),
-    // Line up every note past the longest name that has one.
-    name: getMaxWidth(noteLines.map(({ name }) => name)),
-  }
-}
-
-const layoutStatusLine = (statusLine: StatusLine, widths: StatusLineWidths): string => {
+const layoutStatusLine = (statusLine: StatusLine): string => {
   const { status, kind, name, note } = statusLine
-  const statusAndKind = `${INDENT}${padToWidth(status, widths.status)} ${padToWidth(kind, widths.kind)} `
-  if (note === undefined) return `${statusAndKind}${name}`
-
-  // Pad only a line with a note, because the name column is the widest name among those lines.
-  return `${statusAndKind}${padToWidth(name, widths.name)}${COLUMN_GAP}${note}`
+  const line = `${INDENT}${status} ${kind} ${name}`
+  return note === undefined ? line : `${line}${COLUMN_GAP}${note}`
 }
 
 /** Lays out aligned rows as `label: value` lines, with each value starting at `valueColumn`. */
@@ -69,16 +48,15 @@ const layoutBody = (body: Body): string[] => {
   return [...errorLines, ...indentedDetailLines]
 }
 
-const layoutEntry = (formattedEntry: FormattedEntry, widths: StatusLineWidths): string[] => {
+const layoutEntry = (formattedEntry: FormattedEntry): string[] => {
   const { statusLine, body } = formattedEntry
   const bodyLines = layoutBody(body).map((bodyLine) => `${DETAIL_INDENT}${bodyLine}`)
-  return [layoutStatusLine(statusLine, widths), ...bodyLines]
+  return [layoutStatusLine(statusLine), ...bodyLines]
 }
 
-/** Lays out a host block: its name, then its formatted entries with their columns lined up. */
+/** Lays out a host block: its name, then each of its formatted entries. */
 export const layoutHostBlock = (name: string, formattedEntries: FormattedEntry[]): string => {
-  const widths = getStatusLineWidths(formattedEntries.map(({ statusLine }) => statusLine))
-  const entryLines = formattedEntries.flatMap((formattedEntry) => layoutEntry(formattedEntry, widths))
+  const entryLines = formattedEntries.flatMap((formattedEntry) => layoutEntry(formattedEntry))
 
   return [name, ...entryLines].join("\n")
 }

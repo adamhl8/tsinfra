@@ -1,7 +1,7 @@
 import type { AlignedRow } from "#report/format/details/aligned-row.ts"
 import { formatAlignedRow } from "#report/format/details/aligned-row.ts"
 import { formatOwnerChange } from "#report/format/details/owner.ts"
-import { formatChange, formatChangeDescription, formatWantValue } from "#report/format/elements/elements.ts"
+import { changeElement, changeDescriptionElement, wantValueElement } from "#report/format/elements/elements.ts"
 import type { LinkComparisonValues, LinkChange } from "#session/session.ts"
 
 // Give each way of making a link its words.
@@ -12,8 +12,8 @@ const REPLACEMENT_WORDS: Record<Exclude<LinkChange["kind"], "same" | "changed">,
 }
 
 const formatLinkChange = (linkChange: Exclude<LinkChange, { kind: "same" }>): string => {
-  if (linkChange.kind === "changed") return formatChange(linkChange.got, linkChange.want)
-  return `${formatChangeDescription(REPLACEMENT_WORDS[linkChange.kind])} ${formatWantValue(linkChange.want)}`
+  if (linkChange.kind === "changed") return changeElement(linkChange.got, linkChange.want)
+  return `${changeDescriptionElement(REPLACEMENT_WORDS[linkChange.kind])} ${wantValueElement(linkChange.want)}`
 }
 
 /** Formats how a link changes as its rows: one for its target, then one for each owner that changes. */

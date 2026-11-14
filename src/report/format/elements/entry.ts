@@ -12,21 +12,21 @@ const STATUS_SYMBOLS: Record<EntryStatus, string> = {
 }
 
 /** Formats an entry's status as its symbol and `word` in the status's color, like `~ change`. */
-export const formatStatus = (status: EntryStatus, word: string): string =>
+export const statusElement = (status: EntryStatus, word: string): string =>
   STATUS_COLORS[status](`${STATUS_SYMBOLS[status]} ${word}`)
 
 /**
  * Formats an entry's kind in parentheses, like `(file)`, so it reads apart from the name even without color. Italicizes
  * a failure no step owns, like `(host fn)`, so it doesn't read as a kind of step.
  */
-export const formatKind = (kind: EntryKind): string => {
+export const kindElement = (kind: EntryKind): string => {
   const text = styleMuted(`(${kind})`)
   return kind === "preparation" || kind === "host fn" ? styleItalic(text) : text
 }
 
 /** Formats an entry's name: a step's name as it is, and a value's name, like a command or a path, in the value color. */
-export const formatEntryName = (name: { kind: NameKind; text: string }): string =>
+export const entryNameElement = (name: { kind: NameKind; text: string }): string =>
   name.kind === "value" ? styleValue(name.text) : name.text
 
 /** Formats the note after an entry's name, like `needs 'A', 'B'`, muted so the name stays the focus. */
-export const formatEntryNote = (text: string): string => styleMuted(text)
+export const entryNoteElement = (text: string): string => styleMuted(text)

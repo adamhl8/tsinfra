@@ -51,14 +51,13 @@ three. Every command is already recorded with its output (see [What a host recor
 levels only change what's printed:
 
 - **`-v`** (`--verbose`) adds the rest of the steps: steps that were already right as `=` lines, and each read or
-  inspect as a `·` line named by its command. It also shows every diff and every differing line in full, and a failed fix's values from before
-  the fix. A step given options that change how its commands run gets an `options:` line under it, naming the ones it
-  set, like `options: sudo` or `options: env { URL, PORT }, secretEnv { TOKEN }`. It names each variable but shows no
-  value, because the values come at `-vv`. A `sudo` the script writes inside a command doesn't count, because it shows
-  in the command at `-vv`.
-- **`-vv`** also turns the `options:` line into a block, with each variable on its own row and its value, and each
-  `secretEnv` value as `[MASKED]`. The values line up within each of `env` and `secretEnv`, not across them, because
-  each is its own object. It lists each command a step ran, dimmed, under a `commands:` heading after the step's other
+  inspect as a `·` line named by its command. It also shows a long diff and every differing line in full, and a failed
+  fix's values from before the fix.
+- **`-vv`** also shows how each step ran. A diff or a comparison that took longer than 200 ms gets up to 10 seconds and
+  shows in full. A step given options that change how its commands run gets an `options:` line under it, naming the
+  ones it set, like `options: sudo` or `options: env { URL, PORT }, secretEnv { TOKEN }`. It names each variable but
+  shows no value, because the values come at `-vvv`. A `sudo` the script writes inside a command doesn't count, because
+  it shows in the command. It lists each command a step ran, dimmed, under a `commands:` heading after the step's other
   details, like `$ systemctl is-active sonarr`, in the order they ran. A read or inspect lists none, because its name
   is its command. A command tsinfra writes itself shows as its label in angle brackets, like
   `$ <file details script>`, because its text is tsinfra's code, not the script's. Angle brackets mark text that isn't
@@ -69,7 +68,9 @@ levels only change what's printed:
   `sudo: true` wraps them in. A preparation failure lists the commands preparation ran, by their labels, like
   `$ <home directory>`, so it shows how far preparation got. A host that was prepared lists none, because the same
   commands would repeat in every block.
-- **`-vvv`** also shows what each command printed, as `exit:`, `stdout:`, and `stderr:` rows under a dim italic
+- **`-vvv`** also turns the `options:` line into a block, with each variable on its own row and its value, and each
+  `secretEnv` value as `[MASKED]`. The values line up within each of `env` and `secretEnv`, not across them, because
+  each is its own object. It also shows what each command printed, as `exit:`, `stdout:`, and `stderr:` rows under a dim italic
   `output:` heading, one level past the command's text, with their values lined up. The heading keeps the rows from
   reading like more of a multi-line command. A read or inspect, which lists no command, shows its `output:` heading and
   rows right under its line, after any options. Every command shows its exit code, even 0, and a command that couldn't
@@ -91,38 +92,36 @@ The same host at each level, in `apply`, with a `sudo: true` file that changes, 
 
 ```
 sonarr                                                    # default
-  ~ change:    (file) /etc/systemd/system/sonarr.service
+  ~ change: (file) /etc/systemd/system/sonarr.service
       <diff>
-  > triggered: (run)  Reload systemd
+  > triggered: (run) Reload systemd
 
 sonarr                                                    # -v
-  · observed:  (read)   uname -m
+  · observed: (read) uname -m
   = unchanged: (ensure) Install sonarr
-  ~ change:    (file)   /etc/systemd/system/sonarr.service
-      options: sudo
+  ~ change: (file) /etc/systemd/system/sonarr.service
       <diff>
-  > triggered: (run)    Reload systemd
+  > triggered: (run) Reload systemd
 
 sonarr                                                    # -vv
-  · observed:  (read)   uname -m
+  · observed: (read) uname -m
   = unchanged: (ensure) Install sonarr
       commands:
         $ command -v sonarr
-  ~ change:    (file)   /etc/systemd/system/sonarr.service
-      options:
-        sudo: true
+  ~ change: (file) /etc/systemd/system/sonarr.service
+      options: sudo
       <diff>
       commands:
         $ <file details script>
         $ <file content>
         $ <file write script>
         $ <file details script>
-  > triggered: (run)    Reload systemd
+  > triggered: (run) Reload systemd
       commands:
         $ sudo systemctl daemon-reload
 
 sonarr                                                    # -vvv
-  · observed:  (read)   uname -m
+  · observed: (read) uname -m
       output:
         exit:   0
         stdout: x86_64
@@ -132,7 +131,7 @@ sonarr                                                    # -vvv
                      output:
                        exit:   0
                        stdout: /usr/bin/sonarr
-  ~ change:    (file)   /etc/systemd/system/sonarr.service
+  ~ change: (file) /etc/systemd/system/sonarr.service
       options:
         sudo: true
       <diff>
@@ -142,7 +141,7 @@ sonarr                                                    # -vvv
                        exit:   0
                        stdout: <the file's details>
         ...
-  > triggered: (run)    Reload systemd
+  > triggered: (run) Reload systemd
       commands:
         $ sudo systemctl daemon-reload
             output:
@@ -151,17 +150,17 @@ sonarr                                                    # -vvv
 
 ```
 sonarr
-  ~ change:    (file) /etc/systemd/system/sonarr.service
+  ~ change: (file) /etc/systemd/system/sonarr.service
       -Restart=always
       +Restart=on-failure
-  > triggered: (run)  Reload systemd
+  > triggered: (run) Reload systemd
 
 immich
   ! failed: (ensure) Start Immich
       docker is missing: launch the container with the docker profile
 
 macbook
-  ~ change:  (ensure) Install brew packages
+  ~ change: (ensure) Install brew packages
   ? waiting: (ensure) Install fish plugins   needs 'Install brew packages'
 
 Steps after a change were checked without that change, so apply may differ.
@@ -201,7 +200,8 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
     kind, a label, or a value. An element decides how something looks, and structure decides what it says. So an
     element adds its own markup, like the parentheses around a kind, the quotes at a value's edges, or the `(empty)`
     marker, and picks its own look from the palette, so it never takes a style. It holds none of tsinfra's words. It
-    doesn't know where it ends up. Elements look alike only by choice,
+    doesn't know where it ends up. An element function is named after its element, like `labelElement`, and every
+    function that starts with `format` is structure. Elements look alike only by choice,
     like a kind and the `(empty)` marker, which are both muted, so either can change alone. The files are named after
     what their elements are about, never after a layout shape like a row. A formatter for one kind of data, like a
     file's size, stays private next to its caller, and its text can go through an element after it.
@@ -214,9 +214,9 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
 - **Status lines.** A host's block is its name, then its entries, or "no steps" for a script that made none. Each entry
   is a status line, with its details and any error on the lines under it. A status line starts with the entry's status,
   as a symbol and a word in the status's color, then an uncolored colon, like `~ change:`.
-  Then comes the step's kind in dim parentheses, like `(file)`, and then its name. The status and the kind are each
-  padded to the widest in the block, so every kind and every name starts in one column. The parentheses keep the kind
-  apart from the name without color. A failure no step owns shows `(preparation)` or `(host fn)` in place of a kind,
+  Then comes the step's kind in dim parentheses, like `(file)`, and then its name. Nothing is padded to match the other
+  entries, so each entry stands on its own, and one long name doesn't push the rest of the block to the right. The
+  parentheses keep the kind apart from the name without color. A failure no step owns shows `(preparation)` or `(host fn)` in place of a kind,
   also in italics, so it doesn't read as a kind of step (see [Kinds of failure](#kinds-of-failure)). A `changed` step from `ensure`, `file`, or `link` is `~ change`, and a `ran` step from `run` is
   `> triggered`, because a step it follows changed. Any failed step is `! failed`, because the status matters more than the kind once
   something broke, and the error already says what failed. In `--verbose`, every step that was already right is `= unchanged`,
@@ -272,8 +272,8 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   Commands and their output show as they are, because they're for reading, not comparing.
 
 - **Colors** follow the status: a summary's change count matches `~` and `>`, and its waiting count matches `?`. The
-  plan reminder is dim, so the host lines stay the main thing in the summary. In a block, the notes line up in one
-  column. A waiting step's note is `needs 'A', 'B'`. A failure no step owns never gets a note.
+  plan reminder is dim, so the host lines stay the main thing in the summary. A note follows its entry's name after a
+  gap of three spaces. A waiting step's note is `needs 'A', 'B'`. A failure no step owns never gets a note.
 - **Options.** The `options:` heading is dim and italic, its keys are dim like other labels, and its values are styled
   like other values, with the same markers and quotes. `[MASKED]` is dim, because it's tsinfra's marker, not a
   value the script gave. On the line, an object's variable names go in braces after its name, like `env { URL, PORT }`,
@@ -299,7 +299,7 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   warning isn't drift, so it doesn't change the exit code.
 - **Levels.** Every piece of a block has the lowest level it shows at: a step's own line, each part of its note, each
   detail under it, and the pieces inside a detail, like an option's value or what a command printed. A piece's level comes from what it is, like 1 for the line of a step that was
-  already right, 1 for the options line, and 0 for a warning. A piece can also stop at a level, like the "run with -vvv"
+  already right, 2 for the options line, and 0 for a warning. A piece can also stop at a level, like the "run with -vvv"
   note, which goes away at 3, where the stderr it points at shows. A piece shows once its own level is reached, or when
   anything inside it shows, and a step that shows always prints its own line. So a warning, at 0, shows its step at the
   default level, even when the step was already right. The report builds every piece for every step, then keeps the ones
@@ -318,16 +318,16 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   text content shows as a diff. A diff shows 1 unchanged line around each change. Each line is numbered by where it sits in `want`, so a removed
   line, which isn't in `want`, has no number, the way Zed shows a combined diff. A dim rule separates the hunks, and
   another frames the diff above and below, so it stands apart from a `stderr:` row or a `mode:` row after it. A diff
-  longer than 15 lines, counting the rules between hunks, shows "long diff (N lines)" instead. A diff that takes longer
-  than 200 ms to compute shows "diff took too long to compute". Both suggest `--verbose`, which shows every diff in full
-  and allows 10 seconds to compute one.
+  longer than 15 lines, counting the rules between hunks, shows "long diff (N lines)" instead, which suggests
+  `--verbose`. A diff that takes longer than 200 ms to compute shows "diff took too long to compute", which suggests
+  `-vv`, because that level allows 10 seconds. Each note names the flag that shows what it hides.
 - **A string `ensure` value** shows as `got:` and `want:` rows under its step, not as a diff, because a check's output
   has no lines for numbers to point to. A multi-line value shows only the lines that differ, which jsdiff picks, so a
   long list with one change stays short. Each line follows the rules in Values, so an empty line or a trailing space
   still shows. An empty value shows as `(empty)`, and a side whose lines are all in the other side has no row, like a lone `want:` row
   for a missing package. The rows don't say where in the value a line sits, so a pure reorder shows the same lines
-  under both. More than 15 differing lines show "N lines differ", and lines that take longer than 200 ms to compare
-  show "values took too long to compare". Both suggest `--verbose`, which shows every differing line. A boolean or an
+  under both. More than 15 differing lines show "N lines differ", which suggests `--verbose`, and lines that take
+  longer than 200 ms to compare show "values took too long to compare", which suggests `-vv`. A boolean or an
   exit code shows nothing, because the step's name says what yes and no mean.
 
 There's no `--json` mode yet (see [Maybe later](./roadmap.md#maybe-later)).

@@ -1,14 +1,15 @@
-import { chmod, mkdtemp, rm, symlink } from "node:fs/promises"
+import { chmod, mkdir, mkdtemp, rm, symlink } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import process from "node:process"
 
-// Prints the report for one example host per way a block can look, to inspect the output by eye.
+// Prints the report with every element and every message tsinfra writes at least once, to inspect the output by eye.
 // It runs `plan` for what only shows in `plan`, then `apply` for the rest.
-// Then it runs the sudo cases against a fake `sudo`, which accepts only the password `tsinfra`.
-// Every pass shows the level its `-v` flags ask for, like the CLI, so `bun report-preview.ts -vv` checks level 2.
+// Every pass shows the level its `-v` flags ask for, like the CLI, so `bun report-preview.ts -vv` shows level 2, and
+// each level adds to the same hosts.
 // Run it with `bask report-preview`, and with `NO_COLOR=1` to see it without colors.
-// Run `bun report-preview.ts --sudo-prompt` to also get the sudo password prompt, and type at it.
+// Run `bun report-preview.ts --sudo-prompt` to also get the sudo password prompt, against a fake `sudo` that accepts
+// only the password `tsinfra`, and type at it.
 import bun, { spawn } from "bun"
 import pc from "picocolors"
 import type { Result } from "ts-explicit-errors"
@@ -18,38 +19,47 @@ import type { HostFunction, HostSudo } from "#hosts/host.ts"
 import { prepareHosts } from "#hosts/prepare/prepare.ts"
 import { runHost } from "#hosts/run.ts"
 import type { Mode } from "#mode.ts"
-import { printTsinfraError } from "#report/errors.ts"
 import type { HostBlock } from "#report/report.ts"
-import { getExitCode, renderHostBlock, renderSummary, toHostBlock, toVerbosity } from "#report/report.ts"
+import {
+  getExitCode,
+  printTsinfraError,
+  renderHostBlock,
+  renderSummary,
+  toHostBlock,
+  toVerbosity,
+} from "#report/report.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 import { PUBLIC_FILE_MODE } from "#session/handlers/shared/filesystem/mode.ts"
+import type { HostRecord } from "#session/session.ts"
+import { createHostRecord } from "#session/session.ts"
 import { runLocal } from "#transport/local.ts"
 
-/**
- * One run of the preview: `plan` shows what only shows in `plan`, and `apply` the rest. `sudo` shows the sudo cases
- * that need no typing, and `sudoPrompt` the ones that prompt.
- */
-type PreviewPass = "plan" | "apply" | "sudo" | "sudoPrompt"
+/** One run of the preview: `plan` shows what only shows in `plan`, `apply` the rest, and `sudoPrompt` the prompt. */
+type PreviewPass = "plan" | "apply" | "sudoPrompt"
 
 interface Scenario {
   name: string
   target: string
-  /** The pass the case shows up in. Defaults to `apply`. */
-  pass?: PreviewPass
+  pass: PreviewPass
   /** The host's `sudo` option. Defaults to `false`. */
   sudo?: HostSudo
-  /** The highest level the case runs at, for one that only shows something worth seeing below it. */
-  maxVerbosity?: Verbosity
   fn: HostFunction
 }
 
+// Print numbered lines with `awk`, because BusyBox's `seq` has no `-f`.
+const printNumberedLines = (prefix: string, count: number) =>
+  `awk 'BEGIN { for (i = 0; i < ${count}; i++) print "${prefix} " i }'`
+
+const numberedLines = (prefix: string, count: number) =>
+  Array.from({ length: count }, (_, index) => `${prefix} ${index}`).join("\n")
+
+// A 12-line config, and the version the script wants, with two changes far enough apart to make two hunks.
 const CONFIG_LINES = Array.from({ length: 12 }, (_, index) => `setting_${index + 1} = default`)
+const WANTED_CONFIG_LINES = CONFIG_LINES.map((line, index) =>
+  index === 1 || index === 10 ? line.replace("default", "tuned") : line,
+)
 
-// Write each line through `printf`, so the check prints exactly these lines.
-const printLines = (lines: string[]) => `printf '%s\\n' ${lines.map((line) => `'${line}'`).join(" ")}`
-
-// A 40-line config, and the version the script wants, with changes spread out so the diff shows several hunks.
-// Lines 3 and 4 change together, line 15 gains two lines after it, line 28 goes away, and line 38 changes.
+// A 40-line config, and the version the script wants, with enough changes that its diff is too long to show.
 const optionLine = (number: number, value: string) => `option_${String(number).padStart(2, "0")} = ${value}`
 const SITE_CONFIG = Array.from({ length: 40 }, (_, index) => optionLine(index + 1, index % 3 === 0 ? "on" : "off"))
 const WANTED_SITE_CONFIG = SITE_CONFIG.flatMap((line, index) => {
@@ -60,223 +70,168 @@ const WANTED_SITE_CONFIG = SITE_CONFIG.flatMap((line, index) => {
   return [line]
 })
 
+// Make a value big enough that comparing it takes too long, which only shows below `-vv`, where the time limit applies.
+const BIG_VALUE_LINE_COUNT = 2000
+// Make a file bigger than the 100 kB the report diffs.
+const TOO_LARGE_BYTES = 120_000
+
 // Pick a group the user is in besides their own, so a `group:` row can change in `apply` without root.
 const OTHER_GROUP_ID = process.getgroups?.().find((gid) => gid !== os.userInfo().gid) ?? os.userInfo().gid
 
-// Give a sudo case a script that does nothing visible, because what it shows is its preparation.
-const readTrue: HostFunction = async (h) => {
-  await h.read("true")
-}
-
-const BIG_VALUE_LINE_COUNT = 2000
-const numberedLines = (prefix: string) =>
-  Array.from({ length: BIG_VALUE_LINE_COUNT }, (_, index) => `${prefix} ${index}`).join("\n")
-
 /**
- * Returns one example host for each way a block can look, with markers in `dir` so `apply` can make and see real
- * changes. Cases that only differ in their words share one example, and each failure needs a host of its own, because a
- * host stops at its first failure.
+ * Returns the example hosts, with markers in `dir` so `apply` can make and see real changes. A host stops at its first
+ * failure, so each kind of failure has a host of its own, and every element that needs no failure is on `elements`.
  */
-const createScenarios = (dir: string): Scenario[] => {
+const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
   const marker = (file: string) => path.join(dir, file)
   const touchStep = (file: string) => ({
     check: `test -f '${marker(file)}'`,
     want: true,
     fix: `touch '${marker(file)}'`,
   })
+  // Write `lines` to a marker until it exists, so the check reads `fallback` before the fix and the marker after it.
+  const linesStep = (file: string, fallback: string, wanted: string) => ({
+    check: `cat '${marker(file)}' 2>/dev/null || ${fallback}`,
+    want: wanted,
+    fix: `printf '%s' '${wanted === "" ? "" : `${wanted}\n`}' > '${marker(file)}'`,
+  })
 
   return [
     {
-      // `?` lines with notes in one column, a note that names two steps, a waiting count, and the plan reminder.
-      name: "waiting",
+      // `~ change`, `? waiting` with a `needs` note naming two steps, a waiting `sudo: true` file, whose options line
+      // shows from `-v` without calling sudo, the waiting count, and the plan reminder.
+      name: "plan",
       target: "@local",
       pass: "plan",
       fn: async (h) => {
         const brew = await h.ensure("Install brew packages", touchStep("brew"))
         const fish = await h.ensure("Install fish", { needs: [brew], ...touchStep("fish") })
         await h.ensure("Install editor plugins", { needs: [brew, fish], ...touchStep("editor") })
-      },
-    },
-    {
-      // A `sudo: true` step's options line from `-v`, and its value from `-vv`, under a step that waits.
-      // The file waits in `plan`, so it runs no command, and the real `sudo` is never called.
-      name: "sudo-option",
-      target: "@local",
-      pass: "plan",
-      fn: async (h) => {
-        const brew = await h.ensure("Install brew packages", touchStep("brew"))
         await h.file(marker("sudo-conf"), "a\n", { needs: [brew], sudo: true })
-        await h.ensure("Install fish", { needs: [brew], ...touchStep("fish") })
       },
     },
     {
-      // Steps given `env` and `secretEnv`: an options line naming the variables from `-v`, and a block with their values
-      // from `-vv`, lined up within each object, with a multi-line value and each secret as `[MASKED]`.
-      name: "env-options",
+      // One bare step for each status `apply` shows, and the summary's count.
+      name: "statuses",
       target: "@local",
-      pass: "plan",
+      pass: "apply",
       fn: async (h) => {
-        await h.read('printf %s "$URL"', {
-          env: { URL: "https://example.com", PORT: "8080" },
-          secretEnv: { TOKEN: "s3cret-token" },
-        })
-        await h.run("Deploy the app", 'echo "$RELEASE"', {
-          after: "always",
-          env: { RELEASE: "v1.2.3", NOTES: "first line\nsecond line" },
-          secretEnv: { API_KEY: "s3cret-key" },
-        })
-      },
-    },
-    {
-      // A diff too long to show, which becomes a note without `--verbose`.
-      name: "long-diff",
-      target: "@local",
-      pass: "plan",
-      fn: async (h) => {
-        await h.ensure("Write the site config", {
-          check: `cat '${marker("site")}' 2>/dev/null || ${printLines(SITE_CONFIG)}`,
-          want: WANTED_SITE_CONFIG.join("\n"),
-          fix: `${printLines(WANTED_SITE_CONFIG)} > '${marker("site")}'`,
-        })
-      },
-    },
-    {
-      // The note that replaces a diff that takes too long, which suggests `--verbose`.
-      // Run it only at the default level, because `-v` shows the whole diff, thousands of lines.
-      name: "big-diff",
-      target: "@local",
-      pass: "plan",
-      maxVerbosity: 0,
-      fn: async (h) => {
-        await h.ensure("Write the big file", {
-          check: `cat '${marker("big")}' 2>/dev/null || seq -f 'old %g' 0 ${BIG_VALUE_LINE_COUNT - 1}`,
-          want: numberedLines("new"),
-          fix: `seq -f 'new %g' 0 ${BIG_VALUE_LINE_COUNT - 1} > '${marker("big")}'`,
-        })
-      },
-    },
-    {
-      // A warning on a step that was already right, which shows it without `--verbose`, and a warning count.
-      name: "warning",
-      target: "@local",
-      pass: "plan",
-      fn: async (h) => {
-        await symlink(marker("missing-dotfile"), marker("broken-link"))
-        await h.link(marker("broken-link"), marker("missing-dotfile"))
-      },
-    },
-    {
-      // No block, only an `unchanged` summary line, because nothing changed and there's no `--verbose`.
-      name: "unchanged",
-      target: "@local",
-      pass: "plan",
-      fn: async (h) => {
+        const caddy = await h.ensure("Install Caddy", touchStep("caddy"))
+        await h.run("Reload Caddy", "true", { after: [caddy] })
         await h.ensure("Install git", { check: "true", want: true, fix: "true" })
+        await h.read("uname -m")
+        await h.inspect("test -d /etc")
       },
     },
     {
-      // Every kind of step that passes, with the kinds padded to one column.
-      // An `ensure` with nothing under it, a quoted `got` and `want`, and a diff with a hunk for each change far apart.
-      // A file with a diff and a `mode:` row, a new file's size, and a secret file's sizes lined up with a `group:` row.
-      // A link that replaces a file, one whose target changed, and a new one to a missing path, with its warning.
-      // `> triggered:` runs, `= unchanged:` for an `ensure` and an untriggered run, and `· observed:` for a read.
-      name: "steps",
+      // Every element on steps that succeed. `ensure` strings: `got:` and `want:` rows, multi-line rows with a lone side,
+      // `(empty)` for a value and a line, a quoted trailing space, and the notes for too many lines and a slow compare.
+      // `file`: a diff with two hunks, `mode:` and a numeric `group:`, the note for a long diff and a slow one, and each
+      // content description. `link`: a changed target, both replacements, and a missing target with its warning, on a
+      // step that changes and one that was already right. A triggered multi-line run and one that didn't trigger.
+      // A read with `env` and `secretEnv`, with a multi-line, an empty, a padded, and a masked value.
+      // Commands at `-vv`, and their phases, output, and labels at `-vvv`.
+      name: "elements",
       target: "@local",
+      pass: "apply",
       fn: async (h) => {
-        await bun.write(marker("app.conf"), "port = 8080\nworkers = 4\nlog = info\n")
+        await bun.write(marker("app.conf"), `${CONFIG_LINES.join("\n")}\n`)
         await chmod(marker("app.conf"), 0o600)
+        await bun.write(marker("site.conf"), `${SITE_CONFIG.join("\n")}\n`)
         await bun.write(marker("token"), "old-token\n")
-        const dotfile = marker("dotfile")
-        await bun.write(dotfile, "set -x EDITOR vim\n")
+        await bun.write(marker("image.bin"), "old\0image\n")
+        await bun.write(marker("dump.sql"), "a".repeat(TOO_LARGE_BYTES))
+        await bun.write(marker("dotfile"), "set -x EDITOR vim\n")
         await bun.write(marker("old-dotfile"), "set -x EDITOR nano\n")
         await bun.write(marker("real-file"), "a file where the link goes\n")
+        await mkdir(marker("empty-dir"))
         await symlink(marker("old-dotfile"), marker("moved-link"))
+        await symlink(marker("missing-dotfile"), marker("broken-link"))
 
-        await h.ensure("Install Caddy", touchStep("caddy"))
-        await h.ensure("Set the hostname", {
-          check: `cat '${marker("hostname")}' 2>/dev/null || true`,
-          want: "web1",
-          fix: `printf web1 > '${marker("hostname")}'`,
-        })
-        const wantedConfig = CONFIG_LINES.map((line, index) =>
-          index === 1 || index === 10 ? line.replace("default", "tuned") : line,
+        await h.ensure("Set the hostname", linesStep("hostname", "true", "web1"))
+        const packages = await h.ensure(
+          "Upgrade packages",
+          linesStep("outdated", String.raw`printf 'fd\n\nripgrep \n'`, ""),
         )
-        const config = await h.ensure("Write the config", {
-          check: `cat '${marker("config")}' 2>/dev/null || ${printLines(CONFIG_LINES)}`,
-          want: wantedConfig.join("\n"),
-          fix: `${printLines(wantedConfig)} > '${marker("config")}'`,
+        await h.ensure("Install packages", linesStep("installed", String.raw`printf 'fd\njq\n'`, "fd\njq\nripgrep"))
+        await h.ensure(
+          "Write the hosts list",
+          linesStep("hosts", printNumberedLines("old", 8), numberedLines("new", 8)),
+        )
+        if (verbosity < 2) {
+          await h.ensure(
+            "Write the big list",
+            linesStep(
+              "big",
+              printNumberedLines("old", BIG_VALUE_LINE_COUNT),
+              numberedLines("new", BIG_VALUE_LINE_COUNT),
+            ),
+          )
+        }
+
+        await h.file(marker("app.conf"), `${WANTED_CONFIG_LINES.join("\n")}\n`, {
+          mode: PUBLIC_FILE_MODE,
+          group: OTHER_GROUP_ID,
         })
-
-        await h.file(marker("app.conf"), "port = 8080\nworkers = 8\nlog = info\n", { mode: PUBLIC_FILE_MODE })
+        await h.file(marker("site.conf"), `${WANTED_SITE_CONFIG.join("\n")}\n`)
+        if (verbosity < 2) {
+          await bun.write(marker("big.conf"), `${numberedLines("old", BIG_VALUE_LINE_COUNT)}\n`)
+          await h.file(marker("big.conf"), `${numberedLines("new", BIG_VALUE_LINE_COUNT)}\n`)
+        }
         await h.file(marker("new.conf"), "enabled = true\n")
-        await h.file(marker("token"), "new-token\n", { secret: true, group: OTHER_GROUP_ID })
+        await h.file(marker("token"), "new-token\n", { secret: true })
+        await h.file(marker("image.bin"), "new\0image\n")
+        await h.file(marker("dump.sql"), "b".repeat(TOO_LARGE_BYTES))
 
-        await h.link(marker("real-file"), dotfile, { force: true })
-        await h.link(marker("moved-link"), dotfile)
+        await h.link(marker("moved-link"), marker("dotfile"))
+        await h.link(marker("real-file"), marker("dotfile"), { force: true })
+        await h.link(marker("empty-dir"), marker("dotfile"), { force: true })
+        await h.link(marker("new-link"), marker("missing-config "))
         await h.link(marker("broken-link"), marker("missing-dotfile"))
 
-        await h.run("Reload the app", "true", { after: [config] })
-        const caddyfile = await h.ensure("Write the Caddyfile", { check: "true", want: true, fix: "true" })
-        await h.run("Restart caddy", "true", { after: [caddyfile] })
-        await h.read("uname -m")
+        await h.run("Reload the shell", "echo reloading\necho done", { after: [packages] })
+        const git = await h.ensure("Install git", { check: "true", want: true, fix: "true" })
+        await h.run("Configure git", "true", { after: [git] })
+
+        await h.read(String.raw`printf '%s\n' "$URL" "$NOTES"; echo 'a warning on stderr' >&2`, {
+          env: { URL: "https://example.com", NOTES: "first line\nsecond line", EMPTY: "", PADDED: " padded" },
+          secretEnv: { TOKEN: "s3cret-token" },
+        })
       },
     },
     {
-      // A block with "no steps", which shows at every level.
+      // A block with "no steps", which shows at every level, and the summary's `unchanged`.
       name: "no-steps",
       target: "@local",
-      pass: "plan",
+      pass: "apply",
       fn: async () => {
         // A script with no steps.
       },
     },
     {
-      // A quoted `got` and `want`, and the stderr of a fix that exits 0 and of the check after it, each with its command.
-      name: "fix-and-check-stderr",
+      // A step that still differs after its fix, with italic exit codes, and a `command:` and `stderr:` row for each
+      // phase that ran one command: the fix, and the multi-line check after it, its later lines lined up.
+      name: "stderr",
       target: "@local",
+      pass: "apply",
       fn: async (h) => {
-        await h.ensure("Set the app's mode", {
-          check: "echo staging; echo 'appctl: warning: config format is deprecated' >&2",
-          want: "production",
-          fix: "echo 'appctl: warning: config is read-only, ignoring the new value' >&2",
-        })
-      },
-    },
-    {
-      // A multi-line string value as a diff, and a multi-line stderr lined up under its first line.
-      name: "multi-line-value",
-      target: "@local",
-      fn: async (h) => {
-        await h.ensure("Set the allowed hosts", {
-          check: String.raw`printf 'sonarr.lan\nradarr.lan\n'; printf 'warning: radarr.lan is deprecated\nsee the docs\n' >&2`,
-          want: "sonarr.lan\nprowlarr.lan",
-          fix: "true",
-        })
-      },
-    },
-    {
-      // A boolean, which is neither quoted nor italic, and a check function with one command, which shows its stderr.
-      name: "one-command-check-function",
-      target: "@local",
-      fn: async (h) => {
-        await h.ensure("App is healthy", {
-          check: async ({ inspect }) => {
-            const { exitCode } = await inspect("echo 'curl: (7) Failed to connect to localhost port 8080' >&2; exit 7")
-            return exitCode === 0
-          },
+        await h.ensure("Enable the app", {
+          check: "echo 'checking the app'\necho 'appctl: the app is disabled' >&2\nexit 1",
           want: true,
-          fix: "true",
+          fix: "echo 'appctl: warning: config is read-only' >&2",
         })
       },
     },
     {
-      // A note for each phase that ran several commands, one during the fix and one after it.
-      name: "several-commands-in-both-phases",
+      // A step that still differs after its fix, with italic booleans, and the note for each phase that ran several
+      // commands, one during the fix and one after it.
+      name: "stderr-notes",
       target: "@local",
+      pass: "apply",
       fn: async (h) => {
         await h.ensure("App is healthy", {
           check: async ({ inspect }) => {
-            await inspect("echo 'ls: /opt/old: No such file or directory' >&2; exit 2")
+            await inspect("echo 'curl: (7) Failed to connect' >&2; exit 7")
             await inspect("true")
             return false
           },
@@ -289,87 +244,29 @@ const createScenarios = (dir: string): Scenario[] => {
       },
     },
     {
-      // An exit code, which is italic because it isn't quoted, and a multi-line command, whose stderr follows the arrow
-      // on its last line.
-      name: "multi-line-command",
-      target: "@local",
-      fn: async (h) => {
-        await h.ensure("Enable the app", {
-          check: "echo 'checking the app'\necho 'the app is disabled' >&2\nexit 1",
-          want: true,
-          fix: "true",
-        })
-      },
-    },
-    {
-      // A failed fix, with the values from before the fix under their note.
+      // A fix that fails, with a `secretEnv` value in its error as `[MASKED]`, and from `-v`, the values from before the
+      // fix under their note.
       name: "failed-fix",
       target: "@local",
+      pass: "apply",
       fn: async (h) => {
         await h.ensure("Set the timezone", {
           check: "echo America/New_York",
           want: "UTC",
-          fix: "echo 'sudo: a password is required' >&2; exit 1",
+          fix: 'echo "the token $TOKEN was rejected" >&2; exit 1',
+          secretEnv: { TOKEN: "s3cret-token" },
         })
       },
     },
     {
-      // An error with no details under it, which is how every failure without a comparison looks.
-      name: "error",
+      // A failure no step owns, as `(host fn)` and the host's target with its note, after a step that changed.
+      name: "host-fn",
       target: "@local",
+      pass: "apply",
       fn: async (h) => {
-        await h.ensure("Enable the app", {
-          check: () => {
-            throw new Error("Unexpected token '}' in JSON at position 41")
-          },
-          want: true,
-          fix: "true",
-        })
+        await h.ensure("Install Caddy", touchStep("throws"))
+        throw new Error("the API token is missing")
       },
-    },
-    {
-      // A failed read whose stderr holds a `secretEnv` value and one line of a multi-line one, each shown as `[MASKED]`.
-      name: "masked-secret",
-      target: "@local",
-      fn: async (h) => {
-        await h.read('echo "bad token $TOKEN, key line $(echo "$KEY" | tail -n 1)" >&2; exit 1', {
-          secretEnv: { TOKEN: "s3cret-value", KEY: "first-key-line\nsecond-key-line" },
-        })
-      },
-    },
-    {
-      // A host whose preparation failed, as `(preparation)` and its target in the value color, because its script never ran.
-      // Give it a target with a space, because ssh rejects one before it reads any config or connects.
-      name: "unreachable",
-      target: "web lan",
-      fn: async (h) => {
-        await h.read("true")
-      },
-    },
-    {
-      // A wrong password from `host()`, which fails with only its own message.
-      name: "wrong-sudo-password",
-      target: "@local",
-      pass: "sudo",
-      sudo: { password: "wrong" },
-      fn: readTrue,
-    },
-    {
-      // A command's `sudo` that needs a password, on a host that doesn't declare `sudo`, with the hint under it.
-      name: "undeclared-sudo",
-      target: "@local",
-      pass: "sudo",
-      fn: async (h) => {
-        await h.read("sudo true")
-      },
-    },
-    {
-      // A sudo that fails for another reason, which shows sudo's own output in the error chain.
-      name: "not-in-sudoers",
-      target: "@local",
-      pass: "sudo",
-      sudo: { password: "not-in-sudoers" },
-      fn: readTrue,
     },
     {
       // Two hosts that prompt one after the other, to try the right password, a wrong one, three wrong ones, and Ctrl-D.
@@ -377,77 +274,87 @@ const createScenarios = (dir: string): Scenario[] => {
       target: "@local",
       pass: "sudoPrompt",
       sudo: true,
-      fn: readTrue,
+      fn: async (h) => {
+        await h.read("true")
+      },
     },
     {
       name: "second-prompt",
       target: "@local",
       pass: "sudoPrompt",
       sudo: true,
-      fn: readTrue,
-    },
-    {
-      // A failure no step owns, as `(host fn)` and the host's target with a note, after a step that changed.
-      name: "script-error",
-      target: "@local",
       fn: async (h) => {
-        await h.ensure("Install Caddy", touchStep("throws"))
-        throw new Error("the API token is missing")
+        await h.read("true")
       },
     },
   ]
 }
 
-const PASS_RUNS: Record<PreviewPass, { mode: Mode; fakeSudo: boolean }> = {
-  plan: { mode: "plan", fakeSudo: false },
-  apply: { mode: "apply", fakeSudo: false },
-  sudo: { mode: "apply", fakeSudo: true },
-  sudoPrompt: { mode: "apply", fakeSudo: true },
+/**
+ * Returns a host whose preparation failed with every hint, as a record, because the ssh hints need a real ssh setup. It
+ * shows `(preparation)` and the host's target, and from `-vv`, the commands preparation ran, by their labels.
+ */
+const createHintsRecord = (): HostRecord => ({
+  ...createHostRecord("hints", "web.lan"),
+  preparationCommands: [
+    { cmd: "ssh -G -T -- web.lan", label: "ssh config" },
+    { cmd: String.raw`printf '%s\n' "$HOME"`, label: "home directory" },
+  ],
+  failure: {
+    kind: "preparation",
+    error: new Error("Host key verification failed."),
+    hints: [{ kind: "changedHostKey" }, { kind: "unknownHostKey", target: "web.lan" }, { kind: "sudoOption" }],
+  },
+})
+
+const PASS_MODES: Record<PreviewPass, Mode> = {
+  plan: "plan",
+  apply: "apply",
+  sudoPrompt: "apply",
 }
 
 // Fail `-n`, and with `-S` accept only `tsinfra`, printing what real sudo prints for one wrong try.
-// Answer the password `not-in-sudoers` the way sudo answers a user with no sudo rule.
 const FAKE_SUDO = [
   "#!/bin/sh",
   "if [ \"$1\" = -n ]; then echo 'sudo: a password is required' >&2; exit 1; fi",
   "read -r password",
   '[ "$password" = tsinfra ] && exit 0',
-  '[ "$password" = not-in-sudoers ] && { echo "$USER is not in the sudoers file." >&2; exit 1; }',
   String.raw`printf 'Sorry, try again.\n\nsudo: no password was provided\nsudo: 1 incorrect password attempt\n' >&2`,
   "exit 1",
 ].join("\n")
 
+/** Prints a host's block, if it has one at `verbosity`, and returns the block for the summary. */
+const printHostBlock = (hostRecord: HostRecord, verbosity: Verbosity): HostBlock => {
+  const hostBlock = toHostBlock(hostRecord)
+  const renderedHostBlock = renderHostBlock(hostBlock, { verbosity })
+  if (renderedHostBlock) console.log(`${renderedHostBlock}\n`)
+  return hostBlock
+}
+
 /**
  * Runs the scenarios of one pass at `verbosity`, and prints each block, the summary, and the exit code the CLI would
- * return.
+ * return. `apply` also prints the hints host, after the hosts that ran.
  */
 const previewPass = async (pass: PreviewPass, verbosity: Verbosity) => {
-  const { mode, fakeSudo } = PASS_RUNS[pass]
+  const mode = PASS_MODES[pass]
   const dir = await mkdtemp(path.join(os.tmpdir(), "tsinfra-preview-"))
   try {
-    const sudoNote = fakeSudo ? " (fake sudo, password 'tsinfra')" : ""
+    const sudoNote = pass === "sudoPrompt" ? " (fake sudo, password 'tsinfra')" : ""
     const verbosityFlag = verbosity > 0 ? ` -${"v".repeat(verbosity)}` : ""
     console.log(pc.cyan(pc.bold(`==== tsinfra ${mode}${verbosityFlag}${sudoNote} ====`)))
     console.log()
 
-    const hostBlocks: HostBlock[] = []
-    const scenarios = createScenarios(dir).filter(
-      ({ pass: scenarioPass = "apply", maxVerbosity }) =>
-        scenarioPass === pass && (maxVerbosity === undefined || verbosity <= maxVerbosity),
-    )
+    const scenarios = createScenarios(dir, verbosity).filter((scenario) => scenario.pass === pass)
     const loadedHosts = scenarios.map((scenario) =>
       Object.assign(scenario, { options: { sudo: scenario.sudo ?? false } }),
     )
     const hostEntries = await prepareHosts(loadedHosts)
+    const hostBlocks: HostBlock[] = []
     for (const hostEntry of hostEntries) {
       // oxlint-disable-next-line no-await-in-loop - hosts run one at a time, the same as the CLI
-      const hostRecord = await runHost(hostEntry, mode)
-      const hostBlock = toHostBlock(hostRecord)
-      hostBlocks.push(hostBlock)
-
-      const renderedHostBlock = renderHostBlock(hostBlock, { verbosity })
-      if (renderedHostBlock) console.log(`${renderedHostBlock}\n`)
+      hostBlocks.push(printHostBlock(await runHost(hostEntry, mode), verbosity))
     }
+    if (pass === "apply") hostBlocks.push(printHostBlock(createHintsRecord(), verbosity))
 
     console.log(renderSummary(hostBlocks, mode))
 
@@ -460,22 +367,22 @@ const previewPass = async (pass: PreviewPass, verbosity: Verbosity) => {
 
 const SUDO_PROMPT_FLAG = "--sudo-prompt"
 
-// Set this variable only in the child, so it tells the child that it runs the sudo passes, and where its fake `sudo` is.
+// Set this variable only in the child, so it tells the child that it runs the prompt pass, and where its fake `sudo` is.
 const FAKE_SUDO_PATH_VARIABLE = "TSINFRA_PREVIEW_FAKE_SUDO"
 
 /**
- * Runs the sudo passes in a child process, with a fake `sudo` first on `PATH` and a temp `HOME` for the askpass helper.
+ * Runs the prompt pass in a child process, with a fake `sudo` first on `PATH` and a temp `HOME` for the askpass helper.
  * Set them when the child starts, because a command gets the environment tsinfra started with. Returns the child's exit
  * code.
  */
-const previewSudoPasses = async (): Promise<number> => {
+const previewSudoPrompt = async (): Promise<number> => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "tsinfra-preview-sudo-"))
   try {
     const fakeSudoPath = path.join(dir, "bin", "sudo")
     await bun.write(fakeSudoPath, `${FAKE_SUDO}\n`)
     await chmod(fakeSudoPath, 0o755)
 
-    // Pass the child every argument, so it shows the same level, and prompts only when asked.
+    // Pass the child every argument, so it shows the same level.
     const child = spawn([process.execPath, import.meta.path, ...process.argv.slice(2)], {
       env: {
         ...process.env,
@@ -493,8 +400,8 @@ const previewSudoPasses = async (): Promise<number> => {
   }
 }
 
-/** Runs the sudo passes, in the child that `previewSudoPasses` starts. Stops before any case if the fake isn't found. */
-const runSudoPasses = async (verbosity: Verbosity): Promise<number> => {
+/** Runs the prompt pass, in the child that `previewSudoPrompt` starts. Stops before any host if the fake isn't found. */
+const runSudoPromptPass = async (verbosity: Verbosity): Promise<number> => {
   const foundSudo = await runLocal("command -v sudo")
   if (isErr(foundSudo) || foundSudo.stdout.trim() !== process.env[FAKE_SUDO_PATH_VARIABLE]) {
     printTsinfraError(
@@ -503,8 +410,7 @@ const runSudoPasses = async (verbosity: Verbosity): Promise<number> => {
     return 1
   }
 
-  await previewPass("sudo", verbosity)
-  if (process.argv.includes(SUDO_PROMPT_FLAG)) await previewPass("sudoPrompt", verbosity)
+  await previewPass("sudoPrompt", verbosity)
   return 0
 }
 
@@ -541,11 +447,11 @@ const main = async (): Promise<number> => {
     return 1
   }
 
-  if (process.env[FAKE_SUDO_PATH_VARIABLE] !== undefined) return runSudoPasses(verbosity)
+  if (process.env[FAKE_SUDO_PATH_VARIABLE] !== undefined) return runSudoPromptPass(verbosity)
 
   await previewPass("plan", verbosity)
   await previewPass("apply", verbosity)
-  const sudoExitCode = await previewSudoPasses()
+  const sudoExitCode = process.argv.includes(SUDO_PROMPT_FLAG) ? await previewSudoPrompt() : 0
   previewOwnErrors()
   return sudoExitCode
 }

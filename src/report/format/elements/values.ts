@@ -32,25 +32,25 @@ interface FormatSideValue {
 }
 
 /** Formats a value the host has now, like a `got` value or the old side of a change. */
-export const formatGotValue: FormatSideValue = (value: Value, describe?: (value: boolean | number) => string) =>
+export const gotValueElement: FormatSideValue = (value: Value, describe?: (value: boolean | number) => string) =>
   applyValueRules(value, styleCurrent, describe)
 
 /** Formats a value the script wants, like a `want` value or the new side of a change. */
-export const formatWantValue: FormatSideValue = (value: Value, describe?: (value: boolean | number) => string) =>
+export const wantValueElement: FormatSideValue = (value: Value, describe?: (value: boolean | number) => string) =>
   applyValueRules(value, styleWanted, describe)
 
 /** Formats a value that changes, like `alice -> bob`. */
-export const formatChange = (got: Value, want: Value): string => `${formatGotValue(got)} -> ${formatWantValue(want)}`
+export const changeElement = (got: Value, want: Value): string => `${gotValueElement(got)} -> ${wantValueElement(want)}`
 
 /** Formats an option's value as its lines, and a masked one as a muted marker, because it's tsinfra's, not the script's. */
-export const formatOptionValueLines = (value: string | boolean): string[] => {
+export const optionValueLineElements = (value: string | boolean): string[] => {
   if (typeof value === "boolean") return [applyValueRules(value, styleValue)]
   if (value === MASKED_VALUE) return [styleMuted(value)]
   return value.split("\n").map((line) => applyValueRules(line, styleValue))
 }
 
 /** Formats the value a warning is about, like the target in `nothing exists at target -> /x`. */
-export const formatWarningValue = (value: string): string => applyValueRules(value, styleValue)
+export const warningValueElement = (value: string): string => applyValueRules(value, styleValue)
 
 /** Formats the exit code a command printed with, like `exit: 0`. */
-export const formatExitCode = (exitCode: number): string => applyValueRules(exitCode, styleValue)
+export const exitCodeElement = (exitCode: number): string => applyValueRules(exitCode, styleValue)

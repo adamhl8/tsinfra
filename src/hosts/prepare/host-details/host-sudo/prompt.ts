@@ -18,17 +18,17 @@ const SKIPPED_SUDO_PASSWORD_PROMPT_MESSAGE = "skipped sudo password prompt"
 const SKIPPING_HOST = "skipping host"
 
 /** Formats the prompt's keyboard shortcuts, muted so the question after them stands out. */
-const formatKeyboardShortcuts = (text: string): string => styleMuted(text)
+const keyboardShortcutsElement = (text: string): string => styleMuted(text)
 
 /** Formats a name in the prompt, like the host's or the user's, in the value color, because it's the script's. */
-const formatPromptName = (name: string): string => styleValue(name)
+const promptNameElement = (name: string): string => styleValue(name)
 
 /** Formats a warning that the prompt moves on, in the warning color. */
-const formatPromptWarning = (warning: string): string => styleWarning(warning)
+const promptWarningElement = (warning: string): string => styleWarning(warning)
 
 /** Warns that preparation moves on to the next host, with a blank line before that host's prompt. */
 const warnSkippingHost = (warning: string) => {
-  process.stderr.write(`${formatPromptWarning(warning)}\n\n`)
+  process.stderr.write(`${promptWarningElement(warning)}\n\n`)
 }
 
 /**
@@ -40,8 +40,8 @@ export const promptForSudoPassword = async (shell: Shell, name: string, user: st
   // Say which host and user once, then ask with only `Password:` on each try, so the prompt reads like sudo's own.
   // Pass them as part of the first prompt, because the reader prints its prompt only once nothing typed is echoed.
   const promptHeader = [
-    formatKeyboardShortcuts("Ctrl-D to skip this host · Ctrl-C to cancel the entire run"),
-    `To run host '${formatPromptName(name)}', enter the sudo password for user '${formatPromptName(user)}'.`,
+    keyboardShortcutsElement("Ctrl-D to skip this host · Ctrl-C to cancel the entire run"),
+    `To run host '${promptNameElement(name)}', enter the sudo password for user '${promptNameElement(user)}'.`,
   ].join("\n")
 
   for (let tryNumber = 1; tryNumber <= SUDO_PASSWORD_TRIES; tryNumber++) {

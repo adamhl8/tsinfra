@@ -133,7 +133,7 @@ const failSecondCompare = async (h: Host) => {
 describe("renderHostBlock", () => {
   it("should mark a changed step with '~' and a ran step with '>' in plan", async () => {
     expect(await formatBlock(changeAndRun, "plan")).toBe(
-      "a\n  ~ change:    (ensure) Write the unit\n  > triggered: (run)    Reload systemd\n  > triggered: (run)    Prune",
+      "a\n  ~ change: (ensure) Write the unit\n  > triggered: (run) Reload systemd\n  > triggered: (run) Prune",
     )
   })
 
@@ -150,8 +150,8 @@ describe("renderHostBlock", () => {
       [
         "a",
         "  = unchanged: (ensure) Install Caddy",
-        "  · observed:  (read)   true",
-        "  = unchanged: (run)    Reload systemd",
+        "  · observed: (read) true",
+        "  = unchanged: (run) Reload systemd",
       ].join("\n"),
     )
   })
@@ -170,12 +170,12 @@ describe("renderHostBlock", () => {
     )
   })
 
-  it("should line up the notes of a block's waiting steps in one column", async () => {
+  it("should put each waiting step's note after its own name, not in a column", async () => {
     expect(await formatBlock(waitTwiceOnBrew, "plan")).toBe(
       [
         "a",
-        "  ~ change:  (ensure) Install brew packages",
-        "  ? waiting: (ensure) Install fish           needs 'Install brew packages'",
+        "  ~ change: (ensure) Install brew packages",
+        "  ? waiting: (ensure) Install fish   needs 'Install brew packages'",
         "  ? waiting: (ensure) Install fish plugins   needs 'Install brew packages'",
       ].join("\n"),
     )
@@ -185,23 +185,7 @@ describe("renderHostBlock", () => {
     expect(await formatBlock(waitOnBrew, "plan")).toBe(
       [
         "a",
-        "  ~ change:  (ensure) Install brew packages",
-        "  ? waiting: (ensure) Install fish plugins   needs 'Install brew packages'",
-      ].join("\n"),
-    )
-  })
-
-  it("should leave hidden steps out of the columns", async () => {
-    expect(
-      await formatBlock(async (h) => {
-        await h.inspect("true")
-        await h.ensure("Install every one of the fish plugins", { check: "true", want: true, fix: "true" })
-        await waitOnBrew(h)
-      }, "plan"),
-    ).toBe(
-      [
-        "a",
-        "  ~ change:  (ensure) Install brew packages",
+        "  ~ change: (ensure) Install brew packages",
         "  ? waiting: (ensure) Install fish plugins   needs 'Install brew packages'",
       ].join("\n"),
     )
@@ -229,7 +213,7 @@ describe("renderHostBlock", () => {
 
   it("should show a failure that isn't any step's after the steps", async () => {
     expect(await formatBlock(changeThenThrow, "plan")).toBe(
-      "a\n  ~ change: (ensure)  Pending\n  ! failed: (host fn) @local\n      boom\n        thrown in the host function, outside any step",
+      "a\n  ~ change: (ensure) Pending\n  ! failed: (host fn) @local\n      boom\n        thrown in the host function, outside any step",
     )
   })
 
@@ -442,7 +426,7 @@ describe("renderHostBlock for a step that would change a string", () => {
     }, "plan")
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
-      "      values took too long to compare, run with --verbose to see them",
+      "      values took too long to compare, run with -vv to see them",
     ])
   })
 })
@@ -1394,49 +1378,57 @@ describe("renderHostBlock for a step's commands", () => {
 })
 
 describe("renderHostBlock for a step's options", () => {
-  it("should show sudo on an options line under the step with -v", async () => {
+  it("should show sudo on an options line under the step with -vv", async () => {
     const { oldPath, newPath } = await createSudoPaths()
     const { hostSession } = await createFakeSudoSession("plan")
     await hostSession.host.file(oldPath, "a\n", { sudo: true })
     await hostSession.host.file(newPath, "a\n", { sudo: true })
     await hostSession.host.ensure("Install git", { check: "true", want: true, fix: "true" })
 
-    expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")).toStrictEqual([
       "a",
-      `  = unchanged: (file)   ${oldPath}`,
+      `  = unchanged: (file) ${oldPath}`,
       "      options: sudo",
-      `  ~ change:    (file)   ${newPath}`,
+      "      commands:",
+      "        $ <file details script>",
+      `  ~ change: (file) ${newPath}`,
       "      options: sudo",
       "      content: new file, 2 bytes",
+      "      commands:",
+      "        $ <file details script>",
       "  = unchanged: (ensure) Install git",
+      "      commands:",
+      "        $ true",
     ])
   })
 
-  it("should leave the options out by default", async () => {
+  it("should leave the options out below -vv", async () => {
     const { newPath } = await createSudoPaths()
     const { hostSession } = await createFakeSudoSession("plan")
     await hostSession.host.file(newPath, "a\n", { sudo: true })
 
-    expect(renderRecord(hostSession.hostRecord)?.split("\n")).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")).toStrictEqual([
       "a",
       `  ~ change: (file) ${newPath}`,
       "      content: new file, 2 bytes",
     ])
   })
 
-  it("should show a waiting step's options under it, and line up the notes", async () => {
+  it("should show a waiting step's options under it", async () => {
     const { newPath } = await createSudoPaths()
     const { hostSession } = await createFakeSudoSession("plan")
     const brew = await hostSession.host.ensure("Install brew packages", { check: "false", want: true, fix: "true" })
     await hostSession.host.file(newPath, "a\n", { needs: [brew], sudo: true })
     await hostSession.host.ensure("Install fish", { needs: [brew], check: "true", want: true, fix: "true" })
 
-    expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")).toStrictEqual([
       "a",
-      "  ~ change:  (ensure) Install brew packages",
-      `  ? waiting: (file)   ${newPath}   needs 'Install brew packages'`,
+      "  ~ change: (ensure) Install brew packages",
+      "      commands:",
+      "        $ false",
+      `  ? waiting: (file) ${newPath}   needs 'Install brew packages'`,
       "      options: sudo",
-      `  ? waiting: (ensure) ${"Install fish".padEnd(newPath.length)}   needs 'Install brew packages'`,
+      "  ? waiting: (ensure) Install fish   needs 'Install brew packages'",
     ])
   })
 
@@ -1448,7 +1440,7 @@ describe("renderHostBlock for a step's options", () => {
 
     try {
       await attempt(async () => hostSession.host.file(newPath, "a\n", { sudo: true }))
-      const lines = renderRecord(hostSession.hostRecord, 1)?.split("\n")
+      const lines = renderRecord(hostSession.hostRecord, 2)?.split("\n")
       expect([lines?.[1], lines?.[3]]).toStrictEqual([`  ! failed: (file) ${newPath}`, "        options: sudo"])
     } finally {
       await chmod(directory, 0o755)
@@ -1459,26 +1451,25 @@ describe("renderHostBlock for a step's options", () => {
     const hostSession = await createSession()
     await hostSession.host.read("true", { env: { URL: "u", PORT: "1" }, secretEnv: { TOKEN: "t" } })
 
-    expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")).toStrictEqual([
       "a",
       "  · observed: (read) true",
       "      options: env { URL, PORT }, secretEnv { TOKEN }",
     ])
   })
 
-  it("should show sudo's value in an options block with -vv, in place of the line", async () => {
+  it("should show sudo's value in an options block with -vvv, in place of the line", async () => {
     const { newPath } = await createSudoPaths()
     const { hostSession } = await createFakeSudoSession("plan")
     await hostSession.host.file(newPath, "a\n", { sudo: true })
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(0, 6)).toStrictEqual([
       "a",
       `  ~ change: (file) ${newPath}`,
       "      options:",
       "        sudo: true",
       "      content: new file, 2 bytes",
       "      commands:",
-      "        $ <file details script>",
     ])
   })
 
@@ -1505,7 +1496,7 @@ describe("renderHostBlock for a step's options", () => {
     const hostSession = await createSession()
     await hostSession.host.read("true", { env: { KEY: "first\nsecond" } })
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(2)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(2, 6)).toStrictEqual([
       "      options:",
       "        env:",
       "          KEY: first",
@@ -1517,7 +1508,7 @@ describe("renderHostBlock for a step's options", () => {
     const hostSession = await createSession()
     await hostSession.host.read("true", { env: { EMPTY: "", PADDED: " a", PLAIN: "a" } })
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(2)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(2, 7)).toStrictEqual([
       "      options:",
       "        env:",
       "          EMPTY:  (empty)",
@@ -1527,29 +1518,29 @@ describe("renderHostBlock for a step's options", () => {
   })
 
   // Skip this as root, because root can write to any directory, so the write wouldn't fail.
-  it.skipIf(isRoot)("should show a failed step's options block after its error with -vv", async () => {
+  it.skipIf(isRoot)("should show a failed step's options block after its error with -vvv", async () => {
     const { directory, newPath } = await createSudoPaths()
     await chmod(directory, 0o500)
     const { hostSession } = await createFakeSudoSession("apply")
 
     try {
       await attempt(async () => hostSession.host.file(newPath, "a\n", { sudo: true }))
-      const lines = renderRecord(hostSession.hostRecord, 2)?.split("\n")
+      const lines = renderRecord(hostSession.hostRecord, 3)?.split("\n")
       expect(lines?.slice(3, 5)).toStrictEqual(["        options:", "          sudo: true"])
     } finally {
       await chmod(directory, 0o755)
     }
   })
 
-  it("should name a step's own options with -v, and show their values with -vv, in plan too", async () => {
+  it("should name a step's own options with -vv, and show their values with -vvv, in plan too", async () => {
     const { newPath } = await createSudoPaths()
     const hostSession = await createSession("plan")
     await hostSession.host.file(newPath, "a\n", { validate: (tmp) => `test -s ${tmp}`, secret: true, overwrite: false })
 
-    expect(renderRecord(hostSession.hostRecord, 1)?.split("\n").slice(2, 3)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(2, 3)).toStrictEqual([
       "      options: validate, secret, overwrite",
     ])
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(2, 6)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(2, 6)).toStrictEqual([
       "      options:",
       `        validate:  test -s "$tmppath"`,
       "        secret:    true",
@@ -1562,7 +1553,7 @@ describe("renderHostBlock for a step's options", () => {
     const { hostSession } = await createFakeSudoSession("plan")
     await hostSession.host.file(newPath, "a\n", { sudo: true, overwrite: false })
 
-    expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")[2]).toBe("      options: sudo, overwrite")
+    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")[2]).toBe("      options: sudo, overwrite")
   })
 
   it("should show link's force and ensure's verify when they're set", async () => {
@@ -1572,19 +1563,19 @@ describe("renderHostBlock for a step's options", () => {
     await hostSession.host.link(linkPath, directory, { force: true })
     await hostSession.host.ensure("Reboot", { check: "true", want: true, fix: "true", verify: false })
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")).toStrictEqual([
-      "a",
-      `  ~ change:    (link)   ${linkPath}`,
-      "      options:",
-      "        force: true",
-      `      target: new link to ${directory}`,
-      "      commands:",
-      "        $ <link details script>",
-      "  = unchanged: (ensure) Reboot",
-      "      options:",
-      "        verify: false",
-      "      commands:",
-      "        $ true",
+    const lines = renderRecord(hostSession.hostRecord, 3)?.split("\n")
+    const linkLines = lines?.slice(1, 5)
+    const ensureStart = lines?.indexOf("  = unchanged: (ensure) Reboot")
+    const ensureLines = lines?.slice(ensureStart).slice(0, 3)
+
+    expect([linkLines, ensureLines]).toStrictEqual([
+      [
+        `  ~ change: (link) ${linkPath}`,
+        "      options:",
+        "        force: true",
+        `      target: new link to ${directory}`,
+      ],
+      ["  = unchanged: (ensure) Reboot", "      options:", "        verify: false"],
     ])
   })
 
@@ -1593,7 +1584,7 @@ describe("renderHostBlock for a step's options", () => {
     const hostSession = await createSession("apply")
     await attempt(async () => hostSession.host.file(newPath, "a\n", { validate: (tmp) => `false ${tmp}` }))
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(3, 5)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(3, 5)).toStrictEqual([
       "        options:",
       `          validate: false "$tmppath"`,
     ])
@@ -1605,11 +1596,6 @@ describe("renderHostBlock for a step's options", () => {
     await hostSession.host.read("true", { env: {}, secretEnv: {} })
     await hostSession.host.file(newPath, "a\n", { sudo: false })
 
-    expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")).toStrictEqual([
-      "a",
-      "  · observed: (read) true",
-      `  ~ change:   (file) ${newPath}`,
-      "      content: new file, 2 bytes",
-    ])
+    expect(renderRecord(hostSession.hostRecord, 3)).not.toContain("options")
   })
 })

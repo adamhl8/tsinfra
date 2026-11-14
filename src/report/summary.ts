@@ -1,5 +1,5 @@
 import type { Mode } from "#mode.ts"
-import { COLUMN_GAP, formatPlanReminder, formatStatusText, formatWarningCount } from "#report/format/format.ts"
+import { COLUMN_GAP, planReminderElement, statusTextElement, warningCountElement } from "#report/format/format.ts"
 import type { HostBlock, HostBlockEntry } from "#report/host-block/host-block.ts"
 import { getMaxWidth, padToWidth } from "#utils.ts"
 
@@ -19,7 +19,7 @@ export const hasDrift = (hostBlock: HostBlock): boolean =>
   getEntries(hostBlock).some(({ status }) => status === "changed")
 
 const formatHostStatus = (hostBlock: HostBlock): string => {
-  if (hasFailed(hostBlock)) return formatStatusText("failed", "failed")
+  if (hasFailed(hostBlock)) return statusTextElement("failed", "failed")
 
   const entries = getEntries(hostBlock)
   const statuses = entries.map(({ status }) => status)
@@ -32,10 +32,10 @@ const formatHostStatus = (hostBlock: HostBlock): string => {
 
   // Leave the comma between the counts unstyled.
   const counts: string[] = []
-  if (changeCount > 0) counts.push(formatStatusText("changed", countOf(changeCount, "change", "changes")))
-  if (waitingCount > 0) counts.push(formatStatusText("waiting", `${waitingCount} waiting`))
-  if (counts.length === 0) counts.push(formatStatusText("unchanged", "unchanged"))
-  if (warningCount > 0) counts.push(formatWarningCount(countOf(warningCount, "warning", "warnings")))
+  if (changeCount > 0) counts.push(statusTextElement("changed", countOf(changeCount, "change", "changes")))
+  if (waitingCount > 0) counts.push(statusTextElement("waiting", `${waitingCount} waiting`))
+  if (counts.length === 0) counts.push(statusTextElement("unchanged", "unchanged"))
+  if (warningCount > 0) counts.push(warningCountElement(countOf(warningCount, "warning", "warnings")))
   return counts.join(", ")
 }
 
@@ -47,5 +47,5 @@ export const renderSummary = (hostBlocks: HostBlock[], mode: Mode): string => {
   )
 
   const hasAnyDrift = mode === "plan" && hostBlocks.some((hostBlock) => hasDrift(hostBlock))
-  return [...(hasAnyDrift ? [formatPlanReminder(PLAN_REMINDER), ""] : []), ...hostLines].join("\n")
+  return [...(hasAnyDrift ? [planReminderElement(PLAN_REMINDER), ""] : []), ...hostLines].join("\n")
 }

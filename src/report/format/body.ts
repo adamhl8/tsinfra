@@ -2,7 +2,7 @@ import { messageChain } from "ts-explicit-errors"
 
 import type { DetailRows, DiffLimits } from "#report/format/details/details.ts"
 import { formatDetail } from "#report/format/details/details.ts"
-import { formatErrorLine } from "#report/format/elements/elements.ts"
+import { errorLineElement } from "#report/format/elements/elements.ts"
 import type { HostBlockEntry } from "#report/host-block/host-block.ts"
 import { splitNonEmptyLines } from "#utils.ts"
 
@@ -14,12 +14,12 @@ export interface Body {
 }
 
 /** Formats an entry's error lines in red, if it failed, and each of its details' rows. */
-export const formatBody = (hostBlockEntry: HostBlockEntry, diffLimits: DiffLimits | undefined): Body => {
+export const formatBody = (hostBlockEntry: HostBlockEntry, diffLimits: DiffLimits): Body => {
   const { details, error } = hostBlockEntry
   const detailRows = details.map((detail) => formatDetail(detail, diffLimits))
   if (!error) return { detailRows }
 
   // Leave out empty lines, like the one sudo prints after an empty prompt, because they only open a gap in the error.
-  const errorLines = splitNonEmptyLines(messageChain(error)).map((errorLine) => formatErrorLine(errorLine))
+  const errorLines = splitNonEmptyLines(messageChain(error)).map((errorLine) => errorLineElement(errorLine))
   return { errorLines, detailRows }
 }
