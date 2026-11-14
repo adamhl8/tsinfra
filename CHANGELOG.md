@@ -1,3 +1,23 @@
+## [0.2.0](https://github.com/adamhl8/tsinfra/compare/v0.1.0..v0.2.0) - 2026-11-14
+
+### 🚀 Features
+
+- allow ensure to compare objects ([4842116](https://github.com/adamhl8/tsinfra/commit/4842116b2db6d6fb1b5f5bd0d3247318a7ffa0f1) by @adamhl8)
+
+- allow want to take a string[] ([8aa5296](https://github.com/adamhl8/tsinfra/commit/8aa52960ad9b9b44e6458ae2a4816825a9da3cfc) by @adamhl8)
+
+- pass fix the diff ([936da90](https://github.com/adamhl8/tsinfra/commit/936da90f2cd9f7e9e8fd7f73db67eadb81595bd9) by @adamhl8)
+
+### 🚜 Refactor
+
+- want before check ([af1eb80](https://github.com/adamhl8/tsinfra/commit/af1eb80c508508b51ea9dfbde3e1ec2e05a0639a) by @adamhl8)
+
+- _(report)_ rename element functions ([75f1e34](https://github.com/adamhl8/tsinfra/commit/75f1e3414588bdeb1732971ab922dc9d800fd400) by @adamhl8)
+
+- _(report)_ let the formatter hold message text ([b7542e4](https://github.com/adamhl8/tsinfra/commit/b7542e49b3bfe0bec91cdee72b924f31d2f9084c) by @adamhl8)
+
+- _(report)_ separate element formatters ([42aa748](https://github.com/adamhl8/tsinfra/commit/42aa748c8fc37b83755f680aee4b83dc28ca84cd) by @adamhl8)
+
 ## [0.1.0](https://github.com/adamhl8/tsinfra/compare/v0.0.0..v0.1.0) - 2026-11-13
 
 ### 🚀 Features
