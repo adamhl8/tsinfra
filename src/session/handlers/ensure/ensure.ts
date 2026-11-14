@@ -5,17 +5,20 @@ import { isErr } from "ts-explicit-errors"
 import type { Check, Want } from "#session/handlers/ensure/check.ts"
 import { checkSchema, wantSchema } from "#session/handlers/ensure/check.ts"
 import { compareCheck } from "#session/handlers/ensure/comparison.ts"
+import type { Fix } from "#session/handlers/ensure/fix.ts"
+import { fixSchema, toFixDifference } from "#session/handlers/ensure/fix.ts"
 import { getHostCheckDetails } from "#session/handlers/ensure/host-check-details.ts"
-import type { ChangeStepResult, Change } from "#session/handlers/shared/shared.ts"
-import { withChangeStepResult, changeSchema, runChange, validateInput } from "#session/handlers/shared/shared.ts"
+import type { ChangeStepResult } from "#session/handlers/shared/shared.ts"
+import { withChangeStepResult, runChange, validateInput } from "#session/handlers/shared/shared.ts"
 import type { EnvOptions, HandlerOptions, NeedsOptions } from "#session/handlers/step-options/step-options.ts"
 import { NO_NEEDS, needsOptionsSchema } from "#session/handlers/step-options/step-options.ts"
 import type { HandlerReturn, StepContext } from "#session/step.ts"
 
 export type { Check, Want } from "#session/handlers/ensure/check.ts"
 export type { EnsureComparisonValues } from "#session/handlers/ensure/comparison.ts"
+export type { FixDifference } from "#session/handlers/ensure/fix.ts"
 
-/** `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string. */
+/** `T` ties a check function's return type, and a fix function's difference, to `want`. */
 export interface EnsureOptions<T extends Want> extends NeedsOptions, EnvOptions {
   /**
    * The answer `check` gives when already right. `true` means a command exits 0, and `false` means it exits non-zero. A
@@ -27,8 +30,11 @@ export interface EnsureOptions<T extends Want> extends NeedsOptions, EnvOptions 
    * change what the script manages.
    */
   check: Check<T>
-  /** A command, or a function that runs several commands by calling `exec`. It only runs in `apply`. */
-  fix: Change
+  /**
+   * A command, or a function that runs several commands by calling `exec`. A function also gets what the check answered
+   * for a string `want`, as `{ got }`. It only runs in `apply`.
+   */
+  fix: Fix<T>
   /**
    * Runs the check again after the fix, and fails the step when it still fails. Defaults to true. Set it to false only
    * for a fix whose effect nothing in the run can make visible, like one that needs a reboot.
@@ -40,7 +46,7 @@ export interface EnsureOptions<T extends Want> extends NeedsOptions, EnvOptions 
 // Set the defaults in a pipe, because ArkType only allows a default on a required key.
 const ensureOptionsSchema = type
   .declare<HandlerOptions<EnsureOptions<Want>>>()
-  .type(needsOptionsSchema.merge({ want: wantSchema, check: checkSchema, fix: changeSchema, "verify?": "boolean" }))
+  .type(needsOptionsSchema.merge({ want: wantSchema, check: checkSchema, fix: fixSchema, "verify?": "boolean" }))
   .pipe((options) => ({ verify: true, needs: NO_NEEDS, ...options }))
 
 export const handleEnsure = async (
@@ -59,7 +65,7 @@ export const handleEnsure = async (
     needs,
     getHostDetails: async () => getHostCheckDetails(shell, readTools, check),
     compare: (hostCheckDetails) => compareCheck(hostCheckDetails, want),
-    fix: async () => runChange(ctx, fix),
+    fix: async (_hostDetails, comparison) => runChange(ctx, fix, toFixDifference(comparison)),
     verify,
   })
 

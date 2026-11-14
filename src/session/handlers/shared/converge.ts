@@ -23,8 +23,11 @@ interface ConvergeSpec<HostDetails> {
   getHostDetails: () => Promise<Result<HostDetails>>
   /** Compares what `getHostDetails` read with what the step wants. A comparison that reads nothing more can be sync. */
   compare: (hostDetails: HostDetails) => Result<Comparison> | Promise<Result<Comparison>>
-  /** Gets what the `before` phase read, because a write keeps what it can of what it replaces. */
-  fix: (hostDetails: HostDetails) => Promise<Result>
+  /**
+   * Gets what the `before` phase read, because a write keeps what it can of what it replaces, and how it compared, so a
+   * fix can act on what differs.
+   */
+  fix: (hostDetails: HostDetails, comparison: Comparison) => Promise<Result>
   verify: boolean
 }
 
@@ -71,7 +74,7 @@ export const createConverge =
     if (mode === "plan") return "changed"
 
     startPhase("fix")
-    const fixResult = await fix(before.hostDetails)
+    const fixResult = await fix(before.hostDetails, before.comparison)
     if (isErr(fixResult)) return err("failed to run the fix", fixResult)
     if (!verify) return "changed"
 

@@ -1,4 +1,10 @@
-export type { Check, EnsureComparisonValues, EnsureOptions, Want } from "#session/handlers/ensure/ensure.ts"
+export type {
+  Check,
+  EnsureComparisonValues,
+  EnsureOptions,
+  FixDifference,
+  Want,
+} from "#session/handlers/ensure/ensure.ts"
 export { handleEnsure } from "#session/handlers/ensure/ensure.ts"
 export type {
   ContentComparison,

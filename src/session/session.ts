@@ -48,6 +48,7 @@ export type {
   ContentComparison,
   EnsureComparisonValues,
   EnsureOptions,
+  FixDifference,
   EnvOptions,
   Exec,
   FileAttributeOptions,

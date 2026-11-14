@@ -2,6 +2,7 @@ export type { HostDefinition, HostFunction, HostOptions } from "#hosts/hosts.ts"
 export { host } from "#hosts/hosts.ts"
 export type {
   EnsureOptions,
+  FixDifference,
   EnvOptions,
   FileMode,
   OctalMode,

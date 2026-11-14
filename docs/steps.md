@@ -635,7 +635,8 @@ type EnsureOptions<T extends string | boolean> = {
   // A string is compared to the command's stdout, or the function's value.
   want: T
   check: string | ((tools: ReadTools) => Promise<T>)
-  fix: string | ((tools: ChangeTools) => Promise<void>)
+  // A function also gets `{ got }`, what the check answered, for a string `want` (see `FixDifference`).
+  fix: string | ((tools: ChangeTools, difference: FixDifference<T>) => Promise<void>)
   verify?: boolean // default true
   env?: Record<string, string> // see EnvOptions
   secretEnv?: Record<string, string>
@@ -793,6 +794,32 @@ fix: async ({ exec }) => {
 ```
 
 The fix function only runs in `apply`, so it can change things and do work on the control machine.
+
+**What the check found.** For a string `want`, a fix function gets a second argument after its tools, `{ got }`, with
+what the check answered, the same value the report shows as `got:`. A fix can act on it without reading the host again:
+
+```ts
+await h.ensure("Update Caddy", {
+  want: latest,
+  check: async ({ read }) => (await read("caddy version")).split(" ")[0] ?? "",
+  fix: async ({ exec }, { got }) => {
+    await exec(`caddy-migrate --from ${got} --to ${latest}`)
+  },
+})
+```
+
+- **It holds only what the fix can't work out from `want`.** `want` is already in the script, so a string comparison,
+  which is plain equality, adds only `got`.
+- **A boolean `want` gives nothing more,** because `got` is just `!want`. A fix function that declares a second argument
+  for one is a type error. A `want` typed as `string | boolean` gives `{ got } | undefined`.
+- **It's a second argument, not part of the tools,** because the tools are what a fix can call, and this is data about
+  one comparison.
+- **Only a fix function gets it.** A command fix stays the form for simple cases, and a run's function gets only its
+  tools.
+- **It's fresh.** In `apply`, the comparison runs right before the fix, so `got` describes the host the fix changes.
+  The check after the fix still catches a fix that acts on it and misses something.
+- **The comparison computes it, and the report and the fix both read it,** so `plan` shows exactly what the fix gets.
+  The type is `FixDifference<T>`, exported for helpers that build a fix.
 
 **One step or several.** A fix re-runs every command whenever its check fails. If one command's effect can be in place
 while the check still fails, that effect is state of its own, and it gets its own step. In the apt example, an updated

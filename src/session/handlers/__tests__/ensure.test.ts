@@ -504,3 +504,53 @@ describe("h.ensure with invalid input", () => {
     )
   })
 })
+
+describe("h.ensure with a fix function's difference", () => {
+  it("should give the fix what a command check answered, as got", async () => {
+    const marker = path.join(await makeTempDir(), "mode")
+    const { host: h } = await createSession()
+    const gots: string[] = []
+    const result = await ensureOrMessage(h, {
+      want: "production",
+      check: `cat '${marker}' 2>/dev/null || echo staging`,
+      fix: async ({ exec }, { got }) => {
+        gots.push(got)
+        await exec(`echo production > '${marker}'`)
+      },
+    })
+
+    expect([result, gots]).toStrictEqual([{ name: "Make marker", kind: "ensure", changed: true }, ["staging"]])
+  })
+
+  it("should give the fix what a function check returned, as got", async () => {
+    const marker = path.join(await makeTempDir(), "version")
+    const { host: h } = await createSession()
+    const gots: string[] = []
+    await ensureOrMessage(h, {
+      want: "2.0",
+      check: async ({ read }) => read(`cat '${marker}' 2>/dev/null || echo 1.0`),
+      fix: async ({ exec }, { got }) => {
+        gots.push(got)
+        await exec(`echo 2.0 > '${marker}'`)
+      },
+    })
+
+    expect(gots).toStrictEqual(["1.0"])
+  })
+
+  it("should give a boolean want's fix no difference", async () => {
+    const { marker, options } = await createMarkerStep()
+    const { host: h } = await createSession()
+    const differences: unknown[] = []
+    await ensureOrMessage(h, {
+      ...options,
+      // @ts-expect-error - a boolean want gives a fix no difference, so a second argument is a type error
+      fix: async ({ exec }: ChangeTools, difference: unknown) => {
+        differences.push(difference)
+        await exec(`touch '${marker}'`)
+      },
+    })
+
+    expect(differences).toStrictEqual([undefined])
+  })
+})

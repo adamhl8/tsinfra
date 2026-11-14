@@ -6,7 +6,6 @@ describe tsinfra as it is.
 <!-- toc -->
 
 - [Next](#next)
-  - [Passing the difference to the fix](#passing-the-difference-to-the-fix)
   - [Lists in `ensure`](#lists-in-ensure)
   - [Records in `ensure`](#records-in-ensure)
 - [Planned](#planned)
@@ -42,52 +41,11 @@ describe tsinfra as it is.
 
 In the order they'll be built.
 
-### Passing the difference to the fix
-
-A fix function gets a second argument, after its tools, with what the comparison found that the fix can't work out
-from `want`. Without it, a fix has to repeat the comparison, like reading the installed packages again to find the
-extras, or the script reads them before the step and passes them through `env`.
-
-```ts
-fix: async ({ exec }, { missing, extra }) => {
-  if (missing.length > 0) await exec(`bun add -g ${missing.map(shellQuote).join(" ")}`)
-  if (extra.length > 0) await exec(`bun remove -g ${extra.map(shellQuote).join(" ")}`)
-}
-```
-
-| `want`                   | The fix's second argument      |
-| ------------------------ | ------------------------------ |
-| `boolean`                | none, because `got` is `!want` |
-| `string`                 | `{ got }`                      |
-| `string[]`               | `{ missing, extra }`           |
-| `Record<string, string>` | `{ missing, extra, changed }`  |
-
-- **It holds only what the fix can't work out from `want`.** A string comparison is equality, with no parts, so
-  `got` is the one new thing. A list's or a record's `got` can be rebuilt from `want` and its parts, so it isn't
-  passed, which keeps a fix from redoing the comparison.
-- **A record's parts each carry the values they can.** `missing` maps a key to its wanted value, because the host
-  doesn't have it. `extra` maps a key to its current value, because `want` doesn't have it. `changed` maps a key to
-  `{ got, want }`, because the pairing is the difference.
-- **Its type follows `want`,** like a check function's return type.
-- **A second argument, not a field of the tools object,** because the tools are what a fix can call, and this is data
-  about one comparison. Every fix gets tools, and only some get this.
-- **Only a fix function gets it.** A command fix stays the form for simple cases.
-- **It's fresh.** In `apply`, the comparison runs right before the fix, so it describes the host the fix changes. The
-  check after the fix still catches a fix that acts on it and misses something.
-- **The comparison computes the result, and the report only displays it.** The result is what decides "in sync" and
-  what the fix gets: equality for a string, `missing` and `extra` for a list, and all three parts for a record. The
-  comparison stores it, and the report and the fix both read it, so `plan` shows exactly what the fix gets. The report
-  may still compute what's only for display, like a multi-line string's line diff or a file's diff, because those
-  don't change whether a step is in sync and the fix never sees them.
-- **Build the plumbing first,** with the string's `{ got }` as its first use, so lists and records each add their
-  fields to it.
-
 ### Lists in `ensure`
 
 A list of things, like packages, is a set. Squeezing it into a multi-line string makes the script sort both sides, and
-makes the report show it as text. `want: string[]` makes it a value of its own, built after
-[Passing the difference to the fix](#passing-the-difference-to-the-fix), and its items render as
-other values do (see [CLI](./cli.md#how-the-report-is-built)).
+makes the report show it as text. `want: string[]` makes it a value of its own, and its items render as other values
+do (see [CLI](./cli.md#how-the-report-is-built)).
 
 - **`want` decides how a check is read.** A command check's answer is read in `want`'s shape, and a check function must
   return `want`'s type:
@@ -122,8 +80,9 @@ other values do (see [CLI](./cli.md#how-the-report-is-built)).
                ripgrep
   ```
 
-- **The comparison computes `missing` and `extra`,** which the report shows and the fix gets (see
-  [Passing the difference to the fix](#passing-the-difference-to-the-fix)).
+- **The comparison computes `missing` and `extra`,** which the report shows. A fix function gets them as its
+  `FixDifference`, `{ missing, extra }`, both `string[]`, and no `got`, because `got` is `want` minus `missing`, plus
+  `extra`, so passing it would only invite redoing the comparison (see [Steps](./steps.md#fix)).
 - **`want: []` is "nothing left to do",** in place of `want: ""` for a check that lists what's left.
 - **A list where order matters, like `PATH` entries, stays a string.**
 - **Update the docs once it's built:** the type table and rows in [Steps](./steps.md#ensure), [CLI](./cli.md), and the
@@ -137,8 +96,11 @@ It comes after [Lists in `ensure`](#lists-in-ensure).
 
 - **Only a check function can return one,** because a command's stdout has no natural key and value format.
   `Check<T>` drops the command form when `T` is a record, so `check: "..."` is a type error at the call site.
-- **The comparison computes `missing`, `extra`, and `changed`,** which the report shows and the fix gets (see
-  [Passing the difference to the fix](#passing-the-difference-to-the-fix)).
+- **The comparison computes `missing`, `extra`, and `changed`,** which the report shows. A fix function gets them as
+  its `FixDifference`, `{ missing, extra, changed }`, and no `got`, because it can be rebuilt from `want` and the
+  parts. Each part carries the values it can: `missing` maps a key to its wanted value, because the host doesn't have
+  it, `extra` maps a key to its current value, because `want` doesn't have it, and `changed` maps a key to
+  `{ got, want }`, because the pairing is the difference.
 - **The report shows one row per key that differs,** current value to wanted, like the `file` attribute rows:
 
   ```
