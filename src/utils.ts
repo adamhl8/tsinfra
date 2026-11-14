@@ -22,11 +22,20 @@ export const stripOneTrailingNewline = (text: string): string => text.replace(TR
 /** Adds a newline to the end of `text`, unless it already ends with one. */
 export const endWithNewline = (text: string): string => (text.endsWith("\n") ? text : `${text}\n`)
 
+/** Splits `text` into its lines. An empty string has none, so it can't count as one empty line. */
+export const splitLines = (text: string): string[] => (text === "" ? [] : text.split("\n"))
+
 /** Splits `text` into its lines, leaving out the ones that are empty or only whitespace. */
 export const splitNonEmptyLines = (text: string): string[] => text.split("\n").filter((line) => line.trim() !== "")
 
 /** Splits `text` into its words, ignoring leading and trailing whitespace. */
 export const splitWords = (text: string): string[] => text.trim().split(WHITESPACE)
+
+/** Returns `count` with its noun, like `1 change` or `2 changes`. */
+export const countOf = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`
+
+/** Names the type of `value`, saying "array" for an array, because `typeof` says "object". */
+export const describeType = (value: unknown): string => (Array.isArray(value) ? "array" : typeof value)
 
 /** Wraps each name in single quotes and joins them into a list, like `'a', 'b'`. */
 export const quoteNames = (names: Iterable<string>): string => Array.from(names, (name) => `'${name}'`).join(", ")

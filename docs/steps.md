@@ -630,12 +630,14 @@ manages first.
 
 ```ts
 // `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string.
-type EnsureOptions<T extends string | boolean> = {
+type EnsureOptions<T extends boolean | string | readonly string[]> = {
   // `true` means exit 0, or a function returning true, is already right. `false` means the opposite.
   // A string is compared to the command's stdout, or the function's value.
+  // A list is compared to the command's lines, or the function's array, as a set.
   want: T
   check: string | ((tools: ReadTools) => Promise<T>)
-  // A function also gets `{ got }`, what the check answered, for a string `want` (see `FixDifference`).
+  // A function also gets what the check found: `{ got }` for a string `want`, and `{ missing, extra }` for a list.
+  // See `FixDifference`.
   fix: string | ((tools: ChangeTools, difference: FixDifference<T>) => Promise<void>)
   verify?: boolean // default true
   env?: Record<string, string> // see EnvOptions
@@ -664,8 +666,8 @@ await h.ensure("Remove the old user", { want: false, check: "id olduser", fix: "
 Trailing newlines are stripped from both (the way `$(cmd)` does), then the two are compared exactly. Stripping `want`
 too means a value built from a template literal that ends in a newline still matches. When they differ, the report shows
 how under the step's status line, in `plan` and `apply`, as a `got:` and a `want:` row. For a multi-line value, the rows
-hold only the lines that differ (see [CLI](./cli.md#how-the-report-is-built)). For a list of things, like packages, see
-[The state you want, or what's left to do](./recipes.md#the-state-you-want-or-whats-left-to-do).
+hold only the lines that differ (see [CLI](./cli.md#how-the-report-is-built)). For a list of things, like packages, use
+a list `want`.
 
 ```ts
 await h.ensure("Start Sonarr", {
@@ -675,10 +677,42 @@ await h.ensure("Start Sonarr", {
 })
 ```
 
+**A list `want`** is compared as a set, so order and duplicates don't count, and neither side needs sorting. A command
+check's stdout is split into lines, and its blank lines, empty or only whitespace, are left out. Every other line is an
+item as it is, so a trailing space counts. A check function returns an array. `want: []` means nothing is left to do,
+for a check that lists what's left, like outdated packages. A readonly array works, like a constant or `as const`. A
+list where order matters, like `PATH` entries, stays a string.
+
+```ts
+await h.ensure("Install packages", {
+  want: ["fd", "jq", "ripgrep"],
+  check: "dpkg-query -W -f='${Package}\\n' fd jq ripgrep 2>/dev/null",
+  fix: async ({ exec }, { missing }) => {
+    await exec(`sudo apt-get install -y ${missing.join(" ")}`)
+  },
+})
+
+await h.ensure("Upgrade brew packages", { want: [], check: "brew outdated --quiet", fix: "brew upgrade" })
+```
+
+The report shows a `missing:` row with what `want` has that the check didn't find, in `want`'s order, then an `extra:`
+row with what the check found that `want` doesn't have, in the check's order. A side with nothing has no row. They're
+named for how the host compares with `want`, not for what the fix does, because tsinfra doesn't know that. A list of
+what's left shows under `extra:`, because you want none of it.
+
+```
+  ~ change: (ensure) Install packages
+      missing: ripgrep
+  ~ change: (ensure) Upgrade brew packages
+      extra: node
+             python
+```
+
 A command check is shorthand for calling `inspect` in a check function, so a non-zero exit is an answer, not a failure.
 `read` is the one that fails on a non-zero exit.
 
-A broken check must not look converged. If the command exits non-zero and its output still equals `want`, the step fails
+A broken check must not look converged. If the command exits non-zero and its output still matches `want`, as a string or
+as a list, the step fails
 instead of reporting `unchanged`. A check whose non-zero exit is legitimate (`systemctl is-active` exits 3 for inactive)
 already produces output that differs from `want`, so this only catches the broken case.
 
@@ -795,8 +829,9 @@ fix: async ({ exec }) => {
 
 The fix function only runs in `apply`, so it can change things and do work on the control machine.
 
-**What the check found.** For a string `want`, a fix function gets a second argument after its tools, `{ got }`, with
-what the check answered, the same value the report shows as `got:`. A fix can act on it without reading the host again:
+**What the check found.** A fix function gets a second argument after its tools, with what the check found: `{ got }` for
+a string `want`, what the check answered, and `{ missing, extra }` for a list, the same items the report shows. A fix
+can act on it without reading the host again:
 
 ```ts
 await h.ensure("Update Caddy", {
@@ -809,9 +844,10 @@ await h.ensure("Update Caddy", {
 ```
 
 - **It holds only what the fix can't work out from `want`.** `want` is already in the script, so a string comparison,
-  which is plain equality, adds only `got`.
+  which is plain equality, adds only `got`. A list's `got` isn't passed, because it's `want` minus `missing`, plus
+  `extra`, and passing it would only invite redoing the comparison.
 - **A boolean `want` gives nothing more,** because `got` is just `!want`. A fix function that declares a second argument
-  for one is a type error. A `want` typed as `string | boolean` gives `{ got } | undefined`.
+  for one is a type error. A `want` typed as the full `Want` union gets the union of the three.
 - **It's a second argument, not part of the tools,** because the tools are what a fix can call, and this is data about
   one comparison.
 - **Only a fix function gets it.** A command fix stays the form for simple cases, and a run's function gets only its

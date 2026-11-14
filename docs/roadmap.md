@@ -6,7 +6,6 @@ describe tsinfra as it is.
 <!-- toc -->
 
 - [Next](#next)
-  - [Lists in `ensure`](#lists-in-ensure)
   - [Records in `ensure`](#records-in-ensure)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
@@ -41,58 +40,9 @@ describe tsinfra as it is.
 
 In the order they'll be built.
 
-### Lists in `ensure`
-
-A list of things, like packages, is a set. Squeezing it into a multi-line string makes the script sort both sides, and
-makes the report show it as text. `want: string[]` makes it a value of its own, and its items render as other values
-do (see [CLI](./cli.md#how-the-report-is-built)).
-
-- **`want` decides how a check is read.** A command check's answer is read in `want`'s shape, and a check function must
-  return `want`'s type:
-
-  | `want`                   | A command check compares     | A check function returns |
-  | ------------------------ | ---------------------------- | ------------------------ |
-  | `boolean`                | its exit status              | `boolean`                |
-  | `string`                 | its stdout                   | `string`                 |
-  | `string[]`               | its stdout's lines, as a set | `string[]`               |
-  | `Record<string, string>` | not allowed                  | `Record<string, string>` |
-
-  The first two rows are how it works today. `T` ties the types as it does now, and a runtime error covers a script
-  that gets past them.
-
-- **A command check's stdout splits on `\n`, and blank lines are dropped,** both empty and whitespace-only. Each other
-  line is an item as it is.
-- **Compared as a set.** Order and duplicates don't count, so neither side needs sorting.
-- **The broken-check rule still applies.** A command that exits non-zero with a set that matches `want` fails the step.
-- **The report shows `missing:` and `extra:` rows,** in that order. `missing` is in `want` but not in what the check
-  found. `extra` is what the check found that `want` doesn't have. Added and removed would describe what the fix does,
-  which tsinfra doesn't know, and would misread a list of what's left to do as things the fix removes:
-
-  ```
-    ~ change: (ensure) Sync bun global packages
-        missing: turbo@2.5.4
-                 zx@8.8.1
-        extra:   turbo@2.5.0
-                 typescript@5.9.2
-
-    ~ change: (ensure) Upgrade brew packages
-        extra: fd
-               ripgrep
-  ```
-
-- **The comparison computes `missing` and `extra`,** which the report shows. A fix function gets them as its
-  `FixDifference`, `{ missing, extra }`, both `string[]`, and no `got`, because `got` is `want` minus `missing`, plus
-  `extra`, so passing it would only invite redoing the comparison (see [Steps](./steps.md#fix)).
-- **`want: []` is "nothing left to do",** in place of `want: ""` for a check that lists what's left.
-- **A list where order matters, like `PATH` entries, stays a string.**
-- **Update the docs once it's built:** the type table and rows in [Steps](./steps.md#ensure), [CLI](./cli.md), and the
-  README, and [the recipe](./recipes.md#the-state-you-want-or-whats-left-to-do), which becomes about a full list or
-  `[]`.
-
 ### Records in `ensure`
 
 `want: Record<string, string>` compares values by key, like a package name to its version, or a config's settings.
-It comes after [Lists in `ensure`](#lists-in-ensure).
 
 - **Only a check function can return one,** because a command's stdout has no natural key and value format.
   `Check<T>` drops the command form when `T` is a record, so `check: "..."` is a type error at the call site.
@@ -215,7 +165,7 @@ updating it use the same steps, but an update shouldn't happen every time the co
 ```ts
 const update = task("update", async (h) => {
   await h.ensure("Upgrade packages", {
-    want: "",
+    want: [],
     check: "sudo apt-get update && apt list --upgradable | tail -n +2",
     fix: "sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y",
   })
@@ -231,7 +181,7 @@ tsinfra plan --task update         # every host that has an update task, and no 
 ```
 
 - **A task is an ordinary host function,** with the same `h`, steps, `plan`, `apply`, session, and sudo prompt. With
-  an empty `want`, `plan --task update` lists what would upgrade on every host.
+  `want: []`, `plan --task update` lists what would upgrade on every host.
 - **`task(name, fn)` mirrors `host(target, fn)`,** and `host()` registers its tasks explicitly with `tasks`, so a task
   only belongs to the hosts that list it. A task exported from a shared module doesn't register itself anywhere.
 - **Define a task above the `host()` call,** because `host()` reads `tasks` straight away, and a `const` can't be read
@@ -537,7 +487,7 @@ Shipped as subpath exports once two hosts use one the same way (see
 - **`tsinfra/macos`:** each `defaults` key as an `ensure`, with `defaults read` as the check and `defaults write` as the
   fix, and a run that restarts Dock or Finder after. `defaults read` prints booleans as `1` and `0`. Like nix-darwin, a
   removed key stays as it was.
-- **`tsinfra/docker`:** container helpers, starting with the empty-`want` `ensure` that keeps running containers on the
+- **`tsinfra/docker`:** container helpers, starting with the `want: []` `ensure` that keeps running containers on the
   newest images (see [Recipes](./recipes.md#running-the-latest-container-images)), if the Docker container ports repeat
   it.
 - **A run-once marker,** like chezmoi's `run_once_`: write a hash of the command to
@@ -648,7 +598,7 @@ Recorded so the survey doesn't need redoing:
 
 - **A run that reports nothing changed,** like Ansible's `changed_when` and Salt's `stateful` scripts, as a run function
   returning `{ changed: false }`. Its case, pulling images and recreating containers only when one is new, is an
-  `ensure` on "the running containers are on the newest images", with a read-only check and an empty `want` (see
+  `ensure` on "the running containers are on the newest images", with a read-only check and `want: []` (see
   [Recipes](./recipes.md#running-the-latest-container-images)). The run version only made sense because it let the pull
   sit where a read-only check belongs, and its `plan` showed a change every time.
 

@@ -232,6 +232,89 @@ describe("h.ensure with a string want", () => {
   })
 })
 
+describe("h.ensure with a list want", () => {
+  it("should compare a command's lines as a set, so order and duplicates don't count", async () => {
+    const { host: h } = await createSession()
+
+    expect(
+      await ensureOrMessage(h, { want: ["a", "b"], check: String.raw`printf 'b\na\na\n'`, fix: "exit 1" }),
+    ).toMatchObject({ changed: false })
+  })
+
+  it("should leave out a command's empty and whitespace-only lines", async () => {
+    const { host: h } = await createSession()
+
+    expect(
+      await ensureOrMessage(h, { want: ["a", "b"], check: String.raw`printf 'a\n\n  \nb\n'`, fix: "exit 1" }),
+    ).toMatchObject({ changed: false })
+  })
+
+  it("should keep a line's other whitespace, so it differs from the item without it", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(await ensureOrMessage(h, { want: ["a"], check: String.raw`printf 'a \n'`, fix: "true" })).toMatchObject({
+      changed: true,
+    })
+  })
+
+  it("should be in sync with an empty want when the check prints nothing", async () => {
+    const { host: h } = await createSession()
+
+    expect(await ensureOrMessage(h, { want: [], check: "true", fix: "exit 1" })).toMatchObject({ changed: false })
+  })
+
+  it("should give the fix what's missing and extra, and return changed once they're gone", async () => {
+    const marker = path.join(await makeTempDir(), "packages")
+    const { host: h } = await createSession()
+    const differences: unknown[] = []
+    const result = await ensureOrMessage(h, {
+      want: ["a", "b"],
+      check: String.raw`cat '${marker}' 2>/dev/null || printf 'a\nc\n'`,
+      fix: async ({ exec }, difference) => {
+        differences.push(difference)
+        await exec(String.raw`printf 'a\nb\n' > '${marker}'`)
+      },
+    })
+
+    expect([result, differences]).toStrictEqual([
+      { name: "Make marker", kind: "ensure", changed: true },
+      [{ missing: ["b"], extra: ["c"] }],
+    ])
+  })
+
+  it("should fail a check that exits non-zero but matches want", async () => {
+    const { host: h } = await createSession()
+
+    expect(await ensureOrMessage(h, { want: ["a"], check: "echo a; echo broken >&2; exit 1", fix: "true" })).toBe(
+      "failed to compare the host with what the step wants -> exited with code 1: broken",
+    )
+  })
+
+  it("should compare the list a function check returns", async () => {
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, {
+      want: ["b", "a"],
+      check: async ({ read }) => (await read(String.raw`printf 'a\nb\n'`)).split("\n"),
+      fix: "exit 1",
+    })
+
+    expect(result).toMatchObject({ changed: false })
+  })
+
+  it("should fail validation when a function check returns a string for a list want", async () => {
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, {
+      want: toLooseWant(["a"]),
+      check: async ({ read }) => read("echo a"),
+      fix: "true",
+    })
+
+    expect(result).toBe(
+      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> it's of type string, but want is of type array",
+    )
+  })
+})
+
 describe("h.ensure with verify: false", () => {
   it("should return changed without checking again after the fix", async () => {
     const { host: h } = await createSession()
@@ -436,9 +519,14 @@ describe("h.ensure with a fix function", () => {
 describe("h.ensure with invalid input", () => {
   it.each([
     {
-      description: "whose want is neither a string nor a boolean",
+      description: "whose want is neither a boolean, a string, nor an array of strings",
       options: { want: 1, check: "true", fix: "true" },
-      message: "want must be a string or boolean (was a number)",
+      message: "want must be a boolean, a string, or an array of strings (was a number)",
+    },
+    {
+      description: "whose want is a list with an item that isn't a string",
+      options: { want: ["a", 1], check: "true", fix: "true" },
+      message: "want[1] must be a string (was a number)",
     },
     {
       description: "whose fix is an empty command",

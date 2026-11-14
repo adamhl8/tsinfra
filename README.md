@@ -227,9 +227,11 @@ it worked. `plan` only runs `check`.
   - `true`: `check` exits 0 (or the function returns `true`)
   - `false`: `check` exits non-zero (or the function returns `false`)
   - A string: compared with `check`'s stdout (or the function's return value). Trailing newlines are ignored.
+  - A list of strings: compared with `check`'s lines, blank ones left out (or the function's array), as a set, so order
+    and duplicates don't count. `[]` means nothing is left to do.
 - `check`: a command, or an async function given `{ read, inspect }` that returns the answer
-- `fix`: a command, or an async function given `{ exec, inspect }`. For a string `want`, the function also gets
-  `{ got }`, what `check` answered. It only runs in `apply`.
+- `fix`: a command, or an async function given `{ exec, inspect }`. The function also gets what `check` found:
+  `{ got }` for a string `want`, and `{ missing, extra }` for a list. It only runs in `apply`.
 - `verify` (default: `true`): run `check` again after `fix`, and fail if the state still differs
 - `env`, `secretEnv`: see [Values and secrets](#values-and-secrets)
 - `needs`: see [Needs](#needs)

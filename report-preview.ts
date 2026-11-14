@@ -126,6 +126,7 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
     {
       // Every element on steps that succeed. `ensure` strings: `got:` and `want:` rows, multi-line rows with a lone side,
       // `(empty)` for a value and a line, a quoted trailing space, and the notes for too many lines and a slow compare.
+      // `ensure` lists: `missing:` and `extra:` rows, and `want: []` with only `extra:`.
       // `file`: a diff with two hunks, `mode:` and a numeric `group:`, the note for a long diff and a slow one, and each
       // content description. `link`: a changed target, both replacements, and a missing target with its warning, on a
       // step that changes and one that was already right. A triggered multi-line run and one that didn't trigger.
@@ -154,6 +155,19 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
           linesStep("outdated", String.raw`printf 'fd\n\nripgrep \n'`, ""),
         )
         await h.ensure("Install packages", linesStep("installed", String.raw`printf 'fd\njq\n'`, "fd\njq\nripgrep"))
+        await h.ensure("Sync the package list", {
+          want: ["fd", "jq", "ripgrep"],
+          check: String.raw`cat '${marker("package-list")}' 2>/dev/null || printf 'zsh\nfd\nbat\n'`,
+          fix: async ({ exec }, { missing, extra }) => {
+            await exec(`echo 'installing ${missing.join(" ")}, removing ${extra.join(" ")}'`)
+            await exec(String.raw`printf 'fd\njq\nripgrep\n' > '${marker("package-list")}'`)
+          },
+        })
+        await h.ensure("Upgrade brew packages", {
+          want: [],
+          check: `cat '${marker("outdated-list")}' 2>/dev/null || printf 'node\\npython\\n'`,
+          fix: `: > '${marker("outdated-list")}'`,
+        })
         await h.ensure(
           "Write the hosts list",
           linesStep("hosts", printNumberedLines("old", 8), numberedLines("new", 8)),

@@ -7,6 +7,7 @@ import type { DiffLimits } from "#report/format/details/diff.ts"
 import { FULL_DIFF_TIMEOUT_MS, LINE_LIMIT_FLAG, TIME_LIMIT_FLAG } from "#report/format/details/diff.ts"
 import { gotValueElement, noteElement, wantValueElement } from "#report/format/elements/elements.ts"
 import type { EnsureComparisonValues } from "#session/session.ts"
+import { splitLines } from "#utils.ts"
 
 /**
  * Formats the note in place of values that took too long to compare, naming the flag that shows them only when one
@@ -19,22 +20,24 @@ const formatSlowCompareNote = (hasTimeLimit: boolean): string =>
 const formatManyLinesNote = (lineCount: number): string =>
   noteElement(`${lineCount} lines differ, run with ${LINE_LIMIT_FLAG} to see them`)
 
-type NonStringValues = Exclude<EnsureComparisonValues, { kind: "string" }>
+/** Formats the note in place of `itemCount` differing items of a list, which are too many to show. */
+const formatManyItemsNote = (itemCount: number): string =>
+  noteElement(`${itemCount} items differ, run with ${LINE_LIMIT_FLAG} to see them`)
+
+type BooleanWantValues = Extract<EnsureComparisonValues, { kind: "exit" | "boolean" }>
+type ListValues = Extract<EnsureComparisonValues, { kind: "list" }>
 
 // Describe an exit code in words, because a bare `1` would be hard to read.
 const describeExitCode = (exitCode: number) => `exit code ${exitCode}`
 const describeWantedExit = (wantsZero: boolean) => (wantsZero ? "exit code 0" : "a non-zero exit code")
 
-/** Formats the `got` and `want` rows of a comparison whose values aren't strings. */
-const formatNonStringRows = (values: NonStringValues): AlignedRow[] => {
+/** Formats the `got` and `want` rows of a boolean `want`: a command's exit code, or a check function's boolean. */
+const formatBooleanWantRows = (values: BooleanWantValues): AlignedRow[] => {
   const got = values.kind === "exit" ? gotValueElement(values.got, describeExitCode) : gotValueElement(values.got)
   const want =
     values.kind === "exit" ? wantValueElement(values.want, describeWantedExit) : wantValueElement(values.want)
   return [formatAlignedRow("got", [got]), formatAlignedRow("want", [want])]
 }
-
-/** Splits a compared string into its lines. An empty string has none, so it can't count as one empty line. */
-const splitLines = (text: string): string[] => (text === "" ? [] : text.split("\n"))
 
 /**
  * Returns a side's row: a marker for an empty value, its differing lines, or nothing when every line it has is also in
@@ -80,9 +83,43 @@ const formatStringValues = (got: string, want: string, diffLimits: DiffLimits): 
   return { kind: "aligned", rows }
 }
 
-/** Formats what an `ensure` compared as its `got` and `want` rows, or a note when a string's lines can't show. */
-export const formatEnsureValues = (values: EnsureComparisonValues, diffLimits: DiffLimits): DetailRows => {
-  if (values.kind === "string") return formatStringValues(values.got, values.want, diffLimits)
+/**
+ * Formats a list's `missing:` and `extra:` rows, `missing` first, because what the script wants is what a reader checks
+ * first. Shows a row only for a side that has items. More items than `diffLimits` allows become a note.
+ */
+const formatListValues = ({ missing, extra }: ListValues, diffLimits: DiffLimits): DetailRows => {
+  const itemCount = missing.length + extra.length
+  if (diffLimits.maxLines !== undefined && itemCount > diffLimits.maxLines)
+    return { kind: "unaligned", rows: [formatManyItemsNote(itemCount)] }
 
-  return { kind: "aligned", rows: formatNonStringRows(values) }
+  const missingRows =
+    missing.length > 0
+      ? [
+          formatAlignedRow(
+            "missing",
+            missing.map((item) => wantValueElement(item)),
+          ),
+        ]
+      : []
+  const extraRows =
+    extra.length > 0
+      ? [
+          formatAlignedRow(
+            "extra",
+            extra.map((item) => gotValueElement(item)),
+          ),
+        ]
+      : []
+  return { kind: "aligned", rows: [...missingRows, ...extraRows] }
+}
+
+/**
+ * Formats what an `ensure` compared: `got` and `want` rows, a list's `missing` and `extra` rows, or a note when the
+ * lines or items can't show.
+ */
+export const formatEnsureValues = (values: EnsureComparisonValues, diffLimits: DiffLimits): DetailRows => {
+  if (values.kind === "exit" || values.kind === "boolean")
+    return { kind: "aligned", rows: formatBooleanWantRows(values) }
+  if (values.kind === "string") return formatStringValues(values.got, values.want, diffLimits)
+  return formatListValues(values, diffLimits)
 }

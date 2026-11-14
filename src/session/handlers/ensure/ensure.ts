@@ -4,7 +4,7 @@ import { isErr } from "ts-explicit-errors"
 
 import type { Check, Want } from "#session/handlers/ensure/check.ts"
 import { checkSchema, wantSchema } from "#session/handlers/ensure/check.ts"
-import { compareCheck } from "#session/handlers/ensure/comparison.ts"
+import { compareCheck } from "#session/handlers/ensure/comparison/comparison.ts"
 import type { Fix } from "#session/handlers/ensure/fix.ts"
 import { fixSchema, toFixDifference } from "#session/handlers/ensure/fix.ts"
 import { getHostCheckDetails } from "#session/handlers/ensure/host-check-details.ts"
@@ -15,7 +15,7 @@ import { NO_NEEDS, needsOptionsSchema } from "#session/handlers/step-options/ste
 import type { HandlerReturn, StepContext } from "#session/step.ts"
 
 export type { Check, Want } from "#session/handlers/ensure/check.ts"
-export type { EnsureComparisonValues } from "#session/handlers/ensure/comparison.ts"
+export type { EnsureComparisonValues } from "#session/handlers/ensure/comparison/comparison.ts"
 export type { FixDifference } from "#session/handlers/ensure/fix.ts"
 
 /** `T` ties a check function's return type, and a fix function's difference, to `want`. */

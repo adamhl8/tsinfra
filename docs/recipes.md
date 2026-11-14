@@ -99,9 +99,9 @@ await docker(h, { present: false })
 
 ## The state you want, or what's left to do
 
-A `want` for several things, like packages, takes one of two shapes. Either it's the state you want, and the check
-prints the host's state the same way, or it's `""`, and the check prints what's left to do. Prefer the state you want,
-because `plan` then shows exactly which lines the fix will change.
+A `want` for several things, like packages, is a list, and it takes one of two shapes. Either it's the state you want,
+and the check lists the host's state the same way, or it's `[]`, and the check lists what's left to do. Prefer the
+state you want, because `plan` then shows exactly which items the fix will change.
 
 **Compute the state you want** whenever you can work it out before the step. `want` is a plain value, so it can come
 from a constant, a `fetch` on the control machine, or an `h.read` before the step. For global Bun packages, each on the
@@ -115,30 +115,37 @@ for (const spec of specs) {
 }
 
 await h.ensure("Sync bun global packages", {
-  want: wanted.toSorted().join("\n"),
-  check: async ({ read }) => toSortedLines(await read("bun pm ls -g")),
-  fix: syncGlobals,
+  want: wanted,
+  check: async ({ read }) => toGlobals(await read("bun pm ls -g")),
+  fix: async ({ exec }, { missing, extra }) => {
+    if (missing.length > 0) await exec(`bun add -g ${missing.join(" ")}`)
+    const unwanted = extra.filter((global) => !wanted.some((spec) => sameName(spec, global)))
+    if (unwanted.length > 0) await exec(`bun remove -g ${unwanted.map(packageName).join(" ")}`)
+  },
 })
 ```
 
-`packageName` drops a spec's range, like `pnpm@11` -> `pnpm`. `toSortedLines` turns the listing into sorted
-`name@version` lines, the same shape as `want`. Sort both sides, because the comparison is exact. `plan` shows only
-the lines that differ: a missing package under `want:`, an extra one under `got:`, and an update under both:
+`packageName` drops a spec's version, like `pnpm@11` -> `pnpm`, `sameName` compares two by their names, and `toGlobals`
+turns the listing into `name@version` items, the same shape as `want`. A list compares as a set, so neither side needs
+sorting. `plan` shows only the items that differ: a missing package or version under `missing:`, and an extra one
+under `extra:`, so an update shows under both:
 
 ```
   ~ change: (ensure) Sync bun global packages
-      got:  turbo@2.5.0
-            typescript@5.9.2
-      want: turbo@2.5.4
-            zx@8.8.1
+      missing: turbo@2.5.4
+               zx@8.8.1
+      extra:   turbo@2.5.0
+               typescript@5.9.2
 ```
 
-**List what's left, with `want: ""`,** when the tool works out the difference itself, like `brew outdated`,
+`bun add` replaces an old version, so the fix only removes the extras whose package isn't wanted at all.
+
+**List what's left, with `want: []`,** when the tool works out the difference itself, like `brew outdated`,
 `apt list --upgradable`, or a newer image digest (see
 [Running the latest container images](#running-the-latest-container-images)). Writing out the state you want there
 means asking for every item's newest version, which is slower and longer than the tool's own answer. The fix runs only
 while the list isn't empty, and the check after the fix confirms the list emptied. A boolean would only say
-"something". `plan` shows the list under `got:`, with `want: (empty)`.
+"something". `plan` shows the list under `extra:`, because you want none of it.
 
 **List what's left when the state you want depends on an earlier step.** `h.read` runs when the script reaches it and
 takes no `needs`, so in `plan` it reads the host before an earlier change is applied. A version from a registry doesn't
@@ -147,13 +154,13 @@ changes, work out what's left inside the check, and give the step `needs` (see [
 
 ## Running the latest container images
 
-This is an empty-`want` `ensure`. The check reads the registry's digest without pulling, and compares it with the image
+This is a `want: []` `ensure`. The check reads the registry's digest without pulling, and compares it with the image
 each running container started from, because pulling in a check breaks the rule on what a check may change (see
 [Steps](./steps.md#what-a-check-may-change)). The exact `docker` commands are unconfirmed:
 
 ```ts
 await h.ensure("Run the latest images", {
-  want: "",
+  want: [],
   check: async ({ read }) => {
     const outdated: string[] = []
     for (const { service, image } of services) {
@@ -161,7 +168,7 @@ await h.ensure("Run the latest images", {
       const running = await read(`docker inspect --format '{{.Image}}' $(docker compose ps -q ${service})`)
       if (!(await isSameImage(read, running, remote))) outdated.push(service)
     }
-    return outdated.join("\n")
+    return outdated
   },
   fix: "docker compose pull && docker compose up -d",
 })
@@ -177,7 +184,7 @@ Hub's pull limit, which an hourly drift check can reach. Use it only if those co
 
 ```ts
 await h.ensure("Run the latest images", {
-  want: "",
+  want: [],
   check: async ({ read }) => {
     await read("docker compose pull")
     const outdated: string[] = []
@@ -186,7 +193,7 @@ await h.ensure("Run the latest images", {
       const running = await read(`docker inspect --format '{{.Image}}' $(docker compose ps -q ${service})`)
       if (pulled !== running) outdated.push(service)
     }
-    return outdated.join("\n")
+    return outdated
   },
   fix: "docker compose up -d",
 })

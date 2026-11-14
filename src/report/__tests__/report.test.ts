@@ -431,6 +431,54 @@ describe("renderHostBlock for a step that would change a string", () => {
   })
 })
 
+describe("renderHostBlock for a step that would change a list", () => {
+  it("should show missing items, then extra ones, each in the order its side lists them", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Install packages", {
+        want: ["jq", "fd", "rg"],
+        check: String.raw`printf 'zsh\nfd\nbat\n'`,
+        fix: "true",
+      })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
+      "      missing: jq",
+      "               rg",
+      "      extra:   zsh",
+      "               bat",
+    ])
+  })
+
+  it("should leave out the row of a side with no items", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Upgrade packages", { want: [], check: String.raw`printf 'fd\nrg\n'`, fix: "true" })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      extra: fd", "             rg"])
+  })
+
+  it("should show each item by the value rules, like an item with a trailing space quoted", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Install packages", { want: ["fd"], check: String.raw`printf 'fd \n'`, fix: "true" })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      missing: fd", "      extra:   'fd '"])
+  })
+
+  it("should show a note for more than 15 differing items, and every item with --verbose", async () => {
+    const items = Array.from({ length: 16 }, (_, index) => `pkg${index}`)
+    const upgrade = async (h: Host) => {
+      await h.ensure("Upgrade packages", { want: [], check: `printf '%s\\n' ${items.join(" ")}`, fix: "true" })
+    }
+
+    const hostBlock = await formatBlock(upgrade, "plan")
+    const verboseLines = (await formatVerboseBlock(upgrade))?.split("\n").slice(2)
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      16 items differ, run with --verbose to see them"])
+    expect([verboseLines?.length, verboseLines?.[0]]).toStrictEqual([16, "      extra: pkg0"])
+  })
+})
+
 describe("renderHostBlock for a file step", () => {
   it("should show a file's diff and each attribute that changes, old value to new", async () => {
     const filePath = path.join(await makeTempDir(), "app.conf")

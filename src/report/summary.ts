@@ -1,12 +1,9 @@
 import type { Mode } from "#mode.ts"
 import { COLUMN_GAP, planReminderElement, statusTextElement, warningCountElement } from "#report/format/format.ts"
 import type { HostBlock, HostBlockEntry } from "#report/host-block/host-block.ts"
-import { getMaxWidth, padToWidth } from "#utils.ts"
+import { countOf, getMaxWidth, padToWidth } from "#utils.ts"
 
 const PLAN_REMINDER = "Steps after a change were checked without that change, so apply may differ."
-
-/** Returns `count` with its noun, like `1 change` or `2 changes`. */
-const countOf = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`
 
 const getEntries = (hostBlock: HostBlock): HostBlockEntry[] => (hostBlock.kind === "entries" ? hostBlock.entries : [])
 
