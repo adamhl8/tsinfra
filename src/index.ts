@@ -1,4 +1,4 @@
-export type { HostDefinition, HostFunction, HostOptions } from "#hosts/hosts.ts"
+export type { HostConfig, HostDefinition, HostFunction } from "#hosts/hosts.ts"
 export { host } from "#hosts/hosts.ts"
 export type {
   EnsureOptions,

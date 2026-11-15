@@ -4,7 +4,7 @@ import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
 
-import { createSession, fileOrMessage, prepareAndRunHost, toLoadedHost } from "#__tests__/session.ts"
+import { createSession, fileOrMessage, prepareAndRunHost, loadHostDefinition } from "#__tests__/session.ts"
 import { host } from "#hosts/host.ts"
 import { renderHostBlock, toHostBlock } from "#report/report.ts"
 
@@ -19,9 +19,8 @@ describe("a user with no sudo rule", () => {
 
   it("should hint at the sudo option when a step's sudo needs a password", async () => {
     const hostRecord = await prepareAndRunHost(
-      toLoadedHost(
-        "a",
-        host("@local", async (h) => {
+      loadHostDefinition(
+        host({ name: "a", target: "@local" }, async (h) => {
           await h.file("/etc/tsinfra-docker-x", "a\n", { sudo: true })
         }),
       ),

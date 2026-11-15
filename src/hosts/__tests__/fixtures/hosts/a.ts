@@ -1,5 +1,5 @@
 import { host } from "#index.ts"
 
-export default host("a.lan", async () => {
+export default host({ name: "a", target: "a.lan" }, async () => {
   /* empty */
 })

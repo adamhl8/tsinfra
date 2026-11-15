@@ -37,16 +37,16 @@ export interface EnvOptions {
   secretEnv?: Record<string, string>
 }
 
-// Require a valid shell name, because an invalid one turns its line of the prelude into a different command.
-const SHELL_NAME_PATTERN = /^[A-Z_a-z]\w*$/v
+// Require a valid variable name, because an invalid one turns its line of the prelude into a different command.
+const VAR_NAME_PATTERN = /^[A-Z_a-z]\w*$/v
 
 // Check the names in a narrow, because ArkType's own message for a key that fails a pattern is "must be removed".
 const envVariablesSchema = type("Record<string, string>").narrow((variables, ctx) => {
-  const invalidNames = Object.keys(variables).filter((name) => !SHELL_NAME_PATTERN.test(name))
+  const invalidNames = Object.keys(variables).filter((name) => !VAR_NAME_PATTERN.test(name))
   return (
     invalidNames.length === 0
     || ctx.reject({
-      expected: "valid shell names, of letters, digits, and underscores, not starting with a digit",
+      expected: "valid variable names, of letters, digits, and underscores, not starting with a digit",
       actual: quoteNames(invalidNames),
     })
   )

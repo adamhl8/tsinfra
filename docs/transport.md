@@ -17,8 +17,8 @@ the remote shell.
 <!-- tocstop -->
 
 ```ts
-export default host("sonarr.lan", async (h) => { ... }) // SSH, any target ssh accepts
-export default host("@local", async (h) => { ... }) // the control machine itself
+export default host({ name: "sonarr", target: "sonarr.lan" }, async (h) => { ... }) // SSH, any target ssh accepts
+export default host({ name: "macbook", target: "@local" }, async (h) => { ... }) // the control machine itself
 ```
 
 `"@local"` is the same magic name pyinfra uses, and the one `~/homelab/pyinfra/inventory.py` already uses.
@@ -329,8 +329,8 @@ A host whose script uses sudo declares `sudo` on `host()`, whether that's a comm
 `file` or `link`. It's off by default:
 
 ```ts
-export default host("macbook", fn, { sudo: true }) // prompts when passwordless sudo isn't set up
-export default host("incus.lan", fn, { sudo: { password: incusSudo } }) // a password the script decrypted, never prompts
+export default host({ name: "macbook", target: "@local", sudo: true }, fn) // prompts when passwordless sudo isn't set up
+export default host({ name: "incus", target: "incus.lan", sudo: { password: incusSudo } }, fn) // a password the script decrypted, never prompts
 ```
 
 - **Declare `sudo: true` even with passwordless sudo.** There it only adds a check in preparation, with no prompt and no

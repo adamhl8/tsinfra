@@ -3,7 +3,7 @@ import { existsSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
-import { createSession, prepareAndRunHost, readOrMessage, toLoadedHost } from "#__tests__/session.ts"
+import { createSession, prepareAndRunHost, readOrMessage, loadHostDefinition } from "#__tests__/session.ts"
 import { host } from "#hosts/host.ts"
 
 // Find the helper in the real home, because preparation writes it before the test preload swaps the session's `home`.
@@ -26,15 +26,10 @@ describe("a user with passwordless sudo", () => {
   it("should not hint at the sudo option on a host that sets it", async () => {
     // Print sudo's own line for a missing password, because the hint only reads the command's stderr.
     const hostRecord = await prepareAndRunHost(
-      toLoadedHost(
-        "a",
-        host(
-          "@local",
-          async (h) => {
-            await h.read("echo 'sudo: a password is required' >&2; exit 1")
-          },
-          { sudo: true },
-        ),
+      loadHostDefinition(
+        host({ name: "a", target: "@local", sudo: true }, async (h) => {
+          await h.read("echo 'sudo: a password is required' >&2; exit 1")
+        }),
       ),
       "apply",
     )

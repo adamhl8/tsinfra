@@ -3,7 +3,6 @@ import { argument, command, constant, merge, message, object, option, or, string
 import { defineProgram } from "@optique/core/program"
 import { path } from "@optique/run"
 
-import { HOST_SCRIPT_EXTENSION } from "#hosts/hosts.ts"
 import type { Mode } from "#mode.ts"
 import { MODES } from "#mode.ts"
 import packageJson from "#package.json" with { type: "json" }
@@ -21,7 +20,7 @@ const hostOptions = object({
     .multiple()
     .map((flags) => toVerbosity(flags.length)),
   hosts: argument(string({ metavar: "HOST" }), {
-    description: message`A host to run, by its file name without ${text(HOST_SCRIPT_EXTENSION)} (default: every host)`,
+    description: message`A host to run, by its name (default: every host)`,
   }).multiple(),
 })
 

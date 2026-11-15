@@ -16,6 +16,8 @@ import {
 } from "#transport/transport.ts"
 import type { Shell, Transport } from "#transport/transport.ts"
 
+export { toSavedStatePath } from "#hosts/prepare/host-details/tsinfra-directory.ts"
+
 /** What preparation reads from a host before its transport is built. */
 export interface HostDetails {
   /** The SSH user's home directory. */

@@ -14,7 +14,7 @@ import {
   createWrappedSession,
   prepareAndRunHost,
   throwBoom,
-  toLoadedHost,
+  loadHostDefinition,
 } from "#__tests__/session.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
@@ -27,7 +27,7 @@ import type { Want } from "#session/handlers/ensure/want.ts"
 import type { Exec, Host, HostRecord } from "#session/session.ts"
 
 const runNamedHost = async (name: string, fn: HostFunction, mode: Mode) =>
-  prepareAndRunHost(toLoadedHost(name, host("@local", fn)), mode)
+  prepareAndRunHost(loadHostDefinition(host({ name, target: "@local" }, fn)), mode)
 
 const isRoot = process.getuid?.() === 0
 
@@ -218,7 +218,10 @@ describe("renderHostBlock", () => {
   })
 
   it("should name a host that couldn't be prepared after its target, and count it as failed", async () => {
-    const hostRecord = await prepareAndRunHost(toLoadedHost("a", host(UNREACHABLE_TARGET, changeThenThrow)), "plan")
+    const hostRecord = await prepareAndRunHost(
+      loadHostDefinition(host({ name: "a", target: UNREACHABLE_TARGET }, changeThenThrow)),
+      "plan",
+    )
     const startError =
       "failed to read the ssh config for 'unreachable host' -> exited with code 255: hostname contains invalid characters"
 
@@ -268,7 +271,10 @@ describe("renderHostBlock", () => {
   })
 
   it("should list the commands preparation ran under its failure with -vv, by their labels", async () => {
-    const hostRecord = await prepareAndRunHost(toLoadedHost("a", host(UNREACHABLE_TARGET, changeThenThrow)), "plan")
+    const hostRecord = await prepareAndRunHost(
+      loadHostDefinition(host({ name: "a", target: UNREACHABLE_TARGET }, changeThenThrow)),
+      "plan",
+    )
 
     expect([
       renderRecord(hostRecord, 1)?.split("\n").length,

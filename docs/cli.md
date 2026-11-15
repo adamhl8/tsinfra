@@ -21,9 +21,14 @@ tsinfra apply sonarr --verbose
 
 ## Hosts
 
-The CLI looks in `./hosts` (or `--hosts-dir <dir>`). Each `.ts` file there is one host, and its file name without `.ts`
-is the name used on the command line. The file's default export is `host(target, fn, options?)`. Shared setup lives anywhere
-else and is imported like any other module.
+The CLI looks in `./hosts` (or `--hosts-dir <dir>`). Each `.ts` file there is one host script, whose default export is
+`host({ name, target, sudo? }, fn)`. The `name` is what the command line picks the host by, what the report shows, and
+what its saved state is kept under. Shared setup lives anywhere else and is imported like any other module.
+
+tsinfra loads every host script before it picks any, because a host's name is in its script, not its file name. So a
+script's top level runs on every run, and should only define things. A name that more than one script defines fails the
+run, naming each script, like `more than one host script defines the host 'web': 'hosts/web.ts', 'hosts/web-old.ts'`. A
+script that fails to load is named by its path, because its host has no name yet.
 
 With no host names, `plan` and `apply` run every host. An unknown name is an error that lists the names that exist.
 

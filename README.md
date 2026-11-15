@@ -60,26 +60,22 @@ import { host } from "tsinfra"
 
 import { sonarrUnit } from "../files/sonarr-unit.ts"
 
-export default host(
-  "sonarr.lan",
-  async (h) => {
-    await h.ensure("Install Caddy", {
-      want: true,
-      check: "dpkg -s caddy",
-      fix: "sudo apt-get install -y caddy",
-    })
+export default host({ name: "sonarr", target: "sonarr.lan", sudo: true }, async (h) => {
+  await h.ensure("Install Caddy", {
+    want: true,
+    check: "dpkg -s caddy",
+    fix: "sudo apt-get install -y caddy",
+  })
 
-    const unit = await h.file("/etc/systemd/system/sonarr.service", sonarrUnit, { sudo: true })
-    await h.run("Reload systemd", "sudo systemctl daemon-reload", { after: [unit] })
+  const unit = await h.file("/etc/systemd/system/sonarr.service", sonarrUnit, { sudo: true })
+  await h.run("Reload systemd", "sudo systemctl daemon-reload", { after: [unit] })
 
-    await h.ensure("Start Sonarr", {
-      want: "active",
-      check: "systemctl is-active sonarr",
-      fix: "sudo systemctl enable --now sonarr",
-    })
-  },
-  { sudo: true },
-)
+  await h.ensure("Start Sonarr", {
+    want: "active",
+    check: "systemctl is-active sonarr",
+    fix: "sudo systemctl enable --now sonarr",
+  })
+})
 ```
 
 See what would change:
@@ -117,16 +113,28 @@ bunx tsinfra apply sonarr
 ## Hosts
 
 ```ts
-host(target: string, fn: (h: Host) => Promise<void>, options?: HostOptions)
+host(config: HostConfig, fn: (h: Host) => Promise<void>)
+
+interface HostConfig {
+  name: string
+  target: string
+  sudo?: boolean | { password: string }
+}
 ```
 
-Each file in `hosts/` default exports a `host()`. The file's name without `.ts` is the host's name on the command line.
+Each file in `hosts/` default exports a `host()`.
 
+- `name`: the host's name, which the report shows and the command line picks it by. It must be unique across host
+  scripts, and has letters, digits, `.`, `_`, and `-`, starting with a letter or a digit.
 - `target`: where the commands run
   - `"@local"`: the machine tsinfra runs on
   - Anything else goes to `ssh` as written, like `"sonarr.lan"` or `"adam@incus.lan"`
+- `sudo`: declares that the script uses sudo (see [sudo](#sudo))
 - `fn`: the host function. It's given `h`, which has every [step](#steps).
-- `options.sudo`: declares that the script uses sudo (see [sudo](#sudo))
+
+tsinfra loads every host script on each run before it picks the hosts to run, so a script's top level runs even when
+its host isn't picked. Keep it to quick definitions. Something that prompts or takes a while, like reading a secret from
+a password manager, goes in the host function or a step.
 
 Shared setup is an ordinary function that takes `h`, imported from anywhere outside `hosts/`:
 
@@ -141,7 +149,7 @@ export const base = async (h: Host) => {
 
 ```ts
 // hosts/sonarr.ts
-export default host("sonarr.lan", async (h) => {
+export default host({ name: "sonarr", target: "sonarr.lan" }, async (h) => {
   await base(h)
   // the rest of the host's steps...
 })
@@ -168,8 +176,8 @@ Commands say `sudo` themselves, only where they need it, like `fix: "sudo system
 A host whose script uses sudo declares it on `host()`:
 
 ```ts
-export default host("macbook", fn, { sudo: true })
-export default host("incus.lan", fn, { sudo: { password: incusSudoPassword } })
+export default host({ name: "macbook", target: "@local", sudo: true }, fn)
+export default host({ name: "incus", target: "incus.lan", sudo: { password: incusSudoPassword } }, fn)
 ```
 
 - `sudo: true`: before any script runs, tsinfra checks that sudo works. If it needs a password, tsinfra asks for it once,
@@ -654,7 +662,7 @@ tsinfra apply [options] [HOST]...
 
 - `plan`: show what would change on each host
 - `apply`: make the changes on each host
-- `HOST`: a host's file name without `.ts` (default: every host)
+- `HOST`: a host's `name` (default: every host)
 
 Options:
 

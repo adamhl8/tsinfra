@@ -1,3 +1,5 @@
+import path from "node:path"
+
 import { stringWidth } from "bun"
 import { err } from "ts-explicit-errors"
 
@@ -50,3 +52,32 @@ export const createCommandExitError = (commandOutput: CommandOutput) => {
 
 /** Quotes `text` for a POSIX shell, so a space or a quote in it can't break the command. */
 export const quoteShellArg = (text: string): string => `'${text.replaceAll("'", String.raw`'\''`)}'`
+
+interface PrivateFileWriteOptions {
+  /** Makes the file executable by its owner, like a helper another program runs. */
+  executable?: boolean
+}
+
+/**
+ * Returns a script that writes `content` to `filePath` on the host, readable only by its owner, replacing any file
+ * there. Write it under a temp name and rename it into place, so a write cut short leaves the old file whole. Set
+ * `umask 077`, because `mkdir -p -m 700` sets the mode of the last directory only, and the umask makes every directory
+ * the script creates `700` and the file `600`.
+ */
+export const buildPrivateFileWriteScript = (
+  filePath: string,
+  content: string,
+  options: PrivateFileWriteOptions = {},
+): string => {
+  const { executable = false } = options
+  const quotedFilePath = quoteShellArg(filePath)
+  return [
+    "set -eu",
+    "umask 077",
+    `mkdir -p ${quoteShellArg(path.posix.dirname(filePath))}`,
+    `tmp=${quotedFilePath}.$$`,
+    `printf '%s' ${quoteShellArg(content)} >"$tmp"`,
+    ...(executable ? [`chmod 700 "$tmp"`] : []),
+    `mv -f "$tmp" ${quotedFilePath}`,
+  ].join("\n")
+}

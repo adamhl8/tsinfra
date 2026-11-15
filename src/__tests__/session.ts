@@ -6,9 +6,10 @@ import bun from "bun"
 import type { Result } from "ts-explicit-errors"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
-import type { HostDefinition, HostOptions } from "#hosts/host.ts"
+import type { HostConfig, HostDefinition } from "#hosts/host.ts"
 import { host, hostDefinitionSchema } from "#hosts/host.ts"
 import type { LoadedHost } from "#hosts/load.ts"
+import { toLoadedHost } from "#hosts/load.ts"
 import { buildHostDetails } from "#hosts/prepare/host-details/host-details.ts"
 import { prepareHosts } from "#hosts/prepare/prepare.ts"
 import { runHost } from "#hosts/run.ts"
@@ -48,11 +49,12 @@ export const throwBoom = () => {
   throw new Error("boom")
 }
 
+/** What a test sets on a host besides its name and target, like `sudo`. */
+type TestHostOptions = Omit<HostConfig, "name" | "target">
+
 /** Validates `hostDefinition` the way loading a host script does, so it gets the same defaults. */
-export const toLoadedHost = (name: string, hostDefinition: HostDefinition): LoadedHost => ({
-  name,
-  ...hostDefinitionSchema.assert(hostDefinition),
-})
+export const loadHostDefinition = (hostDefinition: HostDefinition): LoadedHost =>
+  toLoadedHost(hostDefinitionSchema.assert(hostDefinition))
 
 /** Prepares one host the way a run does. */
 const prepareHostEntry = async (loadedHost: LoadedHost) => {
@@ -75,11 +77,11 @@ const prepareSessionContext = async (loadedHost: LoadedHost): Promise<Result<Ses
 }
 
 /** Prepares a host 'a' on `target`, and returns its context, or why it couldn't be prepared. */
-export const buildSessionContextOn = async (target: string, hostOptions?: HostOptions) =>
-  prepareSessionContext(toLoadedHost("a", host(target, doNothing, hostOptions)))
+export const buildSessionContextOn = async (target: string, hostOptions?: TestHostOptions) =>
+  prepareSessionContext(loadHostDefinition(host({ name: "a", target, ...hostOptions }, doNothing)))
 
 /** Prepares a host 'a' on `@local`. */
-export const buildLocalSessionContext = async (hostOptions?: HostOptions) =>
+export const buildLocalSessionContext = async (hostOptions?: TestHostOptions) =>
   buildSessionContextOn(LOCAL_TARGET, hostOptions)
 
 /** A test's view of a prepared host: the `Host` its function would get, and the record its session fills in. */
@@ -104,11 +106,11 @@ const prepareSession = async (loadedHost: LoadedHost, mode: Mode): Promise<TestS
 }
 
 /** Creates a session for a host 'a' on `target`. */
-export const createSessionOn = async (target: string, mode: Mode, hostOptions?: HostOptions) =>
-  prepareSession(toLoadedHost("a", host(target, doNothing, hostOptions)), mode)
+export const createSessionOn = async (target: string, mode: Mode, hostOptions?: TestHostOptions) =>
+  prepareSession(loadHostDefinition(host({ name: "a", target, ...hostOptions }, doNothing)), mode)
 
 /** Creates a session for a host 'a' on `@local`. */
-export const createSession = async (mode: Mode = "apply", hostOptions?: HostOptions) =>
+export const createSession = async (mode: Mode = "apply", hostOptions?: TestHostOptions) =>
   createSessionOn(LOCAL_TARGET, mode, hostOptions)
 
 /** Writes a shell script named `name` into `binDir`, to stand in for a command on `PATH`. */
@@ -127,7 +129,7 @@ export const createWrappedSession = async (
   mode: Mode,
   wrapTransport: (transport: Transport) => Transport,
 ): Promise<TestSession> => {
-  const loadedHost = toLoadedHost("a", host("@local", doNothing))
+  const loadedHost = loadHostDefinition(host({ name: "a", target: "@local" }, doNothing))
   const { sessionContext, hostRecord } = await preparePreparedHostEntry(loadedHost)
 
   // Record this second preparation on a recorder of its own, because the session's record already has the first.

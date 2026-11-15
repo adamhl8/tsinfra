@@ -6,7 +6,7 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import { program } from "#cli/program.ts"
-import { discoverHosts, loadHosts, prepareHosts, runHost } from "#hosts/hosts.ts"
+import { discoverHostScripts, loadHosts, prepareHosts, runHost, selectHosts } from "#hosts/hosts.ts"
 import packageJson from "#package.json" with { type: "json" }
 import type { HostBlock } from "#report/report.ts"
 import {
@@ -23,13 +23,16 @@ import { closeConnections } from "#transport/transport.ts"
 const runTsinfra = async (): Promise<Result<number>> => {
   const config = run(program, { help: "option", version: packageJson.version, showDefault: true, theme: ERROR_THEME })
 
-  const hostScripts = await discoverHosts(config.hostsDir, config.hosts)
+  const hostScripts = await discoverHostScripts(config.hostsDir)
   if (isErr(hostScripts)) return err("failed to discover hosts", hostScripts)
 
   const loadedHosts = await loadHosts(hostScripts)
   if (isErr(loadedHosts)) return loadedHosts
 
-  const hostEntries = await prepareHosts(loadedHosts)
+  const selectedHosts = selectHosts(loadedHosts, config.hosts)
+  if (isErr(selectedHosts)) return err("failed to pick hosts", selectedHosts)
+
+  const hostEntries = await prepareHosts(selectedHosts)
 
   const reportOptions = { verbosity: config.verbosity }
   const hostBlocks: HostBlock[] = []
@@ -44,7 +47,7 @@ const runTsinfra = async (): Promise<Result<number>> => {
     if (renderedHostBlock) console.log(`${renderedHostBlock}\n`)
   }
 
-  await closeConnections(loadedHosts.map(({ target }) => target))
+  await closeConnections(selectedHosts.map(({ target }) => target))
 
   console.log(renderSummary(hostBlocks, config.mode))
 

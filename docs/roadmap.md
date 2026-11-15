@@ -103,9 +103,9 @@ features can add to, like the run-once marker and the manifest in [Ideas](#ideas
 and in prose, to keep it apart from the host's state, which steps read.
 
 **Where the saved state lives.** `~/.tsinfra/state/<host>.json`, on the host next to the askpass helper, in the SSH
-user's home. `<host>` is the host's name, from its script's file name, not its target. Two host scripts can manage the
-same machine, like two that both target `@local`, and step names are unique only within one script, so each gets its
-own file. Every checkout and control machine sees the same saved state, and a rebuilt host starts with none. The file holds only step names, which already show in the output. An open change names
+user's home. `<host>` is the `name` in the host's config, not its target. Two host scripts can manage the same
+machine, like two that both target `@local`, and step names are unique only within one script, so each gets its own
+file. Loading fails when two scripts define the same name, so no two hosts share a file. Every checkout and control machine sees the same saved state, and a rebuilt host starts with none. The file holds only step names, which already show in the output. An open change names
 its step by its name, which is unique on a host. A `file` or `link` is named by its path.
 
 **How the saved state is stored.**
@@ -200,41 +200,80 @@ test that calls `h` directly never reaches the clean finish that closes them.
 
 #### 3. The saved state file
 
-A new package, `src/session/saved-state/`, with `saved-state.ts` as its main module. Nothing calls it yet.
+A new package, `src/session/saved-state/`, with `saved-state.ts` as its main module. Its only entry is the saved state
+manager, which nothing calls yet.
 
-- **3a.** The ArkType schema and its type: `{ version: 1, openChanges: Record<string, string[]> }`.
-- **3b.** `readSavedState`: one command that prints the host's file, or a marker when there's none. Parse it with
-  `JSON.parse` inside `attempt`, then check it against the schema. Each error names the file.
-- **3c.** The write script: `mkdir -p -m 700` on the state directory, a temp file with the JSON from
-  `quoteShellArg`, `chmod 600`, and `mv -f` into place, like the askpass helper's write script. The delete is `rm -f`.
-  The package takes the file's path finished, from `toSavedStatePath` (2d), and quotes it with `quoteShellArg`. It
-  never writes `"$HOME"` in a script, so the test preload's `home` reaches it.
-- **3d.** The store, which holds the saved state in memory:
-  - `openChange(name)` opens a fresh change, with no runs listed.
-  - `recordRun(runName, stepNames)` adds the run to each of those steps' open changes.
-  - `getChangesWithoutRun(runName, stepNames)` returns the steps with an open change that doesn't list the run.
+- **3a.** The ArkType schema and its type: `{ version: 1, openChanges: Record<string, string[]> }`. A `version` that
+  isn't `1` fails the schema, so a later format change fails loudly instead of being misread. Keys the schema doesn't
+  know are ignored, which is ArkType's default.
+- **3b.** The read: one command, `if [ -e <path> ]; then cat -- <path>; else printf '%s' <marker>; fi`, run with
+  `exec`, so a failed `cat` is an error. A marker matches how the file details script reports a missing path, and it
+  isn't valid JSON, so it can't be mistaken for a file's contents. ArkType parses the output and checks it in one
+  schema (`type("string.json.parse").to(savedStateSchema)`), so a file that isn't JSON fails the same way as one with
+  the wrong shape. It returns `Result<SavedState | undefined>`, where `undefined` means there's no file, so a missing
+  file never stands in as an empty saved state. Each error names the file, like
+  `the saved state in '<path>' isn't saved state tsinfra wrote -> version must be 1 (was 2)`.
+- **3c.** The write script comes from `buildPrivateFileWriteScript` in `src/utils.ts`, which the askpass helper's
+  write uses too: `set -eu`, `umask 077`, `mkdir -p` on the file's directory, a temp file with the content from
+  `quoteShellArg`, and `mv -f` into place, plus `chmod 700` for an executable like the askpass helper. The saved state
+  is written as indented JSON with a trailing newline, so it reads well on the host. The delete is `rm -f`. Use
+  `umask 077`, not `mkdir -p -m 700`, because `-m` applies only to the last directory, so a write on a host with
+  passwordless sudo, where the askpass setup never made `~/.tsinfra`, would leave it `755`. The umask makes every
+  directory the write creates `700` and the file `600`. The package takes the file's path finished,
+  from `toSavedStatePath` (2d), and quotes it with `quoteShellArg`. It never writes `"$HOME"` in a script, so the test
+  preload's `home` reaches it.
+- **3d.** The manager, `createSavedStateManager(shell, savedStatePath): Promise<Result<SavedStateManager>>`, like the
+  recorders: it reads the file once with 3b, fails when the read fails, and closes over `shell`, `savedStatePath`, and
+  the saved state in memory, so nothing outside the package can write the file with another path or shell, or skip the
+  read. A follow-up is a step whose `after` names the steps it follows, today a `run` and later a `reboot`. Callers pass
+  `stepNames` as the names in that follow-up's `after`. It returns:
+  - `openChange(name)` opens a fresh change, with no follow-ups listed.
   - `isOpen(name)`.
+  - `getOpenChangesForFollowUp(followUpName, stepNames)` returns the steps whose change is still open for the
+    follow-up: open, and not listing it yet. A non-empty result means the follow-up fires.
+  - `recordFollowUp(followUpName, stepNames)` adds the follow-up to each of those steps' open changes.
   - `closeAll()`.
 
-  Each write uses the script from 3c, and is skipped when the saved state didn't change. `closeAll` deletes the file
-  while open changes are all the saved state holds.
+  No saved state (`undefined`) means no open changes. Each write uses the script from 3c, and is skipped when the saved
+  state didn't change. The memory changes only after a write succeeds, so it always matches the file. `closeAll`
+  deletes the file while open changes are all the saved state holds, and skips the delete when there was never a file
+  and nothing was opened. The manager doesn't know the mode: its callers only call the writing functions in `apply`,
+  where the step already branches on the mode, so the rule lives in one place.
 
-- **3e.** Tests in `src/session/saved-state/__tests__/`, on `@local`'s shell:
-  - a round trip
-  - a missing file
-  - invalid JSON
-  - a file that fails the schema
-  - the file's `600` mode
-  - a skipped write that leaves the file alone
+- **3e.** Tests in `src/session/saved-state/__tests__/`, on `@local`'s shell, with the file in a temp directory whose
+  name has a quote and a space:
+  - a round trip: open a change, record a run, create a new manager, and read it back
+  - a missing file, which opens no changes
+  - invalid JSON, and a file that fails the schema, each naming the file
+  - the file's `600` mode, and `700` on every directory the write creates, including a missing `.tsinfra`
+  - `closeAll` deleting the file
+  - a skipped write running no command, through a shell that counts its commands
 
 #### 4. Read the saved state in preparation
 
-- **4a.** In `buildSessionContext` (`src/hosts/prepare/prepare.ts`), build the file's path with
-  `toSavedStatePath(home, name)`, read the saved state with a shell on the host's final transport that records
-  nothing, and fail preparation when the read fails.
-- **4b.** Add the store to `SessionContext`.
-- **4c.** Test in `src/hosts/__tests__/prepare.test.ts`: a host with an invalid file fails preparation with the file's
-  name, and the read isn't in the record.
+Folded into piece 3's commit, because knip reports piece 3's package as unused until preparation imports it.
+
+- **4a.** Add `toSavedStatePath(home, hostName)` to `tsinfra-directory.ts`, which returns
+  `<home>/.tsinfra/state/<hostName>.json`, and re-export it through `host-details.ts` for `prepare.ts`.
+- **4b.** Create each host's saved state manager in `prepareHosts`' parallel step, right after `buildHostDetails`
+  returns, so every host's read happens at once. `buildSessionContext` runs one host at a time, because the password
+  prompts take turns, so a read there would add a round trip per host in series. Use an unrecorded
+  `createShell(baseTransport)`: saved state never needs sudo, so the base transport works even for a host still
+  waiting for its password prompt. A failed read fails preparation for that host through
+  `preparationRecorder.recordFailure`, so it's never asked for a password. The test mock's temp `home` reaches it,
+  because the manager is built from the details `buildHostDetails` returned.
+- **4c.** Add `savedStateManager: SavedStateManager` to `SessionContext`, and re-export `createSavedStateManager` and
+  `SavedStateManager` through `session.ts` for `hosts/`. Nothing destructures it until piece 5.
+- **4d.** Keep one temp home per `LoadedHost` in the test preload's mock, in a `WeakMap<LoadedHost, HomeDirectory>`.
+  Preparing the same `loadedHost` twice gives the same home, so a test can run two applies on one host, which piece 6
+  needs, or put a file in its home between preparations. Every new `loadedHost`, which the session helpers create,
+  still gets a fresh home.
+- **4e.** Test in `src/hosts/__tests__/prepare.test.ts`:
+  - a host with no saved state prepares, and preparation's commands include no saved state read
+  - saved state carries over: open a change through `sessionContext.savedStateManager`, prepare the same `loadedHost`
+    again, and the new manager reports it open
+  - a bad file fails preparation with the file's path: prepare, write `{` to `toSavedStatePath(home, name)`, and
+    prepare again
 
 #### 5. Open changes in `apply`
 
@@ -402,7 +441,7 @@ const update = task("update", async (h) => {
   })
 })
 
-export default host("sonarr.lan", configure, { sudo: true, tasks: [update] })
+export default host({ name: "sonarr", target: "sonarr.lan", sudo: true, tasks: [update] }, configure)
 ```
 
 ```sh
@@ -413,7 +452,7 @@ tsinfra plan --task update         # every host that has an update task, and no 
 
 - **A task is an ordinary host function,** with the same `h`, steps, `plan`, `apply`, session, and sudo prompt. With
   `want: []`, `plan --task update` lists what would upgrade on every host.
-- **`task(name, fn)` mirrors `host(target, fn)`,** and `host()` registers its tasks explicitly with `tasks`, so a task
+- **`task(name, fn)` mirrors `host(config, fn)`,** and `host()` registers its tasks explicitly with `tasks`, so a task
   only belongs to the hosts that list it. A task exported from a shared module doesn't register itself anywhere.
 - **Define a task above the `host()` call,** because `host()` reads `tasks` straight away, and a `const` can't be read
   before its line.
@@ -442,7 +481,7 @@ Decided on 2026-11-11, and skipped from the SSH pieces because nothing needs it 
 login shell loads (see [Login shells](./transport.md#login-shells)).
 
 ```ts
-export default host("caddy.lan", async (h) => { ... }, { shell: ["bash", "-l", "-s"] })
+export default host({ name: "caddy", target: "caddy.lan", shell: ["bash", "-l", "-s"] }, async (h) => { ... })
 ```
 
 The host option `shell` replaces the whole command that starts the host's shell, as an array of words. The default is
@@ -485,7 +524,7 @@ imports:
 ```ts
 import incus from "./incus.ts"
 
-export default host("sonarr.lan", configure, { needs: [incus] })
+export default host({ name: "sonarr", target: "sonarr.lan", needs: [incus] }, configure)
 ```
 
 - **It's named `needs`, not `after`.** On a `run`, `after` means "only if those changed", but `sonarr` runs whether or

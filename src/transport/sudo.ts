@@ -1,7 +1,5 @@
-import path from "node:path"
-
 import type { Transport } from "#transport/transport.ts"
-import { quoteShellArg } from "#utils.ts"
+import { buildPrivateFileWriteScript, quoteShellArg } from "#utils.ts"
 
 const SUDO_PASSWORD_VARIABLE = "TSINFRA_SUDO_PASSWORD"
 
@@ -10,21 +8,11 @@ const SUDO_PASSWORD_VARIABLE = "TSINFRA_SUDO_PASSWORD"
 const ASKPASS_HELPER = `#!/bin/sh\nprintf '%s\\n' "$${SUDO_PASSWORD_VARIABLE}"\n`
 
 /**
- * Returns the script that writes the askpass helper to `helperPath`, replacing the one from an earlier run. Write it
- * under a temp name and rename it into place, because another host on the same machine can be running it while
- * preparation writes it.
+ * Returns the script that writes the askpass helper to `helperPath`, replacing the one from an earlier run. The write
+ * renames a temp file into place, because another host on the same machine can be running the helper meanwhile.
  */
-export const buildAskpassHelperWriteScript = (helperPath: string): string => {
-  const quotedHelperPath = quoteShellArg(helperPath)
-  return [
-    "set -eu",
-    `mkdir -p -m 700 ${quoteShellArg(path.posix.dirname(helperPath))}`,
-    `tmp=${quotedHelperPath}.$$`,
-    `printf '%s' ${quoteShellArg(ASKPASS_HELPER)} >"$tmp"`,
-    `chmod 700 "$tmp"`,
-    `mv -f "$tmp" ${quotedHelperPath}`,
-  ].join("\n")
-}
+export const buildAskpassHelperWriteScript = (helperPath: string): string =>
+  buildPrivateFileWriteScript(helperPath, ASKPASS_HELPER, { executable: true })
 
 // Use `-n`, because a `sudo` that needs a password would otherwise prompt on a local terminal, in the middle of the report.
 const PASSWORDLESS_SUDO_FUNCTION = `sudo() { command sudo -n "$@"; }`

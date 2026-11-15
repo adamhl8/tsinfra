@@ -32,7 +32,7 @@ Check new names, comments, docs, and error messages against these words.
 
 - **Host** is the machine a script configures, in code and prose ("runs on the host", `HostFile` for the file found
   at a path).
-- **Target** is only the connection address in `host(target, fn)` (like `@local`, `sonarr.lan`) and a symlink's target
+- **Target** is only the connection address in `host({ name, target }, fn)` (like `@local`, `sonarr.lan`) and a symlink's target
   in `h.link`.
 - **Host script** is a file in `hosts/` (`HostScript`, `HOST_SCRIPT_EXTENSION`, the `hostScript` name kind), never
   "host file".
@@ -50,6 +50,8 @@ Check new names, comments, docs, and error messages against these words.
 - **Saved state** is what tsinfra itself keeps on a host between applies (`~/.tsinfra/state/<host>.json`, the
   `saved-state` package), in code and prose, so it never reads as the host's state. Inside that package, plain `state`
   in a local name is fine where the context is clear. **Open changes** are the first part of saved state.
+- **Follow-up** is a step whose `after` names the steps it follows, today a `run` and later a `reboot`. Use it, not
+  "run", in code that would apply to any of them, like `recordFollowUp(followUpName, stepNames)`.
 - **Preparation** is what runs before a host's script, never "preflight" or "host failure".
 - **"Outcome"** isn't a term in the code.
 - **"Note"** is the report's word. **"Diff"** means the line output in the report, so it doesn't name a comparison.

@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test"
 
 import { attempt, messageChain } from "ts-explicit-errors"
 
-import { UNREACHABLE_TARGET, getPreparationFailure, prepareAndRunHost, toLoadedHost } from "#__tests__/session.ts"
+import { UNREACHABLE_TARGET, getPreparationFailure, prepareAndRunHost, loadHostDefinition } from "#__tests__/session.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
 import type { Host, HostRecord } from "#session/session.ts"
@@ -24,7 +24,8 @@ const readTwice = async (h: Host) => {
   await h.read("exit 1")
 }
 
-const runHostA = async (fn: HostFunction) => prepareAndRunHost(toLoadedHost("a", host("@local", fn)), "apply")
+const runHostA = async (fn: HostFunction) =>
+  prepareAndRunHost(loadHostDefinition(host({ name: "a", target: "@local" }, fn)), "apply")
 
 const getMessage = (failure: HostRecord["failure"]) => failure && messageChain(failure.error)
 
@@ -33,7 +34,10 @@ const runAndGetMessage = async (fn: HostFunction) => getMessage((await runHostA(
 
 describe("runHost", () => {
   it("should fail before the script runs when the host can't run commands", async () => {
-    const hostRecord = await prepareAndRunHost(toLoadedHost("a", host(UNREACHABLE_TARGET, throwBoom)), "apply")
+    const hostRecord = await prepareAndRunHost(
+      loadHostDefinition(host({ name: "a", target: UNREACHABLE_TARGET }, throwBoom)),
+      "apply",
+    )
 
     expect(hostRecord).toMatchObject({
       name: "a",

@@ -2,7 +2,7 @@ import process from "node:process"
 
 import { messageChain } from "ts-explicit-errors"
 
-import { getPreparationFailure, toLoadedHost } from "#__tests__/session.ts"
+import { getPreparationFailure, loadHostDefinition } from "#__tests__/session.ts"
 import { host } from "#hosts/host.ts"
 import { prepareHosts } from "#hosts/prepare/prepare.ts"
 
@@ -17,7 +17,7 @@ const isPrintingRecords = args[0] === "--records"
 const names = isPrintingRecords ? args.slice(1) : args
 
 const hostEntries = await prepareHosts(
-  names.map((name) => toLoadedHost(name, host("@local", doNothing, { sudo: true }))),
+  names.map((name) => loadHostDefinition(host({ name, target: "@local", sudo: true }, doNothing))),
 )
 const results = hostEntries.map((hostEntry) => [
   hostEntry.loadedHost.name,

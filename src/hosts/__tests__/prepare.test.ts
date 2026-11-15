@@ -4,7 +4,7 @@ import path from "node:path"
 import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
 
-import { UNREACHABLE_TARGET, prepareAndRunHost, toLoadedHost } from "#__tests__/session.ts"
+import { UNREACHABLE_TARGET, prepareAndRunHost, loadHostDefinition } from "#__tests__/session.ts"
 import { host } from "#hosts/host.ts"
 import { prepareHosts } from "#hosts/prepare/prepare.ts"
 import type { Host } from "#session/session.ts"
@@ -20,9 +20,9 @@ describe("prepareHosts", () => {
       await h.read(`touch '${marker}'`)
     }
     const hostEntries = await prepareHosts([
-      toLoadedHost("a", host("@local", touchMarker)),
-      toLoadedHost("b", host(UNREACHABLE_TARGET, touchMarker)),
-      toLoadedHost("c", host("@local", touchMarker)),
+      loadHostDefinition(host({ name: "a", target: "@local" }, touchMarker)),
+      loadHostDefinition(host({ name: "b", target: UNREACHABLE_TARGET }, touchMarker)),
+      loadHostDefinition(host({ name: "c", target: "@local" }, touchMarker)),
     ])
 
     expect(
@@ -37,9 +37,8 @@ describe("prepareHosts", () => {
 
   it("should record preparation's commands on the host, and leave the host function's on its steps", async () => {
     const hostRecord = await prepareAndRunHost(
-      toLoadedHost(
-        "a",
-        host("@local", async (h) => {
+      loadHostDefinition(
+        host({ name: "a", target: "@local" }, async (h) => {
           await h.read("echo hi")
         }),
       ),
@@ -54,7 +53,10 @@ describe("prepareHosts", () => {
   })
 
   it("should record the ssh -G a target failed on", async () => {
-    const hostRecord = await prepareAndRunHost(toLoadedHost("a", host(UNREACHABLE_TARGET, doNothing)), "apply")
+    const hostRecord = await prepareAndRunHost(
+      loadHostDefinition(host({ name: "a", target: UNREACHABLE_TARGET }, doNothing)),
+      "apply",
+    )
 
     expect(hostRecord.preparationCommands).toMatchObject([
       { cmd: `ssh -G -T -- '${UNREACHABLE_TARGET}'`, label: "ssh config", output: { exitCode: 255 } },

@@ -6,7 +6,13 @@ import path from "node:path"
 import bun, { $ } from "bun"
 import { isErr, messageChain } from "ts-explicit-errors"
 
-import { createSessionOn, getStepRecords, prepareAndRunHost, readOrMessage, toLoadedHost } from "#__tests__/session.ts"
+import {
+  createSessionOn,
+  getStepRecords,
+  prepareAndRunHost,
+  readOrMessage,
+  loadHostDefinition,
+} from "#__tests__/session.ts"
 import { SSHD_TARGET, startSshd, stopSshd } from "#__tests__/sshd.ts"
 import { host } from "#hosts/host.ts"
 import { prepareBaseTransport } from "#hosts/prepare/host-details/host-details.ts"
@@ -45,7 +51,8 @@ const toMessage = (value: unknown) => (value instanceof Error ? messageChain(val
 const findKnownHost = async (name: string) => (await $`ssh-keygen -F ${name}`.nothrow().quiet()).exitCode === 0
 
 /** Prepares and runs a host 'a' on `target` the way a run does, and returns its record. */
-const runHostOn = async (target: string) => prepareAndRunHost(toLoadedHost("a", host(target, doNothing)), "apply")
+const runHostOn = async (target: string) =>
+  prepareAndRunHost(loadHostDefinition(host({ name: "a", target }, doNothing)), "apply")
 
 /** Prepares a host 'a' on the sshd the way a run does, and creates its session. */
 const createSshSession = async () => createSessionOn(SSHD_TARGET, "apply")

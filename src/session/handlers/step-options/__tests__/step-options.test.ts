@@ -106,7 +106,7 @@ describe("env and secretEnv", () => {
     const hostSession = await createSession()
 
     expect(await readOrMessage(hostSession.host, "true", { env: { "MY-TOKEN": "x", "1A": "y" } })).toBe(
-      "failed to validate the options given to 'read' -> env must be valid shell names, of letters, digits, and underscores, not starting with a digit (was 'MY-TOKEN', '1A')",
+      "failed to validate the options given to 'read' -> env must be valid variable names, of letters, digits, and underscores, not starting with a digit (was 'MY-TOKEN', '1A')",
     )
     expect(hostSession.hostRecord.failure?.kind).toBe("step")
   })
