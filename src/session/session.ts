@@ -1,5 +1,5 @@
 import type { Result } from "ts-explicit-errors"
-import { isErr } from "ts-explicit-errors"
+import { err, isErr } from "ts-explicit-errors"
 
 import type { Mode } from "#mode.ts"
 import type {
@@ -34,8 +34,8 @@ import {
   inspectCommand,
 } from "#session/handlers/handlers.ts"
 import type { SessionRecorder } from "#session/recorder/recorder.ts"
-import type { HandlerReturn, StepContext, StepKind } from "#session/step.ts"
-import { nonEmptyStringSchema } from "#session/step.ts"
+import type { ChangeStepKind, HandlerReturn, StepContext, StepKind } from "#session/step.ts"
+import { isChangeStepKind, nonEmptyStringSchema } from "#session/step.ts"
 import type { Shell } from "#transport/transport.ts"
 
 export type {
@@ -223,6 +223,22 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
   // Record what `converge` finds as it goes, so a failure can't lose it and a handler never records anything itself.
   const converge = createConverge(mode, convergeRecorder)
 
+  const stepKindsByName = new Map<string, ChangeStepKind>()
+  // Refuse a name an earlier change step has, because the report and `needs` tell steps apart by name.
+  const claimStepName = (stepName: string, kind: StepKind): Result => {
+    if (!isChangeStepKind(kind)) return
+
+    const earlierKind = stepKindsByName.get(stepName)
+    if (earlierKind) {
+      return err(
+        `an earlier ${earlierKind} step has the same name, and step names must be unique in a host script`,
+        undefined,
+      )
+    }
+
+    stepKindsByName.set(stepName, kind)
+  }
+
   const callStep = async <K extends StepKind, T>(
     stepName: unknown,
     kind: K,
@@ -239,6 +255,12 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
 
       const stepStart = startStep(validName, kind)
       if (isErr(stepStart)) return stepStart
+
+      const nameClaim = claimStepName(validName, kind)
+      if (isErr(nameClaim)) {
+        failStep(nameClaim)
+        return nameClaim
+      }
 
       // Validate `options` after recording the step, so a bad one fails under the step like the step's other inputs.
       const validOptions = validateInput(options, stepShellOptionsSchema, { inputLabel: "options", givenTo: kind })

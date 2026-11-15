@@ -85,12 +85,15 @@ describe("h.file in plan", () => {
   })
 
   it("should report a mode that differs, and leave a mode that wasn't given alone", async () => {
-    const filePath = await createFilePath()
-    await bun.write(filePath, "a\n")
-    await chmod(filePath, 0o600)
+    const modeFilePath = await createFilePath()
+    const otherFilePath = await createFilePath()
+    await bun.write(modeFilePath, "a\n")
+    await bun.write(otherFilePath, "a\n")
+    await chmod(modeFilePath, 0o600)
+    await chmod(otherFilePath, 0o600)
     const hostSession = await createSession("plan")
-    await fileOrMessage(hostSession.host, filePath, "a\n", { mode: "644" })
-    await fileOrMessage(hostSession.host, filePath, "a\n")
+    await fileOrMessage(hostSession.host, modeFilePath, "a\n", { mode: "644" })
+    await fileOrMessage(hostSession.host, otherFilePath, "a\n")
 
     expect(hostSession.hostRecord.stepRecords.map(({ comparisons }) => comparisons.before)).toMatchObject([
       {
@@ -116,13 +119,17 @@ describe("h.file in plan", () => {
   })
 
   it("should compare a user name with the user's name, and a user id with its uid", async () => {
-    const filePath = await createFilePath()
-    await bun.write(filePath, "a\n")
+    const nameFilePath = await createFilePath()
+    const uidFilePath = await createFilePath()
+    const otherUidFilePath = await createFilePath()
+    await bun.write(nameFilePath, "a\n")
+    await bun.write(uidFilePath, "a\n")
+    await bun.write(otherUidFilePath, "a\n")
     const { username, uid } = os.userInfo()
     const { hostSession } = await createFakeSudoSession("plan")
-    await fileOrMessage(hostSession.host, filePath, "a\n", { user: username, sudo: true })
-    await fileOrMessage(hostSession.host, filePath, "a\n", { user: uid, sudo: true })
-    await fileOrMessage(hostSession.host, filePath, "a\n", { user: uid + 1, sudo: true })
+    await fileOrMessage(hostSession.host, nameFilePath, "a\n", { user: username, sudo: true })
+    await fileOrMessage(hostSession.host, uidFilePath, "a\n", { user: uid, sudo: true })
+    await fileOrMessage(hostSession.host, otherUidFilePath, "a\n", { user: uid + 1, sudo: true })
 
     expect(hostSession.hostRecord.stepRecords.map(({ comparisons }) => comparisons.before)).toMatchObject([
       { inSync: true },
@@ -647,12 +654,14 @@ describe("h.file in apply", () => {
       chcon: failAfterLogging("chcon"),
       restorecon: failAfterLogging("restorecon"),
     })
-    const filePath = await createFilePath()
+    const newFilePath = await createFilePath()
+    const existingFilePath = await createFilePath()
+    await bun.write(existingFilePath, "a\n")
 
-    expect(await fileOrMessage(h, filePath, "a\n")).toMatchObject({ changed: true })
-    expect(await fileOrMessage(h, filePath, "b\n")).toMatchObject({ changed: true })
+    expect(await fileOrMessage(h, newFilePath, "a\n")).toMatchObject({ changed: true })
+    expect(await fileOrMessage(h, existingFilePath, "b\n")).toMatchObject({ changed: true })
 
-    expect(await bun.file(filePath).text()).toBe("b\n")
+    expect(await bun.file(existingFilePath).text()).toBe("b\n")
     expect(await bun.file(logPath).text()).toBe("restorecon\nchcon\n")
   })
 

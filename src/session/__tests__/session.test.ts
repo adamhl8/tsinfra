@@ -12,11 +12,14 @@ import {
   ensureOrMessage,
   getFailureMessage,
   getStepRecords,
+  linkOrMessage,
   readOrMessage,
   runOrMessage,
 } from "#__tests__/session.ts"
 import type { FinishedStepRecord, HostRecord, StepRecord } from "#session/recorder/recorder.ts"
 import type { Host } from "#session/session.ts"
+
+const DUPLICATE_ENSURE_NAME = "an earlier ensure step has the same name, and step names must be unique in a host script"
 
 const toPlainResult = <T>(result: Result<T> | undefined) => (isErr(result) ? messageChain(result) : result)
 
@@ -187,9 +190,51 @@ describe("h inside a step", () => {
   it("should allow calls on h again once a step finishes", async () => {
     const { host: h } = await createSession()
 
-    expect(await ensureOrMessage(h, { want: true, check: "true", fix: "true" })).toMatchObject({ changed: false })
-    expect(await ensureOrMessage(h, { want: true, check: "true", fix: "true" })).toMatchObject({ changed: false })
+    expect(await h.ensure("First", { want: true, check: "true", fix: "true" })).toMatchObject({ changed: false })
+    expect(await h.ensure("Second", { want: true, check: "true", fix: "true" })).toMatchObject({ changed: false })
     expect(await readOrMessage(h, "echo hi")).toBe("hi")
+  })
+})
+
+describe("step names", () => {
+  it("should fail a change step whose name an earlier change step has, without running it", async () => {
+    const marker = path.join(await makeTempDir(), "ran")
+    const hostSession = await createSession("apply")
+    await ensureOrMessage(hostSession.host, { want: true, check: "true", fix: "true" })
+
+    expect(await runOrMessage(hostSession.host, `touch '${marker}'`, { after: "always" })).toBe(DUPLICATE_ENSURE_NAME)
+    expect(await bun.file(marker).exists()).toBe(false)
+    expect(toPlainRecords(hostSession.hostRecord)).toStrictEqual([
+      { name: "Make marker", kind: "ensure", status: "unchanged", commands: ["true"] },
+      { name: "Make marker", kind: "run", status: DUPLICATE_ENSURE_NAME, commands: [] },
+    ])
+  })
+
+  it("should fail a duplicate name the same way in plan", async () => {
+    const { host: h } = await createSession("plan")
+    await ensureOrMessage(h, { want: true, check: "true", fix: "true" })
+
+    expect(await runOrMessage(h, "true", { after: "always" })).toBe(DUPLICATE_ENSURE_NAME)
+  })
+
+  it("should fail a link on a path an earlier file step has", async () => {
+    const directory = await makeTempDir()
+    const filePath = path.join(directory, "app.conf")
+    const { host: h } = await createSession("apply")
+    await h.file(filePath, "a\n")
+
+    expect(await linkOrMessage(h, filePath, path.join(directory, "target"))).toBe(
+      "an earlier file step has the same name, and step names must be unique in a host script",
+    )
+  })
+
+  it("should allow two reads and two inspects of one command", async () => {
+    const { host: h } = await createSession()
+
+    expect(await readOrMessage(h, "echo hi")).toBe("hi")
+    expect(await readOrMessage(h, "echo hi")).toBe("hi")
+    expect(await h.inspect("echo hi")).toMatchObject({ stdout: "hi" })
+    expect(await h.inspect("echo hi")).toMatchObject({ stdout: "hi" })
   })
 })
 

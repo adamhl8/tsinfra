@@ -216,7 +216,7 @@ interface ChangeStepResult {
 
 > [!TIP]
 > Name a step like a function, starting with a verb ("Install Caddy"), or as the state it ensures ("Caddy is
-> installed").
+> installed"). Each change step needs its own name in a host script, so a step in a loop puts the item in its name.
 
 ---
 
@@ -534,8 +534,8 @@ fix: async ({ exec }) => {
 
 ### Values and secrets
 
-Pass values into a command as environment variables, not in its text. `env` and `secretEnv` take an object of
-variables, and the command uses them as `"$NAME"`:
+Pass a value that could hold shell syntax as an environment variable, not in the command's text. `env` and
+`secretEnv` take an object of variables, and the command uses them as `"$NAME"`:
 
 ```ts
 await h.read('curl -fsSL -H "Authorization: Bearer $TOKEN" "$URL"', {
@@ -553,8 +553,10 @@ await h.read('curl -fsSL -H "Authorization: Bearer $TOKEN" "$URL"', {
   still works, because the shell expands `"$FILE"` first.
 
 > [!IMPORTANT]
-> Always pass outside values through `env`: a host's output, anything fetched, user input. Put into a command's text,
-> a space breaks the command, and a `;` or `$(...)` runs part of it.
+> A value put into a command's text is read as shell code. That's fine for a value with a known, safe shape, like a
+> package name or a version. Pass anything else through `env`, like a path with spaces, a message, a file's contents,
+> or user input, so the shell reads it as a value. In the text, a space would break the command, and a `;` or `$(...)`
+> would run part of it. Pass a secret through `secretEnv`, so it's masked.
 
 `secretEnv` values show as `[MASKED]` everywhere tsinfra prints or records them, from that step on: in the options,
 and in the output and errors of every later command on the host. Your script still gets the real values.

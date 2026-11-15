@@ -27,6 +27,10 @@ type ReadStepKind = (typeof READ_STEP_KINDS)[number]
 /** The steps that can change the host, whether or not they do. */
 export type ChangeStepKind = (typeof CHANGE_STEP_KINDS)[number]
 
+/** Reports whether `kind` is a step that can change the host. */
+export const isChangeStepKind = (kind: StepKind): kind is ChangeStepKind =>
+  CHANGE_STEP_KINDS.some((changeStepKind) => changeStepKind === kind)
+
 /**
  * What a step's handler is given: the step's name and kind, and the session's mode, shell, home directory, tools, and
  * `converge`. `K` keeps a step's kind in its type, so a script can't give a run's result to `needs`.

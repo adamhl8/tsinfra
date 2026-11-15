@@ -192,11 +192,14 @@ command, and every tool call inside a check, fix, or run function. The tools don
 inside a function, like a container ID from one `exec`, goes into the next command's string, and quoting it is up to
 the script.
 
-**A value from outside your script goes in through `env`, never into the command string.** That means a host's own
-output, like file names from `ls`, and anything fetched, like a version tag or a URL. A command string is code, and
-tsinfra runs it as written, so a value put into it is read as code too. A space or a newline in it breaks the command,
-and a `;` or `$(...)` runs part of it. The same goes for one host's output used in a command on another host. Through
-`env`, the shell only ever reads it as a value.
+**A value that could hold shell syntax goes in through `env`, not into the command string.** A command string is code,
+and tsinfra runs it as written, so a value put into it is read as code too. A space or a newline in it breaks the
+command, and a `;` or `$(...)` runs part of it. Through `env`, the shell only ever reads it as a value. What decides
+it is the value's shape, not where it came from. A value with a known, safe shape, like a package name, a version, or a
+path you wrote, can go into the string, even when it came from a host's output, like the names a list check found. A
+value whose shape you don't control goes through `env`: file names from `ls`, a message, a file's contents, user
+input, or anything fetched that could hold more than you expect. A secret always goes through `secretEnv`, whatever its
+shape, so it's masked.
 
 **`secretEnv` keeps a secret out of everything tsinfra shows or keeps.** The command's text never holds it. Its value
 shows as `[MASKED]` in the record's variables, and in the output and errors of that step's commands and of every later
@@ -262,6 +265,15 @@ read the state themselves. [`run`](#run) is a step that reads no state.
 
 Name a step like a function, starting with a verb ("Install Caddy"), or as the state it ensures ("Caddy is installed").
 Both read well after `ensure`.
+
+A change step's name must be unique in its host script. `file` and `link` are named by their path, so two of them on
+one path clash too. The second step fails the host, under its own name, with
+`an earlier ensure step has the same name, and step names must be unique in a host script`. `plan` fails the same way.
+The report and `needs` tell steps apart by name. Reads and inspects are named by their command, so reading the same
+thing twice is fine.
+
+A step in a loop puts the item in its name, like `` `Install ${name}` ``. A helper that adds steps can be called twice
+on one host only when its step names differ, like by including its arguments.
 
 ## `read`
 
