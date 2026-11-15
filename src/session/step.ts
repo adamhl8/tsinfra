@@ -1,5 +1,6 @@
 import { type } from "arktype"
 
+import type { HomeDirectory } from "#hosts/hosts.ts"
 import type { Mode } from "#mode.ts"
 import type {
   EnsureComparisonValues,
@@ -40,8 +41,8 @@ export interface StepContext<K extends StepKind = StepKind> {
   kind: K
   mode: Mode
   shell: Shell
-  /** The SSH user's home directory, read when the host is prepared. It's empty when `$HOME` isn't set. */
-  home: string
+  /** The SSH user's home directory, read and checked when the host is prepared. */
+  home: HomeDirectory
   /** Given to a check function. */
   readTools: ReadTools
   /** Given to a fix or run function. */

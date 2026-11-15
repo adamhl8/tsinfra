@@ -7,6 +7,8 @@ import { buildHostDetails, finishHostDetails } from "#hosts/prepare/host-details
 import { createHostRecord, createPreparationRecorder, createSessionRecorder } from "#session/session.ts"
 import type { SessionContext, HostRecord } from "#session/session.ts"
 
+export type { HomeDirectory } from "#hosts/prepare/host-details/host-details.ts"
+
 /** A host after preparation: what its script defines, the record of its run, and its context if it was prepared. */
 export interface HostEntry {
   loadedHost: LoadedHost

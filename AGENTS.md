@@ -90,6 +90,13 @@ whether a reader could mistake it for the wanted value or the host's value.
 - **Handlers never record anything.** What a step has one of is returned (`HandlerReturn { status, value }`), and what
   it has zero or more of is recorded by a wrapper it runs through.
 - **A check reports the same** whether it's a command string or a function with one `inspect`.
+- **`runProcess` doesn't pass `env` to `spawn`,** so a host script's changes to `process.env` never reach the commands
+  tsinfra runs. Bun's `spawn` gives children the environment the process started with, so a test can't move `HOME`
+  either. Instead, the test preload mocks `buildHostDetails` to give each `@local` host a temp `home`.
+- **Paths tsinfra keeps under a host's home come from `hosts/prepare/host-details/tsinfra-directory.ts`,** built from
+  the checked `HomeDirectory`, never as `"$HOME"` in a script. The test preload's mock swaps `home` on what
+  `buildHostDetails` returns, so it reaches paths built after preparation, like saved state. It doesn't reach the
+  askpass helper, which `buildHostDetails` writes itself, so tests find the helper in the real home.
 - **Recorders follow the stages of a run** (preparation, then the session), not the host, step, and converge
   hierarchy.
 

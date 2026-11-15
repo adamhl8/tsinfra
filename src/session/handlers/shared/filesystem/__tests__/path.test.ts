@@ -1,33 +1,29 @@
 import { describe, expect, it } from "bun:test"
 
-import { isErr, messageChain } from "ts-explicit-errors"
+import { isErr } from "ts-explicit-errors"
 
+import type { HomeDirectory } from "#hosts/hosts.ts"
+import { validateHome } from "#hosts/prepare/host-details/host-details.ts"
 import { resolveHome } from "#session/handlers/shared/filesystem/path.ts"
 
-const toMessage = (...resolveHomeArgs: Parameters<typeof resolveHome>) => {
-  const resolved = resolveHome(...resolveHomeArgs)
-  return isErr(resolved) ? messageChain(resolved) : resolved
+/** Returns `rawHome` checked the way preparation checks it, or throws why it isn't a home directory. */
+const toHome = (rawHome: string): HomeDirectory => {
+  const home = validateHome(rawHome)
+  if (isErr(home)) throw home
+  return home
 }
+
+const HOME = toHome("/home/adam")
 
 describe("resolveHome", () => {
   it("should replace a leading ~/ and a bare ~ with the home directory", () => {
-    expect([toMessage("~/.config/fish", "/home/adam"), toMessage("~", "/home/adam")]).toStrictEqual([
+    expect([resolveHome("~/.config/fish", HOME), resolveHome("~", HOME)]).toStrictEqual([
       "/home/adam/.config/fish",
       "/home/adam",
     ])
   })
 
-  it("should leave an absolute path as it is, whatever the home directory", () => {
-    expect(toMessage("/etc/app.conf", "")).toBe("/etc/app.conf")
-  })
-
-  it("should fail when $HOME is empty", () => {
-    expect(toMessage("~/x", "")).toBe("can't resolve ~/ in '~/x', because $HOME isn't set on the host")
-  })
-
-  it("should fail when $HOME isn't absolute", () => {
-    expect(toMessage("~/x", "adam")).toBe(
-      "can't resolve ~/ in '~/x', because $HOME on the host is 'adam', not an absolute path",
-    )
+  it("should leave an absolute path as it is", () => {
+    expect(resolveHome("/etc/app.conf", HOME)).toBe("/etc/app.conf")
   })
 })

@@ -6,12 +6,12 @@ import { makeTempDir } from "@adamhl8/configs/test"
 
 import { createFakeSudoSession, readOrMessage, writeFakeTool } from "#__tests__/session.ts"
 import { runLocal } from "#transport/local.ts"
-import { WRITE_ASKPASS_HELPER_SCRIPT, createAskpassSudoTransport } from "#transport/sudo.ts"
+import { buildAskpassHelperWriteScript, createAskpassSudoTransport } from "#transport/sudo.ts"
 
 const OCTAL_RADIX = 8
 
-/** Runs `script` with `home` as `$HOME`, so the askpass helper goes under it instead of the real home. */
-const runInHome = async (home: string, cmd: string) => runLocal(`HOME='${home}'\n${cmd}`)
+// Put a quote and a space in the helper's directory, so a path that isn't quoted breaks the script.
+const toHelperPath = async () => path.join(await makeTempDir(), "it's here", "askpass.sh")
 
 describe("createPasswordlessSudoTransport", () => {
   it("should add -n to a script's own sudo, and stay off the record", async () => {
@@ -24,8 +24,8 @@ describe("createPasswordlessSudoTransport", () => {
 })
 
 describe("createAskpassSudoTransport", () => {
-  it("should give sudo the password through the helper in ~/.tsinfra", async () => {
-    const home = await makeTempDir()
+  it("should give sudo the password through the helper at its path", async () => {
+    const helperPath = await toHelperPath()
     const binDir = await makeTempDir()
     const password = `it's "a" $HOME`
     // Stand in for `sudo` with a tool that prints what the helper gives it, then runs the command.
@@ -34,23 +34,30 @@ describe("createAskpassSudoTransport", () => {
       "sudo",
       '[ "$1" = -A ] && shift\nprintf \'password: %s\\n\' "$("$SUDO_ASKPASS")"\nexec "$@"',
     )
-    const askpassTransport = createAskpassSudoTransport(runLocal, password)
+    const askpassTransport = createAskpassSudoTransport(runLocal, password, helperPath)
 
-    expect(await runInHome(home, WRITE_ASKPASS_HELPER_SCRIPT)).toStrictEqual({ stdout: "", stderr: "", exitCode: 0 })
-    expect((await stat(path.join(home, ".tsinfra", "askpass.sh"))).mode.toString(OCTAL_RADIX)).toEndWith("700")
-    // Set `HOME` in the script, because the `sudo` function reads it when it runs.
-    expect(await askpassTransport(`HOME='${home}'\nPATH='${binDir}':"$PATH"\nsudo echo hi`)).toStrictEqual({
+    expect(await runLocal(buildAskpassHelperWriteScript(helperPath))).toStrictEqual({
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+    })
+    expect((await stat(helperPath)).mode.toString(OCTAL_RADIX)).toEndWith("700")
+    expect(await askpassTransport(`PATH='${binDir}':"$PATH"\nsudo echo hi`)).toStrictEqual({
       stdout: `password: ${password}\nhi\n`,
       stderr: "",
       exitCode: 0,
     })
   })
 
-  it("should replace the helper from an earlier run, and leave nothing else in ~/.tsinfra", async () => {
-    const home = await makeTempDir()
-    await runInHome(home, WRITE_ASKPASS_HELPER_SCRIPT)
+  it("should replace the helper from an earlier run, and leave nothing else in its directory", async () => {
+    const helperPath = await toHelperPath()
+    await runLocal(buildAskpassHelperWriteScript(helperPath))
 
-    expect(await runInHome(home, WRITE_ASKPASS_HELPER_SCRIPT)).toStrictEqual({ stdout: "", stderr: "", exitCode: 0 })
-    expect(await readdir(path.join(home, ".tsinfra"))).toStrictEqual(["askpass.sh"])
+    expect(await runLocal(buildAskpassHelperWriteScript(helperPath))).toStrictEqual({
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+    })
+    expect(await readdir(path.dirname(helperPath))).toStrictEqual(["askpass.sh"])
   })
 })

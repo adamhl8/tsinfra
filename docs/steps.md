@@ -397,11 +397,10 @@ resolves `~/` itself:
 - **It replaces the leading `~/` with that path,** then quotes the whole path. Every command `file` builds uses a plain
   absolute path, the same with or without `sudo`. A bare `~` means the home directory itself. [`link`](#link) gets
   the same treatment, for its path and its target.
-- **An empty or relative `HOME` is an error,** like `can't resolve ~/ in '~/.config/fish/config.fish', because $HOME
-  isn't set on the host`. `printf` prints nothing whether `HOME` is unset or empty, so one check covers both. The check runs only for a path that
-  uses `~`, so a host without `HOME` still runs a script that doesn't. Over
-  SSH, sshd sets `HOME` from the user's account, so this only happens when tsinfra itself runs without one. A `HOME` of
-  `/` is odd but valid, so it's allowed.
+- **An empty or relative `HOME` fails the host when it's prepared,** like `$HOME isn't set on the host`, whether or not
+  the script uses `~`. `printf` prints nothing whether `HOME` is unset or empty, so one check covers both. Over SSH,
+  sshd sets `HOME` from the user's account, so this only happens when tsinfra itself runs without one. A `HOME` of `/`
+  is odd but valid, so it's allowed.
 - **`~otheruser/` is an error,** because it isn't an absolute path. Resolving another user's home would need an
   account lookup that nothing needs yet.
 

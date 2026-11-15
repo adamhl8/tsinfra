@@ -232,7 +232,7 @@ describe("h.file in plan", () => {
     await fileOrMessage(hostSession.host, `~/${relativePath}`, "a\n")
 
     const commands = hostSession.hostRecord.stepRecords[0]?.commands.map(({ cmd }) => cmd).join("\n")
-    expect(commands).toContain(`'${path.join(os.homedir(), relativePath)}'`)
+    expect(commands).toContain(`'${path.join(hostSession.home, relativePath)}'`)
   })
 })
 

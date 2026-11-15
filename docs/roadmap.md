@@ -165,13 +165,38 @@ lint and has its own tests. The lettered steps inside a piece are small enough t
 
 #### 2. Keep the tests' open changes apart
 
-From piece 5 on, every change in an `apply` opens a change under `$HOME`. Tests run at once on `@local`, and a test
-that calls `h` directly never reaches the clean finish that closes them.
+From piece 5 on, every change in an `apply` opens a change in the host's home. Tests run at once on `@local`, and a
+test that calls `h` directly never reaches the clean finish that closes them.
 
-- **2a.** Point `HOME` at a temp directory in `src/__tests__/test-setup.ts`, so no test writes into the real home.
-  Check that the ssh tests still pass, because OpenSSH finds `~/.ssh` through the user database, not `HOME`.
-- **2b.** Give each test host a unique name in `src/__tests__/session.ts`, so one test's open changes never reach
-  another's host. A test that checks the host's name passes its own.
+- **2a.** Give each `@local` test host a home of its own. The test preload (`src/__tests__/test-setup.ts`) mocks
+  `buildHostDetails` with a wrapper that calls the real one and swaps the `home` it read for a fresh temp directory.
+  Tests can't move `HOME` itself, because Bun's `spawn` gives commands the environment the test run started with, and
+  `runProcess` doesn't pass `process.env`, so a host script's changes to it never reach commands. This only isolates
+  saved state because piece 3 builds its path from the session's `home` (see 3c).
+- **2b.** Give the test sessions their `home`, so a test that resolves `~/` compares with it, not `os.homedir()`.
+- **2c.** Check `home` once, in `buildHostDetails`, and fail preparation when `$HOME` is empty or doesn't start with
+  `/`. Every `home` that reaches a session is then absolute, so `resolveHome` drops its two checks and only replaces
+  the `~`. The `path.test.ts` cases for an empty or relative `$HOME` move to a preparation test. A host with no `$HOME`
+  now fails `plan` too.
+  - `validateHome(rawHome): Result<HomeDirectory>` in `host-details.ts` runs the checks, with errors about the host's
+    `$HOME` itself: `$HOME isn't set on the host`, and `$HOME on the host is 'x', not an absolute path`.
+  - `HomeDirectory` is a branded string, like `Bytes`, and `validateHome` holds its only cast. `HostDetails.home`,
+    `SessionContext.home`, `StepContext.home`, `resolveHome`, and the path helpers in 2d all take it, so a raw `$HOME`
+    can't skip the check. `session/` imports only the type from `hosts/`.
+  - Tests that make up a home, like `path.test.ts`, get one from `validateHome`, and the test preload's mock brands its
+    temp directory the same way.
+- **2d.** Add `hosts/prepare/host-details/tsinfra-directory.ts` as the one place that lists what tsinfra keeps on a
+  host: `TSINFRA_DIRECTORY_NAME` (`.tsinfra`), `toAskpassHelperPath(home)`,
+  and later `toSavedStatePath(home, hostName)`, re-exported through `host-details.ts` once `prepare.ts` needs it.
+  They only join paths, because `home` is already checked. The askpass
+  helper isn't saved state: it holds no data, is rewritten every run, and serves every host script on the machine. It
+  only shares the directory.
+- **2e.** Make `transport/sudo.ts` take a finished `helperPath`, for both the write script (now
+  `buildAskpassHelperWriteScript(helperPath)`) and the `sudo` function (`createAskpassSudoTransport(transport,
+  password, helperPath)`), quoted with `quoteShellArg`. `buildHostDetails` and `finishHostDetails` both get it from
+  `toAskpassHelperPath(home)`, so they stay in sync without a new field.
+- **2f.** Tests: `sudo.test.ts` passes a path in a temp directory instead of faking `HOME`. The sudo Docker tests still
+  find the helper in the real home, because `buildHostDetails` writes it before the test preload swaps `home`.
 
 #### 3. The saved state file
 
@@ -180,8 +205,10 @@ A new package, `src/session/saved-state/`, with `saved-state.ts` as its main mod
 - **3a.** The ArkType schema and its type: `{ version: 1, openChanges: Record<string, string[]> }`.
 - **3b.** `readSavedState`: one command that prints the host's file, or a marker when there's none. Parse it with
   `JSON.parse` inside `attempt`, then check it against the schema. Each error names the file.
-- **3c.** The write script: `mkdir -p -m 700 ~/.tsinfra/state`, a temp file with the JSON from `quoteShellArg`,
-  `chmod 600`, and `mv -f` into place, like `WRITE_ASKPASS_HELPER_SCRIPT`. The delete is `rm -f`.
+- **3c.** The write script: `mkdir -p -m 700` on the state directory, a temp file with the JSON from
+  `quoteShellArg`, `chmod 600`, and `mv -f` into place, like the askpass helper's write script. The delete is `rm -f`.
+  The package takes the file's path finished, from `toSavedStatePath` (2d), and quotes it with `quoteShellArg`. It
+  never writes `"$HOME"` in a script, so the test preload's `home` reaches it.
 - **3d.** The store, which holds the saved state in memory:
   - `openChange(name)` opens a fresh change, with no runs listed.
   - `recordRun(runName, stepNames)` adds the run to each of those steps' open changes.
@@ -202,8 +229,9 @@ A new package, `src/session/saved-state/`, with `saved-state.ts` as its main mod
 
 #### 4. Read the saved state in preparation
 
-- **4a.** In `buildSessionContext` (`src/hosts/prepare/prepare.ts`), read the saved state with a shell on the host's
-  final transport that records nothing, and fail preparation when the read fails.
+- **4a.** In `buildSessionContext` (`src/hosts/prepare/prepare.ts`), build the file's path with
+  `toSavedStatePath(home, name)`, read the saved state with a shell on the host's final transport that records
+  nothing, and fail preparation when the read fails.
 - **4b.** Add the store to `SessionContext`.
 - **4c.** Test in `src/hosts/__tests__/prepare.test.ts`: a host with an invalid file fails preparation with the file's
   name, and the read isn't in the record.

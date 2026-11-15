@@ -187,7 +187,7 @@ describe("h.link in apply", () => {
     await linkOrMessage(hostSession.host, `~/${directoryName}/link`, "~/target", { user: uid })
 
     expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toMatchObject({
-      linkChange: { kind: "new", want: path.join(os.homedir(), "target") },
+      linkChange: { kind: "new", want: path.join(hostSession.home, "target") },
     })
   })
 })

@@ -342,7 +342,7 @@ export default host("incus.lan", fn, { sudo: { password: incusSudo } }) // a pas
 The Incus containers have passwordless sudo through cloud-init, so `sudo: true` only checks it there. The Mac and the
 first run on the Incus host need a password.
 
-**Preparation.** Every host is prepared before any script runs: connect, read `$HOME`, and for a host that declares
+**Preparation.** Every host is prepared before any script runs: connect, read and check `$HOME`, and for a host that declares
 `sudo`, check it. That happens for every host at once. Then the hosts that need a password prompt, one at a time, in the
 hosts' order. Then the scripts run, one after another, so a prompt never mixes with a running host's
 output. A host that can't be reached fails here, before any other host changes anything. A host has to declare `sudo`
@@ -392,10 +392,11 @@ because of this: by the time its script runs, it's too late to ask.
   stderr counts too, because a redirected prompt would leave the run waiting on a prompt nobody sees.
 
 **How a command's `sudo` gets the password.** On a host with a password, preparation writes an askpass helper to
-`~/.tsinfra/askpass.sh`, and every script tsinfra sends starts with a preamble that defines `sudo` as a shell function:
+`.tsinfra/askpass.sh` in the home directory it read and checked, and every script tsinfra sends starts with a preamble
+that defines `sudo` as a shell function, with the helper's absolute path quoted:
 
 ```sh
-sudo() { TSINFRA_SUDO_PASSWORD='...' SUDO_ASKPASS="$HOME"/.tsinfra/askpass.sh command sudo -A "$@"; }
+sudo() { TSINFRA_SUDO_PASSWORD='...' SUDO_ASKPASS='/home/adam/.tsinfra/askpass.sh' command sudo -A "$@"; }
 ```
 
 - **The helper stays between runs.** It only prints `$TSINFRA_SUDO_PASSWORD`, so it holds no secret. Preparation writes

@@ -22,6 +22,7 @@ import { closeConnections } from "#transport/transport.ts"
 
 // `setup.sh` gives this user this password.
 const PASSWORD = "it's tsinfra"
+// Find the helper in the real home, because preparation writes it before the test preload swaps the session's `home`.
 const ASKPASS_HELPER_PATH = path.join(os.homedir(), ".tsinfra", "askpass.sh")
 
 /** Returns why preparing a host failed as its message chain, or `prepared`. */

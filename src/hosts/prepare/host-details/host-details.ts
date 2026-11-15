@@ -4,9 +4,10 @@ import { err, isErr } from "ts-explicit-errors"
 import type { LoadedHost } from "#hosts/load.ts"
 import { promptForSudoPassword, resolveHostSudo } from "#hosts/prepare/host-details/host-sudo/host-sudo.ts"
 import { readSshDefaultOptions } from "#hosts/prepare/host-details/ssh-options.ts"
+import { toAskpassHelperPath } from "#hosts/prepare/host-details/tsinfra-directory.ts"
 import type { PreparationRecorder } from "#session/session.ts"
 import {
-  WRITE_ASKPASS_HELPER_SCRIPT,
+  buildAskpassHelperWriteScript,
   createAskpassSudoTransport,
   createPasswordlessSudoTransport,
   LOCAL_TARGET,
@@ -17,8 +18,8 @@ import type { Shell, Transport } from "#transport/transport.ts"
 
 /** What preparation reads from a host before its transport is built. */
 export interface HostDetails {
-  /** The SSH user's home directory. It's empty when `$HOME` isn't set. */
-  home: string
+  /** The SSH user's home directory. */
+  home: HomeDirectory
   /** The SSH user's name, which the sudo password prompt names. */
   user: string
   /** How to reach the host, before `sudo` is set up on it. */
@@ -32,10 +33,23 @@ export interface ReadyHostDetails extends HostDetails {
   transport: Transport
 }
 
+declare const HOME_DIRECTORY_BRAND: unique symbol
+/** The SSH user's home directory, which is absolute. Only `validateHome` makes one, so a raw `$HOME` can't stand in. */
+export type HomeDirectory = string & { readonly [HOME_DIRECTORY_BRAND]: true }
+
 // Read `$HOME` with `printf '%s'`, because it prints the value exactly, with no newline to strip.
 // `echo` treats backslashes or a leading `-n` specially in some shells.
 const READ_HOME_COMMAND = `printf '%s' "$HOME"`
 const READ_USER_COMMAND = "id -un"
+
+/** Checks the `$HOME` the host printed, because a path built from an empty or relative home lands in the wrong place. */
+export const validateHome = (rawHome: string): Result<HomeDirectory> => {
+  if (rawHome === "") return err("$HOME isn't set on the host", undefined)
+  if (!rawHome.startsWith("/")) return err(`$HOME on the host is '${rawHome}', not an absolute path`, undefined)
+
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion - a brand exists only in the types, so only `as` can make one
+  return rawHome as HomeDirectory
+}
 
 /**
  * Returns how to reach `target`, without `sudo` set up yet. Reads the ssh config first for a target that goes over ssh,
@@ -70,9 +84,12 @@ export const buildHostDetails = async (
   const hostShell = preparationRecorder.getShell(baseTransport)
 
   // Read the SSH user's home before the script runs, because a path that starts with `~/` needs it.
-  // An unset `$HOME` comes back empty, so this fails only when the host can't run commands at all.
-  const home = await hostShell.exec(READ_HOME_COMMAND, { label: "home directory" })
-  if (isErr(home)) return err("failed to read the SSH user's home directory", home)
+  // An unset `$HOME` comes back empty, so the read fails only when the host can't run commands at all.
+  const homeOutput = await hostShell.exec(READ_HOME_COMMAND, { label: "home directory" })
+  if (isErr(homeOutput)) return err("failed to read the SSH user's home directory", homeOutput)
+
+  const home = validateHome(homeOutput)
+  if (isErr(home)) return home
 
   const userOutput = await hostShell.exec(READ_USER_COMMAND, { label: "user name" })
   if (isErr(userOutput)) return err("failed to read the SSH user's name", userOutput)
@@ -81,9 +98,12 @@ export const buildHostDetails = async (
   const resolvedSudo = await resolveHostSudo(hostShell, sudo)
   if (isErr(resolvedSudo)) return resolvedSudo
 
+  const askpassHelperPath = toAskpassHelperPath(home)
+
   // Skip writing the askpass helper for hosts where passwordless sudo is enabled.
   if (resolvedSudo.kind !== "passwordless") {
-    const helperWrite = await hostShell.exec(WRITE_ASKPASS_HELPER_SCRIPT, { label: "askpass helper write" })
+    const helperWriteScript = buildAskpassHelperWriteScript(askpassHelperPath)
+    const helperWrite = await hostShell.exec(helperWriteScript, { label: "askpass helper write" })
     if (isErr(helperWrite)) return err("failed to write the sudo askpass helper", helperWrite)
   }
 
@@ -91,7 +111,7 @@ export const buildHostDetails = async (
 
   const transport =
     resolvedSudo.kind === "password"
-      ? createAskpassSudoTransport(baseTransport, resolvedSudo.password)
+      ? createAskpassSudoTransport(baseTransport, resolvedSudo.password, askpassHelperPath)
       : createPasswordlessSudoTransport(baseTransport)
 
   return { home, user, baseTransport, hostShell, transport }
@@ -105,11 +125,11 @@ export const finishHostDetails = async (
   loadedHost: LoadedHost,
   hostDetails: HostDetails,
 ): Promise<Result<ReadyHostDetails>> => {
-  const { user, baseTransport, hostShell } = hostDetails
+  const { home, user, baseTransport, hostShell } = hostDetails
 
   const password = await promptForSudoPassword(hostShell, loadedHost.name, user)
   if (isErr(password)) return password
 
-  const transport = createAskpassSudoTransport(baseTransport, password)
+  const transport = createAskpassSudoTransport(baseTransport, password, toAskpassHelperPath(home))
   return { ...hostDetails, transport }
 }

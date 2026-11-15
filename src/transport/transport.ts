@@ -8,9 +8,9 @@ export type { CommandOptions, RecordingTransport, Shell } from "#transport/shell
 export { createShell } from "#transport/shell.ts"
 export { createStepTransport } from "#transport/step.ts"
 export {
+  buildAskpassHelperWriteScript,
   createAskpassSudoTransport,
   createPasswordlessSudoTransport,
-  WRITE_ASKPASS_HELPER_SCRIPT,
 } from "#transport/sudo.ts"
 
 /** The target that runs a host on the control machine itself, without ssh. */

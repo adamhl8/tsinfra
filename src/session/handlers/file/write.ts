@@ -46,7 +46,7 @@ const getModeArg = (attributes: HostFileAttributeDetails | undefined, options: V
  * Returns a function that puts the given text in the heredoc of the script that writes the file (see
  * `docs/transport.md`). The real script and the recorded one differ only in that text.
  */
-const createWriteScript = (
+const buildFileWriteScript = (
   hostFileDetails: HostFileDetails,
   validateCommand: string | undefined,
   options: ValidFileOptions,
@@ -112,7 +112,7 @@ export const writeFile = async (
   const { path } = hostFileDetails
   const { resolvedContent, validateCommand } = fileWrite
 
-  const withContent = createWriteScript(hostFileDetails, validateCommand, options)
+  const withContent = buildFileWriteScript(hostFileDetails, validateCommand, options)
   const encodedContent = Buffer.from(resolvedContent.bytes).toString("base64")
   const writeScript = withContent(encodedContent)
 

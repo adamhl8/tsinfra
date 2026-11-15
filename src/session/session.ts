@@ -1,6 +1,7 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
+import type { HomeDirectory } from "#hosts/hosts.ts"
 import type { Mode } from "#mode.ts"
 import type {
   EnsureOptions,
@@ -111,8 +112,8 @@ export type { ComparisonValues, StepKind, StepStatus } from "#session/step.ts"
 /** What a host's session needs, set up before any script runs. */
 export interface SessionContext {
   name: string
-  /** The SSH user's home directory. It's empty when `$HOME` isn't set. */
-  home: string
+  /** The SSH user's home directory. */
+  home: HomeDirectory
   sessionRecorder: SessionRecorder
 }
 

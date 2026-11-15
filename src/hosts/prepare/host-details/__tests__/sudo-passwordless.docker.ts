@@ -6,6 +6,7 @@ import path from "node:path"
 import { createSession, prepareAndRunHost, readOrMessage, toLoadedHost } from "#__tests__/session.ts"
 import { host } from "#hosts/host.ts"
 
+// Find the helper in the real home, because preparation writes it before the test preload swaps the session's `home`.
 const ASKPASS_HELPER_PATH = path.join(os.homedir(), ".tsinfra", "askpass.sh")
 
 describe("a user with passwordless sudo", () => {

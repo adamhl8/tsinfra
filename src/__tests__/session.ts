@@ -86,6 +86,8 @@ export const buildLocalSessionContext = async (hostOptions?: HostOptions) =>
 interface TestSession {
   host: Host
   hostRecord: HostRecord
+  /** The SSH user's home the session resolves `~/` with, which the test preload gives each `@local` host. */
+  home: string
 }
 
 /** Prepares one host the way a run does, and returns its entry, or throws why it couldn't be prepared. */
@@ -98,7 +100,7 @@ const preparePreparedHostEntry = async (loadedHost: LoadedHost) => {
 /** Prepares `loadedHost` the way a run does, and creates its session. */
 const prepareSession = async (loadedHost: LoadedHost, mode: Mode): Promise<TestSession> => {
   const { sessionContext, hostRecord } = await preparePreparedHostEntry(loadedHost)
-  return { host: createHostSession(sessionContext, mode), hostRecord }
+  return { host: createHostSession(sessionContext, mode), hostRecord, home: sessionContext.home }
 }
 
 /** Creates a session for a host 'a' on `target`. */
@@ -136,7 +138,11 @@ export const createWrappedSession = async (
   if (!("transport" in hostDetails)) throw new Error("the host needs a sudo password prompt")
 
   const sessionRecorder = createSessionRecorder(hostRecord, options, wrapTransport(hostDetails.transport))
-  return { host: createHostSession({ ...sessionContext, sessionRecorder }, mode), hostRecord }
+  return {
+    host: createHostSession({ ...sessionContext, sessionRecorder }, mode),
+    hostRecord,
+    home: sessionContext.home,
+  }
 }
 
 /** Creates a session where the scripts in `binDir` come first on `PATH`. */

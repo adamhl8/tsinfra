@@ -15,7 +15,7 @@ const RECORDED_PASSWORD = "<sudo password>"
  * argument. Give sudo the password on stdin with `-S`, because sudo then makes one try and stops at the end of stdin.
  * Through askpass, it makes three tries and logs three failures. Use `-p ''`, so sudo prints no prompt of its own.
  */
-const buildCheckSudoPasswordScript = (passwordArg: string): string =>
+const buildSudoPasswordCheckScript = (passwordArg: string): string =>
   `printf '%s\\n' ${passwordArg} | sudo -k -S -p '' true`
 
 /**
@@ -23,9 +23,9 @@ const buildCheckSudoPasswordScript = (passwordArg: string): string =>
  * another reason, like a user who isn't in sudoers, because then the password may well be right.
  */
 export const checkSudoPassword = async (shell: Shell, password: string): Promise<Result<boolean>> => {
-  const output = await shell.inspect(buildCheckSudoPasswordScript(quoteShellArg(password)), {
+  const output = await shell.inspect(buildSudoPasswordCheckScript(quoteShellArg(password)), {
     label: "sudo password check",
-    recordedCmd: buildCheckSudoPasswordScript(RECORDED_PASSWORD),
+    recordedCmd: buildSudoPasswordCheckScript(RECORDED_PASSWORD),
   })
   if (isErr(output)) return err(SUDO_PASSWORD_CHECK_FAILED_MESSAGE, output)
   if (output.exitCode !== 0) {
