@@ -18,6 +18,7 @@ import type { Mode } from "#mode.ts"
 import type { EnsureOptions } from "#session/handlers/ensure/ensure.ts"
 import type { Want } from "#session/handlers/ensure/want.ts"
 import type { RunOptions } from "#session/handlers/run.ts"
+import type { ChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
 import { savedStateFileSchema } from "#session/saved-state/schema.ts"
 import type { FinishedStepRecord, Host, SessionContext, HostRecord, StepRecord } from "#session/session.ts"
@@ -59,8 +60,8 @@ export const loadHostDefinition = (hostDefinition: HostDefinition): LoadedHost =
   toLoadedHost(hostDefinitionSchema.assert(hostDefinition))
 
 /**
- * Loads a host 'a' on `target`, `@local` by default. The test preload gives an `@local` host the same home each time
- * it's prepared, so a test can run several applies on it.
+ * Loads a host 'a' on `target`, `@local` by default. The test preload gives a host the same home each time it's
+ * prepared, so a test can run several applies on it.
  */
 export const loadTestHost = (target: string = LOCAL_TARGET, hostOptions?: TestHostOptions) =>
   loadHostDefinition(host({ name: "a", target, ...hostOptions }, doNothing))
@@ -97,7 +98,7 @@ export const buildLocalSessionContext = async (hostOptions?: TestHostOptions) =>
 interface TestSession {
   host: Host
   hostRecord: HostRecord
-  /** The SSH user's home the session resolves `~/` with, which the test preload gives each `@local` host. */
+  /** The SSH user's home the session resolves `~/` with, which the test preload gives each host. */
   home: HomeDirectory
 }
 
@@ -193,6 +194,42 @@ export const createFakeSudoSession = async (mode: Mode) => {
   }
 
   return { hostSession: await createSessionWithBinDir(mode, binDir), readSudoCalls }
+}
+
+/** Prepares `loadedHost` once, and returns the home its saved state goes under, which later preparations reuse. */
+export const getPreparedHome = async (loadedHost: LoadedHost) => {
+  const { sessionContext } = await preparePreparedHostEntry(loadedHost)
+  return sessionContext.home
+}
+
+/** What a test passes to `loadHostThatStopsBeforeRun`. */
+interface StopsBeforeRunOptions {
+  target: string
+  hostOptions?: TestHostOptions
+  /** Makes the change the run follows. */
+  change: (h: Host) => Promise<ChangeStepResult>
+  runCommand: string
+}
+
+/**
+ * Loads a host 'a' whose first apply makes `change` and then fails before the run after it, like an apply that didn't
+ * finish. Later applies reach the run. Returns the host, and a function that lets the applies after it reach the run.
+ */
+export const loadHostThatStopsBeforeRun = (options: StopsBeforeRunOptions) => {
+  const { target, hostOptions, change, runCommand } = options
+  let isFirstApply = true
+  const loadedHost = loadHostDefinition(
+    host({ name: "a", target, ...hostOptions }, async (h) => {
+      const changeResult = await change(h)
+      if (isFirstApply) throwBoom()
+      await h.run("Restart", runCommand, { after: [changeResult] })
+    }),
+  )
+
+  const reachRun = () => {
+    isFirstApply = false
+  }
+  return { loadedHost, reachRun }
 }
 
 /** Prepares one host and runs it, for a test that only cares about its report. */

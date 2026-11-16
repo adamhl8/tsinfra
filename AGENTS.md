@@ -37,7 +37,8 @@ Check new names, comments, docs, and error messages against these words.
 - **Host script** is a file in `hosts/` (`HostScript`, `HOST_SCRIPT_EXTENSION`, the `hostScript` name kind), never
   "host file".
 - **Change** is anything that modifies the host (the summary's `N changes`). **Drift** is a change a step that reads
-  the host found (a `changed` status, the only thing that makes `plan` exit 2). **Run** is a change with no drift
+  the host found (a `changed` status), or a run that only changes still open from an earlier apply triggered (a
+  `ranFromOpenChanges` status). Those are the only things that make `plan` exit 2. **Run** is a change with no drift
   behind it. Don't coin a word for non-drift changes.
 - **Read step** is a step that tells the script about the host (`read`, `inspect`). **Change step** is a step that can
   change the host, whether or not it does (`file`, `ensure`, `run`, `link`, later `reboot`).
@@ -49,7 +50,8 @@ Check new names, comments, docs, and error messages against these words.
   `compareFileState`). The "state command" is the exception, because it's a documented term.
 - **Saved state** is what tsinfra itself keeps on a host between applies (`~/.tsinfra/state/<host>.json`, the
   `saved-state` package), in code and prose, so it never reads as the host's state. Inside that package, plain `state`
-  in a local name is fine where the context is clear. **Open changes** are the first part of saved state.
+  in a local name is fine where the context is clear. **Open changes** are the first part of saved state. A step
+  that's right, but whose change is still open from an earlier apply, is **`resume`**.
 - **Follow-up** is a step whose `after` names the steps it follows, today a `run` and later a `reboot`. Use it, not
   "run", in code that would apply to any of them, like `recordFollowUp(followUpName, stepNames)`.
 - **Preparation** is what runs before a host's script, never "preflight" or "host failure".
@@ -94,7 +96,8 @@ whether a reader could mistake it for the wanted value or the host's value.
 - **A check reports the same** whether it's a command string or a function with one `inspect`.
 - **`runProcess` doesn't pass `env` to `spawn`,** so a host script's changes to `process.env` never reach the commands
   tsinfra runs. Bun's `spawn` gives children the environment the process started with, so a test can't move `HOME`
-  either. Instead, the test preload mocks `buildHostDetails` to give each `@local` host a temp `home`.
+  either. Instead, the test preload mocks `buildHostDetails` to give each host a temp `home`, ssh ones included,
+  because the only sshds the tests reach run on the same machine as the same user.
 - **Paths tsinfra keeps under a host's home come from `hosts/prepare/host-details/tsinfra-directory.ts`,** built from
   the checked `HomeDirectory`, never as `"$HOME"` in a script. The test preload's mock swaps `home` on what
   `buildHostDetails` returns, so it reaches paths built after preparation, like saved state. It doesn't reach the

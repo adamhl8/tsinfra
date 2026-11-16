@@ -47,6 +47,8 @@ needs?: ChangeStepResult<"file" | "link" | "ensure">[]
   is an error, because that run could never fire.
 - **A waiting step counts as changed,** so a step that needs it waits too, and a follow-up like `after: [x]` shows up
   in the plan. `plan` errs toward showing too much rather than too little.
+- **A `resume` step doesn't make anything wait,** even though it reads as changed, because its change is already on
+  the host (see [Steps](./steps.md#when-an-apply-doesnt-finish)).
 - **`ChangeStepResult` carries the step's name,** so `plan` can say what a step needs.
 - **A run's result can't be needed.** A triggered run is `changed` exactly when the step that triggered it is, so need
   that step instead, because it is what this step's state depends on. A run with `after: "always"` would make every step that

@@ -47,7 +47,8 @@ order. A step that starts while another is running fails the host (see [Steps](.
 Each host's output is held until that host finishes, then printed as one block, so lines from different hosts never
 mix. A summary follows.
 
-By default a block lists only the steps that changed, would change, are waiting, or failed. A host whose script made
+By default a block lists only the steps that changed, would change, are waiting, resume an apply that didn't finish, or
+failed. A host whose script made
 no steps still gets a block, with "no steps" under its name, so it's clear the host ran.
 
 Three levels of `-v` show more, following the `-v`, `-vv`, `-vvv` convention of pyinfra, Ansible, and ssh. Each level
@@ -223,8 +224,10 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   entries, so each entry stands on its own, and one long name doesn't push the rest of the block to the right. The
   parentheses keep the kind apart from the name without color. A failure no step owns shows `(preparation)` or `(host fn)` in place of a kind,
   also in italics, so it doesn't read as a kind of step (see [Kinds of failure](#kinds-of-failure)). A `changed` step from `ensure`, `file`, or `link` is `~ change`, and a `ran` step from `run` is
-  `> triggered`, because a step it follows changed. Any failed step is `! failed`, because the status matters more than the kind once
-  something broke, and the error already says what failed. In `--verbose`, every step that was already right is `= unchanged`,
+  `> triggered`, because a step it follows changed. A `ranFromOpenChanges` run is `> triggered` too. A `resume` step
+  is `^ resume` in cyan, because it's right, but its change is still open from an earlier apply that didn't finish (see
+  [Steps](./steps.md#when-an-apply-doesnt-finish)). Any failed step is `! failed`, because the status matters more than the kind once
+  something broke, and the error already says what failed. In `--verbose`, every other step that was already right is `= unchanged`,
   whatever its kind, so it doesn't rely on color to tell it from a change. A run whose trigger didn't fire is `= unchanged` too,
   because nothing needed doing. A read or inspect has its own `observed` status, so it gets a gray `· observed` rather than `=`.
 - **Failures.** A failed step shows its error's message chain on indented lines under it, in bright red, so it stands
@@ -281,7 +284,10 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
 
 - **Colors** follow the status: a summary's change count matches `~` and `>`, and its waiting count matches `?`. The
   plan reminder is dim, so the host lines stay the main thing in the summary. A note follows its entry's name after a
-  gap of three spaces. A waiting step's note is `needs 'A', 'B'`. A failure no step owns never gets a note.
+  gap of three spaces. A waiting step's note is `needs 'A', 'B'`. A `resume` step's note is "an earlier apply didn't
+  finish, so its follow-ups that didn't complete still trigger", and a `ranFromOpenChanges` run's is "triggered because
+  it didn't complete in an earlier unfinished apply". Both show at the default level, with their lines, because the
+  case is rare and should always be explained. A failure no step owns never gets a note.
 - **Options.** The `options:` heading is dim and italic, its keys are dim like other labels, and its values are styled
   like other values, with the same markers and quotes. `[MASKED]` is dim, because it's tsinfra's marker, not a
   value the script gave. On the line, an object's variable names go in braces after its name, like `env { URL, PORT }`,
@@ -317,9 +323,10 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
 - **A host with nothing to show** gets no block, only its line in the summary. A host whose script made no steps
   isn't one, because its "no steps" block shows that it ran.
 - **The summary** has one line per host: `unchanged`, `failed`, or a count of changes, where a count includes both
-  `changed` and `ran` steps, so it matches the `~` lines in the blocks. A count of warnings follows, like
-  `unchanged, 1 warning`, so one isn't lost once the blocks have scrolled away. In `plan`, when any step's state differed, it
-  starts with the reminder that steps after a change were checked without it (see
+  `changed`, `ran`, and `ranFromOpenChanges` steps, so it matches the `~` and `>` lines in the blocks. A `resume` step
+  isn't counted, because it changed nothing. A count of warnings follows, like `unchanged, 1 warning`, so one isn't lost
+  once the blocks have scrolled away. In `plan`, when there's drift (see [Exit codes](#exit-codes)), it starts with the
+  reminder that steps after a change were checked without it (see
   [Steps](./steps.md#what-plan-can-and-cannot-show)).
 - **Diffs** come from jsdiff (the `diff` package), not hand-written code. It is the standard line-diff library for
   JavaScript, has no dependencies, and returns hunks with context as data, which the report colors itself. A file's
@@ -354,7 +361,9 @@ in the order the script called them, and the host's failure, if it failed.
 
 - **Preparation's commands** are every command it ran for the host, on the control machine and on the host: `ssh -G`,
   the reads of the home directory and the user, the sudo checks, and the askpass helper write. A sudo password check
-  records `<sudo password>` in place of the password, so the password never reaches the record.
+  records `<sudo password>` in place of the password, so the password never reaches the record. The saved state read
+  isn't one of them, and neither is any saved state write, because they're tsinfra's own file (see
+  [Transport](./transport.md#saved-state)).
 
 - **The failure** is the host's only one, because nothing runs on a host once it has failed. It records its error, its
   kind (see [Kinds of failure](#kinds-of-failure)), and any hints for it. A hint is recorded as its kind, like
@@ -389,8 +398,10 @@ A step never records anything itself. It returns its one status, or an error, an
 the wrappers the step runs through: the shell's transport records commands, and `converge` records comparisons. So a
 failure keeps what the step found before it.
 
-A step's status is `unchanged`, `changed`, `ran`, `waiting`, or `observed`. `changed` means the host's state differed.
-`ran` means a run's trigger fired, or its `after` was `"always"`. `waiting` means a step it needs would change. A read
+A step's status is `unchanged`, `changed`, `ran`, `ranFromOpenChanges`, `waiting`, `resume`, or `observed`. `changed`
+means the host's state differed. `ran` means a run's trigger fired, or its `after` was `"always"`. `ranFromOpenChanges`
+means only changes still open from an earlier apply triggered a run. `resume` means a change step was right, but its
+change is still open from an earlier apply. `waiting` means a step it needs would change. A read
 or inspect is always `observed`. The record is the same in `plan` and `apply`, and so is each step's status line. A changed
 step's details come from its `before` comparison, so `apply` can show what a step changed too.
 
@@ -432,8 +443,11 @@ Every kind but a startup failure fails only its own host, so the other hosts sti
 things succeeded.
 
 `plan` exits 2 on drift: a step that reads the host's state found it different from the script, which is a `changed`
-status. A `run` shows up in the plan as a `>` line and counts as a change in the summary, but it is never drift, because
-it doesn't read the host's state. See [Steps](./steps.md#run).
+status. A `run` shows up in the plan as a `>` line and counts as a change in the summary, but it usually isn't drift,
+because it doesn't read the host's state, and the step that triggered it already counts. See [Steps](./steps.md#run).
+The exception is a `ranFromOpenChanges` run, which only changes still open from an earlier apply triggered. Nothing in
+the pass explains it, and `apply` would run it, so it's drift too (see
+[Steps](./steps.md#when-an-apply-doesnt-finish)).
 
 A failed host wins. `plan` exits 1 when any host failed, even if another host has drift, because the plan for
 the failed host is incomplete.

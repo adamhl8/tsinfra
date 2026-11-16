@@ -9,7 +9,7 @@ has drifted on each machine, and `tsinfra apply` fixes only what needs fixing.
 - Plain TypeScript: loops, conditionals, template literals, `fetch`, and your own helper functions
 - `plan` reads every step's state on the machine and changes nothing
 - Every fix is checked again afterward, so a fix that doesn't work fails loudly
-- No inventory file, no state file, and no DSL
+- No inventory file, no state file to keep in sync, and no DSL
 
 > [!WARNING]
 > tsinfra is in early development. Expect breaking changes.
@@ -454,7 +454,8 @@ h.run(name: string, cmd: string | ((tools: ChangeTools) => Promise<void>), optio
 Runs a command with no check, for work that something in the run triggers.
 
 - `after`: when to run
-  - An array of change step results: run when any of them changed
+  - An array of change step results: run when any of them changed, or when an apply that didn't finish left the run to
+    do
   - `"always"`: run on every `apply`
 - `env`, `secretEnv`: see [Values and secrets](#values-and-secrets)
 
@@ -475,12 +476,13 @@ await h.run(
 ```
 
 - `plan` never runs it, and shows it as `> triggered` when it would run.
-- A run never counts as drift.
+- A run counts as drift only when an apply that didn't finish left it to do.
 - A run can follow another run, like `after: [reload]`.
 
-> [!TIP]
-> Put a run right after the steps it follows. tsinfra keeps no state, so if the host fails between a change and its
-> run, the next `apply` sees the change as already done and won't trigger the run. Rerun it by hand.
+> [!NOTE]
+> If a run fails, or the host fails between a change and its run, the next `apply` still triggers the run. tsinfra
+> keeps the changes an apply made on the host until the host finishes an `apply` cleanly, and shows a step whose change
+> is still open as `^ resume`.
 
 Anything that can be checked should be an `ensure`. A run function that tests the host before acting works, but `plan`
 can't see what it decides.
@@ -638,14 +640,15 @@ Each host prints one block when it finishes, then a summary line per host follow
 
 By default, a block lists only the steps that changed, would change, are waiting, or failed:
 
-| Status        | Meaning                                                         |
-| ------------- | --------------------------------------------------------------- |
-| `~ change`    | The host's state differed, so the fix ran (would run in `plan`) |
-| `> triggered` | A run's `after` fired                                           |
-| `? waiting`   | A step it needs would change                                    |
-| `! failed`    | The step failed. Its error is under it.                         |
-| `= unchanged` | Already right (`-v`)                                            |
-| `· observed`  | A `read` or `inspect` (`-v`)                                    |
+| Status        | Meaning                                                           |
+| ------------- | ----------------------------------------------------------------- |
+| `~ change`    | The host's state differed, so the fix ran (would run in `plan`)   |
+| `> triggered` | A run's `after` fired                                             |
+| `? waiting`   | A step it needs would change                                      |
+| `^ resume`    | Already right, but an earlier apply that changed it didn't finish |
+| `! failed`    | The step failed. Its error is under it.                           |
+| `= unchanged` | Already right (`-v`)                                              |
+| `· observed`  | A `read` or `inspect` (`-v`)                                      |
 
 Each `-v` shows more:
 

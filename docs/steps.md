@@ -19,6 +19,7 @@ Everything a host script does to its host goes through `h`, the context passed t
   - [What a check may change](#what-a-check-may-change)
   - [`fix`](#fix)
 - [`run`](#run)
+  - [When an apply doesn't finish](#when-an-apply-doesnt-finish)
 - [Failure](#failure)
 - [What `plan` can and cannot show](#what-plan-can-and-cannot-show)
 
@@ -269,7 +270,7 @@ Both read well after `ensure`.
 A change step's name must be unique in its host script. `file` and `link` are named by their path, so two of them on
 one path clash too. The second step fails the host, under its own name, with
 `an earlier ensure step has the same name, and step names must be unique in a host script`. `plan` fails the same way.
-The report and `needs` tell steps apart by name. Reads and inspects are named by their command, so reading the same
+The report, `needs`, and [open changes](#when-an-apply-doesnt-finish) tell steps apart by name. Reads and inspects are named by their command, so reading the same
 thing twice is fine.
 
 A step in a loop puts the item in its name, like `` `Install ${name}` ``. A helper that adds steps can be called twice
@@ -1038,17 +1039,16 @@ await h.run("Prune docker", "docker system prune -f", { after: "always" })
 that only runs on some code paths goes in the same `if` as the run that follows it, so the run never refers to a step
 that didn't happen.
 
-**Put a run right after the steps it follows.** tsinfra keeps no state, so a trigger that didn't get its run is lost. If
-a unit file changes and the host fails before its reload runs, the next `apply` finds the file already right and
-reports it unchanged, so the reload never fires on its own. With the run right after its steps, the only gap left is the
-run itself failing. A run with `after` that fails needs a rerun by hand once it's fixed, because the steps it follows
-won't show as changed on the next apply.
+**A run that never got to run still triggers.** If a unit file changes and the run after it fails, or the host fails
+before the run, the next `apply` finds the file already right, but still triggers the reload (see
+[When an apply doesn't finish](#when-an-apply-doesnt-finish)).
 
-|                       | `apply`                           | `plan`                                   |
-| --------------------- | --------------------------------- | ---------------------------------------- |
-| `after`, one changed  | runs, reports `ran`               | does not run, reports `ran` (a `>` line) |
-| `after`, none changed | does not run, reports `unchanged` | does not run, reports `unchanged`        |
-| `after: "always"`     | runs, reports `ran`               | does not run, reports `ran` (a `>` line) |
+|                                      | `apply`                            | `plan`                                                  |
+| ------------------------------------ | ---------------------------------- | ------------------------------------------------------- |
+| `after`, one changed                 | runs, reports `ran`                | does not run, reports `ran` (a `>` line)                |
+| `after`, an open change missing it   | runs, reports `ranFromOpenChanges` | does not run, reports `ranFromOpenChanges` (a `>` line) |
+| `after`, none changed or open for it | does not run, reports `unchanged`  | does not run, reports `unchanged`                       |
+| `after: "always"`                    | runs, reports `ran`                | does not run, reports `ran` (a `>` line)                |
 
 A `ran` step returns `changed: true` in `plan` too, so one `run` can follow another (`after: [reload]`), and the plan
 shows the chain exactly as it would run for real.
@@ -1061,8 +1061,9 @@ knows the run exists when nothing changed, so verbose output can list it.
 
 - **There is no check after the fix.** "The unit changed" is still true after the reload, so the check would fail
   again and the step would fail.
-- **It never counts as drift** (see [CLI](./cli.md#exit-codes)). An `"always"` run's check would never pass, so
-  `plan` would exit 2 on every run. A follow-up only fires when a step it follows changed, and that step already counts.
+- **It counts as drift only when open changes alone trigger it** (see [CLI](./cli.md#exit-codes)). An `"always"`
+  run's check would never pass, so `plan` would exit 2 on every run. A follow-up usually triggers because a step it
+  follows changed, and that step already counts.
 
 Two actions are usually two runs, each with its own name in the output. The function form is for one action that takes
 several commands under one trigger:
@@ -1107,6 +1108,48 @@ await h.run(
 
 It works, but it never counts as drift, and `plan` shows it whether or not anything would change. Nothing can stop it,
 because a function can run any code.
+
+### When an apply doesn't finish
+
+A run with `after` triggers when a step it follows changed. When the run fails, or the apply stops before it, after
+another step's failure, Ctrl-C, or a dropped connection, the next `apply` finds those steps already right. Every other
+step reads the host's state, so the next apply finds whatever is left to do. Only a trigger, a step's `changed` used by
+a later step, exists in one apply alone. So tsinfra keeps the changes an apply made on the host, with the follow-ups
+that already ran after each one, until the host finishes an `apply` cleanly. Each is an **open change**. A follow-up
+is a step whose `after` names the steps it follows, like a `run`.
+
+- **A change opens right before it's made:** before a step's fix, and before a run's command, so a run after a run can
+  still trigger. Opening before the fix covers a connection that drops right after the fix succeeds. A step that was
+  already right opens nothing.
+- **Every changed step opens a change,** because tsinfra can't tell at that point whether a run follows it. A run names
+  its steps only when the script reaches it. An open change that nothing follows has no effect.
+- **Every fix opens a fresh change,** with no follow-ups listed, even when the step's change is already open, so its
+  follow-ups trigger for the new change.
+- **A run that succeeds is listed** on the open change of each step in its `after` that has one. A run that fails isn't,
+  so it triggers again.
+- **A clean `apply` closes every open change,** because every follow-up has had its turn. A host that fails keeps
+  them. `plan` reads them and never writes them.
+
+On the next pass, in `plan` or `apply`:
+
+- **A step that's right, but whose change is still open, is `resume`.** It returns `changed: true`, so `after` and
+  `if (x.changed)` treat it like a step that changed. The report shows it as `^ resume`, noted "an earlier apply didn't
+  finish, so its follow-ups that didn't complete still trigger". A run that didn't trigger, but whose own change is
+  still open, is `resume` too, so a run after it can trigger.
+- **A run triggers** when a step in its `after` changed in this pass, or has an open change that doesn't list it. A
+  run that only open changes trigger is `ranFromOpenChanges`. It shows as `> triggered`, noted "triggered because it
+  didn't complete in an earlier unfinished apply", and counts as drift, because nothing in this pass explains it. A
+  run that fails shows only its error, and the `resume` line before it says why it ran.
+- **`needs` doesn't wait on a `resume` step,** because its change is already on the host.
+
+The open changes live in the host's saved state (see [Transport](./transport.md#saved-state)). What they cost:
+
+- **A run that already ran triggers again** when it was renamed since, because the open change doesn't list its new
+  name. Runs are meant to be safe to repeat.
+- **A renamed change step loses its open change,** which is how every trigger works without them.
+- **A changed step opens its change with one more command,** and a run that follows an open change records itself with
+  another.
+- **Two control machines applying to one host at once can race** on the saved state. tsinfra has no locking.
 
 ## Failure
 

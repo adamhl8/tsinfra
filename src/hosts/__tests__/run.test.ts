@@ -8,15 +8,14 @@ import { attempt, messageChain } from "ts-explicit-errors"
 import {
   UNREACHABLE_TARGET,
   getPreparationFailure,
+  getPreparedHome,
   loadHostDefinition,
   prepareAndRunHost,
   readOpenChanges,
 } from "#__tests__/session.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
-import type { LoadedHost } from "#hosts/load.ts"
 import { toSavedStatePath } from "#hosts/prepare/host-details/host-details.ts"
-import { prepareHosts } from "#hosts/prepare/prepare.ts"
 import type { Host, HostRecord } from "#session/session.ts"
 
 const throwBoom = () => {
@@ -40,13 +39,6 @@ const runHostA = async (fn: HostFunction) =>
   prepareAndRunHost(loadHostDefinition(host({ name: "a", target: "@local" }, fn)), "apply")
 
 const getMessage = (failure: HostRecord["failure"]) => failure && messageChain(failure.error)
-
-/** Prepares `loadedHost` once, and returns the home its saved state goes under, which later preparations reuse. */
-const getPreparedHome = async (loadedHost: LoadedHost) => {
-  const [hostEntry] = await prepareHosts([loadedHost])
-  if (hostEntry?.preparation !== "prepared") throw new Error("the host wasn't prepared")
-  return hostEntry.sessionContext.home
-}
 
 /** Runs a host 'a' with `fn` and returns its failure's message chain, if any. */
 const runAndGetMessage = async (fn: HostFunction) => getMessage((await runHostA(fn)).failure)

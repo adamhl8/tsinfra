@@ -7,7 +7,6 @@ import { isErr } from "ts-explicit-errors"
 
 import type { LoadedHost } from "#hosts/load.ts"
 import type { HomeDirectory } from "#hosts/prepare/host-details/host-details.ts"
-import { LOCAL_TARGET } from "#transport/transport.ts"
 
 import "@adamhl8/configs/test/preload"
 
@@ -35,14 +34,15 @@ const getTestHome = async (loadedHost: LoadedHost): Promise<Result<HomeDirectory
   return home
 }
 
-// Give each `@local` host a home of its own, so a test never touches the real home's saved state or another test's.
+// Give each host a home of its own, so a test never touches the real home's saved state or another test's.
 // Swap the home preparation read, because commands get the `HOME` the test run started with, so `HOME` can't move.
+// Give an ssh host one too, because the only sshds the tests reach run on this machine as the same user.
 await mock.module("#hosts/prepare/host-details/host-details.ts", () => ({
   ...hostDetails,
   buildHostDetails: async (...args: Parameters<typeof buildHostDetails>) => {
     const [loadedHost] = args
     const builtHostDetails = await buildHostDetails(...args)
-    if (isErr(builtHostDetails) || loadedHost.target !== LOCAL_TARGET) return builtHostDetails
+    if (isErr(builtHostDetails)) return builtHostDetails
 
     const home = await getTestHome(loadedHost)
     if (isErr(home)) return home

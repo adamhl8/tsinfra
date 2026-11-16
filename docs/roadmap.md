@@ -6,7 +6,6 @@ rest of the docs describe tsinfra as it is.
 <!-- toc -->
 
 - [Next](#next)
-  - [Open changes](#open-changes)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
   - [Live progress](#live-progress)
@@ -38,370 +37,7 @@ rest of the docs describe tsinfra as it is.
 
 ## Next
 
-### Open changes
-
-A run with `after` fires only when a step it follows changed in the same apply. When the run fails, or the apply never
-reaches it, the trigger is lost. The next apply finds those steps already right, so the run never fires on its own (see
-[Steps](./steps.md#run)). That happens when:
-
-- **The run fails,** like a typo in `sudo systemctl restart caddy`.
-- **The apply stops between a change and its run,** because another step failed, or from Ctrl-C or a dropped
-  connection. Putting a run right after its steps makes this gap smaller, but can't close it.
-
-Every other step reads the host's state, so the next apply finds whatever is left to do. Only a trigger, a step's
-`changed` used by a later step, exists in one apply alone. So tsinfra saves the changes an unfinished apply made, with
-the runs that already ran after each one, on the host, and nothing else. There's no record of resources and no
-rollback.
-
-**An open change** is a step's change whose runs may not all have run yet. It stays open until the host finishes
-cleanly.
-
-- **Before a change step runs its fix,** tsinfra opens a change for it on the host. Opening it before the fix covers a
-  connection that drops right after the fix succeeds.
-- **A run that runs opens a change too,** so a run that follows it can still fire. For example, the reload runs and the
-  apply stops before the restart that follows the reload.
-- **A step that was already right opens no change,** because it fired nothing.
-- **Every fix opens a fresh change,** with no runs listed, even for a step whose change is already open. Its runs have
-  to fire for the new change. A step that's in sync keeps its open change as it is.
-- **Every changed step opens a change,** because tsinfra can't tell at change time whether a run follows it. A run names
-  its steps only when the script reaches it. An open change that nothing follows has no effect.
-
-**What a run records.** When a run with `after` succeeds, it adds its name to the open change of each step in its
-`after` that has one. Nothing closes then, because a later run may follow the same step.
-
-**Closing the changes.** All of a host's open changes close when the host finishes cleanly, because every run has then
-had its turn.
-
-**The next apply.**
-
-- **A step with an open change runs its check as usual.** If the host differs, it's an ordinary change.
-- **A step with an open change that's right still returns `changed: true`,** so `after` and `if (x.changed)` fire the
-  same as for a real change. Scripts only see `changed`, so they can't tell the two apart.
-- **A run fires** when a step in its `after` changed in this apply, or has an open change that doesn't list this run.
-- **`needs` ignores open changes.** The change is already on the host, so nothing waits for it.
-
-**In `plan`,** tsinfra reads the open changes and never writes them. A run that an open change would fire shows as
-`ran` and counts as drift, so `plan` exits 2. An open change that nothing follows doesn't count.
-
-**The report** gives a step that's still open from an earlier apply a status of its own, `^ resume`, because the
-earlier apply's unfinished work picks up from it.
-A follow-up that only a still-open change triggered gets a note. Both show at the default level, because the case is
-rare and should always be explained:
-
-```
-  ^ resume: (file) /etc/caddy/Caddyfile   an earlier apply didn't finish, so its follow-ups that didn't complete still trigger
-  > triggered: (run) Restart caddy   triggered because it didn't complete in an earlier unfinished apply
-```
-
-- **"Resume",** because it says what happens at that step, like the other status words, and it doesn't read like
-  `triggered` at a glance. "Carried over" and "open" don't say what happens, and "unfinished" sounds like the change
-  itself is half done.
-- **"An earlier apply",** not "the last apply", because a change stays open until a clean finish. Two failed applies in
-  a row leave the change from the one before last.
-- **"Didn't finish",** not "failed", because Ctrl-C and a dropped connection stop an apply without a step failing.
-- **"Still trigger",** not "trigger again", because a follow-up may never have triggered at all. Nothing can tell
-  whether any follow-up is left to trigger: the follow-ups come later in the script, and the script can act on
-  `changed` without `after`. So the step's note stays true when none is.
-- **"Didn't complete"** covers a follow-up that failed, one the apply never reached, and one that's new or renamed
-  since.
-- **The follow-up's note names no steps,** because the `resume` lines above it already show which steps are still open.
-- **A follow-up that a step changed in this pass also triggered shows no note,** the same as today.
-- **The words have no tense,** like the status words, because a line reads the same in `plan`.
-- **The summary doesn't count a `resume` step as a change,** because it changed nothing. The follow-up counts as it
-  does today.
-
-**Saved state.** Open changes are the first part of tsinfra's saved state, one file per host script that later
-features can add to, like the run-once marker and the manifest in [Ideas](#ideas). It's called saved state, in code
-and in prose, to keep it apart from the host's state, which steps read.
-
-**Where the saved state lives.** `~/.tsinfra/state/<host>.json`, on the host next to the askpass helper, in the SSH
-user's home. `<host>` is the `name` in the host's config, not its target. Two host scripts can manage the same
-machine, like two that both target `@local`, and step names are unique only within one script, so each gets its own
-file. Loading fails when two scripts define the same name, so no two hosts share a file. Every checkout and control machine sees the same saved state, and a rebuilt host starts with none. The file holds only step names, which already show in the output. An open change names
-its step by its name, which is unique on a host. A `file` or `link` is named by its path.
-
-**How the saved state is stored.**
-
-- **The file is JSON with a version field.** `openChanges` maps each step's name to the runs that already ran after
-  its change, like `{ "version": 1, "openChanges": { "/etc/caddy/Caddyfile": ["Restart caddy"] } }`. An empty list means
-  nothing has run after it yet. A format with one change per line would break on a name with a newline in it.
-- **Reading it** takes one command in preparation that prints the file. tsinfra parses it on the control machine and
-  validates it with an ArkType schema, so the host needs no tools. A missing file means no open changes, which also
-  covers a host tsinfra has never touched.
-- **A file that can't be parsed, or doesn't match the schema, fails the host,** with an error that names the file.
-  Atomic writes mean this only happens when something else went wrong, like a hand edit.
-- **tsinfra keeps the saved state in memory** after reading it, and each write replaces the whole file from that
-  copy. It never reads the file again during the apply. That's safe because two control machines racing is already a
-  cost (see below).
-- **A write puts the JSON in its script, quoted with `quoteShellArg`,** like the askpass helper's content, and the
-  script reaches the host on `sh -s`'s stdin, like every command. It writes a temporary file and moves it into place, so
-  a Ctrl-C mid-write leaves the old file whole.
-- **The file is `600`,** and the write creates `~/.tsinfra` as `700` when it's missing, because the askpass setup skips
-  it on a host with passwordless sudo. No write needs sudo, because the file is in the SSH user's home.
-- **A host that finishes cleanly** closes its open changes. With nothing else in the saved state yet, that deletes
-  the file with `rm -f`.
-- **There are two writes:** one before each fix or run, and one after each run that succeeds and follows an open
-  change. tsinfra skips a write when the saved state in memory didn't change, like a run whose steps have no open changes.
-- **The commands that read and write the file aren't in the record** at any verbosity, because they're tsinfra's own
-  work, not a step's. They belong in [diagnostic logs](#diagnostic-logs).
-
-**Duplicate names fail the host,** with an error that names both steps. Numbering the repeats wouldn't help, because a
-number is a position. Adding a step earlier in a loop, or reordering its list, moves every open change after it onto
-the wrong step. React asks for a key on each item in a list for the same reason. The rule covers `file`, `link`,
-`ensure`, and `run`, whose names also show in `needs`'s `needs 'X'`. A read is named by its command, and reading the
-same thing twice is fine. A step is found only when the script reaches it, so the error comes when the second one is
-reached, and `plan` fails the same way. A script that already repeats a name breaks.
-
-**Costs:**
-
-- **A run that already succeeded fires again** when it was renamed between applies, because the open change doesn't
-  list its new name. Runs are meant to be safe to repeat.
-- **A renamed change step loses its open change,** which is how every trigger works today.
-- **A changed step opens its change before its fix,** one extra command. A run that succeeds writes its name to the
-  open changes it follows, one more.
-- **Two control machines applying to one host at once can race on the saved state.** tsinfra has no locking today either.
-
-**Implementation plan.** Each numbered piece is one commit. A piece can leave the feature unfinished, but it passes
-lint and has its own tests. The lettered steps inside a piece are small enough to review one at a time, in order.
-
-#### 1. Reject duplicate step names
-
-- **1a.** Keep a map from name to kind for the host's `file`, `link`, `ensure`, and `run` steps in `createHostSession`
-  (`src/session/session.ts`). Key it by the unmasked name, because the record's names are masked.
-- **1b.** In `callStep`, after `startStep`, fail the step when its name is already in the map, so the error shows under
-  the second step. A draft of the words: `run 'Restart caddy' has the same name as an earlier ensure step`.
-- **1c.** Test in `src/session/__tests__/session.test.ts`: two ensures with one name, a `file` and a `link` on one path,
-  `plan` failing the same way, and two reads of one command passing.
-- **1d.** Document the rule where [Steps](./steps.md#steps) describes step names, and in the README's TIP on naming a
-  step.
-
-#### 2. Keep the tests' open changes apart
-
-From piece 5 on, every change in an `apply` opens a change in the host's home. Tests run at once on `@local`, and a
-test that calls `h` directly never reaches the clean finish that closes them.
-
-- **2a.** Give each `@local` test host a home of its own. The test preload (`src/__tests__/test-setup.ts`) mocks
-  `buildHostDetails` with a wrapper that calls the real one and swaps the `home` it read for a fresh temp directory.
-  Tests can't move `HOME` itself, because Bun's `spawn` gives commands the environment the test run started with, and
-  `runProcess` doesn't pass `process.env`, so a host script's changes to it never reach commands. This only isolates
-  saved state because piece 3 builds its path from the session's `home` (see 3c).
-- **2b.** Give the test sessions their `home`, so a test that resolves `~/` compares with it, not `os.homedir()`.
-- **2c.** Check `home` once, in `buildHostDetails`, and fail preparation when `$HOME` is empty or doesn't start with
-  `/`. Every `home` that reaches a session is then absolute, so `resolveHome` drops its two checks and only replaces
-  the `~`. The `path.test.ts` cases for an empty or relative `$HOME` move to a preparation test. A host with no `$HOME`
-  now fails `plan` too.
-  - `validateHome(rawHome): Result<HomeDirectory>` in `host-details.ts` runs the checks, with errors about the host's
-    `$HOME` itself: `$HOME isn't set on the host`, and `$HOME on the host is 'x', not an absolute path`.
-  - `HomeDirectory` is a branded string, like `Bytes`, and `validateHome` holds its only cast. `HostDetails.home`,
-    `SessionContext.home`, `StepContext.home`, `resolveHome`, and the path helpers in 2d all take it, so a raw `$HOME`
-    can't skip the check. `session/` imports only the type from `hosts/`.
-  - Tests that make up a home, like `path.test.ts`, get one from `validateHome`, and the test preload's mock brands its
-    temp directory the same way.
-- **2d.** Add `hosts/prepare/host-details/tsinfra-directory.ts` as the one place that lists what tsinfra keeps on a
-  host: `TSINFRA_DIRECTORY_NAME` (`.tsinfra`), `toAskpassHelperPath(home)`,
-  and later `toSavedStatePath(home, hostName)`, re-exported through `host-details.ts` once `prepare.ts` needs it.
-  They only join paths, because `home` is already checked. The askpass
-  helper isn't saved state: it holds no data, is rewritten every run, and serves every host script on the machine. It
-  only shares the directory.
-- **2e.** Make `transport/sudo.ts` take a finished `helperPath`, for both the write script (now
-  `buildAskpassHelperWriteScript(helperPath)`) and the `sudo` function (`createAskpassSudoTransport(transport,
-  password, helperPath)`), quoted with `quoteShellArg`. `buildHostDetails` and `finishHostDetails` both get it from
-  `toAskpassHelperPath(home)`, so they stay in sync without a new field.
-- **2f.** Tests: `sudo.test.ts` passes a path in a temp directory instead of faking `HOME`. The sudo Docker tests still
-  find the helper in the real home, because `buildHostDetails` writes it before the test preload swaps `home`.
-
-#### 3. The saved state file
-
-A new package, `src/session/saved-state/`, with `saved-state.ts` as its main module. Its only entry is the saved state
-manager, which nothing calls yet.
-
-- **3a.** The ArkType schema and its type: `{ version: 1, openChanges: Record<string, string[]> }`. A `version` that
-  isn't `1` fails the schema, so a later format change fails loudly instead of being misread. Keys the schema doesn't
-  know are ignored, which is ArkType's default.
-- **3b.** The read: one command, `if [ -e <path> ]; then cat -- <path>; else printf '%s' <marker>; fi`, run with
-  `exec`, so a failed `cat` is an error. A marker matches how the file details script reports a missing path, and it
-  isn't valid JSON, so it can't be mistaken for a file's contents. ArkType parses the output and checks it in one
-  schema (`type("string.json.parse").to(savedStateSchema)`), so a file that isn't JSON fails the same way as one with
-  the wrong shape. It returns `Result<SavedState | undefined>`, where `undefined` means there's no file, so a missing
-  file never stands in as an empty saved state. Each error names the file, like
-  `the saved state in '<path>' isn't saved state tsinfra wrote -> version must be 1 (was 2)`.
-- **3c.** The write script comes from `buildPrivateFileWriteScript` in `src/utils.ts`, which the askpass helper's
-  write uses too: `set -eu`, `umask 077`, `mkdir -p` on the file's directory, a temp file with the content from
-  `quoteShellArg`, and `mv -f` into place, plus `chmod 700` for an executable like the askpass helper. The saved state
-  is written as indented JSON with a trailing newline, so it reads well on the host. The delete is `rm -f`. Use
-  `umask 077`, not `mkdir -p -m 700`, because `-m` applies only to the last directory, so a write on a host with
-  passwordless sudo, where the askpass setup never made `~/.tsinfra`, would leave it `755`. The umask makes every
-  directory the write creates `700` and the file `600`. The package takes the file's path finished,
-  from `toSavedStatePath` (2d), and quotes it with `quoteShellArg`. It never writes `"$HOME"` in a script, so the test
-  preload's `home` reaches it.
-- **3d.** The manager, `createSavedStateManager(shell, savedStatePath): Promise<Result<SavedStateManager>>`, like the
-  recorders: it reads the file once with 3b, fails when the read fails, and closes over `shell`, `savedStatePath`, and
-  the saved state in memory, so nothing outside the package can write the file with another path or shell, or skip the
-  read. A follow-up is a step whose `after` names the steps it follows, today a `run` and later a `reboot`. Callers pass
-  `stepNames` as the names in that follow-up's `after`. It returns:
-  - `openChange(name)` opens a fresh change, with no follow-ups listed.
-  - `isOpen(name)`.
-  - `getOpenChangesMissingFollowUp(followUpName, stepNames)` returns the steps whose change is open, but whose
-    completed follow-ups don't list it. A non-empty result means the follow-up fires.
-  - `recordFollowUp(followUpName, stepNames)` adds the follow-up to each of those steps' open changes.
-  - `closeAll()`.
-
-  No saved state (`undefined`) means no open changes. Each write uses the script from 3c, and is skipped when the saved
-  state didn't change. The memory changes only after a write succeeds, so it always matches the file. `closeAll`
-  deletes the file while open changes are all the saved state holds, and skips the delete when there was never a file
-  and nothing was opened. The manager doesn't know the mode: its callers only call the writing functions in `apply`,
-  where the step already branches on the mode, so the rule lives in one place.
-
-- **3e.** Tests in `src/session/saved-state/__tests__/`, on `@local`'s shell, with the file in a temp directory whose
-  name has a quote and a space:
-  - a round trip: open a change, record a run, create a new manager, and read it back
-  - a missing file, which opens no changes
-  - invalid JSON, and a file that fails the schema, each naming the file
-  - the file's `600` mode, and `700` on every directory the write creates, including a missing `.tsinfra`
-  - `closeAll` deleting the file
-  - a skipped write running no command, through a shell that counts its commands
-
-#### 4. Read the saved state in preparation
-
-Folded into piece 3's commit, because knip reports piece 3's package as unused until preparation imports it.
-
-- **4a.** Add `toSavedStatePath(home, hostName)` to `tsinfra-directory.ts`, which returns
-  `<home>/.tsinfra/state/<hostName>.json`, and re-export it through `host-details.ts` for `prepare.ts`.
-- **4b.** Create each host's saved state manager in `prepareHosts`' parallel step, right after `buildHostDetails`
-  returns, so every host's read happens at once. `buildSessionContext` runs one host at a time, because the password
-  prompts take turns, so a read there would add a round trip per host in series. Use an unrecorded
-  `createShell(baseTransport)`: saved state never needs sudo, so the base transport works even for a host still
-  waiting for its password prompt. A failed read fails preparation for that host through
-  `preparationRecorder.recordFailure`, so it's never asked for a password. The test mock's temp `home` reaches it,
-  because the manager is built from the details `buildHostDetails` returned.
-- **4c.** Add `savedStateManager: SavedStateManager` to `SessionContext`, and re-export `createSavedStateManager` and
-  `SavedStateManager` through `session.ts` for `hosts/`. Nothing destructures it until piece 5.
-- **4d.** Keep one temp home per `LoadedHost` in the test preload's mock, in a `WeakMap<LoadedHost, HomeDirectory>`.
-  Preparing the same `loadedHost` twice gives the same home, so a test can run two applies on one host, which piece 6
-  needs, or put a file in its home between preparations. Every new `loadedHost`, which the session helpers create,
-  still gets a fresh home.
-- **4e.** Test in `src/hosts/__tests__/prepare.test.ts`:
-  - a host with no saved state prepares, and preparation's commands include no saved state read
-  - saved state carries over: open a change through `sessionContext.savedStateManager`, prepare the same `loadedHost`
-    again, and the new manager reports it open
-  - a bad file fails preparation with the file's path: prepare, write `{` to `toSavedStatePath(home, name)`, and
-    prepare again
-
-#### 5. Open changes in `apply`
-
-After this piece, changes open and runs are recorded on them, but nothing fires from them yet.
-
-- **5a.** Open a change right before a step's fix in `converge` (`src/session/handlers/shared/converge.ts`), after the
-  "not in sync, and not `plan`" checks and before `startPhase("fix")`. `createConverge(mode, recorder, openChange)`
-  takes the hook, and `callStep` builds `converge` per step with
-  `openChange: () => savedStateManager.openChange(validName)`, so `converge` knows neither the step's name nor saved
-  state. This covers `file`, `link`, `ensure`, and `verify: false`. A failed write fails the step before the fix runs,
-  with the manager's own error.
-- **5b.** Add `savedStateManager` to `StepContext`. In `apply`, once the trigger fires, `handleRun`
-  (`src/session/handlers/run.ts`) opens the run's own change before its command, for `after: "always"` too, so a run
-  after it can still fire.
-- **5c.** After a run with a list in `after` succeeds, record it with
-  `recordFollowUp(stepName, after.map(({ name }) => name))`. A run whose command fails stays open, and isn't listed on
-  the steps it follows, which is what makes it fire next time. A failed record fails the run's step, even though its
-  command succeeded: the run isn't recorded, so it fires again next time, which is safe.
-- **5d.** Close the host's open changes in `runHost` (`src/hosts/run.ts`) when the host finished an `apply` without a
-  failure. `plan` never closes or writes anything.
-- **5e.** A failed delete fails the host with a new unowned failure kind, `saved state`, which the report shows like
-  `(preparation)`: an italic label and the error. A `host fn` failure doesn't fit, because its note says the error was
-  thrown in the host function. `RecordedUnownedFailure["kind"]` gains `"saved state"`, and `cli.md`'s "Kinds of
-  failure" gets a line for it.
-- **5f.** Test, mostly through the session helpers, which never reach `runHost`, so what a test opened stays to inspect:
-  - `plan` with a changing `ensure` and a run after it writes no file
-  - `apply` with a changing `ensure` and a run after it leaves the `ensure` listing the run, and the run open
-  - a run whose command fails stays open, and the `ensure` doesn't list it
-  - `verify: false` still opens a change
-  - an `after: "always"` run opens its own change and records nothing on another step
-  - a clean `apply` through `runHost` leaves nothing open when the same host is prepared again
-  - a failed delete fails the host with the `saved state` kind
-
-#### 6. Fire runs from open changes
-
-A step's change is **still open from an earlier apply** when the step is in sync and its change is open. A step opens
-its change in this apply only right before it changes something (before the fix in `converge`, before the command in
-`handleRun`), and then it ends `changed` or `ran`, or fails. `plan` never opens anything. So an `unchanged` step with an
-open change can only have one an earlier apply opened and never closed. Two step statuses carry what the rest of the
-feature needs: `resume` for that step, and `ranFromOpenChanges` for a run only such changes triggered.
-
-- **6a.** Add a `resume` status. `withChangeStepResult` (`src/session/handlers/shared/change-step-result.ts`), which
-  every change step's result goes through and whose `ctx` already has `savedStateManager`, makes an `unchanged` step
-  whose `savedStateManager.isOpen(stepName)` is true `resume`, runs included. `COUNTS_AS_CHANGED` counts `resume`, so
-  the script gets `changed: true`. The record holds the real status, so nothing else carries the fact. It also adds the
-  step's name to `changedStepNames`, a set on `StepContext` that the session's steps share, from the handler's own
-  status, before it can become `resume`, so the set holds only the steps that changed in this pass. 6b and 6c read it.
-  Tests, each running two applies on one `loadedHost`, which the test preload gives the same home:
-  - a step still open from an earlier apply is `resume` and returns `changed: true`, in `apply` and in `plan`
-  - a run that didn't trigger, but is still open, is `resume` and returns `changed: true`
-  - a step that isn't open stays `unchanged`, and one that changes again is `changed`
-- **6b.** Make `converge` a plain function, `converge(ctx, spec)`, like `withChangeStepResult` and `runChange`.
-  `StepContext` gives it `convergeRecorder` in place of a prebuilt `converge`, and it opens the step's change with
-  `savedStateManager.openChange(stepName)` itself. In `plan` a step waits only on a needed step in `changedStepNames`,
-  because a step only still open from an earlier apply has its change on the host already. Test that a step that needs
-  one in `plan` doesn't wait.
-- **6c.** Fire a run in `evaluateTrigger` when a step in its `after` is in `changedStepNames`, or
-  `getOpenChangesMissingFollowUp(stepName, afterNames)` isn't empty. In `apply`, a step that really changed has a fresh
-  open change, so the two agree. The first only matters in `plan`, where nothing opens. A still-open step whose open
-  change already lists the run doesn't fire it again. `after: "always"` is unchanged. Tests:
-  - a run that fails, then works
-  - a host that fails between a change and its run
-  - a run the open change already lists doesn't fire
-  - two runs after one step, with the host failing between them
-  - a run after a run
-  - a step that changes again after its run ran
-  - `plan` showing a fired run without writing, not showing one the open change lists, and showing one whose step
-    drifts again
-- **6d.** Add a `ranFromOpenChanges` status for a run that only changes still open from an earlier apply triggered:
-  no step in its `after` changed in this pass, and one has an open change missing it. `evaluateTrigger` returns the
-  run's status, `unchanged`, `ran`, or `ranFromOpenChanges`, and `handleRun` passes it on. It counts as changed, like
-  `ran`, so a run after it triggers. Piece 7 shows its note and counts it as drift from the status. A run that fails has
-  no finished status, so it gets no note, and the `resume` line above it explains it. Tests: the runs in 6c's tests
-  that only open changes trigger are `ranFromOpenChanges`, and a run a step changed in this pass triggered is `ran`,
-  though another step in its `after` is still open.
-
-#### 7. Report open changes
-
-- **7a.** Show `resume` with the word `resume`, the symbol `^`, and cyan, and `ranFromOpenChanges` like `ran`, as
-  `> triggered` in yellow. `ENTRY_LEVELS` (`src/report/host-block/entries.ts`) shows both from level 0. The summary
-  counts `ranFromOpenChanges` as a change, like `ran`, and leaves `resume` out. Test the `resume` line at level 0 and
-  the summary's count.
-- **7b.** Make `NotePart` a union, and add two parts beside `needs`, both from level 0, built in `toStepNote`
-  (`src/report/host-block/note.ts`) from the entry's status:
-  - `resume`, on a `resume` entry: "an earlier apply didn't finish, so its follow-ups that didn't complete still
-    trigger"
-  - `triggeredByOpenChange`, on a `ranFromOpenChanges` entry: "triggered because it didn't complete in an earlier
-    unfinished apply". It names no steps.
-
-  The words go in constants beside `getNotePartWords` (`src/report/format/status-line.ts`). Test both notes in `apply`
-  and `plan`, and that a failed run shows its error with no note.
-
-- **7c.** Count `ranFromOpenChanges` as drift in `hasDrift` (`src/report/summary.ts`), so `plan` exits 2 and shows its
-  reminder. Nothing else in that pass explains the run, and `apply` would run it. Test `hasDrift`, the exit code, and
-  the reminder for it, and that a `resume` step whose run already completed isn't drift.
-- **7d.** Add both to `report-preview.ts`, as a record of a `resume` step and a `ranFromOpenChanges` run, like the hints
-  host. Two applies on one host would leave the second one's saved state in the real home, because the preview has no
-  test preload.
-
-#### 8. Docker tests
-
-- **8a.** On Alpine and Debian, over ssh, a host that fails between a change and its run, and then fires the run on the
-  next apply. Use a passwordless host, where the askpass setup skips `~/.tsinfra`, so the write has to create it.
-- **8b.** A host with a sudo password, whose open changes are written as the SSH user while its steps run with sudo.
-
-#### 9. Docs
-
-- **9a.** Move this design from the roadmap into the docs:
-  - open changes into [Steps](./steps.md#run), replacing the paragraph that says a failed run needs a rerun by hand
-  - the notes, the record's new fields, and the exit code into [CLI](./cli.md)
-  - the saved state file next to the askpass helper in [Transport](./transport.md)
-- **9b.** Rewrite the "No state" section in [the design notes](./README.md#no-state), and their "State file" row, to
-  say there's no record of resources, only a small saved state on each host that holds open changes.
-- **9c.** Change the README's "no state file" bullet, and its TIP about putting a run right after its steps.
-- **9d.** Remove this section and the "Hint on a failed triggered run" follow-up from the roadmap. Add to
-  [Reboot](#reboot) that a reboot follows the same rules as a run.
+Nothing is queued. The next piece comes from [Planned](#planned).
 
 ## Planned
 
@@ -487,6 +123,9 @@ follow-up to a change, not state a check can read, so it works like a [`run`](./
 - **`@local` refuses it,** with `can't reboot @local, because it's the machine tsinfra runs on`.
 - **It's a top-level step.** A fix that installs a kernel doesn't reboot by itself, and the script follows that step
   with `h.reboot`.
+- **It follows the same [open change](./steps.md#when-an-apply-doesnt-finish) rules as a run.** It opens its change
+  before it reboots, records itself on the open changes it follows, and triggers from one that doesn't list it, as
+  `ranFromOpenChanges`. One that didn't trigger, but whose change is still open, is `resume`.
 - **It returns a `ChangeStepResult<"reboot">`,** so a run can follow it. `"reboot"` joins `ChangeStepKind`, and a
   run's `after`. Like a run's, it can't be needed, because nothing about the host's state says a reboot happened.
 
@@ -633,9 +272,6 @@ Fixes and finishing work for what's already built.
   record, and fail the host through `callOrFail` when that step is no longer the running one. Do not throw in
   `recordCommands`, because only `session.ts` throws, and a throw there would skip recording the failure in
   `callOrFail`.
-- **Hint on a failed triggered run.** When a run with `after` fails, end its error with a hint, like
-  `the steps it follows won't show as changed on the next apply, so run this by hand once it's fixed` (see
-  [Steps](./steps.md#run)).
 - **Run the Docker tests in CI.** `bask test-docker` stays out of `bask lint`, because it needs Docker and downloads
   images and packages, so nothing runs it automatically yet.
 - **Check SELinux labels on a VM.** `file`'s `chcon` and `restorecon` are untested on real labels, because containers
@@ -828,7 +464,7 @@ Shipped as subpath exports once two hosts use one the same way (see
   newest images (see [Recipes](./recipes.md#running-the-latest-container-images)), if the Docker container ports repeat
   it.
 - **A run-once marker,** like chezmoi's `run_once_`: save a hash of the command in the
-  host's [saved state](#open-changes), and check for it.
+  host's [saved state](./transport.md#saved-state), and check for it.
 - **A 1Password reader,** like chezmoi's `onepasswordRead`: run `op read` with Bun `$` on the control machine and pass
   the value to `file` with `secret`. Every `plan` has to read the secret to compare it, so every plan prompts.
 
@@ -918,13 +554,13 @@ Opt-in features with no real case yet:
 ### Removed resources
 
 The lowest priority here, and probably never built. A step the script stops managing leaves its file, link, or package
-on the host, because there is no state file (see [No state](./README.md#no-state)). tsinfra doesn't track this, and
+on the host, because there is no record of resources (see [No record of resources](./README.md#no-record-of-resources)). tsinfra doesn't track this, and
 the automatic approaches are in [Rejected](#rejected). What's left:
 
 - **Turn a step into its removal instead of deleting it.** This is the recommended pattern, and it needs no new feature
   (see [Recipes](./recipes.md#turn-a-step-into-its-removal-instead-of-deleting-it)). A step deleted without this leaves
   what it made on the host.
-- **A manifest of `file` and `link` paths on the host,** kept in the host's [saved state](#open-changes), where `plan` only
+- **A manifest of `file` and `link` paths on the host,** kept in the host's [saved state](./transport.md#saved-state), where `plan` only
   warns about paths in it that the script no longer manages. The machine stays the only source of truth. A path is the
   one thing that identifies a step across edits, so this list can be accurate. It wouldn't cover anything done through
   `ensure`. Add it only if a port shows that forgotten files are a real problem.
@@ -975,7 +611,7 @@ Recorded so the survey doesn't need redoing:
   handles an exit that isn't an error.
 - **State-file features:** saved plans, `moved` blocks, refresh-only, generations, and rollback. Rollback is a git revert
   and an `apply`.
-- **Closing [open changes](#open-changes) by hand,** like a flag that deletes them without firing their runs. Open
+- **Closing [open changes](./steps.md#when-an-apply-doesnt-finish) by hand,** like a flag that deletes them without firing their runs. Open
   changes exist so nobody has to fix a host by hand. A clean apply closes them anyway, at the cost of a run that's safe
   to repeat.
 - **Guards like `only_if`, `not_if`, `creates`, and `unless`.** `ensure`'s check covers them, and Chef's own docs show

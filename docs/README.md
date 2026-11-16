@@ -16,7 +16,7 @@ design replaces it with something one person can build and maintain.
 - [Goals](#goals)
 - [Non-goals](#non-goals)
 - [Anti-goals](#anti-goals)
-- [No state](#no-state)
+- [No record of resources](#no-record-of-resources)
 - [Compared with other tools](#compared-with-other-tools)
 - [Example](#example)
 - [Concepts](#concepts)
@@ -58,7 +58,7 @@ tsinfra keeps the script shape and adds what scripts lacked:
 - An inventory file, tags, or groups. A folder of host scripts is the inventory.
 - A dependency graph or any reordering of steps. The order you wrote is the order things run.
 - Ordering between hosts, for now. Run them as separate commands. A [tentative design](./roadmap.md#ordering-between-hosts) comes late.
-- A state file.
+- A record of resources, or a state file on the control machine.
 - A template engine. Template literals cover it.
 - A library of built-in operations (apt, brew, systemd). Write helper functions. Some may move into tsinfra later.
 - A facts system. `h.read` returns a command's output.
@@ -73,12 +73,17 @@ These would make it a failure even if it works:
 - **A plan that looks complete but is not.** Where `plan` cannot know, it says so.
 - **Ceremony in scripts.** An `isErr` after every step, or registering steps before running them.
 
-## No state
+## No record of resources
 
-tsinfra keeps no record of past runs. Every `plan` reads the machine as it is now. There is no state file to lose, lock,
-or keep in sync, and any checkout on any control machine gives the same plan. Ansible and pyinfra work the same way.
-Terraform needs state because it creates resources and has to know which ones are its own. tsinfra configures machines
-that already exist.
+tsinfra keeps no record of what it manages. Every `plan` reads the machine as it is now, and any checkout on any control
+machine gives the same plan. Ansible and pyinfra work the same way. Terraform needs state because it creates resources
+and has to know which ones are its own. tsinfra configures machines that already exist.
+
+The one thing it keeps is a small saved state on each host, which holds the changes an apply that didn't finish made,
+so the runs after them still trigger next time (see [Steps](./steps.md#when-an-apply-doesnt-finish)). A trigger is the
+only thing that exists in one apply alone, because every other step reads the host's state. A host that finishes cleanly
+deletes it, so it never needs locking or syncing between control machines, and it's never a source of truth about what
+the host should look like.
 
 What that costs:
 
@@ -90,8 +95,8 @@ What that costs:
 - **Run-once work needs a marker.** A one-time migration has no natural check, so it leaves a marker on the host, like
   `test -f /var/lib/myapp/migrated`, and checks for that.
 
-If forgotten files become a real problem, a manifest of managed paths on the host is a lighter fix than a state file
-(see [Removed resources](./roadmap.md#removed-resources)).
+If forgotten files become a real problem, a manifest of managed paths in the host's saved state is a lighter fix than a
+record of resources (see [Removed resources](./roadmap.md#removed-resources)).
 
 ## Compared with other tools
 
@@ -106,7 +111,7 @@ strengths:
 | Order                | Top to bottom, as written                                                   | Puppet orders by a graph. cdist's order is undefined without dependencies.                                                                                                                                                         |
 | Reacting to a change | Typed `changed` results passed to `after`                                   | Ansible handlers run at the end of the play. cdist types grep message files.                                                                                                                                                       |
 | Language             | TypeScript, with typed options and template literals                        | YAML, DSLs, or shell scripts with a file per parameter                                                                                                                                                                             |
-| State file           | None                                                                        | Same as Ansible and pyinfra. Terraform needs one because it creates resources.                                                                                                                                                     |
+| State file           | None, only a small saved state on each host that holds open changes         | Ansible and pyinfra keep none, so a handler that a failed run never reached is lost. Terraform needs one because it creates resources.                                                                                             |
 
 ## Example
 

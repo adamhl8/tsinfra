@@ -13,6 +13,7 @@ the remote shell.
   - [How other tools reach hosts](#how-other-tools-reach-hosts)
 - [Link writes](#link-writes)
 - [sudo](#sudo)
+- [Saved state](#saved-state)
 
 <!-- tocstop -->
 
@@ -344,8 +345,9 @@ first run on the Incus host need a password.
 
 **Preparation.** Every host is prepared before any script runs: connect, read and check `$HOME`, for a host that declares
 `sudo`, check it, and read the host's saved state from `~/.tsinfra/state/<name>.json`. That happens for every host at
-once. The saved state read never needs sudo, and isn't on the record, because it's tsinfra's own file. A saved state
-file that isn't one tsinfra wrote fails the host here, with the file's path. Then the hosts that need a password prompt, one at a time, in the
+once. The saved state read never needs sudo, and isn't on the record, because it's tsinfra's own file (see
+[Saved state](#saved-state)). A saved state file that isn't one tsinfra wrote fails the host here, with the file's
+path. Then the hosts that need a password prompt, one at a time, in the
 hosts' order. Then the scripts run, one after another, so a prompt never mixes with a running host's
 output. A host that can't be reached fails here, before any other host changes anything. A host has to declare `sudo`
 because of this: by the time its script runs, it's too late to ask.
@@ -442,3 +444,45 @@ On `file`, `sudo: true` covers the whole operation: the file details script, the
 `/etc` could not be hashed or read otherwise, so `plan` needs sudo too, which preparation provides. Content travels on
 stdin, inside the script, so it never shows up in `ps` or in the sudo log, unless sudoers sets `log_input`, which
 records stdin.
+
+## Saved state
+
+tsinfra keeps one small file on each host, its saved state, at `~/.tsinfra/state/<name>.json`, next to the askpass
+helper in the SSH user's home. `<name>` is the `name` in the host's config, not its target, so two host scripts that
+manage the same machine, like two that both target `@local`, each get their own file. Loading fails when two scripts
+define the same name, so no two hosts share one. Every checkout and control machine sees the same saved state, and a
+rebuilt host starts with none.
+
+It holds only the host's [open changes](./steps.md#when-an-apply-doesnt-finish): each step's name, which already shows
+in the output, with the follow-ups that already ran after its change. A `file` or `link` is named by its path.
+
+```json
+{
+  "version": 1,
+  "openChanges": {
+    "/etc/caddy/Caddyfile": ["Restart caddy"]
+  }
+}
+```
+
+- **Reading it** takes one command in preparation that prints the file. tsinfra parses it on the control machine and
+  validates it with an ArkType schema, so the host needs no tools. A missing file means no open changes, which also
+  covers a host tsinfra has never touched.
+- **A file that can't be parsed, or doesn't match the schema, fails the host** in preparation, with an error that names
+  the file. Atomic writes mean this only happens when something else went wrong, like a hand edit.
+- **tsinfra keeps the saved state in memory** after reading it, and each write replaces the whole file from that copy.
+  It never reads the file again during the apply.
+- **A write puts the JSON in its script, quoted with `quoteShellArg`,** like the askpass helper's content, so it reaches
+  the host on `sh -s`'s stdin like every command. It writes a temp file and moves it into place, so a Ctrl-C mid-write
+  leaves the old file whole. JSON holds a name with a newline in it, which a file with one change per line couldn't.
+- **The file is `600`,** and the write creates `~/.tsinfra` and its `state` directory as `700` when they're missing,
+  because only a host with a sudo password gets the askpass helper there.
+- **No write needs sudo,** because the file is in the SSH user's home, even when the host's steps run as root.
+- **There are two writes:** one before each fix or run, and one after each run that succeeds and follows an open
+  change. tsinfra skips a write when the saved state in memory didn't change, like a run whose steps have no open
+  changes.
+- **A host that finishes an `apply` cleanly closes its open changes,** and with nothing else in the saved state, that
+  deletes the file with `rm -f`. A delete that fails is a saved state failure (see
+  [CLI](./cli.md#kinds-of-failure)).
+- **The commands that read and write it aren't on the record** at any level, because they're tsinfra's own work, not a
+  step's. They belong in the [diagnostic logs](./roadmap.md#diagnostic-logs).
