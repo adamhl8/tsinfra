@@ -21,12 +21,15 @@ import type {
 } from "#session/session.ts"
 
 // Show a step that was already right, or only looked, from level 1, because it changed nothing on the host.
+// Show a `resume` step from level 0, because it's rare, and it explains the follow-ups it triggers.
 const ENTRY_LEVELS: Record<StepStatus, Verbosity> = {
   unchanged: 1,
   observed: 1,
   changed: 0,
   ran: 0,
+  ranFromOpenChanges: 0,
   waiting: 0,
+  resume: 0,
 }
 
 // Treat a read's or an inspect's name as a value, because it's the command itself, and a file's or a link's, because it's a path.

@@ -59,11 +59,16 @@ export type NameKind =
   // A name that's a value: a read's or an inspect's command, a file's or a link's path, or a target.
   | "value"
 
-/** One part of an entry's note, like `needs 'A', 'B'`, the names of the steps a waiting step needs. */
-export interface NotePart extends PieceLevels {
-  kind: "needs"
-  needs: string[]
-}
+/** One part of an entry's note, like `needs 'A', 'B'`, which shows after the entry's name. */
+export type NotePart = PieceLevels
+  // The names of the steps a waiting step needs.
+  & (
+    | { kind: "needs"; needs: string[] }
+    // A `resume` step, whose follow-ups that didn't complete in an earlier apply still trigger.
+    | { kind: "resume" }
+    // A `ranFromOpenChanges` follow-up, which only changes still open from an earlier apply triggered.
+    | { kind: "triggeredByOpenChange" }
+  )
 
 /** One thing an entry shows under its status line, in the order they show, with the levels it shows at. */
 export type Detail = PieceLevels
@@ -135,7 +140,8 @@ export type DetailNote =
   | { kind: "commandsWroteStderr"; phase: StillDiffersPhase }
   // The host function threw outside any step.
   | { kind: "hostFunctionFailure" }
-  // The host's saved state couldn't be cleared after every step ran, so the next apply repeats the runs after a change.
+  // The host's saved state couldn't be cleared after every step ran, so the next apply shows the steps that changed as
+  // `resume`.
   | { kind: "savedStateFailure" }
 
 /** The phases of a step whose commands can explain why its state still differs after the fix. */

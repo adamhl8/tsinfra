@@ -83,20 +83,32 @@ had its turn.
 **In `plan`,** tsinfra reads the open changes and never writes them. A run that an open change would fire shows as
 `ran` and counts as drift, so `plan` exits 2. An open change that nothing follows doesn't count.
 
-**The report** keeps today's statuses. A step with an open change that's right is `= unchanged`, shown at `-v` with a
-note. The run it fires shows at the default level, with the reason:
+**The report** gives a step that's still open from an earlier apply a status of its own, `^ resume`, because the
+earlier apply's unfinished work picks up from it.
+A follow-up that only a still-open change triggered gets a note. Both show at the default level, because the case is
+rare and should always be explained:
 
 ```
-  = unchanged: (file) /etc/caddy/Caddyfile   an earlier apply changed this and didn't finish, so it still triggers the runs after it
-  > ran: (run) Restart caddy   '/etc/caddy/Caddyfile' changed in an earlier apply that didn't finish
+  ^ resume: (file) /etc/caddy/Caddyfile   an earlier apply didn't finish, so its follow-ups that didn't complete still trigger
+  > triggered: (run) Restart caddy   triggered because it didn't complete in an earlier unfinished apply
 ```
 
+- **"Resume",** because it says what happens at that step, like the other status words, and it doesn't read like
+  `triggered` at a glance. "Carried over" and "open" don't say what happens, and "unfinished" sounds like the change
+  itself is half done.
 - **"An earlier apply",** not "the last apply", because a change stays open until a clean finish. Two failed applies in
   a row leave the change from the one before last.
 - **"Didn't finish",** not "failed", because Ctrl-C and a dropped connection stop an apply without a step failing.
-- **"Still triggers",** not "triggers again", because the run may never have fired at all.
-- **A run that follows a step that really changed shows no note,** the same as today.
-- **The summary doesn't count an open change as a change,** because its step is `unchanged`.
+- **"Still trigger",** not "trigger again", because a follow-up may never have triggered at all. Nothing can tell
+  whether any follow-up is left to trigger: the follow-ups come later in the script, and the script can act on
+  `changed` without `after`. So the step's note stays true when none is.
+- **"Didn't complete"** covers a follow-up that failed, one the apply never reached, and one that's new or renamed
+  since.
+- **The follow-up's note names no steps,** because the `resume` lines above it already show which steps are still open.
+- **A follow-up that a step changed in this pass also triggered shows no note,** the same as today.
+- **The words have no tense,** like the status words, because a line reads the same in `plan`.
+- **The summary doesn't count a `resume` step as a change,** because it changed nothing. The follow-up counts as it
+  does today.
 
 **Saved state.** Open changes are the first part of tsinfra's saved state, one file per host script that later
 features can add to, like the run-once marker and the manifest in [Ideas](#ideas). It's called saved state, in code
@@ -309,25 +321,22 @@ After this piece, changes open and runs are recorded on them, but nothing fires 
 
 #### 6. Fire runs from open changes
 
-A step's change is **still open from an earlier apply** when the step is `unchanged` and its change is open. A step
-opens its change in this apply only right before it changes something (before the fix in `converge`, before the command
-in `handleRun`), and then it ends `changed` or `ran`, or fails. `plan` never opens anything. So an `unchanged` step with
-an open change can only have one an earlier apply opened and never closed.
+A step's change is **still open from an earlier apply** when the step is in sync and its change is open. A step opens
+its change in this apply only right before it changes something (before the fix in `converge`, before the command in
+`handleRun`), and then it ends `changed` or `ran`, or fails. `plan` never opens anything. So an `unchanged` step with an
+open change can only have one an earlier apply opened and never closed. Two step statuses carry what the rest of the
+feature needs: `resume` for that step, and `ranFromOpenChanges` for a run only such changes triggered.
 
-- **6a.** Decide it in `withChangeStepResult` (`src/session/handlers/shared/change-step-result.ts`), which every change
-  step's result goes through and whose `ctx` already has `savedStateManager`:
-  `stillOpenFromEarlierApply = status === "unchanged" && savedStateManager.isOpen(stepName)`. The script gets
-  `changed: COUNTS_AS_CHANGED[status] || stillOpenFromEarlierApply`, and the status stays `unchanged`, so it isn't drift
-  and the report still shows it from level 1. `HandlerReturn` gains an optional `stillOpenFromEarlierApply` boolean,
-  which read and inspect leave out. `callStep` passes it to `finishStep`, which puts it on the step record as a required
-  boolean, so handlers still record nothing. `withChangeStepResult` also adds the step's name to `changedStepNames`, a
-  set on `StepContext` that the session's steps share, when its own status counts as changed (`changed`, `ran`, or
-  `waiting`). That's the real `changed`, without the still-open part, which 6b and 6c read. Tests, each running two
-  applies on one `loadedHost`, which the test preload gives the same home:
-  - a step still open from an earlier apply returns `changed: true`, in `apply` and in `plan`, and its record has the
-    flag
-  - a run that didn't fire, but is still open, returns `changed: true`
-  - a step that isn't open, or that changes again, has no flag
+- **6a.** Add a `resume` status. `withChangeStepResult` (`src/session/handlers/shared/change-step-result.ts`), which
+  every change step's result goes through and whose `ctx` already has `savedStateManager`, makes an `unchanged` step
+  whose `savedStateManager.isOpen(stepName)` is true `resume`, runs included. `COUNTS_AS_CHANGED` counts `resume`, so
+  the script gets `changed: true`. The record holds the real status, so nothing else carries the fact. It also adds the
+  step's name to `changedStepNames`, a set on `StepContext` that the session's steps share, from the handler's own
+  status, before it can become `resume`, so the set holds only the steps that changed in this pass. 6b and 6c read it.
+  Tests, each running two applies on one `loadedHost`, which the test preload gives the same home:
+  - a step still open from an earlier apply is `resume` and returns `changed: true`, in `apply` and in `plan`
+  - a run that didn't trigger, but is still open, is `resume` and returns `changed: true`
+  - a step that isn't open stays `unchanged`, and one that changes again is `changed`
 - **6b.** Make `converge` a plain function, `converge(ctx, spec)`, like `withChangeStepResult` and `runChange`.
   `StepContext` gives it `convergeRecorder` in place of a prebuilt `converge`, and it opens the step's change with
   `savedStateManager.openChange(stepName)` itself. In `plan` a step waits only on a needed step in `changedStepNames`,
@@ -345,30 +354,36 @@ an open change can only have one an earlier apply opened and never closed.
   - a step that changes again after its run ran
   - `plan` showing a fired run without writing, not showing one the open change lists, and showing one whose step
     drifts again
-- **6d.** Record `triggeringOpenChanges` on a run's step record: the open changes, still open from an earlier apply,
-  that alone triggered it, by their steps' names. `evaluateTrigger` returns `{ shouldTrigger, triggeringOpenChanges? }`.
-  The list is left out, and recorded as `[]`, when a step in `after` changed in this pass, because that change explains
-  the run, so piece 7 leaves its note off and doesn't count the run as drift. Otherwise it's what
-  `getOpenChangesMissingFollowUp` returns, which is only still-open changes then. `StepRecord` gains the list, `[]` from
-  `startStep`, like `waitingOn`. `handleRun` records it through `recordTriggeringOpenChanges` on `StepContext`, right
-  after the trigger and before the command, so a failed run's record keeps it. Tests:
-  - a run fired only by a still-open change records it, in `apply` and in `plan`
-  - a failed run keeps the list on the failure's record
-  - a run a step changed in this pass fired records nothing, though another step in `after` is still open
-  - an `after: "always"` run, and a run that didn't fire, record nothing
+- **6d.** Add a `ranFromOpenChanges` status for a run that only changes still open from an earlier apply triggered:
+  no step in its `after` changed in this pass, and one has an open change missing it. `evaluateTrigger` returns the
+  run's status, `unchanged`, `ran`, or `ranFromOpenChanges`, and `handleRun` passes it on. It counts as changed, like
+  `ran`, so a run after it triggers. Piece 7 shows its note and counts it as drift from the status. A run that fails has
+  no finished status, so it gets no note, and the `resume` line above it explains it. Tests: the runs in 6c's tests
+  that only open changes trigger are `ranFromOpenChanges`, and a run a step changed in this pass triggered is `ran`,
+  though another step in its `after` is still open.
 
 #### 7. Report open changes
 
-- **7a.** Add two note parts to `NotePart` in `src/report/host-block/host-block.ts`, and build them in `toStepNote`
-  (`src/report/host-block/note.ts`):
-  - the note on a step with `stillOpenFromEarlierApply`, from level 1
-  - the note on a run with `triggeringOpenChanges`, naming those steps, from level 0
-- **7b.** Format both with tsinfra's words in constants, where the `needs` part is formatted.
-- **7c.** Count a run with `triggeringOpenChanges` as drift in `hasDrift` (`src/report/summary.ts`), so `plan`
-  exits 2. The step still open from an earlier apply stays out of the summary's count, because it's `unchanged`.
-- **7d.** Add both notes to `report-preview.ts`.
-- **7e.** Test in `src/report/__tests__/report.test.ts`: each note at the levels it shows at, the summary, and the exit
-  code.
+- **7a.** Show `resume` with the word `resume`, the symbol `^`, and cyan, and `ranFromOpenChanges` like `ran`, as
+  `> triggered` in yellow. `ENTRY_LEVELS` (`src/report/host-block/entries.ts`) shows both from level 0. The summary
+  counts `ranFromOpenChanges` as a change, like `ran`, and leaves `resume` out. Test the `resume` line at level 0 and
+  the summary's count.
+- **7b.** Make `NotePart` a union, and add two parts beside `needs`, both from level 0, built in `toStepNote`
+  (`src/report/host-block/note.ts`) from the entry's status:
+  - `resume`, on a `resume` entry: "an earlier apply didn't finish, so its follow-ups that didn't complete still
+    trigger"
+  - `triggeredByOpenChange`, on a `ranFromOpenChanges` entry: "triggered because it didn't complete in an earlier
+    unfinished apply". It names no steps.
+
+  The words go in constants beside `getNotePartWords` (`src/report/format/status-line.ts`). Test both notes in `apply`
+  and `plan`, and that a failed run shows its error with no note.
+
+- **7c.** Count `ranFromOpenChanges` as drift in `hasDrift` (`src/report/summary.ts`), so `plan` exits 2 and shows its
+  reminder. Nothing else in that pass explains the run, and `apply` would run it. Test `hasDrift`, the exit code, and
+  the reminder for it, and that a `resume` step whose run already completed isn't drift.
+- **7d.** Add both to `report-preview.ts`, as a record of a `resume` step and a `ranFromOpenChanges` run, like the hints
+  host. Two applies on one host would leave the second one's saved state in the real home, because the preview has no
+  test preload.
 
 #### 8. Docker tests
 

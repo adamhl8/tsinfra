@@ -8,6 +8,7 @@ import process from "node:process"
 // Every pass shows the level its `-v` flags ask for, like the CLI, so `bun report-preview.ts -vv` shows level 2, and
 // each level adds to the same hosts.
 // Run it with `bask report-preview`, and with `NO_COLOR=1` to see it without colors.
+// It runs the hosts in a child process with a temp `HOME`, so their saved state never lands in the real home.
 // Run `bun report-preview.ts --sudo-prompt` to also get the sudo password prompt, against a fake `sudo` that accepts
 // only the password `tsinfra`, and type at it.
 import bun, { spawn } from "bun"
@@ -352,6 +353,22 @@ const createSavedStateFailureRecord = (): HostRecord => ({
   },
 })
 
+/**
+ * Returns a host that picks up after an earlier apply that didn't finish, as a record, because it takes two applies on
+ * one host, and the second one's saved state would stay in the real home. It shows `^ resume` and a run only open
+ * changes triggered, each with its note.
+ */
+const createResumeRecord = (): HostRecord => {
+  const stepRecord = { options: {}, commands: [], comparisons: {}, waitingOn: [] }
+  return {
+    ...createHostRecord("resume", "web.lan"),
+    stepRecords: [
+      { ...stepRecord, name: "/etc/caddy/Caddyfile", kind: "file", status: "resume" },
+      { ...stepRecord, name: "Restart caddy", kind: "run", status: "ranFromOpenChanges" },
+    ],
+  }
+}
+
 const PASS_MODES: Record<PreviewPass, Mode> = {
   plan: "plan",
   apply: "apply",
@@ -378,7 +395,7 @@ const printHostBlock = (hostRecord: HostRecord, verbosity: Verbosity): HostBlock
 
 /**
  * Runs the scenarios of one pass at `verbosity`, and prints each block, the summary, and the exit code the CLI would
- * return. `apply` also prints the hints host, after the hosts that ran.
+ * return. `apply` also prints the resume, hints, and saved state hosts, as records, after the hosts that ran.
  */
 const previewPass = async (pass: PreviewPass, verbosity: Verbosity) => {
   const mode = PASS_MODES[pass]
@@ -401,6 +418,7 @@ const previewPass = async (pass: PreviewPass, verbosity: Verbosity) => {
     }
     if (pass === "apply") {
       hostBlocks.push(
+        printHostBlock(createResumeRecord(), verbosity),
         printHostBlock(createHintsRecord(), verbosity),
         printHostBlock(createSavedStateFailureRecord(), verbosity),
       )
@@ -420,6 +438,37 @@ const SUDO_PROMPT_FLAG = "--sudo-prompt"
 // Set this variable only in the child, so it tells the child that it runs the prompt pass, and where its fake `sudo` is.
 const FAKE_SUDO_PATH_VARIABLE = "TSINFRA_PREVIEW_FAKE_SUDO"
 
+// Set this variable only in the child that runs `plan` and `apply`, so it knows it already has a temp `HOME`.
+const PREVIEW_HOME_VARIABLE = "TSINFRA_PREVIEW_HOME"
+
+/**
+ * Runs this script again in a child process with `env` added, and returns the child's exit code. Passes the child every
+ * argument, so it shows the same level.
+ */
+const runPreviewChild = async (env: Record<string, string>): Promise<number> => {
+  const child = spawn([process.execPath, import.meta.path, ...process.argv.slice(2)], {
+    env: { ...process.env, ...env },
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  })
+  return child.exited
+}
+
+/**
+ * Runs the preview in a child process with a temp `HOME`, so the hosts' saved state never lands in the real home. Sets
+ * it when the child starts, because a command gets the environment tsinfra started with. Returns the child's exit
+ * code.
+ */
+const previewWithTempHome = async (): Promise<number> => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "tsinfra-preview-home-"))
+  try {
+    return await runPreviewChild({ HOME: dir, [PREVIEW_HOME_VARIABLE]: dir })
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
 /**
  * Runs the prompt pass in a child process, with a fake `sudo` first on `PATH` and a temp `HOME` for the askpass helper.
  * Set them when the child starts, because a command gets the environment tsinfra started with. Returns the child's exit
@@ -432,19 +481,11 @@ const previewSudoPrompt = async (): Promise<number> => {
     await bun.write(fakeSudoPath, `${FAKE_SUDO}\n`)
     await chmod(fakeSudoPath, 0o755)
 
-    // Pass the child every argument, so it shows the same level.
-    const child = spawn([process.execPath, import.meta.path, ...process.argv.slice(2)], {
-      env: {
-        ...process.env,
-        PATH: `${path.dirname(fakeSudoPath)}:${process.env["PATH"]}`,
-        HOME: dir,
-        [FAKE_SUDO_PATH_VARIABLE]: fakeSudoPath,
-      },
-      stdin: "inherit",
-      stdout: "inherit",
-      stderr: "inherit",
+    return await runPreviewChild({
+      PATH: `${path.dirname(fakeSudoPath)}:${process.env["PATH"]}`,
+      HOME: dir,
+      [FAKE_SUDO_PATH_VARIABLE]: fakeSudoPath,
     })
-    return await child.exited
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
@@ -498,6 +539,7 @@ const main = async (): Promise<number> => {
   }
 
   if (process.env[FAKE_SUDO_PATH_VARIABLE] !== undefined) return runSudoPromptPass(verbosity)
+  if (process.env[PREVIEW_HOME_VARIABLE] === undefined) return previewWithTempHome()
 
   await previewPass("plan", verbosity)
   await previewPass("apply", verbosity)

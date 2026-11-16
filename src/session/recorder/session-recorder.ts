@@ -63,8 +63,6 @@ export interface SessionRecorder {
    * step's handler calls it right after validating its options, so a failure can't lose them.
    */
   recordOptions: (options: StepOptionsRecord) => void
-  /** Records the open changes, still open from an earlier apply, that triggered the running run step. */
-  recordTriggeringOpenChanges: (stepNames?: string[]) => void
   /** Returns the error the host failed with, or nothing while it hasn't failed. */
   getFailure: () => Error | undefined
   /**
@@ -75,10 +73,10 @@ export interface SessionRecorder {
   /** Records a new step and marks it running, or fails when another step is running. */
   startStep: (stepName: string, kind: StepKind) => Result
   /**
-   * Records the running step's status, and whether its change is still open from an earlier apply, and marks no step as
-   * running. Fails the step instead when the host failed while it ran.
+   * Records the running step's status, and marks no step as running. Fails the step instead when the host failed while
+   * it ran.
    */
-  finishStep: (status: StepStatus, stillOpenFromEarlierApply?: boolean) => void
+  finishStep: (status: StepStatus) => void
   /** Fails the running step with `error`, and marks no step as running. */
   failStep: (error: Error) => void
   convergeRecorder: ConvergeRecorder
@@ -175,7 +173,6 @@ export const createSessionRecorder = (
       commands: [],
       comparisons: {},
       waitingOn: [],
-      triggeringOpenChanges: [],
     }
   }
 
@@ -194,7 +191,7 @@ export const createSessionRecorder = (
     hostRecord.failure = { kind: "step", stepRecord, error: keepError(error), hints }
   }
 
-  const finishStep = (status: StepStatus, stillOpenFromEarlierApply = false) => {
+  const finishStep = (status: StepStatus) => {
     const stepRecord = endStep()
     if (!stepRecord) return
 
@@ -202,7 +199,7 @@ export const createSessionRecorder = (
     // `exec` in a fix. It still fails the host, and it belongs to this step.
     // Pass the host's own error, because there's no new one, and the keep rule leaves it as it is.
     if (hostRecord.failure) recordStepFailure(stepRecord, hostRecord.failure.error)
-    else hostRecord.stepRecords.push({ ...stepRecord, status, stillOpenFromEarlierApply })
+    else hostRecord.stepRecords.push({ ...stepRecord, status })
   }
 
   const failStep = (error: Error) => {
@@ -226,17 +223,11 @@ export const createSessionRecorder = (
 
   const convergeRecorder: ConvergeRecorder = { startPhase, recordComparison, recordWaitingOn }
 
-  const recordTriggeringOpenChanges = (_stepNames: string[] = []) => {
-    const stepNames = mask(_stepNames)
-    if (hostRecord.runningStep) hostRecord.runningStep.triggeringOpenChanges = stepNames
-  }
-
   const getFailure = () => hostRecord.failure?.error
 
   return {
     getStepShells,
     recordOptions,
-    recordTriggeringOpenChanges,
     getFailure,
     recordFailure,
     startStep,

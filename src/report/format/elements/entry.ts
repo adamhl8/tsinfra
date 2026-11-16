@@ -7,8 +7,10 @@ const STATUS_SYMBOLS: Record<EntryStatus, string> = {
   observed: "·",
   changed: "~",
   ran: ">",
+  ranFromOpenChanges: ">",
   waiting: "?",
   failed: "!",
+  resume: "^",
 }
 
 /** Formats an entry's status as its symbol and `word` in the status's color, like `~ change`. */

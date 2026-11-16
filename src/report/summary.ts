@@ -11,9 +11,13 @@ const getEntries = (hostBlock: HostBlock): HostBlockEntry[] => (hostBlock.kind =
 export const hasFailed = (hostBlock: HostBlock): boolean =>
   getEntries(hostBlock).some(({ status }) => status === "failed")
 
-/** Reports whether a step found the host different from the script, which is drift, and makes `plan` exit 2. */
+/**
+ * Reports whether a step found the host different from the script, which is drift, and makes `plan` exit 2. A follow-up
+ * that only an open change triggered counts too, because nothing else in the pass explains it, and `apply` would run
+ * it.
+ */
 export const hasDrift = (hostBlock: HostBlock): boolean =>
-  getEntries(hostBlock).some(({ status }) => status === "changed")
+  getEntries(hostBlock).some(({ status }) => status === "changed" || status === "ranFromOpenChanges")
 
 const formatHostStatus = (hostBlock: HostBlock): string => {
   if (hasFailed(hostBlock)) return statusTextElement("failed", "failed")
@@ -21,8 +25,10 @@ const formatHostStatus = (hostBlock: HostBlock): string => {
   const entries = getEntries(hostBlock)
   const statuses = entries.map(({ status }) => status)
 
-  // Count `ran` steps too, so the count matches the `~` and `>` lines in the block.
-  const changeCount = statuses.filter((status) => status === "changed" || status === "ran").length
+  // Count triggered runs too, so the count matches the `~` and `>` lines in the block.
+  const changeCount = statuses.filter(
+    (status) => status === "changed" || status === "ran" || status === "ranFromOpenChanges",
+  ).length
   const waitingCount = statuses.filter((status) => status === "waiting").length
   // Count warnings too, so one isn't lost when the blocks have scrolled away.
   const warningCount = entries.flatMap(({ details }) => details).filter(({ kind }) => kind === "warning").length

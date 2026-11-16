@@ -116,7 +116,6 @@ describe("SessionRecorder steps", () => {
       commands: [],
       comparisons: {},
       waitingOn: [],
-      triggeringOpenChanges: [],
     }
     expect([hostRecord.runningStep, hostRecord.stepRecords, hostRecord.failure]).toStrictEqual([
       undefined,

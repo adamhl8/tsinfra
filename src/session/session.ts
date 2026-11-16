@@ -193,17 +193,8 @@ const STEP_NAME_LABELS: Record<StepKind, string> = {
  */
 export const createHostSession = (sessionContext: SessionContext, mode: Mode): Host => {
   const { name, home, savedStateManager, sessionRecorder } = sessionContext
-  const {
-    getStepShells,
-    recordOptions,
-    recordTriggeringOpenChanges,
-    getFailure,
-    recordFailure,
-    startStep,
-    finishStep,
-    failStep,
-    convergeRecorder,
-  } = sessionRecorder
+  const { getStepShells, recordOptions, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder } =
+    sessionRecorder
 
   // oxlint-disable-next-line promise/prefer-await-to-callbacks - `callback` is awaited, and the rule only matches its name
   const callOrFail = async <T>(callback: () => Promise<Result<T>>) => {
@@ -298,7 +289,6 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
         changeTools,
         convergeRecorder,
         recordOptions,
-        recordTriggeringOpenChanges,
       }
 
       const handlerReturn = await handler(ctx)
@@ -307,10 +297,8 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
         return handlerReturn
       }
 
-      const { status, value, stillOpenFromEarlierApply } = handlerReturn
-
-      finishStep(status, stillOpenFromEarlierApply)
-      return value
+      finishStep(handlerReturn.status)
+      return handlerReturn.value
     })
 
   const host: Host = {

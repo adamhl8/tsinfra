@@ -12,7 +12,7 @@ const getNoteWords = (note: DetailNote): string => {
   if (note.kind === "valuesBeforeFix") return "values before the fix"
   if (note.kind === "hostFunctionFailure") return "thrown in the host function, outside any step"
   if (note.kind === "savedStateFailure")
-    return "every step ran, but tsinfra couldn't clear its saved state on the host, so the next apply repeats the runs that followed a change"
+    return "every step ran, but tsinfra couldn't clear its saved state on the host, so the next apply shows the steps that changed as 'resume', and they still read as changed to the script"
   return `some commands ${PHASE_DESCRIPTIONS[note.phase]} wrote to stderr, run with -vvv to see what they printed`
 }
 

@@ -414,7 +414,8 @@ A failure is one of five kinds, named after what it stops.
   target, because the host function runs on the control machine.
 - **A saved state failure** happens after every step of a host ran in `apply`, when tsinfra can't close the host's
   open changes, like when it can't delete `~/.tsinfra/state/<name>.json`. Its block shows `(saved state)` and the
-  host's target, with a note that the next apply repeats the runs that followed a change.
+  host's target, with a note that the next apply shows the steps that changed as `resume`, and that they still read as
+  changed to the script.
 - **A step failure** belongs to the step that was running, and shows on that step's status line. That includes a failure the
   script caught inside the step.
 

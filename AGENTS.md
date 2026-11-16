@@ -99,6 +99,8 @@ whether a reader could mistake it for the wanted value or the host's value.
   the checked `HomeDirectory`, never as `"$HOME"` in a script. The test preload's mock swaps `home` on what
   `buildHostDetails` returns, so it reaches paths built after preparation, like saved state. It doesn't reach the
   askpass helper, which `buildHostDetails` writes itself, so tests find the helper in the real home.
+- **`report-preview.ts` has no test preload,** so it runs its hosts in a child process started with a temp `HOME`.
+  Otherwise each host that fails there leaves its saved state in the real `~/.tsinfra/state/`.
 - **Recorders follow the stages of a run** (preparation, then the session), not the host, step, and converge
   hierarchy.
 

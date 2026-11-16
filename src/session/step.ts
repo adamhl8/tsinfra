@@ -44,8 +44,8 @@ export interface StepContext<K extends StepKind = StepKind> {
   /** The SSH user's home directory, read and checked when the host is prepared. */
   home: HomeDirectory
   /**
-   * The host's saved state, which says whether a step's change is still open, and which a run opens its own change in
-   * and records itself on as a follow-up.
+   * The host's saved state, which says whether a step's change is still open, and which a follow-up opens its own
+   * change in and records itself on.
    */
   savedStateManager: SavedStateManager
   /**
@@ -63,25 +63,23 @@ export interface StepContext<K extends StepKind = StepKind> {
    * each one at its default. Call it right after validating them, so a failure can't lose them.
    */
   recordOptions: (options: StepOptionsRecord) => void
-  /** Records the open changes, still open from an earlier apply, that triggered the run. */
-  recordTriggeringOpenChanges: (stepNames?: string[]) => void
 }
 
 /** What a step's handler gives: the status to record, and the value to give the script. */
 export interface HandlerReturn<T> {
   status: StepStatus
   value: T
-  /** Whether a change step was `unchanged`, but its change is still open from an earlier apply. Read steps leave it out. */
-  stillOpenFromEarlierApply?: boolean
 }
 
 /**
  * How a step turned out, which the session records for the output. A `changed` status means the host's state differed,
- * so it is the only status that counts as drift in `plan`. A `ran` status means a run was triggered. A `waiting` status
- * means a step it needs would change, so `plan` skipped reading the host's state. An `observed` status is a read or an
- * inspect, which only looks.
+ * which is drift in `plan`. A `ran` status means a run was triggered. A `ranFromOpenChanges` status means only changes
+ * still open from an earlier apply triggered a run, which is drift in `plan` too, because nothing in the pass explains
+ * it. A `resume` status means a change step was in sync, but its change is still open from an earlier apply. A
+ * `waiting` status means a step it needs would change, so `plan` skipped reading the host's state. An `observed` status
+ * is a read or an inspect, which only looks.
  */
-export type StepStatus = "unchanged" | "observed" | "changed" | "ran" | "waiting"
+export type StepStatus = "unchanged" | "observed" | "changed" | "ran" | "ranFromOpenChanges" | "waiting" | "resume"
 
 /** How the host's state compared with what a step wants. */
 export type ComparisonValues = EnsureComparisonValues | FileComparisonValues | LinkComparisonValues

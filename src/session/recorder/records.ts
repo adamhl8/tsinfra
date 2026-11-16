@@ -79,8 +79,6 @@ export interface RecordedStepFailure extends BaseRecordedFailure {
 /** The record of a step that finished, with how it turned out. */
 export interface FinishedStepRecord extends StepRecord {
   status: StepStatus
-  /** Whether the step was `unchanged`, but its change is still open from an earlier apply. */
-  stillOpenFromEarlierApply: boolean
 }
 
 /** A step's record without an outcome: the running step, which the recorder records on, or the step that failed. */
@@ -97,11 +95,6 @@ export interface StepRecord {
   comparisons: StepComparisons
   /** The names of the needed steps this step waited on. */
   waitingOn: string[]
-  /**
-   * The open changes, still open from an earlier apply, that triggered the given run step, by their steps' names. It's
-   * empty when a step in the run's `after` changed in this pass, because that change explains the run.
-   */
-  triggeringOpenChanges: string[]
 }
 
 const NO_VARIABLES: Record<string, string> = {}

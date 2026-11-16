@@ -19,12 +19,21 @@ const STATUS_WORDS: Record<EntryStatus, string> = {
   observed: "observed",
   changed: "change",
   ran: "triggered",
+  ranFromOpenChanges: "triggered",
   waiting: "waiting",
   failed: "failed",
+  resume: "resume",
 }
 
+const RESUME_NOTE = "an earlier apply didn't finish, so its follow-ups that didn't complete still trigger"
+const TRIGGERED_BY_OPEN_CHANGE_NOTE = "triggered because it didn't complete in an earlier unfinished apply"
+
 /** Returns the words of a part of an entry's note, like `needs 'A', 'B'`. */
-const getNotePartWords = (notePart: NotePart): string => `needs ${quoteNames(notePart.needs)}`
+const getNotePartWords = (notePart: NotePart): string => {
+  if (notePart.kind === "needs") return `needs ${quoteNames(notePart.needs)}`
+  if (notePart.kind === "resume") return RESUME_NOTE
+  return TRIGGERED_BY_OPEN_CHANGE_NOTE
+}
 
 /** Formats the fields an entry's status line shows, and joins its note's parts into their text. */
 export const formatStatusLine = (hostBlockEntry: HostBlockEntry): StatusLine => {

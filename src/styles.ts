@@ -11,8 +11,10 @@ export const STATUS_COLORS: Record<EntryStatus, Style> = {
   observed: pc.gray,
   changed: pc.yellow,
   ran: pc.yellow,
+  ranFromOpenChanges: pc.yellow,
   waiting: pc.blue,
   failed: pc.redBright,
+  resume: pc.cyan,
 }
 
 /** Colors what's on the host now red, like a diff's `-` lines, because the change replaces it. */

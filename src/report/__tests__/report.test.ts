@@ -274,7 +274,7 @@ describe("renderHostBlock", () => {
         "a",
         "  ! failed: (saved state) a.lan",
         "      failed to delete the saved state in '/home/a/.tsinfra/state/a.json'",
-        "        every step ran, but tsinfra couldn't clear its saved state on the host, so the next apply repeats the runs that followed a change",
+        "        every step ran, but tsinfra couldn't clear its saved state on the host, so the next apply shows the steps that changed as 'resume', and they still read as changed to the script",
       ].join("\n"),
     )
   })
@@ -1161,6 +1161,75 @@ describe("renderHostBlock and renderSummary for a warning", () => {
   })
 })
 
+/**
+ * Runs a host in `apply`, then runs the same loaded host again in `mode`, and returns the second run's record. `fn`
+ * gets whether it's the first apply, so it can fail there and leave its changes open.
+ */
+const runAfterApply = async (fn: (h: Host, isFirstApply: boolean) => Promise<void>, mode: Mode) => {
+  let isFirstApply = true
+  const loadedHost = loadHostDefinition(host({ name: "a", target: "@local" }, async (h) => fn(h, isFirstApply)))
+
+  await prepareAndRunHost(loadedHost, "apply")
+  isFirstApply = false
+  return prepareAndRunHost(loadedHost, mode)
+}
+
+/** Returns an `ensure` that makes a marker file, so it changes the first time it runs on a host. */
+const createMarker = async (): Promise<EnsureOptions<boolean>> => {
+  const markerPath = path.join(await makeTempDir(), "made")
+  return { want: true, check: `test -f '${markerPath}'`, fix: `touch '${markerPath}'` }
+}
+
+/** Runs a host whose first apply changes `Make marker` and fails before the run after it, then runs it again in `mode`. */
+const resumeAfterFailedApply = async (mode: Mode, restartCommand = "true") => {
+  const marker = await createMarker()
+  return runAfterApply(async (h, isFirstApply) => {
+    const madeMarker = await h.ensure("Make marker", marker)
+    if (isFirstApply) throwBoom()
+    await h.run("Restart", restartCommand, { after: [madeMarker] })
+  }, mode)
+}
+
+/** Runs a host whose first apply changes `Make marker` and runs the run after it, then fails, then runs it in `mode`. */
+const resumeAfterRunCompleted = async (mode: Mode) => {
+  const marker = await createMarker()
+  return runAfterApply(async (h, isFirstApply) => {
+    const madeMarker = await h.ensure("Make marker", marker)
+    await h.run("Restart", "true", { after: [madeMarker] })
+    if (isFirstApply) throwBoom()
+  }, mode)
+}
+
+describe("renderHostBlock for a step still open from an earlier apply", () => {
+  it.each(["apply", "plan"] as const)(
+    "should show it as resume, and the run it triggers, at level 0 in %s",
+    async (mode) => {
+      expect(renderRecord(await resumeAfterFailedApply(mode))).toBe(
+        [
+          "a",
+          "  ^ resume: (ensure) Make marker   an earlier apply didn't finish, so its follow-ups that didn't complete still trigger",
+          "  > triggered: (run) Restart   triggered because it didn't complete in an earlier unfinished apply",
+        ].join("\n"),
+      )
+    },
+  )
+
+  it("should leave the note off a run it triggers that fails, which shows its error", async () => {
+    expect(renderRecord(await resumeAfterFailedApply("apply", "exit 1"))).toBe(
+      [
+        "a",
+        "  ^ resume: (ensure) Make marker   an earlier apply didn't finish, so its follow-ups that didn't complete still trigger",
+        "  ! failed: (run) Restart",
+        "      failed to run the step -> exited with code 1",
+      ].join("\n"),
+    )
+  })
+
+  it("should leave it out of the summary's count, which counts only the run", async () => {
+    expect(renderRecordsSummary([await resumeAfterFailedApply("apply")], "apply")).toBe("a   1 change")
+  })
+})
+
 describe("renderSummary", () => {
   it("should list each host's status, padded to the longest name, after the plan reminder", async () => {
     const hostRecords = [
@@ -1194,6 +1263,12 @@ describe("renderSummary", () => {
     expect(renderRecordsSummary(hostRecords, "plan")).toBe("a   1 change")
   })
 
+  it("should show the reminder when only an open change triggered a run", async () => {
+    expect(renderRecordsSummary([await resumeAfterFailedApply("plan")], "plan")).toBe(
+      ["Steps after a change were checked without that change, so apply may differ.", "", "a   1 change"].join("\n"),
+    )
+  })
+
   it("should leave out the reminder in apply", async () => {
     const hostRecords = [await runNamedHost("a", runOnce, "apply")]
 
@@ -1216,6 +1291,18 @@ describe("hasDrift", () => {
   it("should be false when the only step failed", async () => {
     expect(hasDrift(await planBlock(failRead))).toBe(false)
   })
+
+  it("should be true when only an open change triggered a run", async () => {
+    const hostBlock = toHostBlock(await resumeAfterFailedApply("plan"))
+
+    expect(hasDrift(hostBlock)).toBe(true)
+  })
+
+  it("should be false for a resume step whose run already completed", async () => {
+    const hostBlock = toHostBlock(await resumeAfterRunCompleted("plan"))
+
+    expect(hasDrift(hostBlock)).toBe(false)
+  })
 })
 
 describe("getExitCode", () => {
@@ -1225,6 +1312,12 @@ describe("getExitCode", () => {
 
   it("should be 2 from plan when a host has drift", async () => {
     expect(getExitCode([await planBlock(changeOnce)], "plan")).toBe(2)
+  })
+
+  it("should be 2 from plan when only an open change triggered a run", async () => {
+    const hostBlock = toHostBlock(await resumeAfterFailedApply("plan"))
+
+    expect(getExitCode([hostBlock], "plan")).toBe(2)
   })
 
   it("should be 0 from apply when a host has drift", async () => {

@@ -11,7 +11,7 @@ import {
   validateInput,
 } from "#session/handlers/shared/shared.ts"
 import type { EnvOptions, HandlerOptions } from "#session/handlers/step-options/step-options.ts"
-import type { HandlerReturn, StepContext } from "#session/step.ts"
+import type { HandlerReturn, StepContext, StepStatus } from "#session/step.ts"
 
 /** What makes a run run: the steps it follows, or `"always"`. */
 export type RunTrigger = ChangeStepResult[] | "always"
@@ -35,31 +35,30 @@ const runOptionsSchema = type.declare<HandlerOptions<RunOptions>>().type({
   after: runTriggerSchema,
 })
 
-/** Whether a run should trigger, and the open changes, still open from an earlier apply, that alone trigger it. */
-interface TriggerEvaluation {
-  shouldTrigger: boolean
-  triggeringOpenChanges?: string[]
-}
+/** The statuses a run's trigger gives it, before `withChangeStepResult` can make an `unchanged` one `resume`. */
+type TriggerStatus = Extract<StepStatus, "unchanged" | "ran" | "ranFromOpenChanges">
 
 /**
- * Returns whether the run should trigger: on every pass for `"always"`, or when a step in `after` changed in this pass,
- * or has an open change missing this run.
+ * Returns the run's status from its trigger: `ran` on every pass for `"always"`, or when a step in `after` changed in
+ * this pass, `ranFromOpenChanges` when a step in `after` has an open change missing this run, and `unchanged`
+ * otherwise.
  */
-const evaluateTrigger = (ctx: StepContext<"run">, options: RunOptions): TriggerEvaluation => {
+const evaluateTrigger = (ctx: StepContext<"run">, options: RunOptions): TriggerStatus => {
   const { stepName, savedStateManager, changedStepNames } = ctx
   const { after } = options
-  if (after === "always") return { shouldTrigger: true }
+  if (after === "always") return "ran"
 
   // Check `changedStepNames`, not `changed`, because `changed` is the script's value, not whether the step changed.
   // The script's `changed` is also true when the step's change is still open from an earlier apply.
   const didAnyStepChange = after.some(({ name }) => changedStepNames.has(name))
-  if (didAnyStepChange) return { shouldTrigger: true }
+  if (didAnyStepChange) return "ran"
 
-  // Treat every open change missing this run as still open from an earlier apply, because no step in `after` changed.
+  // Mark a run its open changes trigger `ranFromOpenChanges`, because no step in `after` changed in this pass.
+  // Only changes still open from an earlier apply trigger it.
   const followedStepNames = after.map(({ name }) => name)
-  const triggeringOpenChanges = savedStateManager.getOpenChangesMissingFollowUp(stepName, followedStepNames)
-  const isMissingFromOpenChanges = triggeringOpenChanges.length > 0
-  return { shouldTrigger: isMissingFromOpenChanges, triggeringOpenChanges }
+  const isMissingFromOpenChanges =
+    savedStateManager.getOpenChangesMissingFollowUp(stepName, followedStepNames).length > 0
+  return isMissingFromOpenChanges ? "ranFromOpenChanges" : "unchanged"
 }
 
 export const handleRun = async (
@@ -67,7 +66,7 @@ export const handleRun = async (
   change: unknown,
   options: unknown,
 ): Promise<Result<HandlerReturn<ChangeStepResult<"run">>>> => {
-  const { stepName, kind, mode, savedStateManager, recordTriggeringOpenChanges } = ctx
+  const { stepName, kind, mode, savedStateManager } = ctx
 
   const validChange = validateInput(change, changeSchema, { inputLabel: "command", givenTo: kind })
   if (isErr(validChange)) return validChange
@@ -75,13 +74,9 @@ export const handleRun = async (
   const validOptions = validateInput(options, runOptionsSchema, { inputLabel: "options", givenTo: kind })
   if (isErr(validOptions)) return validOptions
 
-  const { shouldTrigger, triggeringOpenChanges } = evaluateTrigger(ctx, validOptions)
-  if (!shouldTrigger) return withChangeStepResult(ctx, "unchanged")
-
-  // Record what triggered the run before its command, so a failed run's record still says.
-  recordTriggeringOpenChanges(triggeringOpenChanges)
-
-  if (mode === "plan") return withChangeStepResult(ctx, "ran")
+  const triggerStatus = evaluateTrigger(ctx, validOptions)
+  if (triggerStatus === "unchanged") return withChangeStepResult(ctx, triggerStatus)
+  if (mode === "plan") return withChangeStepResult(ctx, triggerStatus)
 
   // Open the run's own change before its command, so a run that follows this one still triggers if the host stops after it.
   const openChangeResult = await savedStateManager.openChange(stepName)
@@ -99,5 +94,5 @@ export const handleRun = async (
     if (isErr(followUpRecord)) return followUpRecord
   }
 
-  return withChangeStepResult(ctx, "ran")
+  return withChangeStepResult(ctx, triggerStatus)
 }
