@@ -1,3 +1,27 @@
+## [0.3.0](https://github.com/adamhl8/tsinfra/compare/v0.2.0..v0.3.0) - 2026-11-16
+
+### 🚀 Features
+
+- report resume steps and count runs from open changes as drift ([be5cf12](https://github.com/adamhl8/tsinfra/commit/be5cf1222c981f4b39d4bed503a0d15f03bd9633) by @adamhl8)
+
+- trigger runs from changes still open from an earlier apply ([32e11b2](https://github.com/adamhl8/tsinfra/commit/32e11b2ebd2cbb29a81cbcd647d9d0595051cdc0) by @adamhl8)
+
+- open changes in apply and close them after a clean run ([9818605](https://github.com/adamhl8/tsinfra/commit/9818605c981e72c3e7aed4440a7395922914e009) by @adamhl8)
+
+- add saved state manager ([8187a3e](https://github.com/adamhl8/tsinfra/commit/8187a3e7acdc1e02e87b430b9156f4ea30dd2bb1) by @adamhl8)
+
+- reject duplicate step names ([bd36e03](https://github.com/adamhl8/tsinfra/commit/bd36e034bbefe91beb408d73007684d793fa5c5e) by @adamhl8)
+
+### 🚜 Refactor
+
+- simplify host definition and get name from the host config ([447619e](https://github.com/adamhl8/tsinfra/commit/447619ecb9e638f2e468cb1b2ec0a49f2b66e2c2) by @adamhl8)
+
+- check $HOME in preparation and give tests their own home ([75e151d](https://github.com/adamhl8/tsinfra/commit/75e151d0c755608d9a9ada9c62bcadfc70b29699) by @adamhl8)
+
+### ⚙️ Miscellaneous Tasks
+
+- update tests and docs ([c7264ac](https://github.com/adamhl8/tsinfra/commit/c7264ac934242c38b2913679a34e669ff5ae90e2) by @adamhl8)
+
 ## [0.2.0](https://github.com/adamhl8/tsinfra/compare/v0.1.0..v0.2.0) - 2026-11-14
 
 ### 🚀 Features
