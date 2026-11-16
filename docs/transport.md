@@ -342,8 +342,10 @@ export default host({ name: "incus", target: "incus.lan", sudo: { password: incu
 The Incus containers have passwordless sudo through cloud-init, so `sudo: true` only checks it there. The Mac and the
 first run on the Incus host need a password.
 
-**Preparation.** Every host is prepared before any script runs: connect, read and check `$HOME`, and for a host that declares
-`sudo`, check it. That happens for every host at once. Then the hosts that need a password prompt, one at a time, in the
+**Preparation.** Every host is prepared before any script runs: connect, read and check `$HOME`, for a host that declares
+`sudo`, check it, and read the host's saved state from `~/.tsinfra/state/<name>.json`. That happens for every host at
+once. The saved state read never needs sudo, and isn't on the record, because it's tsinfra's own file. A saved state
+file that isn't one tsinfra wrote fails the host here, with the file's path. Then the hosts that need a password prompt, one at a time, in the
 hosts' order. Then the scripts run, one after another, so a prompt never mixes with a running host's
 output. A host that can't be reached fails here, before any other host changes anything. A host has to declare `sudo`
 because of this: by the time its script runs, it's too late to ask.

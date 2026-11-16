@@ -2,8 +2,11 @@ import { mock } from "bun:test"
 import process from "node:process"
 
 import { makeTempDir } from "@adamhl8/configs/test"
+import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
+import type { LoadedHost } from "#hosts/load.ts"
+import type { HomeDirectory } from "#hosts/prepare/host-details/host-details.ts"
 import { LOCAL_TARGET } from "#transport/transport.ts"
 
 import "@adamhl8/configs/test/preload"
@@ -17,6 +20,21 @@ process.env["FORCE_COLOR"] = ""
 const hostDetails = await import("#hosts/prepare/host-details/host-details.ts")
 const { buildHostDetails } = hostDetails
 
+// Keep each host's home by its `LoadedHost`, so a test that prepares the same host twice finds its saved state again.
+const homesByLoadedHost = new WeakMap<LoadedHost, HomeDirectory>()
+
+/** Returns the temp home of `loadedHost`, making one the first time the host is prepared. */
+const getTestHome = async (loadedHost: LoadedHost): Promise<Result<HomeDirectory>> => {
+  const knownHome = homesByLoadedHost.get(loadedHost)
+  if (knownHome) return knownHome
+
+  const home = hostDetails.validateHome(await makeTempDir())
+  if (isErr(home)) return home
+
+  homesByLoadedHost.set(loadedHost, home)
+  return home
+}
+
 // Give each `@local` host a home of its own, so a test never touches the real home's saved state or another test's.
 // Swap the home preparation read, because commands get the `HOME` the test run started with, so `HOME` can't move.
 await mock.module("#hosts/prepare/host-details/host-details.ts", () => ({
@@ -26,7 +44,7 @@ await mock.module("#hosts/prepare/host-details/host-details.ts", () => ({
     const builtHostDetails = await buildHostDetails(...args)
     if (isErr(builtHostDetails) || loadedHost.target !== LOCAL_TARGET) return builtHostDetails
 
-    const home = hostDetails.validateHome(await makeTempDir())
+    const home = await getTestHome(loadedHost)
     if (isErr(home)) return home
 
     return { ...builtHostDetails, home }

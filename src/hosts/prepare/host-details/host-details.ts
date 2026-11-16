@@ -18,8 +18,22 @@ import type { Shell, Transport } from "#transport/transport.ts"
 
 export { toSavedStatePath } from "#hosts/prepare/host-details/tsinfra-directory.ts"
 
-/** What preparation reads from a host before its transport is built. */
-export interface HostDetails {
+/** What preparation reads from a host. A host whose sudo password needs a prompt gets no transport until the prompt. */
+export type HostDetails = NeedsPasswordHostDetails | ReadyHostDetails
+
+/** A host's details while its sudo password still needs a prompt, so it has no transport yet. */
+export interface NeedsPasswordHostDetails extends BaseHostDetails {
+  kind: "needsPassword"
+}
+
+/** A host's details once its transport is built. */
+export interface ReadyHostDetails extends BaseHostDetails {
+  kind: "ready"
+  transport: Transport
+}
+
+/** What preparation reads from every host, whether or not its transport is built yet. */
+interface BaseHostDetails {
   /** The SSH user's home directory. */
   home: HomeDirectory
   /** The SSH user's name, which the sudo password prompt names. */
@@ -28,11 +42,6 @@ export interface HostDetails {
   baseTransport: Transport
   /** Runs preparation's commands on the host, recording them, like the sudo password prompt's checks. */
   hostShell: Shell
-}
-
-/** A host's details once its transport is built. A host whose sudo password needs a prompt gets it after the prompt. */
-export interface ReadyHostDetails extends HostDetails {
-  transport: Transport
 }
 
 declare const HOME_DIRECTORY_BRAND: unique symbol
@@ -74,7 +83,7 @@ export const prepareBaseTransport = async (localShell: Shell, target: string): P
 export const buildHostDetails = async (
   loadedHost: LoadedHost,
   preparationRecorder: PreparationRecorder,
-): Promise<Result<HostDetails | ReadyHostDetails>> => {
+): Promise<Result<HostDetails>> => {
   const { target, options } = loadedHost
   const { sudo } = options
 
@@ -109,14 +118,14 @@ export const buildHostDetails = async (
     if (isErr(helperWrite)) return err("failed to write the sudo askpass helper", helperWrite)
   }
 
-  if (resolvedSudo.kind === "needsPassword") return { home, user, baseTransport, hostShell }
+  if (resolvedSudo.kind === "needsPassword") return { kind: "needsPassword", home, user, baseTransport, hostShell }
 
   const transport =
     resolvedSudo.kind === "password"
       ? createAskpassSudoTransport(baseTransport, resolvedSudo.password, askpassHelperPath)
       : createPasswordlessSudoTransport(baseTransport)
 
-  return { home, user, baseTransport, hostShell, transport }
+  return { kind: "ready", home, user, baseTransport, hostShell, transport }
 }
 
 /**
@@ -125,7 +134,7 @@ export const buildHostDetails = async (
  */
 export const finishHostDetails = async (
   loadedHost: LoadedHost,
-  hostDetails: HostDetails,
+  hostDetails: NeedsPasswordHostDetails,
 ): Promise<Result<ReadyHostDetails>> => {
   const { home, user, baseTransport, hostShell } = hostDetails
 
@@ -133,5 +142,5 @@ export const finishHostDetails = async (
   if (isErr(password)) return password
 
   const transport = createAskpassSudoTransport(baseTransport, password, toAskpassHelperPath(home))
-  return { ...hostDetails, transport }
+  return { ...hostDetails, kind: "ready", transport }
 }

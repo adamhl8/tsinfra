@@ -20,8 +20,8 @@ const hostEntries = await prepareHosts(
   names.map((name) => loadHostDefinition(host({ name, target: "@local", sudo: true }, doNothing))),
 )
 const results = hostEntries.map((hostEntry) => [
-  hostEntry.loadedHost.name,
-  hostEntry.sessionContext ? "prepared" : messageChain(getPreparationFailure(hostEntry.hostRecord)),
+  hostEntry.hostRecord.name,
+  hostEntry.preparation === "prepared" ? "prepared" : messageChain(getPreparationFailure(hostEntry.hostRecord)),
 ])
 console.log(JSON.stringify(results))
 

@@ -35,6 +35,7 @@ import {
   inspectCommand,
 } from "#session/handlers/handlers.ts"
 import type { SessionRecorder } from "#session/recorder/recorder.ts"
+import type { SavedStateManager } from "#session/saved-state/saved-state.ts"
 import type { ChangeStepKind, HandlerReturn, StepContext, StepKind } from "#session/step.ts"
 import { isChangeStepKind, nonEmptyStringSchema } from "#session/step.ts"
 import type { Shell } from "#transport/transport.ts"
@@ -107,6 +108,8 @@ export {
   createSessionRecorder,
   MASKED_VALUE,
 } from "#session/recorder/recorder.ts"
+export type { SavedStateManager } from "#session/saved-state/saved-state.ts"
+export { createSavedStateManager } from "#session/saved-state/saved-state.ts"
 export type { ComparisonValues, StepKind, StepStatus } from "#session/step.ts"
 
 /** What a host's session needs, set up before any script runs. */
@@ -114,6 +117,8 @@ export interface SessionContext {
   name: string
   /** The SSH user's home directory. */
   home: HomeDirectory
+  /** The host's saved state, read when it was prepared. */
+  savedStateManager: SavedStateManager
   sessionRecorder: SessionRecorder
 }
 

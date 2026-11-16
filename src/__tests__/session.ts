@@ -73,7 +73,7 @@ export const getPreparationFailure = (hostRecord: HostRecord): Error => {
 /** Prepares one host the way a run does, and returns its context, or why it couldn't be prepared. */
 const prepareSessionContext = async (loadedHost: LoadedHost): Promise<Result<SessionContext>> => {
   const hostEntry = await prepareHostEntry(loadedHost)
-  return hostEntry.sessionContext ?? getPreparationFailure(hostEntry.hostRecord)
+  return hostEntry.preparation === "prepared" ? hostEntry.sessionContext : getPreparationFailure(hostEntry.hostRecord)
 }
 
 /** Prepares a host 'a' on `target`, and returns its context, or why it couldn't be prepared. */
@@ -94,8 +94,10 @@ interface TestSession {
 
 /** Prepares one host the way a run does, and returns its entry, or throws why it couldn't be prepared. */
 const preparePreparedHostEntry = async (loadedHost: LoadedHost) => {
-  const { hostRecord, sessionContext } = await prepareHostEntry(loadedHost)
-  if (!sessionContext) throw getPreparationFailure(hostRecord)
+  const hostEntry = await prepareHostEntry(loadedHost)
+  if (hostEntry.preparation === "failed") throw getPreparationFailure(hostEntry.hostRecord)
+
+  const { hostRecord, sessionContext } = hostEntry
   return { hostRecord, sessionContext }
 }
 
@@ -137,7 +139,7 @@ export const createWrappedSession = async (
   const preparationRecorder = createPreparationRecorder(createHostRecord(name, target), options)
   const hostDetails = await buildHostDetails(loadedHost, preparationRecorder)
   if (isErr(hostDetails)) throw hostDetails
-  if (!("transport" in hostDetails)) throw new Error("the host needs a sudo password prompt")
+  if (hostDetails.kind !== "ready") throw new Error("the host needs a sudo password prompt")
 
   const sessionRecorder = createSessionRecorder(hostRecord, options, wrapTransport(hostDetails.transport))
   return {
