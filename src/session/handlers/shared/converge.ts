@@ -42,9 +42,12 @@ interface PhaseResult<HostDetails> {
 
 const FAILED_COMPARE_MESSAGE = "failed to compare the host with what the step wants"
 
-/** Returns the `converge` a session's steps use, which records what it does as it goes. */
+/**
+ * Returns the `converge` one step uses, which records what it does as it goes. It calls `openChange` right before the
+ * fix, so the step's change is saved even when the connection drops right after the fix succeeds.
+ */
 export const createConverge =
-  (mode: Mode, recorder: ConvergeRecorder): Converge =>
+  (mode: Mode, recorder: ConvergeRecorder, openChange: () => Promise<Result>): Converge =>
   async <HostDetails>(spec: ConvergeSpec<HostDetails>): Promise<Result<StepStatus>> => {
     const { startPhase, recordComparison, recordWaitingOn } = recorder
     const { needs, getHostDetails, compare, fix, verify } = spec
@@ -72,6 +75,9 @@ export const createConverge =
     if (isErr(before)) return err(FAILED_COMPARE_MESSAGE, before)
     if (before.comparison.inSync) return "unchanged"
     if (mode === "plan") return "changed"
+
+    const openChangeResult = await openChange()
+    if (isErr(openChangeResult)) return openChangeResult
 
     startPhase("fix")
     const fixResult = await fix(before.hostDetails, before.comparison)

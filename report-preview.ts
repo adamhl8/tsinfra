@@ -289,7 +289,7 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
       },
     },
     {
-      // A failure no step owns, as `(host fn)` and the host's target with its note, after a step that changed.
+      // A failure no step owns, as `(host fn)` with no target and its note, after a step that changed.
       name: "host-fn",
       target: "@local",
       pass: "apply",
@@ -334,6 +334,21 @@ const createHintsRecord = (): HostRecord => ({
     kind: "preparation",
     error: new Error("Host key verification failed."),
     hints: [{ kind: "changedHostKey" }, { kind: "unknownHostKey", target: "web.lan" }, { kind: "sudoOption" }],
+  },
+})
+
+/**
+ * Returns a host whose steps all ran but whose saved state couldn't be cleared, as a record, because failing the delete
+ * takes a directory where the saved state file goes. It shows `(saved state)` and the host's target, with its note.
+ */
+const createSavedStateFailureRecord = (): HostRecord => ({
+  ...createHostRecord("saved-state", "web.lan"),
+  failure: {
+    kind: "saved state",
+    error: new Error(
+      "failed to delete the saved state in '/home/adam/.tsinfra/state/saved-state.json' -> exited with code 1: rm: cannot remove '/home/adam/.tsinfra/state/saved-state.json': Is a directory",
+    ),
+    hints: [],
   },
 })
 
@@ -384,7 +399,12 @@ const previewPass = async (pass: PreviewPass, verbosity: Verbosity) => {
       // oxlint-disable-next-line no-await-in-loop - hosts run one at a time, the same as the CLI
       hostBlocks.push(printHostBlock(await runHost(hostEntry, mode), verbosity))
     }
-    if (pass === "apply") hostBlocks.push(printHostBlock(createHintsRecord(), verbosity))
+    if (pass === "apply") {
+      hostBlocks.push(
+        printHostBlock(createHintsRecord(), verbosity),
+        printHostBlock(createSavedStateFailureRecord(), verbosity),
+      )
+    }
 
     console.log(renderSummary(hostBlocks, mode))
 

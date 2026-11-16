@@ -279,45 +279,78 @@ Folded into piece 3's commit, because knip reports piece 3's package as unused u
 
 After this piece, changes open and runs are recorded on them, but nothing fires from them yet.
 
-- **5a.** Open a change before a step's fix in `converge` (`src/session/handlers/shared/converge.ts`), which `callStep`
-  gives the step's name. This covers `verify: false` too.
-- **5b.** Open a change before a run's command, in `handleRun` (`src/session/handlers/run.ts`).
-- **5c.** After a run with `after` succeeds, record it on the open changes of the steps in its `after`.
+- **5a.** Open a change right before a step's fix in `converge` (`src/session/handlers/shared/converge.ts`), after the
+  "not in sync, and not `plan`" checks and before `startPhase("fix")`. `createConverge(mode, recorder, openChange)`
+  takes the hook, and `callStep` builds `converge` per step with
+  `openChange: () => savedStateManager.openChange(validName)`, so `converge` knows neither the step's name nor saved
+  state. This covers `file`, `link`, `ensure`, and `verify: false`. A failed write fails the step before the fix runs,
+  with the manager's own error.
+- **5b.** Add `savedStateManager` to `StepContext`. In `apply`, once the trigger fires, `handleRun`
+  (`src/session/handlers/run.ts`) opens the run's own change before its command, for `after: "always"` too, so a run
+  after it can still fire.
+- **5c.** After a run with a list in `after` succeeds, record it with
+  `recordFollowUp(stepName, after.map(({ name }) => name))`. A run whose command fails stays open, and isn't listed on
+  the steps it follows, which is what makes it fire next time. A failed record fails the run's step, even though its
+  command succeeded: the run isn't recorded, so it fires again next time, which is safe.
 - **5d.** Close the host's open changes in `runHost` (`src/hosts/run.ts`) when the host finished an `apply` without a
-  failure.
-- **5e.** Fail the step when a write fails, and the host when the delete fails, with an error that names the file.
-- **5f.** Test that:
-  - `plan` never writes
-  - a failed `apply` leaves its open changes with the runs that ran after them
-  - a clean `apply` leaves no file
+  failure. `plan` never closes or writes anything.
+- **5e.** A failed delete fails the host with a new unowned failure kind, `saved state`, which the report shows like
+  `(preparation)`: an italic label and the error. A `host fn` failure doesn't fit, because its note says the error was
+  thrown in the host function. `RecordedUnownedFailure["kind"]` gains `"saved state"`, and `cli.md`'s "Kinds of
+  failure" gets a line for it.
+- **5f.** Test, mostly through the session helpers, which never reach `runHost`, so what a test opened stays to inspect:
+  - `plan` with a changing `ensure` and a run after it writes no file
+  - `apply` with a changing `ensure` and a run after it leaves the `ensure` listing the run, and the run open
+  - a run whose command fails stays open, and the `ensure` doesn't list it
+  - `verify: false` still opens a change
+  - an `after: "always"` run opens its own change and records nothing on another step
+  - a clean `apply` through `runHost` leaves nothing open when the same host is prepared again
+  - a failed delete fails the host with the `saved state` kind
 
 #### 6. Fire runs from open changes
 
-- **6a.** Return `changed: true` from a step with an open change that's in sync, and keep its status `unchanged`. Keep
-  the names of these steps in the session.
-- **6b.** Leave those steps out of `needs` in `converge`, so nothing waits on them.
-- **6c.** Fire a run in `evaluateTrigger` when a step in its `after` really changed, or has an open change that doesn't
-  list the run. A step from 6a doesn't count as really changed.
-- **6d.** Record it on the step records: a flag on the step whose open change it was, and on the run, the names of the
-  steps whose open changes fired it.
-- **6e.** Tests on `@local`, each running two applies:
+A step's change is **still open from an earlier apply** when the step is `unchanged` and its change is open. A step
+opens its change in this apply only right before it changes something (before the fix in `converge`, before the command
+in `handleRun`), and then it ends `changed` or `ran`, or fails. `plan` never opens anything. So an `unchanged` step with
+an open change can only have one an earlier apply opened and never closed.
+
+- **6a.** Decide it in `withChangeStepResult` (`src/session/handlers/shared/change-step-result.ts`), which every change
+  step's result goes through and whose `ctx` already has `savedStateManager`:
+  `stillOpenFromEarlierApply = status === "unchanged" && savedStateManager.isOpen(stepName)`. The script gets
+  `changed: COUNTS_AS_CHANGED[status] || stillOpenFromEarlierApply`, and the status stays `unchanged`, so it isn't drift
+  and the report still shows it from level 1. `HandlerReturn` gains an optional `stillOpenFromEarlierApply?: true`,
+  which read and inspect never set. `callStep` adds the step's name to a session set, `namesStillOpenFromEarlierApply`,
+  and passes the flag to `finishStep`, which puts it on the step record, so handlers still record nothing. `callStep`
+  doesn't rebuild the result itself, because it's generic over the handler's value, and `kind` doesn't narrow it.
+- **6b.** Give `createConverge` the set's check, the way it gets `openChange`, so in `plan` a step waits only on a needed
+  step that changed and isn't in `namesStillOpenFromEarlierApply`. That change is already on the host.
+- **6c.** Fire a run in `evaluateTrigger` when a step in its `after` really changed (`changed`, and not in the set), or
+  `getOpenChangesForFollowUp(stepName, afterNames)` isn't empty. In `apply`, a step that really changed has a fresh
+  open change, so the two agree. The first only matters in `plan`, where nothing opens. A step in the set whose open
+  change already lists the run doesn't fire it again. `after: "always"` is unchanged.
+- **6d.** Record `firedByStillOpenChanges` on a run that fired: the names from `getOpenChangesForFollowUp` that are in
+  the set. A run a real change also fired records that too, so piece 7 can leave its note off.
+- **6e.** Tests on `@local`, each running two applies on one `loadedHost`, which the test preload gives the same home:
+  - a step still open from an earlier apply returns `changed: true`, in `apply` and in `plan`, and its record has the
+    flag
+  - a step that isn't open returns `changed: false`, with no flag
   - a run that fails, then works
   - a host that fails between a change and its run
   - two runs after one step, with the host failing between them
   - a run after a run
   - a step that changes again after its run ran
-  - a step with an open change that a step in `plan` needs
+  - a step still open from an earlier apply that a step in `plan` needs, which doesn't wait
   - `plan` showing a fired run without writing
 
 #### 7. Report open changes
 
 - **7a.** Add two note parts to `NotePart` in `src/report/host-block/host-block.ts`, and build them in `toStepNote`
   (`src/report/host-block/note.ts`):
-  - the note on a step with an open change, from level 1
-  - the note on a run it fired, with the names of the steps whose open changes fired it, from level 0
+  - the note on a step with `stillOpenFromEarlierApply`, from level 1
+  - the note on a run with `firedByStillOpenChanges`, naming those steps, from level 0
 - **7b.** Format both with tsinfra's words in constants, where the `needs` part is formatted.
-- **7c.** Count a run fired by an open change as drift in `hasDrift` (`src/report/summary.ts`), so `plan` exits 2. The
-  step with the open change stays out of the summary's count, because it's `unchanged`.
+- **7c.** Count a run with `firedByStillOpenChanges` as drift in `hasDrift` (`src/report/summary.ts`), so `plan`
+  exits 2. The step still open from an earlier apply stays out of the summary's count, because it's `unchanged`.
 - **7d.** Add both notes to `report-preview.ts`.
 - **7e.** Test in `src/report/__tests__/report.test.ts`: each note at the levels it shows at, the summary, and the exit
   code.

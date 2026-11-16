@@ -2,16 +2,19 @@ import {
   toHintDetails,
   toHostFunctionFailureDetails,
   toPreparationFailureDetails,
+  toSavedStateFailureDetails,
   toStepDetails,
   toStepFailureDetails,
 } from "#report/host-block/details/details.ts"
-import type { EntryName, HostBlockEntry, NameKind } from "#report/host-block/host-block.ts"
+import type { Detail, EntryName, HostBlockEntry, NameKind } from "#report/host-block/host-block.ts"
 import { toStepNote } from "#report/host-block/note.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 import type {
   FinishedStepRecord,
   HostRecord,
+  CommandRecord,
   RecordedFailure,
+  RecordedUnownedFailure,
   StepKind,
   StepRecord,
   StepStatus,
@@ -48,6 +51,13 @@ const toStepEntry = (stepRecord: FinishedStepRecord): HostBlockEntry => {
   return { status, kind, name, note, details, from: ENTRY_LEVELS[status] }
 }
 
+/** Returns what a failure no step owns shows under its error, before any hints, for its kind. */
+const toUnownedFailureDetails = (failure: RecordedUnownedFailure, preparationCommands: CommandRecord[]): Detail[] => {
+  if (failure.kind === "preparation") return toPreparationFailureDetails(preparationCommands)
+  if (failure.kind === "host fn") return toHostFunctionFailureDetails()
+  return toSavedStateFailureDetails()
+}
+
 const toFailureEntry = (failure: RecordedFailure, hostRecord: HostRecord): HostBlockEntry => {
   const { target, preparationCommands } = hostRecord
   // Show the hints last under every kind of failure, because they say how to fix it.
@@ -62,12 +72,23 @@ const toFailureEntry = (failure: RecordedFailure, hostRecord: HostRecord): HostB
     return { status: "failed", kind: stepRecord.kind, name, note, details, from: 0, error }
   }
 
-  // Name a failure no step owns after the host's target, because the kind already says where it failed.
+  const details = [...toUnownedFailureDetails(failure, preparationCommands), ...hintDetails]
+  const unownedFailureEntry: HostBlockEntry = {
+    status: "failed",
+    kind: failure.kind,
+    note: [],
+    details,
+    from: 0,
+    error: failure.error,
+  }
+
+  // Leave a host function failure unnamed, because the host function runs on the control machine, not the target.
+  // The block's header already names the host.
+  if (failure.kind === "host fn") return unownedFailureEntry
+
+  // Name a failure from work tsinfra did on the host after the host's target, because the kind already says what failed.
   const name: EntryName = { text: target, kind: "value" }
-  const kindDetails =
-    failure.kind === "preparation" ? toPreparationFailureDetails(preparationCommands) : toHostFunctionFailureDetails()
-  const details = [...kindDetails, ...hintDetails]
-  return { status: "failed", kind: failure.kind, name, note: [], details, from: 0, error: failure.error }
+  return { ...unownedFailureEntry, name }
 }
 
 /** Returns a host block's entries: one per finished step, at every level, then the host's failure, if it failed. */

@@ -15,7 +15,8 @@ export interface ChangeStepResult<K extends ChangeStepKind = ChangeStepKind> {
   kind: K
   /**
    * True when the step changed something, or might in `plan` because it would change or waits on a step it needs. A
-   * follow-up guarded by it shows up in the plan too.
+   * follow-up guarded by it shows up in the plan too. Also true when the step is in sync, but its change is still open
+   * from an earlier apply, so the follow-ups that apply didn't finish still run.
    */
   changed: boolean
 }
@@ -41,8 +42,13 @@ export const withChangeStepResult = <K extends ChangeStepKind>(
   ctx: StepContext<K>,
   status: Result<StepStatus>,
 ): Result<HandlerReturn<ChangeStepResult<K>>> => {
-  const { stepName, kind } = ctx
+  const { stepName, kind, savedStateManager } = ctx
   if (isErr(status)) return status
 
-  return { status, value: { name: stepName, kind, changed: COUNTS_AS_CHANGED[status] } }
+  // Open a step's change in this apply only right before it changes something, which makes it `changed` or `ran`.
+  // `plan` never opens one. So an `unchanged` step's open change is one an earlier apply opened and never closed.
+  const stillOpenFromEarlierApply = status === "unchanged" && savedStateManager.isOpen(stepName)
+  const value = { name: stepName, kind, changed: COUNTS_AS_CHANGED[status] || stillOpenFromEarlierApply }
+
+  return stillOpenFromEarlierApply ? { status, value, stillOpenFromEarlierApply } : { status, value }
 }

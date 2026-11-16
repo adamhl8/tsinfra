@@ -51,10 +51,24 @@ export type FailureHint =
   // sudo needs a password on a host that leaves the `sudo` option off.
   | { kind: "sudoOption" }
 
-/** A failure no step owns: one from preparation, or one the host function threw outside any step, for `host fn`. */
-export interface RecordedUnownedFailure extends BaseRecordedFailure {
-  kind: "preparation" | "host fn"
+/** A failure no step owns: one from preparation, or one the session recorded outside any step. */
+export type RecordedUnownedFailure = RecordedPreparationFailure | RecordedSessionFailure
+
+/** A failure while the host was prepared, before its script ran. */
+export interface RecordedPreparationFailure extends BaseRecordedFailure {
+  kind: "preparation"
 }
+
+/**
+ * A failure the session recorded outside any step: one the host function threw, for `host fn`, or one from closing the
+ * open changes in the host's saved state after the host function finished, for `saved state`.
+ */
+export interface RecordedSessionFailure extends BaseRecordedFailure {
+  kind: "host fn" | "saved state"
+}
+
+/** The kinds of failure the session records outside any step. */
+export type SessionFailureKind = RecordedSessionFailure["kind"]
 
 /** A step's failure, with the record of the step that failed. */
 export interface RecordedStepFailure extends BaseRecordedFailure {
@@ -65,6 +79,8 @@ export interface RecordedStepFailure extends BaseRecordedFailure {
 /** The record of a step that finished, with how it turned out. */
 export interface FinishedStepRecord extends StepRecord {
   status: StepStatus
+  /** Whether the step was `unchanged`, but its change is still open from an earlier apply. */
+  stillOpenFromEarlierApply: boolean
 }
 
 /** A step's record without an outcome: the running step, which the recorder records on, or the step that failed. */

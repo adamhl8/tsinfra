@@ -75,3 +75,11 @@ export const toPreparationFailureDetails = (preparationCommands: CommandRecord[]
 export const toHostFunctionFailureDetails = (): Detail[] => [
   { kind: "note", note: { kind: "hostFunctionFailure" }, from: 0 },
 ]
+
+/**
+ * Returns what a saved state failure shows under its error, before any hints: a note, because the error says what
+ * failed to close, not that every step ran or what the next apply does about it.
+ */
+export const toSavedStateFailureDetails = (): Detail[] => [
+  { kind: "note", note: { kind: "savedStateFailure" }, from: 0 },
+]

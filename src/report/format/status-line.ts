@@ -6,7 +6,8 @@ import { quoteNames } from "#utils.ts"
 export interface StatusLine {
   status: string
   kind: string
-  name: string
+  /** Unset when the entry has no name. */
+  name?: string
   /** Unset when the entry has no note. */
   note?: string
 }
@@ -34,7 +35,7 @@ export const formatStatusLine = (hostBlockEntry: HostBlockEntry): StatusLine => 
     // Leave the colon unstyled, so it reads as punctuation between the status and the kind.
     status: `${statusElement(status, STATUS_WORDS[status])}:`,
     kind: kindElement(kind),
-    name: entryNameElement(name),
+    ...(name && { name: entryNameElement(name) }),
     ...(note.length > 0 && { note: entryNoteElement(noteText) }),
   }
 }

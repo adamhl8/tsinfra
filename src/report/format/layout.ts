@@ -14,7 +14,8 @@ export const COLUMN_GAP = "   "
  */
 const layoutStatusLine = (statusLine: StatusLine): string => {
   const { status, kind, name, note } = statusLine
-  const line = `${INDENT}${status} ${kind} ${name}`
+  const lineParts = [status, kind, name].filter((part) => part !== undefined)
+  const line = `${INDENT}${lineParts.join(" ")}`
   return note === undefined ? line : `${line}${COLUMN_GAP}${note}`
 }
 

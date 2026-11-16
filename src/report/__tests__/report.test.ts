@@ -166,7 +166,7 @@ describe("renderHostBlock", () => {
 
   it("should show a failure thrown before any step, not no steps", async () => {
     expect(await formatBlock(throwBoom, "plan")).toBe(
-      "a\n  ! failed: (host fn) @local\n      boom\n        thrown in the host function, outside any step",
+      "a\n  ! failed: (host fn)\n      boom\n        thrown in the host function, outside any step",
     )
   })
 
@@ -213,7 +213,7 @@ describe("renderHostBlock", () => {
 
   it("should show a failure that isn't any step's after the steps", async () => {
     expect(await formatBlock(changeThenThrow, "plan")).toBe(
-      "a\n  ~ change: (ensure) Pending\n  ! failed: (host fn) @local\n      boom\n        thrown in the host function, outside any step",
+      "a\n  ~ change: (ensure) Pending\n  ! failed: (host fn)\n      boom\n        thrown in the host function, outside any step",
     )
   })
 
@@ -251,6 +251,30 @@ describe("renderHostBlock", () => {
         "  ! failed: (preparation) a.lan",
         "      Host key verification failed.",
         "        run 'ssh a.lan' once to check the host's key and save it",
+      ].join("\n"),
+    )
+  })
+
+  it("should show a saved state failure with its note, after every step ran", () => {
+    const hostBlock = renderRecord({
+      name: "a",
+      target: "a.lan",
+      preparationCommands: [],
+      runningStep: undefined,
+      stepRecords: [],
+      failure: {
+        kind: "saved state",
+        error: new Error("failed to delete the saved state in '/home/a/.tsinfra/state/a.json'"),
+        hints: [],
+      },
+    })
+
+    expect(hostBlock).toBe(
+      [
+        "a",
+        "  ! failed: (saved state) a.lan",
+        "      failed to delete the saved state in '/home/a/.tsinfra/state/a.json'",
+        "        every step ran, but tsinfra couldn't clear its saved state on the host, so the next apply repeats the runs that followed a change",
       ].join("\n"),
     )
   })
@@ -1041,7 +1065,7 @@ describe("renderHostBlock for a sudo that needed a password", () => {
     }, "apply")
 
     expect(hostBlock?.split("\n").slice(1)).toStrictEqual([
-      "  ! failed: (host fn) @local",
+      "  ! failed: (host fn)",
       "      the service didn't start",
       "        thrown in the host function, outside any step",
     ])

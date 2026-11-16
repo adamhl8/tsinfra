@@ -29,7 +29,8 @@ export interface HostBlockEntry extends PieceLevels {
   status: EntryStatus
   /** What the entry is about, which shows before the name. */
   kind: EntryKind
-  name: EntryName
+  /** What the entry is about. Unset for a host function failure, which the block's header already names the host of. */
+  name?: EntryName
   /** The note's parts, which show after the name, joined with `, `. Empty when the entry has no note. */
   note: NotePart[]
   /** How a value would change, or for a failure, what the step last found on the host. */
@@ -44,7 +45,7 @@ export type EntryStatus = StepStatus | "failed"
 export type EntryKind = StepKind | UnownedFailureKind
 
 /** Where a failure no step owns happened: in preparation, or in the host function, for `host fn`. */
-type UnownedFailureKind = RecordedUnownedFailure["kind"]
+export type UnownedFailureKind = RecordedUnownedFailure["kind"]
 
 /** A host block entry's name, and what kind of name it is, which decides how it's styled. */
 export interface EntryName {
@@ -134,6 +135,8 @@ export type DetailNote =
   | { kind: "commandsWroteStderr"; phase: StillDiffersPhase }
   // The host function threw outside any step.
   | { kind: "hostFunctionFailure" }
+  // The host's saved state couldn't be cleared after every step ran, so the next apply repeats the runs after a change.
+  | { kind: "savedStateFailure" }
 
 /** The phases of a step whose commands can explain why its state still differs after the fix. */
 export type StillDiffersPhase = Extract<ConvergePhase, "fix" | "after">

@@ -193,7 +193,7 @@ const STEP_NAME_LABELS: Record<StepKind, string> = {
  * as values.
  */
 export const createHostSession = (sessionContext: SessionContext, mode: Mode): Host => {
-  const { name, home, sessionRecorder } = sessionContext
+  const { name, home, savedStateManager, sessionRecorder } = sessionContext
   const { getStepShells, recordOptions, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder } =
     sessionRecorder
 
@@ -205,7 +205,7 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
 
     // oxlint-disable-next-line promise/prefer-await-to-callbacks - `callback` is awaited, and the rule only matches its name
     const value = await callback()
-    if (isErr(value)) throw recordFailure(value)
+    if (isErr(value)) throw recordFailure(value, "host fn")
 
     // Throw a failure recorded during `callback`, because a function in the script may have caught it and returned normally.
     const callbackFailure = getFailure()
@@ -226,9 +226,6 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
     return { readTools, changeTools }
   }
 
-  // Record what `converge` finds as it goes, so a failure can't lose it and a handler never records anything itself.
-  const converge = createConverge(mode, convergeRecorder)
-
   const stepKindsByName = new Map<string, ChangeStepKind>()
   // Refuse a name an earlier change step has, because the report and `needs` tell steps apart by name.
   const claimStepName = (stepName: string, kind: StepKind): Result => {
@@ -244,6 +241,10 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
 
     stepKindsByName.set(stepName, kind)
   }
+
+  // Keep the steps whose change is still open from an earlier apply, because their `changed` alone can't tell them from a
+  // change in this apply.
+  const namesStillOpenFromEarlierApply = new Set<string>()
 
   const callStep = async <K extends StepKind, T>(
     stepName: unknown,
@@ -278,12 +279,15 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
       const { stepShell, toolShell } = getStepShells(validOptions)
       const { readTools, changeTools } = createTools(toolShell)
 
+      const converge = createConverge(mode, convergeRecorder, async () => savedStateManager.openChange(validName))
+
       const ctx: StepContext<K> = {
         stepName: validName,
         kind,
         mode,
         shell: stepShell,
         home,
+        savedStateManager,
         readTools,
         changeTools,
         converge,
@@ -296,8 +300,11 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
         return handlerReturn
       }
 
-      finishStep(handlerReturn.status)
-      return handlerReturn.value
+      const { status, value, stillOpenFromEarlierApply } = handlerReturn
+      if (stillOpenFromEarlierApply) namesStillOpenFromEarlierApply.add(validName)
+
+      finishStep(status, stillOpenFromEarlierApply)
+      return value
     })
 
   const host: Host = {

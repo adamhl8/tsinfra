@@ -10,7 +10,8 @@ import type { HostConfig, HostDefinition } from "#hosts/host.ts"
 import { host, hostDefinitionSchema } from "#hosts/host.ts"
 import type { LoadedHost } from "#hosts/load.ts"
 import { toLoadedHost } from "#hosts/load.ts"
-import { buildHostDetails } from "#hosts/prepare/host-details/host-details.ts"
+import type { HomeDirectory } from "#hosts/prepare/host-details/host-details.ts"
+import { buildHostDetails, toSavedStatePath } from "#hosts/prepare/host-details/host-details.ts"
 import { prepareHosts } from "#hosts/prepare/prepare.ts"
 import { runHost } from "#hosts/run.ts"
 import type { Mode } from "#mode.ts"
@@ -18,6 +19,7 @@ import type { EnsureOptions } from "#session/handlers/ensure/ensure.ts"
 import type { Want } from "#session/handlers/ensure/want.ts"
 import type { RunOptions } from "#session/handlers/run.ts"
 import type { Change } from "#session/handlers/shared/change.ts"
+import { savedStateFileSchema } from "#session/saved-state/schema.ts"
 import type { FinishedStepRecord, Host, SessionContext, HostRecord, StepRecord } from "#session/session.ts"
 import {
   createHostRecord,
@@ -56,6 +58,13 @@ type TestHostOptions = Omit<HostConfig, "name" | "target">
 export const loadHostDefinition = (hostDefinition: HostDefinition): LoadedHost =>
   toLoadedHost(hostDefinitionSchema.assert(hostDefinition))
 
+/**
+ * Loads a host 'a' on `target`, `@local` by default. The test preload gives an `@local` host the same home each time
+ * it's prepared, so a test can run several applies on it.
+ */
+export const loadTestHost = (target: string = LOCAL_TARGET, hostOptions?: TestHostOptions) =>
+  loadHostDefinition(host({ name: "a", target, ...hostOptions }, doNothing))
+
 /** Prepares one host the way a run does. */
 const prepareHostEntry = async (loadedHost: LoadedHost) => {
   const [hostEntry] = await prepareHosts([loadedHost])
@@ -78,7 +87,7 @@ const prepareSessionContext = async (loadedHost: LoadedHost): Promise<Result<Ses
 
 /** Prepares a host 'a' on `target`, and returns its context, or why it couldn't be prepared. */
 export const buildSessionContextOn = async (target: string, hostOptions?: TestHostOptions) =>
-  prepareSessionContext(loadHostDefinition(host({ name: "a", target, ...hostOptions }, doNothing)))
+  prepareSessionContext(loadTestHost(target, hostOptions))
 
 /** Prepares a host 'a' on `@local`. */
 export const buildLocalSessionContext = async (hostOptions?: TestHostOptions) =>
@@ -89,7 +98,18 @@ interface TestSession {
   host: Host
   hostRecord: HostRecord
   /** The SSH user's home the session resolves `~/` with, which the test preload gives each `@local` host. */
-  home: string
+  home: HomeDirectory
+}
+
+/**
+ * Returns the open changes in the saved state file of the test host 'a', checked against the schema the read uses, or
+ * nothing when there's no file.
+ */
+export const readOpenChanges = async ({ home }: { home: HomeDirectory }) => {
+  const savedStateFile = bun.file(toSavedStatePath(home, "a"))
+  if (!(await savedStateFile.exists())) return
+
+  return savedStateFileSchema.assert(await savedStateFile.text()).openChanges
 }
 
 /** Prepares one host the way a run does, and returns its entry, or throws why it couldn't be prepared. */
@@ -102,14 +122,14 @@ const preparePreparedHostEntry = async (loadedHost: LoadedHost) => {
 }
 
 /** Prepares `loadedHost` the way a run does, and creates its session. */
-const prepareSession = async (loadedHost: LoadedHost, mode: Mode): Promise<TestSession> => {
+export const prepareSession = async (loadedHost: LoadedHost, mode: Mode): Promise<TestSession> => {
   const { sessionContext, hostRecord } = await preparePreparedHostEntry(loadedHost)
   return { host: createHostSession(sessionContext, mode), hostRecord, home: sessionContext.home }
 }
 
 /** Creates a session for a host 'a' on `target`. */
 export const createSessionOn = async (target: string, mode: Mode, hostOptions?: TestHostOptions) =>
-  prepareSession(loadHostDefinition(host({ name: "a", target, ...hostOptions }, doNothing)), mode)
+  prepareSession(loadTestHost(target, hostOptions), mode)
 
 /** Creates a session for a host 'a' on `@local`. */
 export const createSession = async (mode: Mode = "apply", hostOptions?: TestHostOptions) =>
@@ -131,7 +151,7 @@ export const createWrappedSession = async (
   mode: Mode,
   wrapTransport: (transport: Transport) => Transport,
 ): Promise<TestSession> => {
-  const loadedHost = loadHostDefinition(host({ name: "a", target: "@local" }, doNothing))
+  const loadedHost = loadTestHost()
   const { sessionContext, hostRecord } = await preparePreparedHostEntry(loadedHost)
 
   // Record this second preparation on a recorder of its own, because the session's record already has the first.

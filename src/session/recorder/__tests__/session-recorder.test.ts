@@ -193,7 +193,7 @@ describe("SessionRecorder masking", () => {
     const { hostRecord, sessionRecorder } = startStepWithShells({ ...NO_SHELL_OPTIONS, secretEnv: { TOKEN: SECRET } })
     const commandError = err(`exited with code 1: ${SECRET}`, undefined)
     sessionRecorder.failStep(err("failed to run the step", commandError))
-    const hostError = sessionRecorder.recordFailure(err("failed to run the host", hostRecord.failure?.error))
+    const hostError = sessionRecorder.recordFailure(err("failed to run the host", hostRecord.failure?.error), "host fn")
 
     expect({
       chain: messageChain(hostError),

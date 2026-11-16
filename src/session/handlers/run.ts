@@ -49,7 +49,7 @@ export const handleRun = async (
   change: unknown,
   options: unknown,
 ): Promise<Result<HandlerReturn<ChangeStepResult<"run">>>> => {
-  const { kind, mode } = ctx
+  const { stepName, kind, mode, savedStateManager } = ctx
 
   const validChange = validateInput(change, changeSchema, { inputLabel: "command", givenTo: kind })
   if (isErr(validChange)) return validChange
@@ -61,8 +61,21 @@ export const handleRun = async (
   if (!shouldRun) return withChangeStepResult(ctx, "unchanged")
   if (mode === "plan") return withChangeStepResult(ctx, "ran")
 
+  // Open the run's own change before its command, so a run that follows this one still fires if the host stops after it.
+  const openChangeResult = await savedStateManager.openChange(stepName)
+  if (isErr(openChangeResult)) return openChangeResult
+
   const changeResult = await runChange(ctx, validChange)
   if (isErr(changeResult)) return err("failed to run the step", changeResult)
+
+  // Record the run on the open changes it followed, so a later apply knows it already ran after them.
+  // Fail the step when that fails, because the run then fires again next time, which is safe.
+  const { after } = validOptions
+  if (after !== "always") {
+    const followedStepNames = after.map(({ name }) => name)
+    const followUpRecord = await savedStateManager.recordFollowUp(stepName, followedStepNames)
+    if (isErr(followUpRecord)) return followUpRecord
+  }
 
   return withChangeStepResult(ctx, "ran")
 }

@@ -11,6 +11,7 @@ import type {
   ReadTools,
 } from "#session/handlers/handlers.ts"
 import type { StepOptionsRecord } from "#session/recorder/recorder.ts"
+import type { SavedStateManager } from "#session/saved-state/saved-state.ts"
 import type { Shell } from "#transport/transport.ts"
 
 // Refuse an empty name, path, or command.
@@ -33,8 +34,8 @@ export const isChangeStepKind = (kind: StepKind): kind is ChangeStepKind =>
   CHANGE_STEP_KINDS.some((changeStepKind) => changeStepKind === kind)
 
 /**
- * What a step's handler is given: the step's name and kind, and the session's mode, shell, home directory, tools, and
- * `converge`. `K` keeps a step's kind in its type, so a script can't give a run's result to `needs`.
+ * What a step's handler is given: the step's name and kind, and the session's mode, shell, home directory, saved state,
+ * tools, and `converge`. `K` keeps a step's kind in its type, so a script can't give a run's result to `needs`.
  */
 export interface StepContext<K extends StepKind = StepKind> {
   stepName: string
@@ -43,6 +44,11 @@ export interface StepContext<K extends StepKind = StepKind> {
   shell: Shell
   /** The SSH user's home directory, read and checked when the host is prepared. */
   home: HomeDirectory
+  /**
+   * The host's saved state, which says whether a step's change is still open, and which a run opens its own change in
+   * and records itself on as a follow-up.
+   */
+  savedStateManager: SavedStateManager
   /** Given to a check function. */
   readTools: ReadTools
   /** Given to a fix or run function. */
@@ -59,6 +65,8 @@ export interface StepContext<K extends StepKind = StepKind> {
 export interface HandlerReturn<T> {
   status: StepStatus
   value: T
+  /** Set on a change step that is `unchanged`, but whose change is still open from an earlier apply. */
+  stillOpenFromEarlierApply?: true
 }
 
 /**

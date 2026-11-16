@@ -86,7 +86,7 @@ describe("tsinfra", () => {
         "  ~ change: (ensure) Pending",
         "",
         "b",
-        "  ! failed: (host fn) @local",
+        "  ! failed: (host fn)",
         "      boom",
         "        thrown in the host function, outside any step",
         "",

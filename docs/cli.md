@@ -231,10 +231,11 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   apart from a red `got:` value. Its `!` and the host's `failed` in the summary are bright red too. That includes a
   failure the script caught inside the step, because the step still fails. The details a step found, like `got:` and
   `want:`, are indented further and are not red, because they are not the error. A host function failure is the
-  block's last `!` line, `(host fn)` and the host's target (like `(host fn) web.lan`), with its error under it the same
-  way, then the note "thrown in the host function, outside any step", because `host fn` alone doesn't say the failure
+  block's last `!` line, just `(host fn)`, with its error under it the same way, then the note "thrown in the host function, outside any step", because `host fn` alone doesn't say the failure
   came from the script and not the host. A preparation failure never ran the script, so its block has one `!` line,
-  `(preparation)` and its target (like `(preparation) web.lan`). Both name the target, because the kind already says where it failed. Neither error is wrapped in "failed to run host" or "failed to prepare the host", because the
+  `(preparation)` and its target (like `(preparation) web.lan`). A preparation failure and a saved state failure name
+  the target, because they're about work tsinfra did on the host. A host function failure names nothing, because the
+  host function runs on the control machine, and the block's header already names the host. Neither error is wrapped in "failed to run host" or "failed to prepare the host", because the
   block's header names the host and the kind says where it failed. A failure can have a hint under it, in italic yellow, with no label, saying how to fix
   it. A host that leaves `sudo` off and fails in a step whose own `sudo` needed a password gets "sudo needs a
   password on this host, so set the sudo option on host()" under that step (see [Transport](./transport.md#sudo)).
@@ -400,7 +401,7 @@ not a step's, like a bug in the script, is a host function failure.
 
 ### Kinds of failure
 
-A failure is one of four kinds, named after what it stops.
+A failure is one of five kinds, named after what it stops.
 
 - **A startup failure** stops the run before any host exists, like a bad flag, no `hosts/` directory, or a host script
   that won't load. It prints to stderr as tsinfra's own error, and there's no report (see
@@ -409,8 +410,11 @@ A failure is one of four kinds, named after what it stops.
   sudo password prompt that was skipped. Its block shows `(preparation)` and the host's target, like
   `(preparation) web.lan`.
 - **A host function failure** is anything thrown during the host function that no step owns, like a bug in the script.
-  It's the block's last line, `(host fn)` and the host's target, like `(host fn) web.lan`, with a note that it was
-  thrown in the host function.
+  It's the block's last line, just `(host fn)`, with a note that it was thrown in the host function. It names no
+  target, because the host function runs on the control machine.
+- **A saved state failure** happens after every step of a host ran in `apply`, when tsinfra can't close the host's
+  open changes, like when it can't delete `~/.tsinfra/state/<name>.json`. Its block shows `(saved state)` and the
+  host's target, with a note that the next apply repeats the runs that followed a change.
 - **A step failure** belongs to the step that was running, and shows on that step's status line. That includes a failure the
   script caught inside the step.
 

@@ -8,7 +8,13 @@ import type { CommandRecorder } from "#session/recorder/commands.ts"
 import { createRecordingTransport } from "#session/recorder/commands.ts"
 import { getFailureHints } from "#session/recorder/failure-hints.ts"
 import { addSecret, maskSecrets } from "#session/recorder/masking.ts"
-import type { ConvergePhase, HostRecord, StepOptionsRecord, StepRecord } from "#session/recorder/records.ts"
+import type {
+  ConvergePhase,
+  HostRecord,
+  SessionFailureKind,
+  StepOptionsRecord,
+  StepRecord,
+} from "#session/recorder/records.ts"
 import { RECORDED_OPTION_DEFAULTS } from "#session/recorder/records.ts"
 import type { StepKind, StepStatus } from "#session/step.ts"
 import type { Shell, Transport } from "#transport/transport.ts"
@@ -60,17 +66,17 @@ export interface SessionRecorder {
   /** Returns the error the host failed with, or nothing while it hasn't failed. */
   getFailure: () => Error | undefined
   /**
-   * Keeps `error` as the host's failure, and returns the error the host ends up with. A new failure is the host
-   * function's, until a step that was running makes it its own when it finishes.
+   * Keeps `error` as the host's failure, and returns the error the host ends up with. A new failure is of `kind`, until
+   * a step that was running makes it its own when it finishes.
    */
-  recordFailure: (error: Error) => Error
+  recordFailure: (error: Error, kind: SessionFailureKind) => Error
   /** Records a new step and marks it running, or fails when another step is running. */
   startStep: (stepName: string, kind: StepKind) => Result
   /**
-   * Records the running step's status, and marks no step as running. Fails the step instead when the host failed while
-   * it ran.
+   * Records the running step's status, and whether its change is still open from an earlier apply, and marks no step as
+   * running. Fails the step instead when the host failed while it ran.
    */
-  finishStep: (status: StepStatus) => void
+  finishStep: (status: StepStatus, stillOpenFromEarlierApply?: boolean) => void
   /** Fails the running step with `error`, and marks no step as running. */
   failStep: (error: Error) => void
   convergeRecorder: ConvergeRecorder
@@ -135,7 +141,7 @@ export const createSessionRecorder = (
     return keptError === undefined || error.cause === keptError ? error : keptError
   }
 
-  const recordFailure = (_error: Error): Error => {
+  const recordFailure = (_error: Error, kind: SessionFailureKind): Error => {
     const error = mask(_error)
     const { failure } = hostRecord
     // Keep an existing failure's kind, and only update its error, because the failure is already where it came from.
@@ -145,7 +151,7 @@ export const createSessionRecorder = (
       return failure.error
     }
 
-    hostRecord.failure = { kind: "host fn", error, hints: [] }
+    hostRecord.failure = { kind, error, hints: [] }
     return error
   }
 
@@ -178,7 +184,7 @@ export const createSessionRecorder = (
     hostRecord.failure = { kind: "step", stepRecord, error: keepError(error), hints }
   }
 
-  const finishStep = (status: StepStatus) => {
+  const finishStep = (status: StepStatus, stillOpenFromEarlierApply = false) => {
     const stepRecord = endStep()
     if (!stepRecord) return
 
@@ -186,7 +192,7 @@ export const createSessionRecorder = (
     // `exec` in a fix. It still fails the host, and it belongs to this step.
     // Pass the host's own error, because there's no new one, and the keep rule leaves it as it is.
     if (hostRecord.failure) recordStepFailure(stepRecord, hostRecord.failure.error)
-    else hostRecord.stepRecords.push({ ...stepRecord, status })
+    else hostRecord.stepRecords.push({ ...stepRecord, status, stillOpenFromEarlierApply })
   }
 
   const failStep = (error: Error) => {

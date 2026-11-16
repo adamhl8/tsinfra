@@ -1,10 +1,22 @@
 import { describe, expect, it } from "bun:test"
+import { mkdir, rm } from "node:fs/promises"
+import path from "node:path"
 
+import { makeTempDir } from "@adamhl8/configs/test"
 import { attempt, messageChain } from "ts-explicit-errors"
 
-import { UNREACHABLE_TARGET, getPreparationFailure, prepareAndRunHost, loadHostDefinition } from "#__tests__/session.ts"
+import {
+  UNREACHABLE_TARGET,
+  getPreparationFailure,
+  loadHostDefinition,
+  prepareAndRunHost,
+  readOpenChanges,
+} from "#__tests__/session.ts"
 import type { HostFunction } from "#hosts/host.ts"
 import { host } from "#hosts/host.ts"
+import type { LoadedHost } from "#hosts/load.ts"
+import { toSavedStatePath } from "#hosts/prepare/host-details/host-details.ts"
+import { prepareHosts } from "#hosts/prepare/prepare.ts"
 import type { Host, HostRecord } from "#session/session.ts"
 
 const throwBoom = () => {
@@ -28,6 +40,13 @@ const runHostA = async (fn: HostFunction) =>
   prepareAndRunHost(loadHostDefinition(host({ name: "a", target: "@local" }, fn)), "apply")
 
 const getMessage = (failure: HostRecord["failure"]) => failure && messageChain(failure.error)
+
+/** Prepares `loadedHost` once, and returns the home its saved state goes under, which later preparations reuse. */
+const getPreparedHome = async (loadedHost: LoadedHost) => {
+  const [hostEntry] = await prepareHosts([loadedHost])
+  if (hostEntry?.preparation !== "prepared") throw new Error("the host wasn't prepared")
+  return hostEntry.sessionContext.home
+}
 
 /** Runs a host 'a' with `fn` and returns its failure's message chain, if any. */
 const runAndGetMessage = async (fn: HostFunction) => getMessage((await runHostA(fn)).failure)
@@ -94,5 +113,43 @@ describe("runHost", () => {
 
   it("should report a failed call even when the host function catches it", async () => {
     expect(await runAndGetMessage(catchFailedRead)).toBe("failed to read 'exit 1' -> exited with code 1")
+  })
+
+  it("should close every open change after a clean apply", async () => {
+    const marker = path.join(await makeTempDir(), "made")
+    const loadedHost = loadHostDefinition(
+      host({ name: "a", target: "@local" }, async (h) => {
+        const madeMarker = await h.ensure("Make marker", {
+          want: true,
+          check: `test -f '${marker}'`,
+          fix: `touch '${marker}'`,
+        })
+        await h.run("Restart", "true", { after: [madeMarker] })
+      }),
+    )
+
+    const hostRecord = await prepareAndRunHost(loadedHost, "apply")
+
+    expect(hostRecord.failure).toBeUndefined()
+    expect(await readOpenChanges({ home: await getPreparedHome(loadedHost) })).toBeUndefined()
+  })
+
+  it("should fail the host as saved state when its open changes can't be closed after a clean apply", async () => {
+    const marker = path.join(await makeTempDir(), "made")
+    let savedStatePath = ""
+    // Open a change, then put a directory where the saved state file is, so closing the changes can't delete it.
+    const loadedHost = loadHostDefinition(
+      host({ name: "a", target: "@local" }, async (h) => {
+        await h.ensure("Make marker", { want: true, check: `test -f '${marker}'`, fix: `touch '${marker}'` })
+        await rm(savedStatePath)
+        await mkdir(savedStatePath)
+      }),
+    )
+    savedStatePath = toSavedStatePath(await getPreparedHome(loadedHost), "a")
+
+    const hostRecord = await prepareAndRunHost(loadedHost, "apply")
+
+    expect(hostRecord.failure?.kind).toBe("saved state")
+    expect(getMessage(hostRecord.failure)).toStartWith(`failed to delete the saved state in '${savedStatePath}' -> `)
   })
 })
