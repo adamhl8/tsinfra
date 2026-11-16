@@ -6,10 +6,13 @@ import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
-import { createSession, loadTestHost, prepareSession, readOpenChanges } from "#__tests__/session.ts"
+import { createSession, getStepRecords, loadTestHost, prepareSession, readOpenChanges } from "#__tests__/session.ts"
+import type { LoadedHost } from "#hosts/load.ts"
 import type { HomeDirectory } from "#hosts/prepare/host-details/host-details.ts"
 import { toSavedStatePath } from "#hosts/prepare/host-details/host-details.ts"
+import type { Mode } from "#mode.ts"
 import type { EnsureOptions } from "#session/handlers/ensure/ensure.ts"
+import type { HostRecord } from "#session/session.ts"
 
 /** Returns an `ensure` that makes `marker`, so it changes the first time it runs. */
 const makeMarker = (marker: string): EnsureOptions<boolean> => ({
@@ -20,10 +23,29 @@ const makeMarker = (marker: string): EnsureOptions<boolean> => ({
 
 const createMarkerPath = async () => path.join(await makeTempDir(), "made")
 
+/** Loads a test host, and returns it with an `ensure` that changes the first time it runs on it. */
+const loadHostWithMarker = async () => ({ loadedHost: loadTestHost(), marker: makeMarker(await createMarkerPath()) })
+
+/** Returns the record of the step named `stepName`, the failed step's included, or nothing when it never ran. */
+const getStepRecord = ({ hostRecord }: { hostRecord: HostRecord }, stepName: string) =>
+  getStepRecords(hostRecord).find(({ name }) => name === stepName)
+
+/** Returns the status the step named `stepName` finished with, or nothing when it didn't finish. */
+const getStatus = ({ hostRecord }: { hostRecord: HostRecord }, stepName: string) =>
+  hostRecord.stepRecords.find(({ name }) => name === stepName)?.status
+
 /** Runs `step` and returns what it failed with, as its message chain, or `succeeded`. */
 const getStepFailure = async (step: () => Promise<unknown>) => {
   const stepResult = await attempt(step)
   return isErr(stepResult) ? messageChain(stepResult) : "succeeded"
+}
+
+/** Runs `Restart` after `Make marker`, in a new session on `loadedHost` that an apply already made the marker on. */
+const restartAfterMarker = async (loadedHost: LoadedHost, mode: Mode, marker: EnsureOptions<boolean>, cmd = "true") => {
+  const hostSession = await prepareSession(loadedHost, mode)
+  const madeMarker = await hostSession.host.ensure("Make marker", marker)
+  await getStepFailure(async () => hostSession.host.run("Restart", cmd, { after: [madeMarker] }))
+  return getStepRecord(hostSession, "Restart")
 }
 
 /** Puts a file where the test host's state directory goes, so a write's `mkdir -p` fails, and returns the file's path. */
@@ -141,7 +163,7 @@ describe("changes still open from an earlier apply", () => {
     ])
   })
 
-  it("should read a run that didn't fire as changed", async () => {
+  it("should read a run that didn't trigger as changed", async () => {
     const loadedHost = loadTestHost()
     const marker = makeMarker(await createMarkerPath())
     const firstApply = await prepareSession(loadedHost, "apply")
@@ -154,6 +176,17 @@ describe("changes still open from an earlier apply", () => {
       kind: "run",
       changed: true,
     })
+  })
+
+  it("should not make a step that needs one wait in plan", async () => {
+    const loadedHost = loadTestHost()
+    const marker = makeMarker(await createMarkerPath())
+    await (await prepareSession(loadedHost, "apply")).host.ensure("Make marker", marker)
+    const hostSession = await prepareSession(loadedHost, "plan")
+    const madeMarker = await hostSession.host.ensure("Make marker", marker)
+    await hostSession.host.ensure("Check marker", { want: true, check: "true", fix: "true", needs: [madeMarker] })
+
+    expect(hostSession.hostRecord.stepRecords[1]).toMatchObject({ status: "unchanged", waitingOn: [] })
   })
 
   it("should not flag a step that isn't open", async () => {
@@ -175,5 +208,161 @@ describe("changes still open from an earlier apply", () => {
     expect(await hostSession.host.ensure("Make marker", makeMarker(markerPath))).toMatchObject({ changed: true })
     expect(hostSession.hostRecord.stepRecords[0]).toMatchObject({ status: "changed" })
     expect(hostSession.hostRecord.stepRecords[0]?.stillOpenFromEarlierApply).toBe(false)
+  })
+})
+
+describe("runs triggered by open changes", () => {
+  it("should trigger a run that failed in an earlier apply", async () => {
+    const { loadedHost, marker } = await loadHostWithMarker()
+    const firstApply = await prepareSession(loadedHost, "apply")
+    const firstMarker = await firstApply.host.ensure("Make marker", marker)
+    await getStepFailure(async () => firstApply.host.run("Restart", "exit 1", { after: [firstMarker] }))
+    const hostSession = await prepareSession(loadedHost, "apply")
+    await hostSession.host.run("Restart", "true", { after: [await hostSession.host.ensure("Make marker", marker)] })
+
+    expect(getStatus(hostSession, "Restart")).toBe("ran")
+    expect(await readOpenChanges(hostSession)).toStrictEqual({ "Make marker": ["Restart"], Restart: [] })
+  })
+
+  it("should trigger a run an earlier apply never reached", async () => {
+    const { loadedHost, marker } = await loadHostWithMarker()
+    await (await prepareSession(loadedHost, "apply")).host.ensure("Make marker", marker)
+    const hostSession = await prepareSession(loadedHost, "apply")
+    await hostSession.host.run("Restart", "true", { after: [await hostSession.host.ensure("Make marker", marker)] })
+
+    expect(getStatus(hostSession, "Restart")).toBe("ran")
+  })
+
+  it("should not trigger a run the open change already lists", async () => {
+    const { loadedHost, marker } = await loadHostWithMarker()
+    const firstApply = await prepareSession(loadedHost, "apply")
+    await firstApply.host.run("Restart", "true", { after: [await firstApply.host.ensure("Make marker", marker)] })
+    const hostSession = await prepareSession(loadedHost, "apply")
+    await hostSession.host.run("Restart", "true", { after: [await hostSession.host.ensure("Make marker", marker)] })
+
+    expect(getStatus(hostSession, "Restart")).toBe("unchanged")
+  })
+
+  it("should trigger only the run an earlier apply didn't reach, of two after one step", async () => {
+    const { loadedHost, marker } = await loadHostWithMarker()
+    const firstApply = await prepareSession(loadedHost, "apply")
+    await firstApply.host.run("Reload", "true", { after: [await firstApply.host.ensure("Make marker", marker)] })
+    const hostSession = await prepareSession(loadedHost, "apply")
+    const madeMarker = await hostSession.host.ensure("Make marker", marker)
+    await hostSession.host.run("Reload", "true", { after: [madeMarker] })
+    await hostSession.host.run("Restart", "true", { after: [madeMarker] })
+
+    expect([getStatus(hostSession, "Reload"), getStatus(hostSession, "Restart")]).toStrictEqual(["unchanged", "ran"])
+  })
+
+  it("should trigger a run after a run an earlier apply ran", async () => {
+    const { loadedHost, marker } = await loadHostWithMarker()
+    const firstApply = await prepareSession(loadedHost, "apply")
+    await firstApply.host.run("Reload", "true", { after: [await firstApply.host.ensure("Make marker", marker)] })
+    const hostSession = await prepareSession(loadedHost, "apply")
+    const reload = await hostSession.host.run("Reload", "true", {
+      after: [await hostSession.host.ensure("Make marker", marker)],
+    })
+    await hostSession.host.run("Restart", "true", { after: [reload] })
+
+    expect([getStatus(hostSession, "Reload"), getStatus(hostSession, "Restart")]).toStrictEqual(["unchanged", "ran"])
+  })
+
+  it("should trigger a run again when its step changes again", async () => {
+    const loadedHost = loadTestHost()
+    const markerPath = await createMarkerPath()
+    const firstApply = await prepareSession(loadedHost, "apply")
+    await firstApply.host.run("Restart", "true", {
+      after: [await firstApply.host.ensure("Make marker", makeMarker(markerPath))],
+    })
+    await rm(markerPath)
+    const hostSession = await prepareSession(loadedHost, "apply")
+    await hostSession.host.run("Restart", "true", {
+      after: [await hostSession.host.ensure("Make marker", makeMarker(markerPath))],
+    })
+
+    expect(getStatus(hostSession, "Restart")).toBe("ran")
+  })
+
+  it("should show a run an open change triggers in plan, without writing", async () => {
+    const { loadedHost, marker } = await loadHostWithMarker()
+    await (await prepareSession(loadedHost, "apply")).host.ensure("Make marker", marker)
+    const hostSession = await prepareSession(loadedHost, "plan")
+    await hostSession.host.run("Restart", "true", { after: [await hostSession.host.ensure("Make marker", marker)] })
+
+    expect(getStatus(hostSession, "Restart")).toBe("ran")
+    expect(await readOpenChanges(hostSession)).toStrictEqual({ "Make marker": [] })
+  })
+
+  it("should not show a run the open change already lists in plan", async () => {
+    const { loadedHost, marker } = await loadHostWithMarker()
+    const firstApply = await prepareSession(loadedHost, "apply")
+    await firstApply.host.run("Restart", "true", { after: [await firstApply.host.ensure("Make marker", marker)] })
+    const hostSession = await prepareSession(loadedHost, "plan")
+    await hostSession.host.run("Restart", "true", { after: [await hostSession.host.ensure("Make marker", marker)] })
+
+    expect(getStatus(hostSession, "Restart")).toBe("unchanged")
+  })
+
+  it("should show a run in plan when its step drifts again, though the open change lists it", async () => {
+    const loadedHost = loadTestHost()
+    const markerPath = await createMarkerPath()
+    const firstApply = await prepareSession(loadedHost, "apply")
+    await firstApply.host.run("Restart", "true", {
+      after: [await firstApply.host.ensure("Make marker", makeMarker(markerPath))],
+    })
+    await rm(markerPath)
+    const hostSession = await prepareSession(loadedHost, "plan")
+    await hostSession.host.run("Restart", "true", {
+      after: [await hostSession.host.ensure("Make marker", makeMarker(markerPath))],
+    })
+
+    expect(getStatus(hostSession, "Restart")).toBe("ran")
+  })
+})
+
+describe("what triggered a run", () => {
+  it.each(["apply", "plan"] as const)(
+    "should record the still-open changes that alone triggered a run in %s",
+    async (mode) => {
+      const { loadedHost, marker } = await loadHostWithMarker()
+      await (await prepareSession(loadedHost, "apply")).host.ensure("Make marker", marker)
+
+      expect(await restartAfterMarker(loadedHost, mode, marker)).toMatchObject({
+        triggeringOpenChanges: ["Make marker"],
+      })
+    },
+  )
+
+  it("should keep what triggered a run on its record when it fails", async () => {
+    const { loadedHost, marker } = await loadHostWithMarker()
+    await (await prepareSession(loadedHost, "apply")).host.ensure("Make marker", marker)
+
+    expect(await restartAfterMarker(loadedHost, "apply", marker, "exit 1")).toMatchObject({
+      triggeringOpenChanges: ["Make marker"],
+    })
+  })
+
+  it("should record nothing when a step changed in this pass, though another's change is still open", async () => {
+    const { loadedHost, marker } = await loadHostWithMarker()
+    await (await prepareSession(loadedHost, "apply")).host.ensure("Make marker", marker)
+    const hostSession = await prepareSession(loadedHost, "apply")
+    const madeMarker = await hostSession.host.ensure("Make marker", marker)
+    const madeOther = await hostSession.host.ensure("Make other", makeMarker(await createMarkerPath()))
+    await hostSession.host.run("Restart", "true", { after: [madeMarker, madeOther] })
+
+    expect(getStepRecord(hostSession, "Restart")).toMatchObject({ status: "ran", triggeringOpenChanges: [] })
+  })
+
+  it("should record nothing for an always run, or a run that didn't trigger", async () => {
+    const hostSession = await createSession("apply")
+    const inSync = await hostSession.host.ensure("Check nothing", { want: true, check: "true", fix: "true" })
+    await hostSession.host.run("Prune", "true", { after: "always" })
+    await hostSession.host.run("Restart", "true", { after: [inSync] })
+
+    expect([getStepRecord(hostSession, "Prune"), getStepRecord(hostSession, "Restart")]).toMatchObject([
+      { status: "ran", triggeringOpenChanges: [] },
+      { status: "unchanged", triggeringOpenChanges: [] },
+    ])
   })
 })

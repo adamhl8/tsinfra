@@ -6,11 +6,10 @@ import type {
   EnsureComparisonValues,
   FileComparisonValues,
   LinkComparisonValues,
-  Converge,
   ChangeTools,
   ReadTools,
 } from "#session/handlers/handlers.ts"
-import type { StepOptionsRecord } from "#session/recorder/recorder.ts"
+import type { ConvergeRecorder, StepOptionsRecord } from "#session/recorder/recorder.ts"
 import type { SavedStateManager } from "#session/saved-state/saved-state.ts"
 import type { Shell } from "#transport/transport.ts"
 
@@ -35,7 +34,7 @@ export const isChangeStepKind = (kind: StepKind): kind is ChangeStepKind =>
 
 /**
  * What a step's handler is given: the step's name and kind, and the session's mode, shell, home directory, saved state,
- * tools, and `converge`. `K` keeps a step's kind in its type, so a script can't give a run's result to `needs`.
+ * tools, and recorders. `K` keeps a step's kind in its type, so a script can't give a run's result to `needs`.
  */
 export interface StepContext<K extends StepKind = StepKind> {
   stepName: string
@@ -49,24 +48,31 @@ export interface StepContext<K extends StepKind = StepKind> {
    * and records itself on as a follow-up.
    */
   savedStateManager: SavedStateManager
+  /**
+   * The names of the change steps that changed in this pass, shared by the session's steps. A result's `changed` is the
+   * script's value instead, which a change still open from an earlier apply also makes true.
+   */
+  changedStepNames: Set<string>
   /** Given to a check function. */
   readTools: ReadTools
   /** Given to a fix or run function. */
   changeTools: ChangeTools
-  converge: Converge
+  convergeRecorder: ConvergeRecorder
   /**
    * Records the options the step was given that the report shows, like `validate`'s command. The recorder leaves out
    * each one at its default. Call it right after validating them, so a failure can't lose them.
    */
   recordOptions: (options: StepOptionsRecord) => void
+  /** Records the open changes, still open from an earlier apply, that triggered the run. */
+  recordTriggeringOpenChanges: (stepNames?: string[]) => void
 }
 
 /** What a step's handler gives: the status to record, and the value to give the script. */
 export interface HandlerReturn<T> {
   status: StepStatus
   value: T
-  /** Set on a change step that is `unchanged`, but whose change is still open from an earlier apply. */
-  stillOpenFromEarlierApply?: true
+  /** Whether a change step was `unchanged`, but its change is still open from an earlier apply. Read steps leave it out. */
+  stillOpenFromEarlierApply?: boolean
 }
 
 /**

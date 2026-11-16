@@ -24,7 +24,7 @@ export const runHost = async (hostEntry: HostEntry, mode: Mode): Promise<HostRec
   }
 
   // Close the open changes only after a clean `apply`, because then every follow-up has had its turn.
-  // A host that failed returned above, so it keeps them, and its next apply fires what this one missed.
+  // A host that failed returned above, so it keeps them, and its next apply triggers what this one missed.
   if (mode !== "apply") return hostRecord
 
   const closeAllResult = await sessionContext.savedStateManager.closeAll()

@@ -9,7 +9,7 @@ import { buildValidateCommand } from "#session/handlers/file/validate-command.ts
 import type { FileWrite } from "#session/handlers/file/write.ts"
 import { writeFile } from "#session/handlers/file/write.ts"
 import type { ChangeStepResult } from "#session/handlers/shared/shared.ts"
-import { withChangeStepResult, validateHostPath, validateInput } from "#session/handlers/shared/shared.ts"
+import { converge, withChangeStepResult, validateHostPath, validateInput } from "#session/handlers/shared/shared.ts"
 import type {
   FileAttributeOptions,
   HandlerOptions,
@@ -83,7 +83,7 @@ export const handleFile = async (
   content: unknown,
   options: unknown = {},
 ): Promise<Result<HandlerReturn<ChangeStepResult<"file">>>> => {
-  const { kind, shell, home, converge, recordOptions } = ctx
+  const { kind, shell, home, recordOptions } = ctx
 
   const absolutePath = validateHostPath(path, home, { inputLabel: "path", givenTo: kind })
   if (isErr(absolutePath)) return absolutePath
@@ -111,7 +111,7 @@ export const handleFile = async (
 
   const fileWrite: FileWrite = { resolvedContent, validateCommand }
 
-  const status = await converge({
+  const status = await converge(ctx, {
     needs,
     getHostDetails: async () => getHostFileDetails(shell, absolutePath),
     compare: async (hostFileDetails) => compareFile(ctx, hostFileDetails, resolvedContent, validOptions),

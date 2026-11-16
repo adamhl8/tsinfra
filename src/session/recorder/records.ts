@@ -97,6 +97,11 @@ export interface StepRecord {
   comparisons: StepComparisons
   /** The names of the needed steps this step waited on. */
   waitingOn: string[]
+  /**
+   * The open changes, still open from an earlier apply, that triggered the given run step, by their steps' names. It's
+   * empty when a step in the run's `after` changed in this pass, because that change explains the run.
+   */
+  triggeringOpenChanges: string[]
 }
 
 const NO_VARIABLES: Record<string, string> = {}

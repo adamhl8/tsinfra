@@ -2,8 +2,8 @@ export type { ChangeStepResult } from "#session/handlers/shared/change-step-resu
 export { changeStepResultSchema, withChangeStepResult } from "#session/handlers/shared/change-step-result.ts"
 export type { Change } from "#session/handlers/shared/change.ts"
 export { changeSchema, runChange } from "#session/handlers/shared/change.ts"
-export type { Comparison, Converge } from "#session/handlers/shared/converge.ts"
-export { createConverge } from "#session/handlers/shared/converge.ts"
+export type { Comparison } from "#session/handlers/shared/converge.ts"
+export { converge } from "#session/handlers/shared/converge.ts"
 export type {
   AttributeChange,
   Bytes,

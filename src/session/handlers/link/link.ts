@@ -6,7 +6,7 @@ import { compareLink } from "#session/handlers/link/comparison.ts"
 import { getHostLinkDetails } from "#session/handlers/link/host-link-details.ts"
 import { writeLink } from "#session/handlers/link/write.ts"
 import type { ChangeStepResult } from "#session/handlers/shared/shared.ts"
-import { withChangeStepResult, validateHostPath, validateInput } from "#session/handlers/shared/shared.ts"
+import { converge, withChangeStepResult, validateHostPath, validateInput } from "#session/handlers/shared/shared.ts"
 import type {
   HandlerOptions,
   OwnerOptions,
@@ -43,7 +43,7 @@ export const handleLink = async (
   target: unknown,
   options: unknown = {},
 ): Promise<Result<HandlerReturn<ChangeStepResult<"link">>>> => {
-  const { kind, shell, home, converge, recordOptions } = ctx
+  const { kind, shell, home, recordOptions } = ctx
 
   const absolutePath = validateHostPath(path, home, { inputLabel: "path", givenTo: kind })
   if (isErr(absolutePath)) return absolutePath
@@ -61,7 +61,7 @@ export const handleLink = async (
   const { needs, force } = validOptions
   recordOptions({ force })
 
-  const status = await converge({
+  const status = await converge(ctx, {
     needs,
     getHostDetails: async () => getHostLinkDetails(shell, absolutePath, absoluteTarget),
     compare: async (hostLinkDetails) => compareLink(ctx, hostLinkDetails, absoluteTarget, validOptions),

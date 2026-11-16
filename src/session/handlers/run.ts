@@ -35,13 +35,31 @@ const runOptionsSchema = type.declare<HandlerOptions<RunOptions>>().type({
   after: runTriggerSchema,
 })
 
-/** Returns whether the run is due: on every pass for `"always"`, or when a step in `after` changed. */
-const evaluateTrigger = (options: RunOptions): boolean => {
-  const { after } = options
-  if (after === "always") return true
+/** Whether a run should trigger, and the open changes, still open from an earlier apply, that alone trigger it. */
+interface TriggerEvaluation {
+  shouldTrigger: boolean
+  triggeringOpenChanges?: string[]
+}
 
-  const didAnyStepChange = after.some(({ changed }) => changed)
-  return didAnyStepChange
+/**
+ * Returns whether the run should trigger: on every pass for `"always"`, or when a step in `after` changed in this pass,
+ * or has an open change missing this run.
+ */
+const evaluateTrigger = (ctx: StepContext<"run">, options: RunOptions): TriggerEvaluation => {
+  const { stepName, savedStateManager, changedStepNames } = ctx
+  const { after } = options
+  if (after === "always") return { shouldTrigger: true }
+
+  // Check `changedStepNames`, not `changed`, because `changed` is the script's value, not whether the step changed.
+  // The script's `changed` is also true when the step's change is still open from an earlier apply.
+  const didAnyStepChange = after.some(({ name }) => changedStepNames.has(name))
+  if (didAnyStepChange) return { shouldTrigger: true }
+
+  // Treat every open change missing this run as still open from an earlier apply, because no step in `after` changed.
+  const followedStepNames = after.map(({ name }) => name)
+  const triggeringOpenChanges = savedStateManager.getOpenChangesMissingFollowUp(stepName, followedStepNames)
+  const isMissingFromOpenChanges = triggeringOpenChanges.length > 0
+  return { shouldTrigger: isMissingFromOpenChanges, triggeringOpenChanges }
 }
 
 export const handleRun = async (
@@ -49,7 +67,7 @@ export const handleRun = async (
   change: unknown,
   options: unknown,
 ): Promise<Result<HandlerReturn<ChangeStepResult<"run">>>> => {
-  const { stepName, kind, mode, savedStateManager } = ctx
+  const { stepName, kind, mode, savedStateManager, recordTriggeringOpenChanges } = ctx
 
   const validChange = validateInput(change, changeSchema, { inputLabel: "command", givenTo: kind })
   if (isErr(validChange)) return validChange
@@ -57,11 +75,15 @@ export const handleRun = async (
   const validOptions = validateInput(options, runOptionsSchema, { inputLabel: "options", givenTo: kind })
   if (isErr(validOptions)) return validOptions
 
-  const shouldRun = evaluateTrigger(validOptions)
-  if (!shouldRun) return withChangeStepResult(ctx, "unchanged")
+  const { shouldTrigger, triggeringOpenChanges } = evaluateTrigger(ctx, validOptions)
+  if (!shouldTrigger) return withChangeStepResult(ctx, "unchanged")
+
+  // Record what triggered the run before its command, so a failed run's record still says.
+  recordTriggeringOpenChanges(triggeringOpenChanges)
+
   if (mode === "plan") return withChangeStepResult(ctx, "ran")
 
-  // Open the run's own change before its command, so a run that follows this one still fires if the host stops after it.
+  // Open the run's own change before its command, so a run that follows this one still triggers if the host stops after it.
   const openChangeResult = await savedStateManager.openChange(stepName)
   if (isErr(openChangeResult)) return openChangeResult
 
@@ -69,7 +91,7 @@ export const handleRun = async (
   if (isErr(changeResult)) return err("failed to run the step", changeResult)
 
   // Record the run on the open changes it followed, so a later apply knows it already ran after them.
-  // Fail the step when that fails, because the run then fires again next time, which is safe.
+  // Fail the step when that fails, because the run then triggers again next time, which is safe.
   const { after } = validOptions
   if (after !== "always") {
     const followedStepNames = after.map(({ name }) => name)

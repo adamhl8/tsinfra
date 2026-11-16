@@ -28,7 +28,6 @@ export type {
   Change,
   ChangeStepResult,
   Comparison,
-  Converge,
   FileMode,
   ModeBits,
   OctalMode,
@@ -36,7 +35,6 @@ export type {
   SymbolicMode,
 } from "#session/handlers/shared/shared.ts"
 export {
-  createConverge,
   GROUP_EXECUTABLE_MODE,
   GROUP_FILE_MODE,
   PRIVATE_EXECUTABLE_MODE,

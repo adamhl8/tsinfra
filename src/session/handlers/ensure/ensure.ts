@@ -11,7 +11,7 @@ import { getHostCheckDetails } from "#session/handlers/ensure/host-check-details
 import type { Want } from "#session/handlers/ensure/want.ts"
 import { wantSchema } from "#session/handlers/ensure/want.ts"
 import type { ChangeStepResult } from "#session/handlers/shared/shared.ts"
-import { withChangeStepResult, runChange, validateInput } from "#session/handlers/shared/shared.ts"
+import { converge, withChangeStepResult, runChange, validateInput } from "#session/handlers/shared/shared.ts"
 import type { EnvOptions, HandlerOptions, NeedsOptions } from "#session/handlers/step-options/step-options.ts"
 import { NO_NEEDS, needsOptionsSchema } from "#session/handlers/step-options/step-options.ts"
 import type { HandlerReturn, StepContext } from "#session/step.ts"
@@ -64,7 +64,7 @@ export const handleEnsure = async (
   ctx: StepContext<"ensure">,
   options: unknown,
 ): Promise<Result<HandlerReturn<ChangeStepResult<"ensure">>>> => {
-  const { kind, shell, readTools, converge, recordOptions } = ctx
+  const { kind, shell, readTools, recordOptions } = ctx
 
   const validOptions = validateInput(options, ensureOptionsSchema, { inputLabel: "options", givenTo: kind })
   if (isErr(validOptions)) return validOptions
@@ -72,7 +72,7 @@ export const handleEnsure = async (
   const { want, check, fix, verify, needs } = validOptions
   recordOptions({ verify })
 
-  const status = await converge({
+  const status = await converge(ctx, {
     needs,
     getHostDetails: async () => getHostCheckDetails(shell, readTools, check),
     compare: (hostCheckDetails) => compareCheck(hostCheckDetails, want),

@@ -229,8 +229,8 @@ manager, which nothing calls yet.
   `stepNames` as the names in that follow-up's `after`. It returns:
   - `openChange(name)` opens a fresh change, with no follow-ups listed.
   - `isOpen(name)`.
-  - `getOpenChangesForFollowUp(followUpName, stepNames)` returns the steps whose change is still open for the
-    follow-up: open, and not listing it yet. A non-empty result means the follow-up fires.
+  - `getOpenChangesMissingFollowUp(followUpName, stepNames)` returns the steps whose change is open, but whose
+    completed follow-ups don't list it. A non-empty result means the follow-up fires.
   - `recordFollowUp(followUpName, stepNames)` adds the follow-up to each of those steps' open changes.
   - `closeAll()`.
 
@@ -318,38 +318,53 @@ an open change can only have one an earlier apply opened and never closed.
   step's result goes through and whose `ctx` already has `savedStateManager`:
   `stillOpenFromEarlierApply = status === "unchanged" && savedStateManager.isOpen(stepName)`. The script gets
   `changed: COUNTS_AS_CHANGED[status] || stillOpenFromEarlierApply`, and the status stays `unchanged`, so it isn't drift
-  and the report still shows it from level 1. `HandlerReturn` gains an optional `stillOpenFromEarlierApply?: true`,
-  which read and inspect never set. `callStep` adds the step's name to a session set, `namesStillOpenFromEarlierApply`,
-  and passes the flag to `finishStep`, which puts it on the step record, so handlers still record nothing. `callStep`
-  doesn't rebuild the result itself, because it's generic over the handler's value, and `kind` doesn't narrow it.
-- **6b.** Give `createConverge` the set's check, the way it gets `openChange`, so in `plan` a step waits only on a needed
-  step that changed and isn't in `namesStillOpenFromEarlierApply`. That change is already on the host.
-- **6c.** Fire a run in `evaluateTrigger` when a step in its `after` really changed (`changed`, and not in the set), or
-  `getOpenChangesForFollowUp(stepName, afterNames)` isn't empty. In `apply`, a step that really changed has a fresh
-  open change, so the two agree. The first only matters in `plan`, where nothing opens. A step in the set whose open
-  change already lists the run doesn't fire it again. `after: "always"` is unchanged.
-- **6d.** Record `firedByStillOpenChanges` on a run that fired: the names from `getOpenChangesForFollowUp` that are in
-  the set. A run a real change also fired records that too, so piece 7 can leave its note off.
-- **6e.** Tests on `@local`, each running two applies on one `loadedHost`, which the test preload gives the same home:
+  and the report still shows it from level 1. `HandlerReturn` gains an optional `stillOpenFromEarlierApply` boolean,
+  which read and inspect leave out. `callStep` passes it to `finishStep`, which puts it on the step record as a required
+  boolean, so handlers still record nothing. `withChangeStepResult` also adds the step's name to `changedStepNames`, a
+  set on `StepContext` that the session's steps share, when its own status counts as changed (`changed`, `ran`, or
+  `waiting`). That's the real `changed`, without the still-open part, which 6b and 6c read. Tests, each running two
+  applies on one `loadedHost`, which the test preload gives the same home:
   - a step still open from an earlier apply returns `changed: true`, in `apply` and in `plan`, and its record has the
     flag
-  - a step that isn't open returns `changed: false`, with no flag
+  - a run that didn't fire, but is still open, returns `changed: true`
+  - a step that isn't open, or that changes again, has no flag
+- **6b.** Make `converge` a plain function, `converge(ctx, spec)`, like `withChangeStepResult` and `runChange`.
+  `StepContext` gives it `convergeRecorder` in place of a prebuilt `converge`, and it opens the step's change with
+  `savedStateManager.openChange(stepName)` itself. In `plan` a step waits only on a needed step in `changedStepNames`,
+  because a step only still open from an earlier apply has its change on the host already. Test that a step that needs
+  one in `plan` doesn't wait.
+- **6c.** Fire a run in `evaluateTrigger` when a step in its `after` is in `changedStepNames`, or
+  `getOpenChangesMissingFollowUp(stepName, afterNames)` isn't empty. In `apply`, a step that really changed has a fresh
+  open change, so the two agree. The first only matters in `plan`, where nothing opens. A still-open step whose open
+  change already lists the run doesn't fire it again. `after: "always"` is unchanged. Tests:
   - a run that fails, then works
   - a host that fails between a change and its run
+  - a run the open change already lists doesn't fire
   - two runs after one step, with the host failing between them
   - a run after a run
   - a step that changes again after its run ran
-  - a step still open from an earlier apply that a step in `plan` needs, which doesn't wait
-  - `plan` showing a fired run without writing
+  - `plan` showing a fired run without writing, not showing one the open change lists, and showing one whose step
+    drifts again
+- **6d.** Record `triggeringOpenChanges` on a run's step record: the open changes, still open from an earlier apply,
+  that alone triggered it, by their steps' names. `evaluateTrigger` returns `{ shouldTrigger, triggeringOpenChanges? }`.
+  The list is left out, and recorded as `[]`, when a step in `after` changed in this pass, because that change explains
+  the run, so piece 7 leaves its note off and doesn't count the run as drift. Otherwise it's what
+  `getOpenChangesMissingFollowUp` returns, which is only still-open changes then. `StepRecord` gains the list, `[]` from
+  `startStep`, like `waitingOn`. `handleRun` records it through `recordTriggeringOpenChanges` on `StepContext`, right
+  after the trigger and before the command, so a failed run's record keeps it. Tests:
+  - a run fired only by a still-open change records it, in `apply` and in `plan`
+  - a failed run keeps the list on the failure's record
+  - a run a step changed in this pass fired records nothing, though another step in `after` is still open
+  - an `after: "always"` run, and a run that didn't fire, record nothing
 
 #### 7. Report open changes
 
 - **7a.** Add two note parts to `NotePart` in `src/report/host-block/host-block.ts`, and build them in `toStepNote`
   (`src/report/host-block/note.ts`):
   - the note on a step with `stillOpenFromEarlierApply`, from level 1
-  - the note on a run with `firedByStillOpenChanges`, naming those steps, from level 0
+  - the note on a run with `triggeringOpenChanges`, naming those steps, from level 0
 - **7b.** Format both with tsinfra's words in constants, where the `needs` part is formatted.
-- **7c.** Count a run with `firedByStillOpenChanges` as drift in `hasDrift` (`src/report/summary.ts`), so `plan`
+- **7c.** Count a run with `triggeringOpenChanges` as drift in `hasDrift` (`src/report/summary.ts`), so `plan`
   exits 2. The step still open from an earlier apply stays out of the summary's count, because it's `unchanged`.
 - **7d.** Add both notes to `report-preview.ts`.
 - **7e.** Test in `src/report/__tests__/report.test.ts`: each note at the levels it shows at, the summary, and the exit

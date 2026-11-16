@@ -63,6 +63,8 @@ export interface SessionRecorder {
    * step's handler calls it right after validating its options, so a failure can't lose them.
    */
   recordOptions: (options: StepOptionsRecord) => void
+  /** Records the open changes, still open from an earlier apply, that triggered the running run step. */
+  recordTriggeringOpenChanges: (stepNames?: string[]) => void
   /** Returns the error the host failed with, or nothing while it hasn't failed. */
   getFailure: () => Error | undefined
   /**
@@ -166,7 +168,15 @@ export const createSessionRecorder = (
       return err(`'${kind}' can't run while ${runningKind} step '${name}' is running`, undefined)
     }
 
-    hostRecord.runningStep = { name: stepName, kind, options: {}, commands: [], comparisons: {}, waitingOn: [] }
+    hostRecord.runningStep = {
+      name: stepName,
+      kind,
+      options: {},
+      commands: [],
+      comparisons: {},
+      waitingOn: [],
+      triggeringOpenChanges: [],
+    }
   }
 
   /** Marks no step as running, and returns the record of the step that was. */
@@ -216,7 +226,22 @@ export const createSessionRecorder = (
 
   const convergeRecorder: ConvergeRecorder = { startPhase, recordComparison, recordWaitingOn }
 
+  const recordTriggeringOpenChanges = (_stepNames: string[] = []) => {
+    const stepNames = mask(_stepNames)
+    if (hostRecord.runningStep) hostRecord.runningStep.triggeringOpenChanges = stepNames
+  }
+
   const getFailure = () => hostRecord.failure?.error
 
-  return { getStepShells, recordOptions, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder }
+  return {
+    getStepShells,
+    recordOptions,
+    recordTriggeringOpenChanges,
+    getFailure,
+    recordFailure,
+    startStep,
+    finishStep,
+    failStep,
+    convergeRecorder,
+  }
 }

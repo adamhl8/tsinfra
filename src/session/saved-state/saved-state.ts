@@ -17,10 +17,10 @@ export interface SavedStateManager {
   /** Opens a fresh change for `stepName`, with no follow-ups listed, in place of any change it already has open. */
   openChange: (stepName: string) => Promise<Result>
   /**
-   * Returns the steps in `stepNames` whose change is still open for `followUpName`: open, and not listing it yet. Their
-   * changes trigger the follow-up again, because it hasn't run after them.
+   * Returns the steps in `stepNames` whose change is open, but whose completed follow-ups don't list `followUpName`.
+   * Their changes trigger the follow-up again, because it hasn't run after them.
    */
-  getOpenChangesForFollowUp: (followUpName: string, stepNames: string[]) => string[]
+  getOpenChangesMissingFollowUp: (followUpName: string, stepNames: string[]) => string[]
   /** Adds `followUpName` to the open change of each step in `stepNames` that has one and doesn't list it yet. */
   recordFollowUp: (followUpName: string, stepNames: string[]) => Promise<Result>
   /** Closes every open change, which deletes the file while open changes are all it holds. */
@@ -70,15 +70,15 @@ export const createSavedStateManager = async (
     return writeOpenChanges({ ...getOpenChanges(), [stepName]: [] })
   }
 
-  const getOpenChangesForFollowUp = (followUpName: string, stepNames: string[]) =>
+  const getOpenChangesMissingFollowUp = (followUpName: string, stepNames: string[]) =>
     stepNames.filter((stepName) => isOpen(stepName) && !getCompletedFollowUps(stepName).includes(followUpName))
 
   const recordFollowUp = async (followUpName: string, stepNames: string[]): Promise<Result> => {
-    const openChangesForFollowUp = getOpenChangesForFollowUp(followUpName, stepNames)
+    const openChangesMissingFollowUp = getOpenChangesMissingFollowUp(followUpName, stepNames)
     // Skip the write when every step already lists the follow-up or has no open change, because the file wouldn't change.
-    if (openChangesForFollowUp.length === 0) return
+    if (openChangesMissingFollowUp.length === 0) return
 
-    const recordedChanges = openChangesForFollowUp.map((stepName): [string, string[]] => [
+    const recordedChanges = openChangesMissingFollowUp.map((stepName): [string, string[]] => [
       stepName,
       [...getCompletedFollowUps(stepName), followUpName],
     ])
@@ -97,5 +97,5 @@ export const createSavedStateManager = async (
     savedState = undefined
   }
 
-  return { isOpen, openChange, getOpenChangesForFollowUp, recordFollowUp, closeAll }
+  return { isOpen, openChange, getOpenChangesMissingFollowUp, recordFollowUp, closeAll }
 }

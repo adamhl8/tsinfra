@@ -63,9 +63,9 @@ describe("createSavedStateManager", () => {
     expect([nextManager.isOpen("Caddyfile"), nextManager.isOpen("Unit"), nextManager.isOpen("Not open")]).toStrictEqual(
       [true, true, false],
     )
-    expect(nextManager.getOpenChangesForFollowUp("Restart caddy", ["Caddyfile", "Unit", "Not open"])).toStrictEqual([
-      "Unit",
-    ])
+    expect(nextManager.getOpenChangesMissingFollowUp("Restart caddy", ["Caddyfile", "Unit", "Not open"])).toStrictEqual(
+      ["Unit"],
+    )
   })
 
   it("should open a fresh change for a step whose change is already open", async () => {
@@ -74,7 +74,7 @@ describe("createSavedStateManager", () => {
     await manager.recordFollowUp("Restart caddy", ["Caddyfile"])
     await manager.openChange("Caddyfile")
 
-    expect(manager.getOpenChangesForFollowUp("Restart caddy", ["Caddyfile"])).toStrictEqual(["Caddyfile"])
+    expect(manager.getOpenChangesMissingFollowUp("Restart caddy", ["Caddyfile"])).toStrictEqual(["Caddyfile"])
   })
 
   it("should have no open changes when there's no file, and write nothing to find that out", async () => {
@@ -83,7 +83,7 @@ describe("createSavedStateManager", () => {
 
     expect([
       manager.isOpen("Caddyfile"),
-      manager.getOpenChangesForFollowUp("Restart caddy", ["Caddyfile"]),
+      manager.getOpenChangesMissingFollowUp("Restart caddy", ["Caddyfile"]),
     ]).toStrictEqual([false, []])
     expect(await bun.file(savedStatePath).exists()).toBe(false)
   })

@@ -42,13 +42,16 @@ export const withChangeStepResult = <K extends ChangeStepKind>(
   ctx: StepContext<K>,
   status: Result<StepStatus>,
 ): Result<HandlerReturn<ChangeStepResult<K>>> => {
-  const { stepName, kind, savedStateManager } = ctx
+  const { stepName, kind, savedStateManager, changedStepNames } = ctx
   if (isErr(status)) return status
+
+  const changed = COUNTS_AS_CHANGED[status]
+  if (changed) changedStepNames.add(stepName)
 
   // Open a step's change in this apply only right before it changes something, which makes it `changed` or `ran`.
   // `plan` never opens one. So an `unchanged` step's open change is one an earlier apply opened and never closed.
   const stillOpenFromEarlierApply = status === "unchanged" && savedStateManager.isOpen(stepName)
-  const value = { name: stepName, kind, changed: COUNTS_AS_CHANGED[status] || stillOpenFromEarlierApply }
+  const value = { name: stepName, kind, changed: changed || stillOpenFromEarlierApply }
 
-  return stillOpenFromEarlierApply ? { status, value, stillOpenFromEarlierApply } : { status, value }
+  return { status, value, stillOpenFromEarlierApply }
 }
