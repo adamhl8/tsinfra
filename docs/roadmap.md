@@ -213,8 +213,8 @@ An `ensure` feature that stands on its own, and that `dir` uses for `exists` and
 - **4c.** Add the keys the script gave to `want`, with `mode` as octal from `parseFileMode` and `toOctalMode`, and have
   the check return the directory's values for those keys, a name for a name and an id, as a number, for a number. Add
   `buildStatCommand(..., ["mode", "owner"])` and `STAT_OWNER_COLUMNS` to the details script and its parser.
-- **4d.** Add the `chown` from `buildChownLines`, then `chmod`, to the fix, because `chown` can clear setuid and
-  setgid. Write the mode as five octal digits, like `00750`, because GNU `chmod` keeps a directory's setuid and setgid
+- **4d.** Add the `chown` from `buildChownLines`, then `chmod`, to the fix, like `file`, because POSIX lets `chown`
+  clear setuid and setgid. Linux leaves a directory's alone. Write the mode as five octal digits, like `00750`, because GNU `chmod` keeps a directory's setuid and setgid
   bits for a numeric mode with fewer, and BSD and busybox read the leading zeros as octal. Run `checkCanSetOwner` in the
   compare, like `file`, so an owner the SSH user can't set fails in `plan`.
 - **4e.** Test on `@local`: each key alone is made and fixed, an octal and a symbolic mode match the same directory, a
@@ -223,9 +223,14 @@ An `ensure` feature that stands on its own, and that `dir` uses for `exists` and
 
 #### 5. Docker tests
 
-- **5a.** On Alpine and Debian, `sudo: true` makes a root-owned directory under `/etc` with `user` and `group`, and the
-  next apply is `unchanged`.
-- **5b.** The same over ssh, for busybox's and dash's `stat` and `mkdir`.
+- **5a.** In `dir-sudo.docker.ts`, as a user with passwordless sudo, on Alpine and Debian: `sudo: true` makes a
+  root-owned directory and its parents, gives one to another user and group with a mode, sets a setgid bit the mode
+  asks for along with an owner, and fixes an existing root-owned directory, each unchanged on the next apply. Without `sudo`, a
+  root-owned directory whose mode differs is refused in `plan`, and one under a directory the user can't write fails
+  with `mkdir`'s error. `dir.test.ts` already runs in Docker, so busybox's and dash's `mkdir`, `stat`, and `chmod`
+  are covered.
+- **5b.** In `dir-ssh.docker.ts`, `sudo: true` over ssh gives a root-owned directory to another user, and the next apply
+  over ssh is unchanged.
 
 #### 6. Docs
 

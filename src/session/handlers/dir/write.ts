@@ -26,7 +26,8 @@ const buildDirWriteScript = (hostDirDetails: HostDirDetails, options: ValidDirOp
 
   const quotedPath = quoteShellArg(path)
 
-  // Set the owner before the mode, because `chown` can clear the setuid and setgid bits.
+  // Set the owner before the mode, like `file`, because POSIX lets `chown` clear the setuid and setgid bits.
+  // Linux leaves a directory's alone, but the mode must win where they're cleared.
   const chownLines = buildChownLines(attributes, quotedPath, options)
   const chmodLines = mode === undefined ? [] : [`chmod ${getModeArg(mode)} ${quotedPath}`]
 
