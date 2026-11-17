@@ -1,9 +1,10 @@
-import type { DetailRows } from "#report/format/details/details.ts"
-import type { DiffLimits } from "#report/format/details/diff/diff.ts"
-import { LINE_LIMIT_FLAG } from "#report/format/details/diff/diff.ts"
-import { formatAlignedRow } from "#report/format/details/shared/shared.ts"
-import { gotValueElement, noteElement, wantValueElement } from "#report/format/elements/elements.ts"
-import type { EnsureComparisonValues } from "#session/session.ts"
+import type { EnsureComparisonValues } from "#core/session/handlers/ensure/comparison.ts"
+import type { DetailRows } from "#report/format/details.ts"
+import type { DiffLimits } from "#report/format/details/diff/limits.ts"
+import { LINE_LIMIT_FLAG } from "#report/format/details/diff/limits.ts"
+import { formatAlignedRow } from "#report/format/details/shared/aligned-row.ts"
+import { noteElement } from "#report/format/elements/messages.ts"
+import { gotValueElement, wantValueElement } from "#report/format/elements/values.ts"
 
 type SetValues = Extract<EnsureComparisonValues, { kind: "set" }>
 

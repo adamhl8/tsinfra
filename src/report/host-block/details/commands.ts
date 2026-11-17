@@ -1,8 +1,9 @@
 import { isErr } from "ts-explicit-errors"
 
-import type { CommandOutputDetail, Detail, StepCommand } from "#report/host-block/host-block.ts"
+import type { CommandRecord, StepRecord } from "#core/session/recorder/records.ts"
+import type { StepKind } from "#core/session/step.ts"
+import type { CommandOutputDetail, Detail, StepCommand } from "#report/host-block.ts"
 import type { Verbosity } from "#report/verbosity.ts"
-import type { CommandRecord, StepKind, StepRecord } from "#session/session.ts"
 
 // List the commands from level 2, because they say how the work was done, which matters only when looking closely.
 const COMMANDS_LEVEL: Verbosity = 2

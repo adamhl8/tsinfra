@@ -1,7 +1,9 @@
-import type { AlignedRow } from "#report/format/details/shared/shared.ts"
-import { formatAlignedRow, formatOwnerChange } from "#report/format/details/shared/shared.ts"
-import { changeElement, changeDescriptionElement, wantValueElement } from "#report/format/elements/elements.ts"
-import type { LinkComparisonValues, LinkChange } from "#session/session.ts"
+import type { LinkComparisonValues, LinkChange } from "#core/session/handlers/link/comparison.ts"
+import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
+import { formatAlignedRow } from "#report/format/details/shared/aligned-row.ts"
+import { formatOwnerChange } from "#report/format/details/shared/attributes.ts"
+import { changeDescriptionElement } from "#report/format/elements/messages.ts"
+import { changeElement, wantValueElement } from "#report/format/elements/values.ts"
 
 // Give each way of making a link its words.
 const REPLACEMENT_WORDS: Record<Exclude<LinkChange["kind"], "same" | "changed">, string> = {

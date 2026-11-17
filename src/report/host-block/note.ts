@@ -1,5 +1,5 @@
-import type { EntryStatus, NotePart } from "#report/host-block/host-block.ts"
-import type { StepRecord } from "#session/session.ts"
+import type { StepRecord } from "#core/session/recorder/records.ts"
+import type { EntryStatus, NotePart } from "#report/host-block.ts"
 
 /** Returns a step's note, for an entry that's waiting, `resume`, or `ranFromOpenChanges`. */
 export const toStepNote = (stepRecord: StepRecord, status: EntryStatus): NotePart[] => {

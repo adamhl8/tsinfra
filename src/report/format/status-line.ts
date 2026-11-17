@@ -1,5 +1,5 @@
-import { entryNameElement, entryNoteElement, kindElement, statusElement } from "#report/format/elements/elements.ts"
-import type { EntryStatus, HostBlockEntry, NotePart } from "#report/host-block/host-block.ts"
+import { entryNameElement, entryNoteElement, kindElement, statusElement } from "#report/format/elements/entry.ts"
+import type { EntryStatus, HostBlockEntry, NotePart } from "#report/host-block.ts"
 import { quoteNames } from "#utils.ts"
 
 /** An entry's status line, with each field formatted, before layout puts them on one line. */

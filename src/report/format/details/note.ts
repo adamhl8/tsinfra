@@ -1,5 +1,5 @@
-import { noteElement } from "#report/format/elements/elements.ts"
-import type { DetailNote, StillDiffersPhase } from "#report/host-block/host-block.ts"
+import { noteElement } from "#report/format/elements/messages.ts"
+import type { DetailNote, StillDiffersPhase } from "#report/host-block.ts"
 
 // Say when the commands ran, because the phases' names are internal.
 const PHASE_DESCRIPTIONS: Record<StillDiffersPhase, string> = {

@@ -1,7 +1,7 @@
-import type { AlignedRow } from "#report/format/details/shared/shared.ts"
-import { formatAlignedRow } from "#report/format/details/shared/shared.ts"
-import { gotValueElement, wantValueElement } from "#report/format/elements/elements.ts"
-import type { EnsureComparisonValues } from "#session/session.ts"
+import type { EnsureComparisonValues } from "#core/session/handlers/ensure/comparison.ts"
+import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
+import { formatAlignedRow } from "#report/format/details/shared/aligned-row.ts"
+import { gotValueElement, wantValueElement } from "#report/format/elements/values.ts"
 
 type BooleanWantValues = Extract<EnsureComparisonValues, { kind: "exit" | "boolean" }>
 

@@ -1,4 +1,4 @@
-import { MASKED_VALUE } from "#session/session.ts"
+import { MASKED_VALUE } from "#core/session/recorder/masking.ts"
 import type { Style } from "#styles.ts"
 import { styleCurrent, styleItalic, styleMuted, styleValue, styleWanted } from "#styles.ts"
 
@@ -42,7 +42,7 @@ export const wantValueElement: FormatSideValue = (value: Value, describe?: (valu
   applyValueRules(value, styleWanted, describe)
 
 /** Formats a value neither side changes, like a list diff's unchanged item, in the terminal's own text color. */
-export const unchangedValueElement = (value: Value): string => applyValueRules(value, (text) => text)
+const unchangedValueElement = (value: Value): string => applyValueRules(value, (text) => text)
 
 /** Whether a list diff's item is only on the host, only in `want`, or on both. */
 export type ListItemChange = "removed" | "added" | "unchanged"

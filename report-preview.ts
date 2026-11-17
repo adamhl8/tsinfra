@@ -16,24 +16,22 @@ import pc from "picocolors"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { HostFunction, HostSudo } from "#hosts/host.ts"
-import { prepareHosts } from "#hosts/prepare/prepare.ts"
-import { runHost } from "#hosts/run.ts"
+import type { HostFunction, HostSudo } from "#core/hosts/host.ts"
+import { prepareHosts } from "#core/hosts/prepare.ts"
+import { runHost } from "#core/hosts/run.ts"
+import { GROUP_DIRECTORY_MODE, PUBLIC_FILE_MODE } from "#core/session/handlers/shared/filesystem/mode.ts"
+import type { HostRecord } from "#core/session/recorder/records.ts"
+import { createHostRecord } from "#core/session/recorder/records.ts"
+import { runLocal } from "#core/transport/local.ts"
 import type { Mode } from "#mode.ts"
-import type { HostBlock } from "#report/report.ts"
-import {
-  getExitCode,
-  printTsinfraError,
-  renderHostBlock,
-  renderSummary,
-  toHostBlock,
-  toVerbosity,
-} from "#report/report.ts"
+import { renderHostBlock } from "#report.ts"
+import { printTsinfraError } from "#report/errors.ts"
+import { getExitCode } from "#report/exit-code.ts"
+import type { HostBlock } from "#report/host-block.ts"
+import { toHostBlock } from "#report/host-block.ts"
+import { renderSummary } from "#report/summary.ts"
+import { toVerbosity } from "#report/verbosity.ts"
 import type { Verbosity } from "#report/verbosity.ts"
-import { GROUP_DIRECTORY_MODE, PUBLIC_FILE_MODE } from "#session/handlers/shared/filesystem/mode.ts"
-import type { HostRecord } from "#session/session.ts"
-import { createHostRecord } from "#session/session.ts"
-import { runLocal } from "#transport/local.ts"
 
 /** One run of the preview: `plan` shows what only shows in `plan`, `apply` the rest, and `sudoPrompt` the prompt. */
 type PreviewPass = "plan" | "apply" | "sudoPrompt"

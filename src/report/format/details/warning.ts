@@ -1,5 +1,6 @@
-import { warningLabelElement, warningValueElement } from "#report/format/elements/elements.ts"
-import type { StepWarning } from "#report/host-block/host-block.ts"
+import { warningLabelElement } from "#report/format/elements/messages.ts"
+import { warningValueElement } from "#report/format/elements/values.ts"
+import type { StepWarning } from "#report/host-block.ts"
 
 // Point each warning's words at the value it's about, which follows them.
 const WARNING_WORDS: Record<StepWarning["kind"], string> = {

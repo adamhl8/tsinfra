@@ -86,15 +86,23 @@ run_tests() {
   user="$2"
   shift 2
   echo "--- $heading"
+  # Fail on a listed file that doesn't exist, because `bun test` skips a path that matches nothing and runs the rest.
+  for file in "$@"; do
+    if [ ! -f "$file" ]; then
+      echo "No test file at $file" >&2
+      failed=1
+      return
+    fi
+  done
   # Set `USER`, because `os.userInfo` in Bun reads the name from it.
   su "$user" -s /bin/sh -c "cd /work && USER=$user PATH=$PATH bun test $*" || failed=1
 }
 
 run_tests "the test suite as a non-root user" tester
 run_tests "the test suite as root" root
-run_tests "real sudo and real root" tester ./src/transport/__tests__/step.docker.ts ./src/session/handlers/__tests__/file-sudo.docker.ts ./src/session/handlers/__tests__/link-sudo.docker.ts ./src/session/handlers/__tests__/dir-sudo.docker.ts ./src/hosts/prepare/host-details/__tests__/sudo-passwordless.docker.ts
-run_tests "a user whose sudo needs a password" sudopw ./src/hosts/prepare/host-details/__tests__/sudo-password.docker.ts ./src/hosts/prepare/host-details/__tests__/sudo-prompt.docker.ts ./src/session/__tests__/open-changes-sudo-password.docker.ts
-run_tests "a user with no sudo rule" nopass ./src/session/handlers/__tests__/file-no-sudo.docker.ts
-run_tests "ssh to a real sshd" tester ./src/transport/__tests__/ssh.docker.ts ./src/session/handlers/__tests__/file-ssh.docker.ts ./src/session/handlers/__tests__/dir-ssh.docker.ts ./src/session/__tests__/open-changes-ssh.docker.ts
+run_tests "real sudo and real root" tester ./src/core/transport/__tests__/step.docker.ts ./src/core/session/handlers/__tests__/file-sudo.docker.ts ./src/core/session/handlers/__tests__/link-sudo.docker.ts ./src/core/session/handlers/__tests__/dir-sudo.docker.ts ./src/core/hosts/prepare/host-details/__tests__/sudo-passwordless.docker.ts
+run_tests "a user whose sudo needs a password" sudopw ./src/core/hosts/prepare/host-details/__tests__/sudo-password.docker.ts ./src/core/hosts/prepare/host-details/__tests__/sudo-prompt.docker.ts ./src/core/__tests__/open-changes-sudo-password.docker.ts
+run_tests "a user with no sudo rule" nopass ./src/core/session/handlers/__tests__/file-no-sudo.docker.ts
+run_tests "ssh to a real sshd" tester ./src/core/transport/__tests__/ssh.docker.ts ./src/core/session/handlers/__tests__/file-ssh.docker.ts ./src/core/session/handlers/__tests__/dir-ssh.docker.ts ./src/core/__tests__/open-changes-ssh.docker.ts
 
 exit "$failed"

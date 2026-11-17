@@ -1,11 +1,12 @@
 import { diffArrays } from "diff"
 
-import type { DetailRows } from "#report/format/details/details.ts"
-import type { DiffLimits } from "#report/format/details/diff/diff.ts"
-import { FULL_DIFF_TIMEOUT_MS, LINE_LIMIT_FLAG, TIME_LIMIT_FLAG } from "#report/format/details/diff/diff.ts"
-import type { AlignedRow } from "#report/format/details/shared/shared.ts"
-import { formatAlignedRow } from "#report/format/details/shared/shared.ts"
-import { gotValueElement, noteElement, wantValueElement } from "#report/format/elements/elements.ts"
+import type { DetailRows } from "#report/format/details.ts"
+import type { DiffLimits } from "#report/format/details/diff/limits.ts"
+import { FULL_DIFF_TIMEOUT_MS, LINE_LIMIT_FLAG, TIME_LIMIT_FLAG } from "#report/format/details/diff/limits.ts"
+import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
+import { formatAlignedRow } from "#report/format/details/shared/aligned-row.ts"
+import { noteElement } from "#report/format/elements/messages.ts"
+import { gotValueElement, wantValueElement } from "#report/format/elements/values.ts"
 import { splitLines } from "#utils.ts"
 
 /**

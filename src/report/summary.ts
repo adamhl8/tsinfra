@@ -1,6 +1,8 @@
 import type { Mode } from "#mode.ts"
-import { COLUMN_GAP, planReminderElement, statusTextElement, warningCountElement } from "#report/format/format.ts"
-import type { HostBlock, HostBlockEntry } from "#report/host-block/host-block.ts"
+import { planReminderElement } from "#report/format/elements/messages.ts"
+import { statusTextElement, warningCountElement } from "#report/format/elements/summary.ts"
+import { COLUMN_GAP } from "#report/format/layout.ts"
+import type { HostBlock, HostBlockEntry } from "#report/host-block.ts"
 import { countOf, getMaxWidth, padToWidth } from "#utils.ts"
 
 const PLAN_REMINDER = "Steps after a change were checked without that change, so apply may differ."

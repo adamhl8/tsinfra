@@ -1,9 +1,10 @@
 import { messageChain } from "ts-explicit-errors"
 
-import type { DetailRows, DiffLimits } from "#report/format/details/details.ts"
-import { formatDetail } from "#report/format/details/details.ts"
-import { errorLineElement } from "#report/format/elements/elements.ts"
-import type { HostBlockEntry } from "#report/host-block/host-block.ts"
+import type { DetailRows } from "#report/format/details.ts"
+import { formatDetail } from "#report/format/details.ts"
+import type { DiffLimits } from "#report/format/details/diff/limits.ts"
+import { errorLineElement } from "#report/format/elements/messages.ts"
+import type { HostBlockEntry } from "#report/host-block.ts"
 import { splitNonEmptyLines } from "#utils.ts"
 
 /** The lines under an entry's status line, each formatted, before layout lines up its aligned rows and indents them. */

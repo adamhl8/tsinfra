@@ -1,8 +1,8 @@
 import { isErr } from "ts-explicit-errors"
 
+import type { CommandRecord, StepRecord } from "#core/session/recorder/records.ts"
+import type { Detail, StillDiffersPhase } from "#report/host-block.ts"
 import { toComparisonValuesDetails } from "#report/host-block/details/comparisons.ts"
-import type { Detail, StillDiffersPhase } from "#report/host-block/host-block.ts"
-import type { CommandRecord, StepRecord } from "#session/session.ts"
 
 // Look at what the fix did and what the last compare saw, because the failure is about the state after the fix.
 // Leave out `before`, because it ran earlier, so it can't explain that state.

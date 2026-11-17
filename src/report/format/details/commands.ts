@@ -1,12 +1,8 @@
 import { formatCommandOutputLines } from "#report/format/details/command-output.ts"
-import {
-  commandPromptElement,
-  commandLineElements,
-  headingElement,
-  phaseElement,
-} from "#report/format/elements/elements.ts"
+import { commandPromptElement, commandLineElements, phaseElement } from "#report/format/elements/commands.ts"
+import { headingElement } from "#report/format/elements/labels.ts"
 import { INDENT } from "#report/format/layout.ts"
-import type { StepCommand } from "#report/host-block/host-block.ts"
+import type { StepCommand } from "#report/host-block.ts"
 import { getMaxWidth, padToWidth } from "#utils.ts"
 
 // Start a command's later lines and its output rows under its text, past the prompt.

@@ -1,6 +1,6 @@
-import type { Detail, OptionValue, StepOption } from "#report/host-block/host-block.ts"
+import type { StepOptionsRecord, StepRecord } from "#core/session/recorder/records.ts"
+import type { Detail, OptionValue, StepOption } from "#report/host-block.ts"
 import type { Verbosity } from "#report/verbosity.ts"
-import type { StepOptionsRecord, StepRecord } from "#session/session.ts"
 
 // Name the options at level 2, with the commands, because they say how the step ran, not what it changed.
 const OPTIONS_LEVEL: Verbosity = 2

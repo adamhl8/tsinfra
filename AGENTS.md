@@ -99,6 +99,17 @@ whether a reader could mistake it for the wanted value or the host's value.
 - **Formatting.** All formatting belongs in the report. That covers recorded values, not error messages. An error
   message can format what it needs, like `prettyBytes` in the size limit error.
 
+## Layout
+
+- **`src/` holds the CLI (`cli.ts`), the report (`report.ts`), and `core/`,** plus the published `index.ts` and code
+  all three share (`mode.ts`, `styles.ts`, `utils.ts`). `core/` holds hosts, the session, and transports, the part of
+  tsinfra that does the work. Nothing in `core/` imports the CLI or the report.
+- **A module with parts sits beside the folder that holds them,** like `core/session/handlers/file.ts` and
+  `core/session/handlers/file/write.ts`, never `file/file.ts`. A folder with no central module, like
+  `handlers/shared/filesystem/`, holds peer modules, each named for what it holds.
+- **A test lives in the `__tests__/` beside the module it tests.** A test of `file.ts` runs the whole step, so it sits
+  in `handlers/__tests__/`. A test of one part, like `file/host-file-details.ts`, sits in `file/__tests__/`.
+
 ## Architecture
 
 - **`session.ts` is the only code that throws.** Everything the script can call (the `h` methods and the tools) is
@@ -110,8 +121,8 @@ whether a reader could mistake it for the wanted value or the host's value.
   tsinfra runs. Bun's `spawn` gives children the environment the process started with, so a test can't move `HOME`
   either. Instead, the test preload mocks `buildHostDetails` to give each host a temp `home`, ssh ones included,
   because the only sshds the tests reach run on the same machine as the same user.
-- **Paths tsinfra keeps under a host's home come from `hosts/prepare/host-details/tsinfra-directory.ts`,** built from
-  the checked `HomeDirectory`, never as `"$HOME"` in a script. The test preload's mock swaps `home` on what
+- **Paths tsinfra keeps under a host's home come from `core/hosts/prepare/host-details/tsinfra-directory.ts`,** built
+  from the checked `HomeDirectory`, never as `"$HOME"` in a script. The test preload's mock swaps `home` on what
   `buildHostDetails` returns, so it reaches paths built after preparation, like saved state. It doesn't reach the
   askpass helper, which `buildHostDetails` writes itself, so tests find the helper in the real home.
 - **`report-preview.ts` has no test preload,** so it runs its hosts in a child process started with a temp `HOME`.
@@ -119,7 +130,7 @@ whether a reader could mistake it for the wanted value or the host's value.
 - **Recorders follow the stages of a run** (preparation, then the session), not the host, step, and converge
   hierarchy.
 
-### `src/session/handlers/`
+### `src/core/session/handlers/`
 
 `handlers/` is the boundary where arguments from the script enter, so the rule is visible from the file tree.
 
@@ -129,10 +140,10 @@ whether a reader could mistake it for the wanted value or the host's value.
   write stay in its folder.
 - `handlers/shared/` holds code more than one handler uses. Its helpers may take `unknown` and validate it, like
   `validateInput` and `validateHostPath`. It's for building blocks no one step owns.
-- A step built on another step's internals imports them from that step's module, so the dependency shows, like `dir`
-  importing `compareRecords` from `ensure/ensure.ts`, never from inside `ensure/`.
+- A step can build on another step's internals. It imports them from the module that declares them, like `dir`
+  importing `compareRecords` from `ensure/comparison/record.ts`.
 - `handlers/shared/filesystem/` holds the filesystem building blocks (paths, owners, modes, sizes, attribute types,
   write-script pieces), even when only one step uses one.
-- `handlers/step-options/` holds every options interface a step's options extend. Each handler keeps its own options
+- `handlers/options/` holds every options interface a step's options extend. Each handler keeps its own options
   interface and schema, extending these.
 - A value a script function returns is validated where it's used, not in `handlers/`'s top level.

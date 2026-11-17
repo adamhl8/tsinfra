@@ -1,6 +1,7 @@
-import type { Detail } from "#report/host-block/host-block.ts"
+import type { FileComparisonValues } from "#core/session/handlers/file/comparison.ts"
+import type { ComparisonValues, StepKind } from "#core/session/step.ts"
+import type { Detail } from "#report/host-block.ts"
 import type { Verbosity } from "#report/verbosity.ts"
-import type { ComparisonValues, FileComparisonValues, StepKind } from "#session/session.ts"
 
 /** Returns how a file differs: a diff when its content is text, then its comparison values. */
 const toFileComparisonDetails = (values: FileComparisonValues, from: Verbosity): Detail[] => {

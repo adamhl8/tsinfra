@@ -1,12 +1,7 @@
-import {
-  headingElement,
-  keyElement,
-  optionEntriesElement,
-  optionNameElement,
-  optionValueLineElements,
-} from "#report/format/elements/elements.ts"
+import { headingElement, keyElement, optionEntriesElement, optionNameElement } from "#report/format/elements/labels.ts"
+import { optionValueLineElements } from "#report/format/elements/values.ts"
 import { INDENT } from "#report/format/layout.ts"
-import type { StepOption } from "#report/host-block/host-block.ts"
+import type { StepOption } from "#report/host-block.ts"
 import { getMaxWidth, padToWidth } from "#utils.ts"
 
 /** Reports whether any of `options`, or any of their entries, kept a value through the filter. */

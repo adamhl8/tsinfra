@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 
-import { formatFileDiff, toDiffLimits } from "#report/format/details/diff/diff.ts"
+import { formatFileDiff } from "#report/format/details/diff/file.ts"
+import { toDiffLimits } from "#report/format/details/diff/limits.ts"
 
 const numberedLines = (prefix: string, count: number) =>
   Array.from({ length: count }, (_, index) => `${prefix}${index}`).join("\n")

@@ -1,5 +1,5 @@
-import { hintElement } from "#report/format/elements/elements.ts"
-import type { FailureHint } from "#session/session.ts"
+import type { FailureHint } from "#core/session/recorder/records.ts"
+import { hintElement } from "#report/format/elements/messages.ts"
 
 // Name both fixes, because `sudo: true` and `sudo: { password }` each give sudo what it needs.
 const SUDO_OPTION_HINT = "sudo needs a password on this host, so set the sudo option on host()"

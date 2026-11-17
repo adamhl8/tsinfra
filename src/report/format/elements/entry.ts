@@ -1,4 +1,4 @@
-import type { EntryKind, EntryStatus, NameKind, UnownedFailureKind } from "#report/host-block/host-block.ts"
+import type { EntryKind, EntryStatus, NameKind, UnownedFailureKind } from "#report/host-block.ts"
 import { STATUS_COLORS, styleItalic, styleMuted, styleValue } from "#styles.ts"
 
 // Give each status a symbol, so a status reads at a glance and lines up in one column.

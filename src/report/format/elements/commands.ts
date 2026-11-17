@@ -1,4 +1,4 @@
-import type { ConvergePhase } from "#session/session.ts"
+import type { ConvergePhase } from "#core/session/recorder/records.ts"
 import { styleAccent, styleError, styleMuted, styleValue } from "#styles.ts"
 
 const COMMAND_PROMPT = "$ "

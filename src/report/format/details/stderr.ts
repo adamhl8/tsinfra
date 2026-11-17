@@ -1,6 +1,6 @@
-import type { AlignedRow } from "#report/format/details/shared/shared.ts"
-import { formatAlignedRow } from "#report/format/details/shared/shared.ts"
-import { failedCommandLineElement, stderrLineElement } from "#report/format/elements/elements.ts"
+import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
+import { formatAlignedRow } from "#report/format/details/shared/aligned-row.ts"
+import { failedCommandLineElement, stderrLineElement } from "#report/format/elements/commands.ts"
 import { splitNonEmptyLines } from "#utils.ts"
 
 /** Formats a command's stderr as two rows, a `command:` row and a `stderr:` row, so each label names its own value. */

@@ -1,16 +1,13 @@
 import { messageChain } from "ts-explicit-errors"
 
-import type { AlignedRow } from "#report/format/details/shared/shared.ts"
-import { formatAlignedRow } from "#report/format/details/shared/shared.ts"
-import {
-  errorLineElement,
-  exitCodeElement,
-  headingElement,
-  stderrLineElement,
-  stdoutLineElement,
-} from "#report/format/elements/elements.ts"
+import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
+import { formatAlignedRow } from "#report/format/details/shared/aligned-row.ts"
+import { stderrLineElement, stdoutLineElement } from "#report/format/elements/commands.ts"
+import { headingElement } from "#report/format/elements/labels.ts"
+import { errorLineElement } from "#report/format/elements/messages.ts"
+import { exitCodeElement } from "#report/format/elements/values.ts"
 import { INDENT } from "#report/format/layout.ts"
-import type { CommandOutputDetail } from "#report/host-block/host-block.ts"
+import type { CommandOutputDetail } from "#report/host-block.ts"
 import { getMaxWidth, padToWidth, splitNonEmptyLines } from "#utils.ts"
 
 /**

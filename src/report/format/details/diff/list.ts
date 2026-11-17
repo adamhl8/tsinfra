@@ -1,15 +1,15 @@
 import type { ArrayChange } from "diff"
 import { diffArrays } from "diff"
 
-import type { DiffLimits } from "#report/format/details/diff/shared.ts"
+import type { DiffLimits } from "#report/format/details/diff/limits.ts"
 import {
   DIFF_CONTEXT_LINES,
   FULL_DIFF_TIMEOUT_MS,
   formatFramedDiff,
   formatSlowDiffNote,
-} from "#report/format/details/diff/shared.ts"
-import type { ListItemChange } from "#report/format/elements/elements.ts"
-import { listDiffItemElement } from "#report/format/elements/elements.ts"
+} from "#report/format/details/diff/limits.ts"
+import type { ListItemChange } from "#report/format/elements/values.ts"
+import { listDiffItemElement } from "#report/format/elements/values.ts"
 
 /** An item of a list diff, and whether it's only on the host, only in `want`, or on both. */
 interface ListDiffItem {

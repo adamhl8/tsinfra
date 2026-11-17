@@ -1,4 +1,4 @@
-import { keyElement, labelElement } from "#report/format/elements/elements.ts"
+import { keyElement, labelElement } from "#report/format/elements/labels.ts"
 
 /**
  * A formatted `label: value` row, ready for layout to pad its label, with a multi-line value's later lines under its

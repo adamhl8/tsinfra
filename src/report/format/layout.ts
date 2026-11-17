@@ -1,6 +1,6 @@
+import type { FormattedEntry } from "#report/format.ts"
 import type { Body } from "#report/format/body.ts"
-import type { AlignedRow } from "#report/format/details/details.ts"
-import type { FormattedEntry } from "#report/format/format.ts"
+import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import type { StatusLine } from "#report/format/status-line.ts"
 import { getMaxWidth, padToWidth } from "#utils.ts"
 

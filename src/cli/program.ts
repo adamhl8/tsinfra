@@ -6,7 +6,7 @@ import { path } from "@optique/run"
 import type { Mode } from "#mode.ts"
 import { MODES } from "#mode.ts"
 import packageJson from "#package.json" with { type: "json" }
-import { toVerbosity } from "#report/report.ts"
+import { toVerbosity } from "#report/verbosity.ts"
 
 const DEFAULT_HOSTS_DIR = "hosts"
 

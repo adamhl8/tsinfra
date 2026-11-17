@@ -1,9 +1,10 @@
-import type { DetailRows } from "#report/format/details/details.ts"
-import type { DiffLimits } from "#report/format/details/diff/diff.ts"
-import { LINE_LIMIT_FLAG } from "#report/format/details/diff/diff.ts"
-import { formatKeyRow } from "#report/format/details/shared/shared.ts"
-import { changeElement, noteElement } from "#report/format/elements/elements.ts"
-import type { RecordComparisonValues } from "#session/session.ts"
+import type { RecordComparisonValues } from "#core/session/handlers/ensure/comparison/record.ts"
+import type { DetailRows } from "#report/format/details.ts"
+import type { DiffLimits } from "#report/format/details/diff/limits.ts"
+import { LINE_LIMIT_FLAG } from "#report/format/details/diff/limits.ts"
+import { formatKeyRow } from "#report/format/details/shared/aligned-row.ts"
+import { noteElement } from "#report/format/elements/messages.ts"
+import { changeElement } from "#report/format/elements/values.ts"
 
 /** Formats the note in place of `keyCount` differing keys of a record, which are too many to show. */
 const formatManyKeysNote = (keyCount: number): string =>

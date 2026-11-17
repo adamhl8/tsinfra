@@ -1,9 +1,9 @@
-import type { DetailRows } from "#report/format/details/details.ts"
-import type { DiffLimits } from "#report/format/details/diff/diff.ts"
-import { formatRecordValues } from "#report/format/details/ensure/ensure.ts"
-import { formatMode } from "#report/format/details/shared/shared.ts"
-import type { RecordComparisonValues, RecordValue } from "#session/session.ts"
-import { toModeBits } from "#session/session.ts"
+import type { RecordComparisonValues, RecordValue } from "#core/session/handlers/ensure/comparison/record.ts"
+import { toModeBits } from "#core/session/handlers/shared/filesystem/mode.ts"
+import type { DetailRows } from "#report/format/details.ts"
+import type { DiffLimits } from "#report/format/details/diff/limits.ts"
+import { formatRecordValues } from "#report/format/details/ensure/record.ts"
+import { formatMode } from "#report/format/details/shared/attributes.ts"
 
 /** Returns a directory's value as the report shows it: its mode in both notations, like a file's, and the rest as is. */
 const toShownDirValue = (key: string, value: RecordValue): RecordValue =>

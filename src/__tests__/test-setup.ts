@@ -5,8 +5,8 @@ import { makeTempDir } from "@adamhl8/configs/test"
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
-import type { LoadedHost } from "#hosts/load.ts"
-import type { HomeDirectory } from "#hosts/prepare/host-details/host-details.ts"
+import type { LoadedHost } from "#core/hosts/load.ts"
+import type { HomeDirectory } from "#core/hosts/prepare/host-details.ts"
 
 import "@adamhl8/configs/test/preload"
 
@@ -16,7 +16,7 @@ process.env["NO_COLOR"] = "1"
 process.env["FORCE_COLOR"] = ""
 
 // Load the real module before mocking it, so the mock can call its `buildHostDetails`.
-const hostDetails = await import("#hosts/prepare/host-details/host-details.ts")
+const hostDetails = await import("#core/hosts/prepare/host-details.ts")
 const { buildHostDetails } = hostDetails
 
 // Keep each host's home by its `LoadedHost`, so a test that prepares the same host twice finds its saved state again.
@@ -37,7 +37,7 @@ const getTestHome = async (loadedHost: LoadedHost): Promise<Result<HomeDirectory
 // Give each host a home of its own, so a test never touches the real home's saved state or another test's.
 // Swap the home preparation read, because commands get the `HOME` the test run started with, so `HOME` can't move.
 // Give an ssh host one too, because the only sshds the tests reach run on this machine as the same user.
-await mock.module("#hosts/prepare/host-details/host-details.ts", () => ({
+await mock.module("#core/hosts/prepare/host-details.ts", () => ({
   ...hostDetails,
   buildHostDetails: async (...args: Parameters<typeof buildHostDetails>) => {
     const [loadedHost] = args

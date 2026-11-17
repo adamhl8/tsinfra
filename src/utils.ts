@@ -3,7 +3,7 @@ import path from "node:path"
 import { stringWidth } from "bun"
 import { err } from "ts-explicit-errors"
 
-import type { CommandOutput } from "#transport/transport.ts"
+import type { CommandOutput } from "#core/transport.ts"
 
 const TRAILING_NEWLINES = /\n+$/v
 const TRAILING_NEWLINE = /\n$/v

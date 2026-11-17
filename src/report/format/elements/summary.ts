@@ -1,4 +1,4 @@
-import type { EntryStatus } from "#report/host-block/host-block.ts"
+import type { EntryStatus } from "#report/host-block.ts"
 import { STATUS_COLORS, styleWarning } from "#styles.ts"
 
 /**

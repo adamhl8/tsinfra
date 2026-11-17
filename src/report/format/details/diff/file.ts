@@ -1,14 +1,14 @@
 import type { StructuredPatchHunk } from "diff"
 import { structuredPatch } from "diff"
 
-import type { DiffLimits } from "#report/format/details/diff/shared.ts"
+import type { DiffLimits } from "#report/format/details/diff/limits.ts"
 import {
   DIFF_CONTEXT_LINES,
   FULL_DIFF_TIMEOUT_MS,
   formatFramedDiff,
   formatSlowDiffNote,
-} from "#report/format/details/diff/shared.ts"
-import { diffGutterElement, diffLineElement } from "#report/format/elements/elements.ts"
+} from "#report/format/details/diff/limits.ts"
+import { diffGutterElement, diffLineElement } from "#report/format/elements/diff.ts"
 import { endWithNewline } from "#utils.ts"
 
 /**

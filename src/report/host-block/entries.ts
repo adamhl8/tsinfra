@@ -1,3 +1,13 @@
+import type {
+  FinishedStepRecord,
+  HostRecord,
+  CommandRecord,
+  RecordedFailure,
+  RecordedUnownedFailure,
+  StepRecord,
+} from "#core/session/recorder/records.ts"
+import type { StepKind, StepStatus } from "#core/session/step.ts"
+import type { Detail, EntryName, HostBlockEntry, NameKind } from "#report/host-block.ts"
 import {
   toHintDetails,
   toHostFunctionFailureDetails,
@@ -5,20 +15,9 @@ import {
   toSavedStateFailureDetails,
   toStepDetails,
   toStepFailureDetails,
-} from "#report/host-block/details/details.ts"
-import type { Detail, EntryName, HostBlockEntry, NameKind } from "#report/host-block/host-block.ts"
+} from "#report/host-block/details.ts"
 import { toStepNote } from "#report/host-block/note.ts"
 import type { Verbosity } from "#report/verbosity.ts"
-import type {
-  FinishedStepRecord,
-  HostRecord,
-  CommandRecord,
-  RecordedFailure,
-  RecordedUnownedFailure,
-  StepKind,
-  StepRecord,
-  StepStatus,
-} from "#session/session.ts"
 
 // Show a step that was already right, or only looked, from level 1, because it changed nothing on the host.
 // Show a `resume` step from level 0, because it's rare, and it explains the follow-ups it triggers.

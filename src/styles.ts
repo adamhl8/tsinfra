@@ -1,6 +1,6 @@
 import pc from "picocolors"
 
-import type { EntryStatus } from "#report/report.ts"
+import type { EntryStatus } from "#report/host-block.ts"
 
 /** Styles a piece of text, like `styleCurrent` or a color from picocolors. */
 export type Style = (text: string) => string
