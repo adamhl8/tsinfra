@@ -10,6 +10,7 @@ export type {
   FileContent,
   FileOptions,
   LinkOptions,
+  DirOptions,
   FileAttributeOptions as FileAttributes,
   FileOwner,
   Change,

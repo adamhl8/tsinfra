@@ -18,7 +18,7 @@ import type { Shell } from "#transport/transport.ts"
 export const nonEmptyStringSchema = type("string > 0")
 
 const READ_STEP_KINDS = ["read", "inspect"] as const
-export const CHANGE_STEP_KINDS = ["file", "link", "ensure", "run"] as const
+export const CHANGE_STEP_KINDS = ["file", "link", "dir", "ensure", "run"] as const
 
 export type StepKind = ReadStepKind | ChangeStepKind
 

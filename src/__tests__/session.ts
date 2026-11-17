@@ -254,6 +254,12 @@ export const fileOrMessage = async (h: Host, ...fileArgs: Parameters<Host["file"
   return isErr(result) ? messageChain(result) : result
 }
 
+/** Runs `h.dir` on `path` and returns its result, or the thrown error's message chain. */
+export const dirOrMessage = async (h: Host, ...dirArgs: Parameters<Host["dir"]>) => {
+  const result = await attempt(async () => h.dir(...dirArgs))
+  return isErr(result) ? messageChain(result) : result
+}
+
 /** Runs `h.link` on `path` and returns its result, or the thrown error's message chain. */
 export const linkOrMessage = async (h: Host, ...linkArgs: Parameters<Host["link"]>) => {
   const result = await attempt(async () => h.link(...linkArgs))

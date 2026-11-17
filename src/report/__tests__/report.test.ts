@@ -518,6 +518,38 @@ const readRecord = async (read: Exec, lines: string) =>
     }),
   )
 
+describe("renderHostBlock for a dir step", () => {
+  it("should name the step by its path, with an exists row", async () => {
+    const dirPath = path.join(await makeTempDir(), "made")
+    const makeDir = async (h: Host) => {
+      await h.dir(dirPath)
+    }
+
+    expect(await formatBlock(makeDir, "plan")).toBe(
+      ["a", `  ~ change: (dir) ${dirPath}`, "      exists: false -> true"].join("\n"),
+    )
+  })
+
+  it("should list its labeled commands from -vv", async () => {
+    const dirPath = path.join(await makeTempDir(), "made")
+    const makeDir = async (h: Host) => {
+      await h.dir(dirPath)
+    }
+
+    expect(renderRecord(await runNamedHost("a", makeDir, "apply"), 2)).toBe(
+      [
+        "a",
+        `  ~ change: (dir) ${dirPath}`,
+        "      exists: false -> true",
+        "      commands:",
+        "        $ <directory details script>",
+        "        $ <directory write script>",
+        "        $ <directory details script>",
+      ].join("\n"),
+    )
+  })
+})
+
 describe("renderHostBlock for a step that would change a record", () => {
   it("should show a row per key that differs, in want's order, then the extra keys, with (none) for an absent side", async () => {
     const hostBlock = await formatBlock(async (h) => {

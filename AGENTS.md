@@ -116,7 +116,9 @@ whether a reader could mistake it for the wanted value or the host's value.
 - `handlers/<step>/` holds one handler's own stages, named without the step prefix. A step's own read, comparison, and
   write stay in its folder.
 - `handlers/shared/` holds code more than one handler uses. Its helpers may take `unknown` and validate it, like
-  `validateInput` and `validateHostPath`.
+  `validateInput` and `validateHostPath`. It's for building blocks no one step owns.
+- A step built on another step's internals imports them from that step's module, so the dependency shows, like `dir`
+  importing `compareRecords` from `ensure/ensure.ts`, never from inside `ensure/`.
 - `handlers/shared/filesystem/` holds the filesystem building blocks (paths, owners, modes, sizes, attribute types,
   write-script pieces), even when only one step uses one.
 - `handlers/step-options/` holds every options interface a step's options extend. Each handler keeps its own options

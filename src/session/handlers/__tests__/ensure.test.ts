@@ -683,7 +683,7 @@ describe("h.ensure with invalid input", () => {
     const prune = await h.run("Prune", "true", { after: "always" })
 
     expect(await ensureOrMessage(h, { needs: castInvalid([prune]), want: true, check: "true", fix: "true" })).toBe(
-      `failed to validate the options given to 'ensure' -> needs[0].kind must be "ensure", "file" or "link" (was "run")`,
+      `failed to validate the options given to 'ensure' -> needs[0].kind must be "dir", "ensure", "file" or "link" (was "run")`,
     )
   })
 

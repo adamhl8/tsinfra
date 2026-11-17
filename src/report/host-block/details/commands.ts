@@ -16,6 +16,7 @@ const LISTS_COMMANDS: Record<StepKind, boolean> = {
   inspect: false,
   file: true,
   link: true,
+  dir: true,
   ensure: true,
   run: true,
 }

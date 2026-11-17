@@ -32,12 +32,14 @@ const ENTRY_LEVELS: Record<StepStatus, Verbosity> = {
   resume: 0,
 }
 
-// Treat a read's or an inspect's name as a value, because it's the command itself, and a file's or a link's, because it's a path.
+// Treat a read's or an inspect's name as a value, because it's the command itself, and a file's, a link's, or a
+// directory's, because it's a path.
 const STEP_NAME_KINDS: Record<StepKind, NameKind> = {
   read: "value",
   inspect: "value",
   file: "value",
   link: "value",
+  dir: "value",
   ensure: "step",
   run: "step",
 }

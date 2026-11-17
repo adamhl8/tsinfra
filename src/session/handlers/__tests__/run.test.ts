@@ -135,7 +135,7 @@ describe("h.run with invalid input", () => {
     {
       description: "follows a step that can't change the host",
       options: { after: [{ name: "uname -m", kind: "read", changed: false }] },
-      message: 'after[0].kind must be "ensure", "file", "link" or "run" (was "read")',
+      message: 'after[0].kind must be "dir", "ensure", "file", "link" or "run" (was "read")',
     },
   ])("should fail a run that $description", async (testCase) => {
     const { options, message } = testCase

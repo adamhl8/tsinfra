@@ -10,6 +10,7 @@ import type {
   FileOptions,
   InspectOptions,
   LinkOptions,
+  DirOptions,
   ReadOptions,
   RunOptions,
   ChangeStepResult,
@@ -26,6 +27,7 @@ import {
   handleFile,
   handleInspect,
   handleLink,
+  handleDir,
   handleRead,
   handleRun,
   stepShellOptionsSchema,
@@ -64,6 +66,7 @@ export type {
   LinkChange,
   LinkComparisonValues,
   LinkOptions,
+  DirOptions,
   MaskOptions,
   ModeBits,
   OctalMode,
@@ -157,6 +160,13 @@ export interface Host extends Record<StepKind, unknown> {
    */
   link: (path: string, target: string, options?: LinkOptions) => Promise<ChangeStepResult<"link">>
   /**
+   * Makes sure `path` is a directory, and makes it and any parents it's missing when it isn't. It must be absolute, and
+   * a leading `~/` means the SSH user's home. In `plan` it only reads what's at the path.
+   *
+   * A symlink, a regular file, or anything else at the path fails the host and throws. So does a failed write.
+   */
+  dir: (path: string, options?: DirOptions) => Promise<ChangeStepResult<"dir">>
+  /**
    * Compares what `check` gives to `want`, and in `apply` runs `fix` when they differ, then checks again. In `plan` the
    * fix never runs.
    *
@@ -179,6 +189,7 @@ const STEP_NAME_LABELS: Record<StepKind, string> = {
   inspect: "command",
   file: "path",
   link: "path",
+  dir: "path",
   ensure: "name",
   run: "name",
 }
@@ -310,6 +321,7 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
       callStep(path, "file", async (ctx) => handleFile(ctx, path, content, options), options),
     link: async (path, target, options) =>
       callStep(path, "link", async (ctx) => handleLink(ctx, path, target, options), options),
+    dir: async (path, options) => callStep(path, "dir", async (ctx) => handleDir(ctx, path, options), options),
     ensure: async (stepName, options) =>
       callStep(stepName, "ensure", async (ctx) => handleEnsure(ctx, options), options),
     run: async (stepName, cmd, options) =>

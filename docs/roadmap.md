@@ -179,13 +179,17 @@ An `ensure` feature that stands on its own, and that `dir` uses for `exists` and
 
 #### 3. A `dir` that makes sure the directory exists
 
-- **3a.** Move `ensure`'s record comparison (`handlers/ensure/comparison/record.ts`) into `handlers/shared/`, because
-  two handlers use it. A pure move, with `ensure` importing it from there.
+- **3a.** Re-export `compareRecords` from `handlers/ensure/ensure.ts`, `ensure`'s own module, and import it in `dir`
+  from there, never from inside `ensure/comparison/`. It stays in `ensure`, because it's what an object `want` means,
+  and `dir` uses it because it's `ensure`'s, so its rows render as an object `ensure`'s. Add to AGENTS.md's `handlers/`
+  rules that a step built on another step's internals imports them from that step's module, and that `shared/` is for
+  building blocks no one step owns.
 - **3b.** Add `"dir"` to `CHANGE_STEP_KINDS` and `NEEDABLE_STEP_KINDS`, and an entry to each map keyed by `StepKind`,
   which the compiler finds: `STEP_NAME_LABELS` in `session.ts` (`"path"`), `STEP_NAME_KINDS` in
   `report/host-block/entries.ts` (`"value"`), and `LISTS_COMMANDS` in `report/host-block/details/commands.ts`
   (`true`). As a change step, it falls under the unique names rule and open changes with no more code.
-- **3c.** Add `DirOptions` with `sudo` and `needs`, and its schema from `sudoOptionsSchema` and `needsOptionsSchema`.
+- **3c.** Add `DirOptions` with `sudo` and `needs`. Its schema is `needsOptionsSchema`, like `file`'s, because
+  `callStep` validates `sudo` as a shell option.
 - **3d.** Add the directory details script and `getHostDirDetails` in `handlers/dir/`, labeled `directory details
   script`. The script prints `kind=absent`, `kind=directory`, `kind=link`, or `kind=other`, and `stat` waits for
   piece 4. A link is the error `'<path>' is a symlink, so dir won't replace it`, and anything else is
