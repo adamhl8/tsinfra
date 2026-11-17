@@ -17,6 +17,7 @@ export type {
 } from "#session/handlers/shared/filesystem/filesystem.ts"
 export {
   buildChownLines,
+  buildStatCommand,
   buildTempDirectoryLines,
   checkCanSetOwner,
   findOwnerChanges,
@@ -30,6 +31,7 @@ export {
   PUBLIC_FILE_MODE,
   REMOVE_TEMP_DIRECTORY_LINES,
   statModeSchema,
+  STAT_OWNER_COLUMNS,
   SYMBOLIC_MODE_PATTERN,
   TEMP_PATH_ARG,
   toBytes,

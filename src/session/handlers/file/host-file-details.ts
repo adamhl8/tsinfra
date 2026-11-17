@@ -3,8 +3,7 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { HostFileAttributeDetails, Bytes } from "#session/handlers/shared/shared.ts"
-import { toBytes, statModeSchema } from "#session/handlers/shared/shared.ts"
-import { nonEmptyStringSchema } from "#session/step.ts"
+import { buildStatCommand, STAT_OWNER_COLUMNS, toBytes, statModeSchema } from "#session/handlers/shared/shared.ts"
 import type { Shell } from "#transport/transport.ts"
 import { quoteShellArg, splitWords } from "#utils.ts"
 
@@ -47,24 +46,15 @@ const hashLineSchema = type(SHA256_PATTERN).pipe((line) => line.slice(0, SHA256_
 
 const statLineSchema = type("string")
   .pipe(splitWords)
-  .to([
-    statModeSchema,
-    "string.integer.parse",
-    "string.integer.parse",
-    nonEmptyStringSchema,
-    nonEmptyStringSchema,
-    type("string.integer.parse").pipe(toBytes),
-  ])
+  .to([statModeSchema, ...STAT_OWNER_COLUMNS, type("string.integer.parse").pipe(toBytes)])
   .pipe(([mode, uid, gid, user, group, size]) => ({ attributes: { mode, uid, gid, user, group }, size }))
 
 /**
  * Returns one command that says what is at `path`, and for a regular file, its sha256, mode, owner, and size. It tries
  * each common sha256 command, because POSIX has none, and feeds the file on stdin, because GNU `sha256sum` escapes odd
- * file names in its output. `stat -c` goes first, because GNU's `stat -f` prints filesystem information instead of
- * failing. BSD needs `%Mp%Lp` to keep setuid and setgid. Check that each sha256 command exists before running it, so a
- * missing one writes nothing to stderr. One that exists and fails keeps its stderr, because it says why a hash is
- * missing. Exit when no sha256 command gives a hash, because `stat` runs next, and its exit code would hide the
- * failure.
+ * file names in its output. Check that each sha256 command exists before running it, so a missing one writes nothing to
+ * stderr. One that exists and fails keeps its stderr, because it says why a hash is missing. Exit when no sha256
+ * command gives a hash, because `stat` runs next, and its exit code would hide the failure.
  */
 const buildFileDetailsScript = (path: string): string =>
   [
@@ -79,7 +69,7 @@ const buildFileDetailsScript = (path: string): string =>
     `  { command -v shasum >/dev/null 2>&1 && shasum -a 256 < "$p"; } ||`,
     `  { command -v sha256 >/dev/null 2>&1 && sha256 < "$p"; } ||`,
     `  { echo 'failed to get the sha256 hash of the file on the host' >&2; exit 1; }`,
-    `  stat -c '%a %u %g %U %G %s' "$p" 2>/dev/null || stat -f '%Mp%Lp %u %g %Su %Sg %z' "$p"`,
+    `  ${buildStatCommand('"$p"', ["mode", "owner", "size"])}`,
     "fi",
   ].join("\n")
 

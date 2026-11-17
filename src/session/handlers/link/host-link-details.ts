@@ -3,7 +3,7 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { HostOwner } from "#session/handlers/shared/shared.ts"
-import { nonEmptyStringSchema } from "#session/step.ts"
+import { buildStatCommand, STAT_OWNER_COLUMNS } from "#session/handlers/shared/shared.ts"
 import type { Shell } from "#transport/transport.ts"
 import { quoteShellArg, splitWords, stripOneTrailingNewline } from "#utils.ts"
 
@@ -44,7 +44,7 @@ const kindLineSchema = type("string")
 
 const statLineSchema = type("string")
   .pipe(splitWords)
-  .to(["string.integer.parse", "string.integer.parse", nonEmptyStringSchema, nonEmptyStringSchema])
+  .to([...STAT_OWNER_COLUMNS])
   .pipe(([uid, gid, user, group]): HostOwner => ({ uid, gid, user, group }))
 
 const targetLineSchema = type("'target=exists' | 'target=missing'").pipe((line) => line === "target=exists")
@@ -72,7 +72,7 @@ const buildLinkDetailsScript = (path: string, target: string): string =>
     `case "$kind" in`,
     "  directory | other) exit 0 ;;",
     "  absent) echo ;;",
-    `  *) stat -c '%u %g %U %G' "$p" 2>/dev/null || stat -f '%u %g %Su %Sg' "$p" ;;`,
+    `  *) ${buildStatCommand('"$p"', ["owner"])} ;;`,
     "esac",
     `if [ -e "$t" ]; then echo target=exists; else echo target=missing; fi`,
     `if [ "$kind" = link ]; then readlink "$p"; fi`,

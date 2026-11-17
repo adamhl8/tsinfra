@@ -6,6 +6,7 @@ rest of the docs describe tsinfra as it is.
 <!-- toc -->
 
 - [Next](#next)
+  - [A directory step](#a-directory-step)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
   - [Live progress](#live-progress)
@@ -37,7 +38,156 @@ rest of the docs describe tsinfra as it is.
 
 ## Next
 
-Nothing is queued. The next piece comes from [Planned](#planned).
+### A directory step
+
+`h.dir(path, options)` makes sure a directory exists, with the mode and owner the script gives. It's a step kind of its
+own, `dir`, so the report shows `(dir)`, but it's built on `ensure`: `ensure` compares, fixes, and verifies it, and the
+report shows its values as an object `ensure`'s rows. So it needs no `converge` spec, comparison values type, record
+shape, or detail renderer of its own.
+
+```ts
+const data = await h.dir("/srv/sonarr", { mode: GROUP_DIRECTORY_MODE, user: "sonarr", group: "sonarr", sudo: true })
+await h.file("/srv/sonarr/config.xml", sonarrConfig, { needs: [data], user: "sonarr", sudo: true })
+```
+
+**Why now.** It was rejected before, because a directory has no data for a step to send or diff, so an `ensure` covers
+it (see [Recipes](./recipes.md#a-directory-with-ensure)). That's still true, but nearly every script needs
+directories, and the `ensure` for one is easy to get subtly wrong: `test -d`, so a regular file with the right mode
+doesn't look correct, `stat -c` on Linux and `stat -f` on macOS, quoting the path, and comparing mode, user, and group.
+tsinfra already solves each of those for `file` and `link`, in `handlers/shared/filesystem/` and the file details
+script. A helper every user writes for themselves is better written once, with those pieces.
+
+**Why it's on `h`, not an import.** The steps on `h` are primitives, and helpers that wrap them, like packages, brew, or
+systemd units, will ship as modules that take `h` (see [Helpers worth shipping](#helpers-worth-shipping)). `dir` is a
+filesystem primitive like `file` and `link`: it needs no knowledge of any tool beyond POSIX, takes the same `mode`,
+`user`, `group`, `sudo`, and `needs` options, and accepts `~/`. A helper that needs a tool's knowledge ships as an
+import.
+
+**How it's built.** `h.dir` calls `callStep(path, "dir", (ctx) => handleDir(ctx, path, options))`. `handleDir`
+(`handlers/dir.ts`) validates the path and options like any handler, then builds `EnsureOptions` and passes them to
+`handleEnsure` with the same `ctx`. `handleEnsure` takes a context of either kind, and `withChangeStepResult` already
+uses `ctx.kind`, so the result is a `ChangeStepResult<"dir">` and a validation error says `given to dir`. It doesn't
+call `h.ensure` after validating outside a step, because a bad option would then fail before the step started, as a
+`(host fn)` failure, not under the step. So `dir` keeps the rule that a step's inputs are validated inside the step, and
+`ensure` does all the comparing, fixing, and verifying.
+
+**The kind is only its identity.** A step kind is a name in `CHANGE_STEP_KINDS` and an entry in the maps keyed by it.
+The bulk of a standalone step, its `converge` spec, its comparison values type, and its detail renderer, stays with
+`ensure`, because the report picks a step's details by its comparison values' kind, not its step kind.
+
+**Options.**
+
+```ts
+interface DirOptions extends FileAttributeOptions, SudoOptions, NeedsOptions {}
+```
+
+- **`mode`, `user`, and `group`** mean what they mean on `file`. Each one left out isn't compared, so an existing
+  directory keeps its own. With none, `dir` only makes sure the directory exists.
+- **`sudo`** runs the details script and the write as root, like `file`'s.
+- **`needs`** works as on `ensure`. The result is a `ChangeStepResult<"dir">`, and `"dir"` joins the kinds `needs` and
+  `after` take, so a later step can need it and a run can follow it.
+- **Mode constants for directories:** `PUBLIC_DIRECTORY_MODE` (`rwxr-xr-x`), `GROUP_DIRECTORY_MODE` (`rwxr-x---`), and
+  `PRIVATE_DIRECTORY_MODE` (`rwx------`), because the `..._EXECUTABLE_MODE` constants have the right bits under a name
+  that's wrong for a directory.
+
+**What it compares.** An object `want`, with only the keys the script gave, so the report shows one row per key that
+differs, the way an object `ensure` already does:
+
+```ts
+{ exists: true, mode: "750", user: "sonarr", group: "sonarr" }
+```
+
+- **The check** runs a directory details script on the step's shell, labeled `directory details script`, like `file`'s
+  details script. It says what's at the path, and for a directory, its mode, uid, gid, user, and group, with the same
+  `stat -c ... || stat -f ...` line as `file`'s.
+- **A missing directory** gives `{ exists: false }`, so every other key shows `(none)` against what's wanted.
+- **A symlink, a regular file, or anything else at the path fails the step,** like `file` does for what it won't
+  replace: `'/srv/sonarr' is a regular file, so dir won't replace it`. `mkdir -p` would fail on it anyway, with a worse
+  message.
+- **`mode`** compares as octal, from `parseFileMode` and `toOctalMode`, so `"750"`, `"rwxr-x---"`, and
+  `GROUP_DIRECTORY_MODE` all match the same directory.
+- **`user` and `group`** compare a name with the name and a number with the id, the same rule as `file`'s owner rows.
+
+**The fix** is a write script on the step's shell, labeled `directory write script`: `mkdir -p`, then `chmod` when
+`mode` is given, then `chown` from `buildChownLines` when `user` or `group` is. `checkCanSetOwner` runs before it, so
+an owner the SSH user can't set fails in `plan` too, the same as `file`. `mkdir -p` makes missing parents with the
+default mode and owner, and only the directory itself gets `mode`, `user`, and `group`. `ensure` compares again after
+the fix, as always.
+
+**The report.** It's named by its path, styled as a value like `file`'s and `link`'s, like
+`~ change: (dir) /srv/sonarr`, with a row per key that differs. The name is the path, so a `dir` and a `file` or `link`
+on the same path clash, like any two change steps with one name, which is right, because one path can't be both.
+
+**Costs:**
+
+- **No removal.** `dir` makes a directory, and removing one is still the `want: false` recipe (see
+  [Recipes](./recipes.md#removing-a-path-with-ensure)).
+- **Parents get the default mode and owner,** so a tree that needs its own on each level takes a `dir` per level.
+
+**Implementation plan.** Each numbered piece is one commit, reviewed before the next. Each adds only code something
+uses, so it passes knip on its own.
+
+#### 1. Shared filesystem pieces
+
+A refactor that changes nothing `file` or `link` does.
+
+- **1a.** Add `buildStatCommand(pathArg, fields)` in `handlers/shared/filesystem/stat.ts`, which builds the
+  `stat -c '...' ... || stat -f '...' ...` command from the fields asked for (`mode`, `owner`, `size`). Each field
+  pairs its GNU and BSD format, so the two forms print the same columns, always in that order, whatever order the
+  fields are asked in. The JSDoc on why `-c` goes first and why BSD needs `%Mp%Lp` moves there. `file`'s details script
+  (`handlers/file/host-file-details.ts`) asks for all three, and `link`'s (`handlers/link/host-link-details.ts`) for
+  `owner`, because it has the same line with owner only, and `dir` would make a third copy. Each built command is
+  byte for byte what the script has today.
+- **1b.** Move the schema that parses that line's output into mode, uid, gid, user, and group there too, with `file`
+  using it.
+- **1c.** Run the existing tests and the Docker suite, because the scripts' text is rebuilt, and busybox has its own
+  `stat`. They prove nothing changed, so this piece adds none.
+
+#### 2. A `dir` that makes sure the directory exists
+
+- **2a.** Add `"dir"` to `CHANGE_STEP_KINDS`, and an entry to each map keyed by `StepKind`, which the compiler finds:
+  `STEP_NAME_LABELS` in `session.ts` (`"path"`), `STEP_NAME_KINDS` in `report/host-block/entries.ts` (`"value"`), and
+  `LISTS_COMMANDS` in `report/host-block/details/commands.ts`. Add it to `NeedableStepKind` and `after`'s type. Let
+  `handleEnsure` take a `StepContext<"ensure" | "dir">` and return a result of that kind.
+- **2b.** Add `DirOptions` with `sudo` and `needs`, and its schema from `sudoOptionsSchema` and `needsOptionsSchema`.
+- **2c.** Add the directory details script and its parser in `handlers/dir/`, using the shared `stat` line from piece
+  1. It says what's at the path: missing, a directory, a symlink, or something else. A symlink or something else is an
+     error naming the path, like `file`'s.
+- **2d.** Add `handleDir`: validate the path with `validateHostPath` and the options with the schema, then pass
+  `handleEnsure` a `want` of `{ exists: true }`, a check that runs the details script on the step's shell, labeled
+  `directory details script`, and a fix that runs `mkdir -p`, labeled `directory write script`.
+- **2e.** Add `dir` to `Host` in `session.ts`, with its JSDoc.
+- **2f.** Test on `@local`: a missing directory is made, an existing one is `unchanged`, `plan` shows it and makes
+  nothing, a file and a symlink at the path fail, a bad option fails under the step, `needs` takes the result and a run
+  can follow it, and a `dir` and a `file` on one path clash. Test the report's `(dir)` line, with the path styled as a
+  value and the `exists` row under it.
+
+#### 3. Mode and owner
+
+- **3a.** Add `PUBLIC_DIRECTORY_MODE`, `GROUP_DIRECTORY_MODE`, and `PRIVATE_DIRECTORY_MODE`, exported where the file
+  mode constants are.
+- **3b.** Add `mode`, `user`, and `group` to `DirOptions`, from `fileAttributeOptionsSchema`.
+- **3c.** Add the keys the script gave to `want`, with `mode` as octal from `parseFileMode` and `toOctalMode`, and have
+  the check return the directory's values for those keys, a name for a name and an id for a number.
+- **3d.** Add `chmod` and the `chown` from `buildChownLines` to the fix, and run `checkCanSetOwner` before it.
+- **3e.** Test on `@local`: each key alone is made and fixed, an octal and a symbolic mode match the same directory, a
+  key left out keeps the directory's own value, parents get the default mode, an owner the SSH user can't set fails
+  in `plan`, and the report shows a row per key that differs.
+
+#### 4. Docker tests
+
+- **4a.** On Alpine and Debian, `sudo: true` makes a root-owned directory under `/etc` with `user` and `group`, and the
+  next apply is `unchanged`.
+- **4b.** The same over ssh, for busybox's and dash's `stat` and `mkdir`.
+
+#### 5. Docs
+
+- **5a.** Add a `dir` section to [Steps](./steps.md), next to `file` and `link`, and to the README's API. Say why `dir`
+  is on `h` and a tool's helper is an import. Add `dir` to the step kinds [CLI](./cli.md) lists, and to the change
+  steps in AGENTS.md's Vocabulary.
+- **5b.** Change the [directory recipe](./recipes.md#a-directory-with-ensure) to point at `dir`, and keep the `ensure`
+  form only for what `dir` doesn't do.
+- **5c.** Remove this section from the roadmap.
 
 ## Planned
 
@@ -600,11 +750,6 @@ Recorded so the survey doesn't need redoing:
 
 - **Pruning symlinks that point into the repo,** like a `pruneLinks(dir, repo)` step, dotbot's `clean`, and
   home-manager's generations. A symlink into the repo is a hint, not proof, because anything can create one.
-
-- **A directory step,** like `h.dir(path, { mode })` and the directory modes in pyinfra's `put_files`. `file` exists
-  because of its data: sending the content, hashing it, diffing it, and swapping it in atomically. A directory has no
-  data, so an `ensure` covers it, including its mode and owner (see
-  [Recipes](./recipes.md#a-directory-with-ensure)). A helper can handle what differs on macOS and quote the path.
 
 - **Tags, targeting, and `--start-at-task`.** Tags are a non-goal, and idempotent steps make starting partway pointless.
 - **`block`/`rescue`, `ignore_errors`, and continuing past a failure.** A failed host stays failed, and `inspect`

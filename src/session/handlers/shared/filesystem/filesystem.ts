@@ -23,6 +23,7 @@ export {
 } from "#session/handlers/shared/filesystem/mode.ts"
 export { checkCanSetOwner, findOwnerChanges } from "#session/handlers/shared/filesystem/owner.ts"
 export { validateHostPath } from "#session/handlers/shared/filesystem/path.ts"
+export { buildStatCommand, STAT_OWNER_COLUMNS } from "#session/handlers/shared/filesystem/stat.ts"
 export {
   buildChownLines,
   buildTempDirectoryLines,
