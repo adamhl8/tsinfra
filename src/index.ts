@@ -31,10 +31,13 @@ export type {
   StepNeeds,
 } from "#session/session.ts"
 export {
+  GROUP_DIRECTORY_MODE,
   GROUP_EXECUTABLE_MODE,
   GROUP_FILE_MODE,
+  PRIVATE_DIRECTORY_MODE,
   PRIVATE_EXECUTABLE_MODE,
   PRIVATE_FILE_MODE,
+  PUBLIC_DIRECTORY_MODE,
   PUBLIC_EXECUTABLE_MODE,
   PUBLIC_FILE_MODE,
 } from "#session/session.ts"

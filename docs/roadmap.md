@@ -213,7 +213,10 @@ An `ensure` feature that stands on its own, and that `dir` uses for `exists` and
 - **4c.** Add the keys the script gave to `want`, with `mode` as octal from `parseFileMode` and `toOctalMode`, and have
   the check return the directory's values for those keys, a name for a name and an id, as a number, for a number. Add
   `buildStatCommand(..., ["mode", "owner"])` and `STAT_OWNER_COLUMNS` to the details script and its parser.
-- **4d.** Add `chmod` and the `chown` from `buildChownLines` to the fix, and run `checkCanSetOwner` before it.
+- **4d.** Add the `chown` from `buildChownLines`, then `chmod`, to the fix, because `chown` can clear setuid and
+  setgid. Write the mode as five octal digits, like `00750`, because GNU `chmod` keeps a directory's setuid and setgid
+  bits for a numeric mode with fewer, and BSD and busybox read the leading zeros as octal. Run `checkCanSetOwner` in the
+  compare, like `file`, so an owner the SSH user can't set fails in `plan`.
 - **4e.** Test on `@local`: each key alone is made and fixed, an octal and a symbolic mode match the same directory, a
   key left out keeps the directory's own value, parents get the default mode, an owner the SSH user can't set fails
   in `plan`, skipped as root, where any owner can be set, and the report shows a row per key that differs.

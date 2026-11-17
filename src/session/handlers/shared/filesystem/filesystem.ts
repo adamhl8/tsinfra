@@ -8,12 +8,15 @@ export type { Bytes } from "#session/handlers/shared/filesystem/bytes.ts"
 export { toBytes } from "#session/handlers/shared/filesystem/bytes.ts"
 export type { FileMode, ModeBits, OctalMode, SymbolicMode } from "#session/handlers/shared/filesystem/mode.ts"
 export {
+  GROUP_DIRECTORY_MODE,
   GROUP_EXECUTABLE_MODE,
   GROUP_FILE_MODE,
   OCTAL_MODE_PATTERN,
   parseFileMode,
+  PRIVATE_DIRECTORY_MODE,
   PRIVATE_EXECUTABLE_MODE,
   PRIVATE_FILE_MODE,
+  PUBLIC_DIRECTORY_MODE,
   PUBLIC_EXECUTABLE_MODE,
   PUBLIC_FILE_MODE,
   statModeSchema,

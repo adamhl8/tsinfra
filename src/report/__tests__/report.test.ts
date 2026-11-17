@@ -530,6 +530,28 @@ describe("renderHostBlock for a dir step", () => {
     )
   })
 
+  it("should show a row for each attribute that differs, and (none) for a missing directory", async () => {
+    const directory = await makeTempDir()
+    await chmod(directory, 0o700)
+    const missingPath = path.join(directory, "made")
+    const makeDirs = async (h: Host) => {
+      await h.dir(directory, { mode: "750" })
+      await h.dir(missingPath, { mode: "750", group: "web" })
+    }
+
+    expect(await formatBlock(makeDirs, "plan")).toBe(
+      [
+        "a",
+        `  ~ change: (dir) ${directory}`,
+        "      mode: 700 -> 750",
+        `  ~ change: (dir) ${missingPath}`,
+        "      exists: false -> true",
+        "      mode:   (none) -> 750",
+        "      group:  (none) -> web",
+      ].join("\n"),
+    )
+  })
+
   it("should list its labeled commands from -vv", async () => {
     const dirPath = path.join(await makeTempDir(), "made")
     const makeDir = async (h: Host) => {

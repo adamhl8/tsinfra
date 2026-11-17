@@ -1,3 +1,5 @@
+export type { DirOptions } from "#session/handlers/dir/dir.ts"
+export { handleDir } from "#session/handlers/dir/dir.ts"
 export type {
   Check,
   EnsureComparisonValues,
@@ -18,8 +20,6 @@ export type { InspectOptions } from "#session/handlers/inspect.ts"
 export { handleInspect } from "#session/handlers/inspect.ts"
 export type { LinkChange, LinkComparisonValues, LinkOptions } from "#session/handlers/link/link.ts"
 export { handleLink } from "#session/handlers/link/link.ts"
-export type { DirOptions } from "#session/handlers/dir/dir.ts"
-export { handleDir } from "#session/handlers/dir/dir.ts"
 export type { ReadOptions } from "#session/handlers/read.ts"
 export { handleRead } from "#session/handlers/read.ts"
 export type { RunOptions, RunTrigger } from "#session/handlers/run.ts"
@@ -37,10 +37,13 @@ export type {
   SymbolicMode,
 } from "#session/handlers/shared/shared.ts"
 export {
+  GROUP_DIRECTORY_MODE,
   GROUP_EXECUTABLE_MODE,
   GROUP_FILE_MODE,
+  PRIVATE_DIRECTORY_MODE,
   PRIVATE_EXECUTABLE_MODE,
   PRIVATE_FILE_MODE,
+  PUBLIC_DIRECTORY_MODE,
   PUBLIC_EXECUTABLE_MODE,
   PUBLIC_FILE_MODE,
   toOctalMode,

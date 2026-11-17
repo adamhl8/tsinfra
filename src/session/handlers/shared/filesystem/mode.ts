@@ -57,6 +57,12 @@ export const PUBLIC_EXECUTABLE_MODE = "rwxr-xr-x" satisfies SymbolicMode
 export const GROUP_EXECUTABLE_MODE = "rwxr-x---" satisfies SymbolicMode
 /** Only the owner reads, writes, and runs it. Octal `700`. */
 export const PRIVATE_EXECUTABLE_MODE = "rwx------" satisfies SymbolicMode
+/** Owner lists, writes, and enters it, everyone else lists and enters it. The usual mode for a directory. Octal `755`. */
+export const PUBLIC_DIRECTORY_MODE = "rwxr-xr-x" satisfies SymbolicMode
+/** Owner lists, writes, and enters it, the group lists and enters it, others get nothing. Octal `750`. */
+export const GROUP_DIRECTORY_MODE = "rwxr-x---" satisfies SymbolicMode
+/** Only the owner lists, writes, and enters it. Octal `700`. */
+export const PRIVATE_DIRECTORY_MODE = "rwx------" satisfies SymbolicMode
 
 const PERMISSION_LETTERS = "rwx"
 // Index the setuid, setgid, and sticky bits by triple: owner, group, others.

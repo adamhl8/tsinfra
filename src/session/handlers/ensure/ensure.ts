@@ -21,6 +21,7 @@ export type { Want } from "#session/handlers/ensure/want.ts"
 export type { EnsureComparisonValues } from "#session/handlers/ensure/comparison/comparison.ts"
 export type { FixDifference } from "#session/handlers/ensure/fix.ts"
 // Re-export the record comparison for `dir`, which is built on it, so its rows render as an object `want`'s.
+export type { RecordWant } from "#session/handlers/ensure/comparison/comparison.ts"
 export { compareRecords } from "#session/handlers/ensure/comparison/comparison.ts"
 
 /** `T` ties a check function's return type, and a fix function's difference, to `want`. */

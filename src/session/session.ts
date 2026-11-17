@@ -82,10 +82,13 @@ export type {
   Want,
 } from "#session/handlers/handlers.ts"
 export {
+  GROUP_DIRECTORY_MODE,
   GROUP_EXECUTABLE_MODE,
   GROUP_FILE_MODE,
+  PRIVATE_DIRECTORY_MODE,
   PRIVATE_EXECUTABLE_MODE,
   PRIVATE_FILE_MODE,
+  PUBLIC_DIRECTORY_MODE,
   PUBLIC_EXECUTABLE_MODE,
   PUBLIC_FILE_MODE,
   toOctalMode,
@@ -160,7 +163,8 @@ export interface Host extends Record<StepKind, unknown> {
    */
   link: (path: string, target: string, options?: LinkOptions) => Promise<ChangeStepResult<"link">>
   /**
-   * Makes sure `path` is a directory, and makes it and any parents it's missing when it isn't. It must be absolute, and
+   * Makes sure `path` is a directory, and makes it and any parents it's missing when it isn't. Manages its mode, user,
+   * and group when they are given, but not its parents', which get the default mode and owner. It must be absolute, and
    * a leading `~/` means the SSH user's home. In `plan` it only reads what's at the path.
    *
    * A symlink, a regular file, or anything else at the path fails the host and throws. So does a failed write.
