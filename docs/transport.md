@@ -154,6 +154,11 @@ stdin and swallow part of the content, so that only worked under bash and zsh. T
 through the heredoc arrives intact under dash and busybox sh, through a pipe and over SSH, and under macOS `/bin/sh`. A
 check by hand found the same under bash and zsh.
 
+bash is slow to read large content, though. It reads a script on a pipe one byte at a time, so it never reads past a
+command into that command's stdin. So a host whose `sh` is bash, like a Mac or Fedora, takes about 2.5 seconds to read
+10 MB of content, where dash takes about 60 ms. zsh is as slow as bash. Decoding the base64 takes about 15 ms. A faster path is open
+(see [the roadmap](./roadmap.md#files-over-10-mb)).
+
 ### How other tools write files
 
 Researched from the source of Ansible, pyinfra, Salt, Chef, Puppet, and cdist:

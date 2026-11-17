@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test"
 import type { Result } from "ts-explicit-errors"
 import { isErr, messageChain } from "ts-explicit-errors"
 
-import { CONTENT_LIMIT_BYTES, createRandomBytes } from "#core/__tests__/content.ts"
+import { createRandomBytes } from "#core/__tests__/content.ts"
 import { toBytes } from "#core/session/handlers/shared/filesystem/bytes.ts"
 import { createRecordingTransport } from "#core/session/recorder/commands.ts"
 import type { CommandRecord } from "#core/session/recorder/records.ts"
@@ -53,7 +53,8 @@ describe("createShell with input", () => {
 
   it("should succeed with an empty stderr when the command never reads its stdin", async () => {
     const { shell } = createLocalShell()
-    const input = createRandomBytes(CONTENT_LIMIT_BYTES)
+    // Send more than the 64 KB pipe buffer, so `base64` is still writing when `true` exits.
+    const input = createRandomBytes(1_000_000)
 
     expect(await shell.inspect("true", { input })).toStrictEqual({ stdout: "", stderr: "", exitCode: 0 })
   })

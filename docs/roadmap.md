@@ -559,6 +559,9 @@ Every agentless tool uses SFTP or scp instead, which streams. A streaming path f
 to a temp file in the destination's directory as the SSH user, which works without `sudo`. With `sudo`, it needs a
 user-writable place and a root `mv`, the two-hop step the heredoc avoids. Add it when a port needs a large file.
 
+A streaming path would also be faster on a host whose `sh` is bash, which reads the script one byte at a time, so 10 MB
+of content takes it about 2.5 seconds (see [Transport](./transport.md#file-writes)).
+
 ### `fsync` before the rename
 
 The write doesn't `fsync` the temp file before the rename (see [Transport](./transport.md#file-writes)). After a crash

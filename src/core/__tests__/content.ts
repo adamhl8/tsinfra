@@ -5,6 +5,10 @@ import { CryptoHasher } from "bun"
 /** The most content `file` or `input` takes. */
 export const CONTENT_LIMIT_BYTES = 10_000_000
 
+// Give a test that sends `CONTENT_LIMIT_BYTES` through the local `sh` more than the default 5 seconds.
+// macOS `/bin/sh` is bash, which reads a script on a pipe one byte at a time, so 10 MB takes it about 2.5 seconds.
+export const CONTENT_LIMIT_TIMEOUT_MS = 20_000
+
 // Fill the bytes in chunks, because `getRandomValues` takes at most 65,536 bytes at a time.
 const RANDOM_CHUNK_BYTES = 65_536
 

@@ -10,7 +10,7 @@ import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
 import { messageChain } from "ts-explicit-errors"
 
-import { CONTENT_LIMIT_BYTES, createRandomBytes, hashBytes } from "#core/__tests__/content.ts"
+import { CONTENT_LIMIT_BYTES, CONTENT_LIMIT_TIMEOUT_MS, createRandomBytes, hashBytes } from "#core/__tests__/content.ts"
 import {
   castInvalid,
   createFakeSudoSession,
@@ -591,14 +591,18 @@ describe("h.file in apply", () => {
 
   // Check the write on the local `sh`, which on a Mac is macOS `/bin/sh`.
   // The Docker tests cover dash and busybox, but no test reaches a Mac over ssh.
-  it("should write 10 MB of binary content intact", async () => {
-    const filePath = await createFilePath()
-    const bytes = createRandomBytes(CONTENT_LIMIT_BYTES)
-    const { host: h } = await createSession("apply")
+  it(
+    "should write 10 MB of binary content intact",
+    async () => {
+      const filePath = await createFilePath()
+      const bytes = createRandomBytes(CONTENT_LIMIT_BYTES)
+      const { host: h } = await createSession("apply")
 
-    expect(await fileOrMessage(h, filePath, bytes)).toMatchObject({ changed: true })
-    expect(hashBytes(await bun.file(filePath).bytes())).toBe(hashBytes(bytes))
-  })
+      expect(await fileOrMessage(h, filePath, bytes)).toMatchObject({ changed: true })
+      expect(hashBytes(await bun.file(filePath).bytes())).toBe(hashBytes(bytes))
+    },
+    CONTENT_LIMIT_TIMEOUT_MS,
+  )
 
   it("should write to a path with spaces and quotes", async () => {
     const filePath = path.join(await makeTempDir(), "it's a file.conf")
