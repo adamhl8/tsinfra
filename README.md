@@ -243,14 +243,16 @@ it worked. `plan` only runs `check`.
   - `true`: `check` exits 0 (or the function returns `true`)
   - `false`: `check` exits non-zero (or the function returns `false`)
   - A string: compared with `check`'s stdout (or the function's return value). Trailing newlines are ignored.
-  - A list of strings: compared with `check`'s lines, blank ones left out (or the function's array), as a set, so order
-    and duplicates don't count. `[]` means nothing is left to do.
+  - A list of strings: compared in order with `check`'s lines, blank ones left out (or the function's array), so a
+    reorder or a duplicate counts. `[]` means nothing is left to do.
+  - A `Set` of strings: compared the same way, but as a set, so order and duplicates don't count. A check function
+    returns a `Set`.
   - A record of string keys and string, number, or boolean values: compared with the function's object by key, each
     value exactly, so `8080` never matches `"8080"`. It needs a check function.
 - `check`: a command, or an async function given `{ read, inspect }` that returns the answer
 - `fix`: a command, or an async function given `{ exec, inspect }`. The function also gets what `check` found:
-  `{ got }` for a string `want`, `{ missing, extra }` for a list, and `{ missing, extra, changed }` for a record. It
-  only runs in `apply`.
+  `{ got }` for a string or a list `want`, `{ missing, extra }` for a set, and `{ missing, extra, changed }` for a
+  record. It only runs in `apply`.
 - `verify` (default: `true`): run `check` again after `fix`, and fail if the state still differs
 - `env`, `secretEnv`: see [Values and secrets](#values-and-secrets)
 - `needs`: see [Needs](#needs)
@@ -270,35 +272,61 @@ How a change shows depends on `want`:
 
 - A boolean shows only the step's name.
 - A string shows `got:` and `want:` rows. For a multi-line value, the rows hold only the lines that differ.
-- A list shows `missing:` and `extra:` rows.
+- A list shows a diff, with `-` for an item only the host has and `+` for one only `want` has.
+- A set shows `missing:` and `extra:` rows.
 - A record shows a row per key that differs.
 
-**A list** is for a set of things, like packages:
+**A set** is for a set of things, like packages:
 
 ```ts
 await h.ensure("Install packages", {
-  want: ["fd-find", "jq", "ripgrep"],
+  want: new Set(["fd-find", "jq", "ripgrep"]),
   check: "dpkg-query -W -f='${Package}\\n' fd-find jq ripgrep 2>/dev/null",
   fix: async ({ exec }, { missing }) => {
     await exec(`sudo apt-get install -y ${missing.join(" ")}`)
   },
+})
+```
+
+```
+  ~ change: (ensure) Install packages
+      missing: ripgrep
+```
+
+- It's compared as a set, so order and duplicates don't count, and neither side needs sorting.
+- A command `check`'s output is split into lines, and blank lines are left out.
+- `missing` is what `want` has that the check didn't find. `extra` is what the check found that `want` doesn't have.
+
+**A list** is for items in order, like search domains:
+
+```ts
+await h.ensure("Set the search domains", {
+  want: ["lan", "home.arpa"],
+  check: async ({ read }) => (await read("resolvectl domain eth0")).split(" ").slice(1),
+  fix: "sudo resolvectl domain eth0 lan home.arpa",
 })
 
 await h.ensure("Upgrade brew packages", { want: [], check: "brew outdated --quiet", fix: "brew upgrade" })
 ```
 
 ```
-  ~ change: (ensure) Install packages
-      missing: ripgrep
+  ~ change: (ensure) Set the search domains
+      ──────────
+      -home.arpa
+       lan
+      +home.arpa
+      ──────────
   ~ change: (ensure) Upgrade brew packages
-      extra: node
-             python@3.13
+      ────────────
+      -node
+      -python@3.13
+      ────────────
 ```
 
-- It's compared as a set, so order and duplicates don't count, and neither side needs sorting.
-- A command `check`'s output is split into lines, and blank lines are left out.
-- `missing` is what `want` has that the check didn't find. `extra` is what the check found that `want` doesn't have.
-- `want: []` is for a check that lists what's left to do, like outdated packages, so everything it lists is `extra`.
+- A reorder shows as the item leaving one place and arriving in another.
+- The fix gets `{ got }`, the host's list, because `missing` and `extra` can't describe a reorder.
+- `want: []` is for a check that lists what's left to do, like outdated packages, so everything it lists shows as a
+  `-` line.
 
 **A record** of string keys and string, number, or boolean values is for names with a value each, like packages on
 a version each:

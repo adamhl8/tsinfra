@@ -94,13 +94,13 @@ await docker(h, { present: false })
 
 ## The state you want, or what's left to do
 
-A `want` for several things, like packages, is a list or a record, and it takes one of two shapes. Either it's the
-state you want, and the check returns the host's state the same way, or it's `[]`, and the check lists what's left to
-do. Prefer the state you want, because `plan` then shows exactly which items the fix will change.
+A `want` for several things, like packages, is a set, a list, or a record, and it takes one of two shapes. Either it's
+the state you want, and the check returns the host's state the same way, or it's `[]`, and the check lists what's left
+to do. Prefer the state you want, because `plan` then shows exactly which items the fix will change.
 
 **Compute the state you want** whenever you can work it out before the step. `want` is a plain value, so it can come
-from a constant, a `fetch` on the control machine, or an `h.read` before the step. A list suits a set of names, like
-packages that should be installed. An object suits names with a value each, like packages on a version each. For
+from a constant, a `fetch` on the control machine, or an `h.read` before the step. A `Set` suits a set of names, like
+packages that should be installed. A record suits names with a value each, like packages on a version each. For
 global Bun packages, each on the newest version its spec allows:
 
 ```ts
@@ -143,7 +143,7 @@ the same name-to-version shape. `plan` shows a row per package that differs:
 [Running the latest container images](#running-the-latest-container-images)). Writing out the state you want there
 means asking for every item's newest version, which is slower and longer than the tool's own answer. The fix runs only
 while the list isn't empty, and the check after the fix confirms the list emptied. A boolean would only say
-"something". `plan` shows the list under `extra:`, because you want none of it.
+"something". `plan` shows each item as a `-` line, because you want none of it.
 
 **List what's left when the state you want depends on an earlier step.** `h.read` runs when the script reaches it and
 takes no `needs`, so in `plan` it reads the host before an earlier change is applied. A version from a registry doesn't

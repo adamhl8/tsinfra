@@ -702,17 +702,23 @@ exists for.
 ```ts
 // `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string.
 type EnsureOptions<
-  T extends boolean | string | readonly string[] | Readonly<Record<string, string | number | boolean>>,
+  T extends
+    | boolean
+    | string
+    | readonly string[]
+    | ReadonlySet<string>
+    | Readonly<Record<string, string | number | boolean>>,
 > = {
   // `true` means exit 0, or a function returning true, is already right. `false` means the opposite.
   // A string is compared to the command's stdout, or the function's value.
-  // A list is compared to the command's lines, or the function's array, as a set.
+  // A list is compared to the command's lines, or the function's array, in order.
+  // A set is compared to the command's lines, or the function's `Set`, as a set.
   // A record is compared to the function's object, by key.
   want: T
   // A record `want` takes only a function, because a command's output has no keys.
   check: string | ((tools: ReadTools) => Promise<T>)
-  // A function also gets what the check found: `{ got }` for a string `want`, `{ missing, extra }` for a list, and
-  // `{ missing, extra, changed }` for a record. See `FixDifference`.
+  // A function also gets what the check found: `{ got }` for a string or a list `want`, `{ missing, extra }` for a
+  // set, and `{ missing, extra, changed }` for a record. See `FixDifference`.
   fix: string | ((tools: ChangeTools, difference: FixDifference<T>) => Promise<void>)
   verify?: boolean // default true
   env?: Record<string, string> // see EnvOptions
@@ -741,8 +747,8 @@ await h.ensure("Remove the old user", { want: false, check: "id olduser", fix: "
 Trailing newlines are stripped from both (the way `$(cmd)` does), then the two are compared exactly. Stripping `want`
 too means a value built from a template literal that ends in a newline still matches. When they differ, the report shows
 how under the step's status line, in `plan` and `apply`, as a `got:` and a `want:` row. For a multi-line value, the rows
-hold only the lines that differ (see [CLI](./cli.md#how-the-report-is-built)). For a list of things, like packages, use
-a list `want`.
+hold only the lines that differ (see [CLI](./cli.md#how-the-report-is-built)). For several things, like packages, use
+a set `want`, or a list `want` when their order matters.
 
 ```ts
 await h.ensure("Start Sonarr", {
@@ -752,36 +758,76 @@ await h.ensure("Start Sonarr", {
 })
 ```
 
-**A list `want`** is compared as a set, so order and duplicates don't count, and neither side needs sorting. A command
-check's stdout is split into lines, and its blank lines, empty or only whitespace, are left out. Every other line is an
-item as it is, so a trailing space counts. A check function returns an array. `want: []` means nothing is left to do,
-for a check that lists what's left, like outdated packages. A readonly array works, like a constant or `as const`. A
-list where order matters, like `PATH` entries, stays a string.
+**A set `want`**, a `Set` of strings, is compared as a set, so order and duplicates don't count, and neither side
+needs sorting. It suits a set of names, like packages that should be installed. A command check's stdout is split into
+lines, and its blank lines, empty or only whitespace, are left out. Every other line is an item as it is, so a trailing
+space counts. A check function returns a `Set`. Returning an array is a type error, and refused before it's compared for
+a script that gets past the types, because the check's type follows `want`'s, as it does for every `want`. An empty
+`new Set()` needs no type argument, and a readonly set works, like a constant.
 
 ```ts
 await h.ensure("Install packages", {
-  want: ["fd", "jq", "ripgrep"],
+  want: new Set(["fd", "jq", "ripgrep"]),
   check: "dpkg-query -W -f='${Package}\\n' fd jq ripgrep 2>/dev/null",
   fix: async ({ exec }, { missing }) => {
     await exec(`sudo apt-get install -y ${missing.join(" ")}`)
+  },
+})
+```
+
+The report shows a `missing:` row with what `want` has that the check didn't find, in `want`'s order, then an `extra:`
+row with what the check found that `want` doesn't have, in the check's order. A side with nothing has no row. They're
+named for how the host compares with `want`, not for what the fix does, because tsinfra doesn't know that.
+
+```
+  ~ change: (ensure) Install packages
+      missing: ripgrep
+```
+
+**A list `want`**, an array of strings, is compared in order, so it matches only the same items in the same order, and
+a duplicate counts. It suits items whose order matters, like search domains or `PATH` entries. A command check's lines
+are read the same way as a set's, and a check function returns an array. A readonly array works, like a constant or
+`as const`.
+
+```ts
+await h.ensure("Set the search domains", {
+  want: ["lan", "home.arpa"],
+  check: async ({ read }) => (await read("resolvectl domain eth0")).split(" ").slice(1),
+  fix: async ({ exec }) => {
+    await exec("sudo resolvectl domain eth0 lan home.arpa")
   },
 })
 
 await h.ensure("Upgrade brew packages", { want: [], check: "brew outdated --quiet", fix: "brew upgrade" })
 ```
 
-The report shows a `missing:` row with what `want` has that the check didn't find, in `want`'s order, then an `extra:`
-row with what the check found that `want` doesn't have, in the check's order. A side with nothing has no row. They're
-named for how the host compares with `want`, not for what the fix does, because tsinfra doesn't know that. A list of
-what's left shows under `extra:`, because you want none of it.
+The report shows a diff from the host's list to the wanted one, framed like a file's: an item only the host has gets
+`-`, an item only `want` has gets `+`, and one unchanged item on each side of a change shows plain. A reorder reads as
+an item leaving one place and arriving in another, which `missing:` and `extra:` rows can't show, because they'd list
+the moved item under both without saying where it sits. Each item follows the value rules, so an empty one shows as
+`(empty)` and one with a trailing space shows quoted (see [CLI](./cli.md#how-the-report-is-built)).
 
 ```
-  ~ change: (ensure) Install packages
-      missing: ripgrep
+  ~ change: (ensure) Set the search domains
+      ──────────
+      -home.arpa
+       lan
+      +home.arpa
+      ──────────
   ~ change: (ensure) Upgrade brew packages
-      extra: node
-             python
+      ───────
+      -node
+      -python
+      ───────
 ```
+
+`want: []` means nothing is left to do, for a check that lists what's left, like outdated packages. An empty list is
+the same in order or as a set, and each item the check found shows as a `-` line, because you want none of it.
+`want: new Set()` does the same, with an `extra:` row.
+
+**The type picks the comparison, not an option.** An array has an order and can hold an item twice, and a `Set` has
+neither, so the value's type already says which comparison the script means. An `ordered: true` option would say it
+again, and would leave an array meant as ordered compared as a set by default.
 
 **A record `want`**, an object of string keys and string, number, or boolean values, compares values by key, like a package
 name to its version, or a config's settings. Key order doesn't count, and each value is compared exactly, so a number
@@ -829,8 +875,8 @@ input, resolve them to versions for `want` before the step, as above, and have t
 A command check is shorthand for calling `inspect` in a check function, so a non-zero exit is an answer, not a failure.
 `read` is the one that fails on a non-zero exit.
 
-A broken check must not look converged. If the command exits non-zero and its output still matches `want`, as a string or
-as a list, the step fails
+A broken check must not look converged. If the command exits non-zero and its output still matches `want`, as a string,
+a list, or a set, the step fails
 instead of reporting `unchanged`. A check whose non-zero exit is legitimate (`systemctl is-active` exits 3 for inactive)
 already produces output that differs from `want`, so this only catches the broken case.
 
@@ -948,8 +994,8 @@ fix: async ({ exec }) => {
 The fix function only runs in `apply`, so it can change things and do work on the control machine.
 
 **What the check found.** A fix function gets a second argument after its tools, with what the check found: `{ got }` for
-a string `want`, what the check answered, `{ missing, extra }` for a list, and `{ missing, extra, changed }` for a
-record, the same items and keys the report shows. A record's `missing` maps a key to its wanted value, `extra` maps a
+a string or a list `want`, what the check answered, `{ missing, extra }` for a set, and `{ missing, extra, changed }`
+for a record, the same items and keys the report shows. A record's `missing` maps a key to its wanted value, `extra` maps a
 key to its current value, and `changed` maps a key to `{ got, want }`. A fix can act on it without reading the host
 again:
 
@@ -964,10 +1010,12 @@ await h.ensure("Update Caddy", {
 ```
 
 - **It holds only what the fix can't work out from `want`.** `want` is already in the script, so a string comparison,
-  which is plain equality, adds only `got`. A list's `got` isn't passed, because it's `want` minus `missing`, plus
+  which is plain equality, adds only `got`. A set's `got` isn't passed, because it's `want` minus `missing`, plus
   `extra`, and passing it would only invite redoing the comparison. A record's `got` isn't passed for the same reason.
+  A list's is, because `missing` and `extra` can't describe a reorder: with every item there but out of order, both
+  would be empty.
 - **A boolean `want` gives nothing more,** because `got` is just `!want`. A fix function that declares a second argument
-  for one is a type error. A `want` typed as the full `Want` union gets the union of the three.
+  for one is a type error. A `want` typed as the full `Want` union gets the union of the four.
 - **It's a second argument, not part of the tools,** because the tools are what a fix can call, and this is data about
   one comparison.
 - **Only a fix function gets it.** A command fix stays the form for simple cases, and a run's function gets only its

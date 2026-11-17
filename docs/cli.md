@@ -344,7 +344,14 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   under both. More than 15 differing lines show "N lines differ", which suggests `--verbose`, and lines that take
   longer than 200 ms to compare show "values took too long to compare", which suggests `-vv`. A boolean or an
   exit code shows nothing, because the step's name says what yes and no mean.
-- **A list `ensure` value** shows as a `missing:` row, with what `want` has that the check didn't find, in `want`'s
+- **A list `ensure` value** shows as a diff from the host's list to the wanted one: an item only the host has gets
+  `-`, an item only `want` has gets `+`, and one unchanged item on each side of a change shows plain. It's framed,
+  ruled between hunks, and limited like a `file` diff, with the same notes for a long diff and a slow one, because it's
+  as unlabeled as one, so the rules set it apart from the rows around it. It has no line numbers, because a check's
+  output has no lines for them to point to. Each item follows the rules in Values, in the current color after a `-`,
+  the wanted color after a `+`, and the terminal's own color when unchanged, so an empty item shows as `(empty)` and a
+  trailing space shows quoted.
+- **A set `ensure` value** shows as a `missing:` row, with what `want` has that the check didn't find, in `want`'s
   order, then an `extra:` row, with what the check found that `want` doesn't have, in the check's order. A side with
   nothing has no row. Each item follows the rules in Values, in the wanted color for `missing` and the current color for
   `extra`. More than 15 differing items show "N items differ", which suggests `--verbose`.
