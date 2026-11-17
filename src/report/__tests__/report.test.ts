@@ -572,6 +572,20 @@ describe("renderHostBlock for a dir step", () => {
   })
 })
 
+describe("renderHostBlock for a step that would change a set", () => {
+  it("should show missing items, then extra ones, like a list", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Install packages", {
+        want: new Set(["jq", "fd"]),
+        check: String.raw`printf 'zsh\nfd\n'`,
+        fix: "true",
+      })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      missing: jq", "      extra:   zsh"])
+  })
+})
+
 describe("renderHostBlock for a step that would change a record", () => {
   it("should show a row per key that differs, in want's order, then the extra keys, with (none) for an absent side", async () => {
     const hostBlock = await formatBlock(async (h) => {

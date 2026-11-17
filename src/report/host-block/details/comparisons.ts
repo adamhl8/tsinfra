@@ -13,7 +13,7 @@ const toFileComparisonDetails = (values: FileComparisonValues, from: Verbosity):
 /**
  * Returns how a value differs, for a step that changes it or a step that failed to. It takes the level its caller
  * decides, because the same values show from 0 on a change and from 1 before a failed fix. Takes the step's kind,
- * because a `dir` step records an object `ensure`'s values, but shows its mode like a file's.
+ * because a `dir` step records a record `want`'s values, but shows its mode like a file's.
  */
 export const toComparisonValuesDetails = (values: ComparisonValues, stepKind: StepKind, from: Verbosity): Detail[] => {
   if (values.kind === "file") return toFileComparisonDetails(values, from)

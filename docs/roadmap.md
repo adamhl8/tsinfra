@@ -6,6 +6,7 @@ rest of the docs describe tsinfra as it is.
 <!-- toc -->
 
 - [Next](#next)
+  - [Ordered lists and sets in `want`](#ordered-lists-and-sets-in-want)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
   - [Live progress](#live-progress)
@@ -19,7 +20,7 @@ rest of the docs describe tsinfra as it is.
   - [What `plan` output should look like](#what-plan-output-should-look-like)
   - [Interactive commands](#interactive-commands)
   - [Published, or personal](#published-or-personal)
-  - [Helpers worth shipping](#helpers-worth-shipping)
+  - [Integrations worth shipping](#integrations-worth-shipping)
   - [Fact helpers](#fact-helpers)
   - [Sending data to a command](#sending-data-to-a-command)
   - [Following symlinks in `file`](#following-symlinks-in-file)
@@ -28,7 +29,8 @@ rest of the docs describe tsinfra as it is.
   - [Backups of replaced files](#backups-of-replaced-files)
   - [Steps side by side within a host](#steps-side-by-side-within-a-host)
 - [Ideas](#ideas)
-  - [Helper families](#helper-families)
+  - [Integration ideas](#integration-ideas)
+  - [Integration notes](#integration-notes)
   - [Maybe later](#maybe-later)
   - [Removed resources](#removed-resources)
 - [Rejected](#rejected)
@@ -37,7 +39,189 @@ rest of the docs describe tsinfra as it is.
 
 ## Next
 
-Nothing is queued. The next piece comes from [Planned](#planned).
+### Ordered lists and sets in `want`
+
+A list `want`, an array, is compared in order, and a set `want`, a `Set`, is compared as a set. The JS type already says which one a
+script means: an array has an order and can hold an item twice, and a `Set` has neither. Today every array is compared
+as a set, so a script that already has its items in the order it wants has to join them into a string `want` to get
+that order checked.
+
+```ts
+await h.ensure("Install packages", {
+  want: new Set(["fd", "jq", "ripgrep"]),
+  check: "dpkg-query -W -f='${Package}\\n' fd jq ripgrep 2>/dev/null",
+  fix: async ({ exec }, { missing }) => {
+    await exec(`sudo apt-get install -y ${missing.join(" ")}`)
+  },
+})
+
+await h.ensure("Set the search domains", {
+  want: ["lan", "home.arpa"],
+  check: async ({ read }) => (await read("resolvectl domain eth0")).split(" ").slice(1),
+  fix: async ({ exec }) => {
+    await exec("sudo resolvectl domain eth0 lan home.arpa")
+  },
+})
+```
+
+**A set `want`** behaves the way a list `want` does today:
+
+- It's compared as a set, so order and duplicates don't count, and neither side needs sorting.
+- A command check's stdout is split into lines, with blank lines left out, and the lines are compared as a set.
+- A check function must return a `Set`. Returning an array for a set `want` is a type error, and a validation error
+  at runtime: `it's of type 'array', but want is of type 'Set'`. That keeps the check's type tied to `want`'s, as it is
+  for every other `want`, and it can be loosened later to take an array too if writing `new Set(...)` in checks gets
+  tedious.
+- The fix function gets `{ missing, extra }`, as arrays, in the same orders as today.
+- The report shows `missing:` and `extra:` rows, as today.
+
+**A list `want`** is compared in order:
+
+- The two lists match when they have the same items in the same order, so a reorder or a duplicate counts.
+- A command check's stdout is split into lines, with blank lines left out, as today, and the lines are compared in
+  order.
+- A check function returns an array.
+- The fix function gets `{ got }`, the host's list, like a string `want`'s fix gets the host's string, because
+  `missing` and `extra` can't describe a reorder. When every item is there but out of order, both would be empty.
+- The report shows a diff from the host's list to the wanted one, like `file`'s but without line numbers: an item
+  only the host has gets `-`, an item only `want` has gets `+`, and one unchanged item on each side of a change shows
+  plain. A move reads as the item leaving one place and arriving in another, which `got:` and `want:` rows can't show,
+  because they'd list the moved item under both without saying where it sits. It has no line numbers, because a
+  check's output has no lines for them to point to, the reason a string `want` isn't shown as a diff.
+
+```
+  ~ change: (ensure) Set the search domains
+      ────────────
+      -home.arpa
+       lan
+      +home.arpa
+      ────────────
+```
+
+- **The diff frames and limits like `file`'s.** A rule goes above and below it, and between hunks when unchanged
+  items are skipped. Past 15 lines, counting the rules between hunks, it shows `long diff (N lines)`, which suggests
+  `--verbose`, and past 200 ms it shows `diff took too long to compute`, which suggests `-vv`.
+- **Each item follows the rules in [CLI](./cli.md)'s Values,** like a `got:` or `want:` row's, so an empty item shows
+  as `(empty)` and one with a trailing space shows quoted, like `'ripgrep '`, before it gets its `-`, `+`, or space.
+
+**`want: []`** stays the way to say "nothing is left to do", because an empty list is the same in order or as a set.
+What changes is how it reads: the report shows each item the check found as a `-` line, and the fix gets `{ got }`
+instead of `{ extra }`. `want: new Set()` keeps the `extra:` rows and `{ extra }`, for a script that would
+rather have them.
+
+**Why the type picks it, not an option.** An `ordered: true` option would work, but it says again what the value's type
+already says, and it would leave an array that the script meant as ordered compared as a set by default. A `Set` is
+the type JS has for "these items, no order, no duplicates", and a script holding a list of packages either has one or
+can make one with `new Set(...)`.
+
+**Costs:**
+
+- **It changes what an existing list `want` means.** A step whose check returns its items in the host's order, like
+  `dpkg-query`, starts reporting drift until its `want` becomes a `Set`. The docs' package examples change with it.
+- **A `Set` isn't a record.** ArkType's `Record<string, ...>` accepts a `Set`, because it has no keys of its own, so
+  `getWantKind` sorts a `Set` out before it reaches the record kind, and `recordWantSchema` refuses any object that
+  isn't plain.
+- **ArkType has no "set of strings" type,** so the schema is `instanceOf(Set)`, narrowed to every item being a string.
+
+**Implementation plan.** Each numbered piece is one commit, reviewed before the next. Each adds only code something
+uses, so it passes knip on its own. Nothing here touches transports, sudo, or writes, so the Docker suite isn't needed.
+
+#### 1. A set `want`
+
+Arrays keep being compared as sets in this piece, so nothing a script sees changes except that a `Set` now works.
+
+- **1a.** Rename the set comparison for what it is. `git mv` `ensure/comparison/list.ts` to `set.ts`, and rename
+  `compareLists` to `compareSets`, `ListDifference` to `SetDifference`, and `ListComparisonValues` to
+  `SetComparisonValues`, with `kind: "set"`. `compareSets` takes any `Iterable<string>` on each side, so it takes an
+  array or a `Set`. Move `toListItems` to `comparison.ts`, next to `compareCommandOutput`, its only user, because it
+  reads a command's output and isn't a set's. In the report, rename `formatListValues` to `formatSetValues` and
+  `ListValues` to `SetValues`, and match on `"set"`. Arrays still go through `compareSets`, so every existing test
+  passes unchanged.
+- **1b.** Add `setWantSchema` in `set.ts`: `type.instanceOf(Set)`, narrowed so every item is a string, with a problem
+  that names the first item that isn't, like a record `want`'s bad key. Type it as `SetWant`, a `ReadonlySet<string>`,
+  so a `Set` built with `new Set([...])` or held in a constant works.
+- **1c.** Add `SetWant` to `Want`. In `want.ts`, route a `Set` to `setWantSchema` in the narrow that today picks
+  between the list and record schemas, and add "a Set of strings" to `wantSchema`'s problem text.
+- **1d.** Make `isRecord` return false for a `Set`, so a `Set` never reaches `compareRecords` and a command check isn't
+  refused for a set `want`. The record schemas need no change: `wantSchema` routes a `Set` to `setWantSchema`, and a
+  `Set` that passes `checkFnValueSchema`'s record pair falls through to a type mismatch in `compareFnValue`.
+- **1e.** Make `describeType` name an object that isn't plain by its constructor, like `Set`, so a function returning
+  an array for a set `want` fails with `it's of type 'array', but want is of type 'Set'`. Comparing a set `want` is
+  already built, as the set case of `compareFnValue` and `compareCommandOutput`.
+- **1f.** Type the fix. Add a `[T] extends [SetWant]` branch to `FixDifference` that gives `SetDifference`, before the
+  record branch, and add `SetDifference` to the fallback union. Return `{ missing, extra }` for `"set"` in
+  `toFixDifference`. `Check<T>` needs no change, because a `Set` isn't a `RecordWant`, but a test confirms it.
+- **1g.** Update `EnsureOptions`'s JSDoc on `want` and `Want`'s JSDoc to name a `Set`.
+- **1h.** Test in `ensure.test.ts`, in a new `h.ensure with a set want` describe:
+  - a command check's lines compared as a set, with order and duplicates not counting
+  - a function check returning a `Set`
+  - a function check returning an array fails validation with the message above, and its type is an error, shown with
+    `@ts-expect-error` like the existing fix typing test
+  - a `Set` holding a number fails validation, naming it
+  - a set `want` takes a command check, so it isn't read as a record `want`
+  - the fix gets `{ missing, extra }`
+  - In `report.test.ts`, a set `want` shows `missing:` and `extra:` rows.
+
+#### 2. Ordered arrays
+
+- **2a.** Change `compareLists` in `ensure/comparison/list.ts` to compare two arrays item by item. They
+  match when they're the same length with each item equal. Its values are `ListComparisonValues`,
+  `{ kind: "list", got, want }`, and its difference is `ListDifference`, `{ got }`. The list case of `compareFnValue`
+  and `compareCommandOutput` already calls it. Update `listWantSchema`'s JSDoc to say "in order".
+- **2b.** Change `FixDifference`'s list branch to `ListDifference`, and return `{ got }` for `"list"` in
+  `toFixDifference`. Update the JSDoc on `FixDifference`, which says an array's `got` isn't passed.
+- **2c.** Split `formatDiff` in `report/format/details/diff.ts` into making a diff's hunk lines and framing them, a
+  refactor that leaves `file`'s output byte for byte the same:
+  - Making the lines stays per caller. `file` keeps `structuredPatch` on its two strings, `formatHunk`, and its
+    numbered gutter, unchanged.
+  - Framing becomes a shared function that takes the hunks' lines: the rule between hunks and around the diff, as wide
+    as the widest line, and the `maxLines` check that becomes the long diff note. The slow diff note stays with each
+    caller's timeout, through the same `formatSlowDiffNote`.
+  - Run `file`'s existing report tests before going on, because they prove the refactor changed nothing.
+- **2d.** Add a list diff to `diff.ts`, on jsdiff's `diffArrays`, not `structuredPatch`. `structuredPatch` takes only
+  strings, so the items would be joined with newlines, and an item a function returned with a newline in it would
+  become two lines, and the item boundaries the Values rules need would be lost. `diffArrays` diffs the items as they
+  are and takes the same `timeout`.
+  - Add the hunking `structuredPatch` does for strings: walk `diffArrays`' changes, keep each changed item and
+    `DIFF_CONTEXT_LINES` unchanged items on each side, and start a new hunk where unchanged items are skipped.
+  - Format each item by the Values rules, in `report/format/elements/values.ts`: a removed item with
+    `gotValueElement` after a `-` in the current color, an added one with `wantValueElement` after a `+` in the
+    wanted color, and an unchanged one after a space with a new element that applies the rules with no color, like
+    `diffLineElement` leaves a `file` diff's unchanged line. Not `diffLineElement` itself, because it colors a whole
+    line, and the Values rules leave the quotes around edge whitespace unstyled. Give it no gutter.
+  - Pass the hunks' lines to the shared framing from 2c, so its notes and limits are `file`'s.
+- **2e.** Replace the `"list"` branch of `formatEnsureValues` with the list diff. `formatSetValues` from piece 1 keeps
+  the `missing:` and `extra:` rows, and `formatStringValues` keeps its `got:` and `want:` rows on `diffArrays`,
+  unchanged.
+- **2f.** Move the existing array tests that rely on set behavior to `Set`s, in `ensure.test.ts` and `report.test.ts`.
+  Then test, in `h.ensure with a list want`:
+  - a command check's lines and a function's array compared in order
+  - a reorder isn't in sync
+  - a duplicate counts
+  - the fix gets `{ got }`
+  - `want: []` still passes for an empty check and fails for one with items
+  - In `report.test.ts`, the list diff for:
+    - a reorder, as a `-` line and a `+` line around the item it moved past
+    - an added item and a removed item, each with its one unchanged item of context
+    - a long list with two changes far apart, as two hunks with a rule between them
+    - an empty item and one with a trailing space, formatted by the Values rules
+    - `want: []`, as a `-` line per item
+    - more than 15 lines, as the long diff note, and the full diff with `--verbose`
+- **2g.** In `report-preview.ts`, make the package step a `Set`, keep the `want: []` step to show its `-` lines, and
+  add an ordered list step whose items are out of order.
+
+#### 3. Docs
+
+- **3a.** [Steps](./steps.md): split the list `want` section into "A set `want`" and "A list `want`", with their
+  report examples. Drop "A list where order matters, like `PATH` entries, stays a string", because an ordered list now
+  suits it. Update the `EnsureOptions` type block, its comments on `want` and `fix`, and the `want: []` paragraph.
+- **3b.** The README's `ensure` section: the `want` and `fix` bullets, the report bullets, and the "A list" section,
+  which becomes a `Set` with a short ordered list example after it.
+- **3c.** [CLI](./cli.md): split the list `ensure` value bullet into a `Set`'s `missing:` and `extra:` rows and a list's
+  diff, and say the list diff frames and limits like `file`'s but has no line numbers, and why.
+- **3d.** [Recipes](./recipes.md): "The state you want, or what's left to do" says a `Set` suits a set of names, and
+  `want: []` shows what's left as `-` lines.
+- **3e.** Delete this roadmap entry, and set Next back to "Nothing is queued".
 
 ## Planned
 
@@ -313,14 +497,18 @@ itself, which conflicts with hosts running in parallel and with `BatchMode`. Set
 The package is set up for npm (`exports`, `bin`, publint, release-it). If tsinfra stays personal tooling for
 `~/homelab`, the packaging work is optional. If it is published, it stays.
 
-### Helpers worth shipping
+### Integrations worth shipping
 
-Candidates from the homelab: an apt package step, brew bundle, a systemd unit with reload, a Docker Compose project, and
-`put_files` (a map of local files to destinations). Start with them as functions in `~/homelab/lib`, and move one into
-tsinfra only once two hosts use it the same way. [Helper families](#helper-families) has the candidates other tools
-suggest.
+An integration is a set of functions that take `h` and call steps to set up one specific program, service, or piece
+of config, like apt packages or systemd units. The candidates are in [Integration ideas](#integration-ideas). Start
+each as a function in `~/homelab/lib`, and move one into tsinfra only once two hosts use it the same way.
 
-Each family of shipped helpers gets its own export path, like `tsinfra/apt` or `tsinfra/systemd`, so a script imports
+An integration configures the host itself: its packages, services, files, users, and settings. It doesn't manage
+objects inside an app, like a database's users, or resources behind an API, like DNS records, because those belong to
+the app's own tooling or to tools like Terraform. And no integration installs and runs one app for you, like a Postgres
+or Tailscale module. A script does that with the general integrations.
+
+Each family of shipped integrations gets its own export path, like `tsinfra/apt` or `tsinfra/systemd`, so a script imports
 only the families it uses. The root, `tsinfra`, stays the core API: `host`, and every type a script annotates with. The
 file mode constants stay in the root too, because they're values for a core step's option, and their types have to be
 there for `FileOptions`. A subpath is an entry file like `src/facts.ts`, an `exports` entry in `package.json` with
@@ -445,28 +633,154 @@ Features other tools have that could fit tsinfra, from a survey of pyinfra, Ansi
 cdist, Rex, Nix with home-manager and nix-darwin, mgmt, chezmoi, dotbot, yadm, Comtrya, Fabric, Pulumi, and Terraform
 with OpenTofu, in November 2026. None is decided.
 
-### Helper families
+### Integration ideas
 
-Shipped as subpath exports once two hosts use one the same way (see
-[Helpers worth shipping](#helpers-worth-shipping)):
+Integrations that might ship (see [Integrations worth shipping](#integrations-worth-shipping) for what one is). Each is
+weighed on its own, and none is decided. One that
+ships follows the rule, scope, and packaging in [Integrations worth shipping](#integrations-worth-shipping). An idea with notes
+so far links to them in [Integration notes](#integration-notes). "Maybe" marks the ones less likely to be worth it. Other tools'
+catalogs suggested most of these (pyinfra's operations, Ansible's modules, Salt's states, Chef's resources, cdist's
+types, nix-darwin, and home-manager).
 
-- **`tsinfra/files`:** a managed block between marker lines, like Ansible's `blockinfile`, Salt's `file.blockreplace`,
-  and pyinfra's `files.block`. Maybe a single-line helper too, though Ansible itself warns against overusing
-  `lineinfile`, and pyinfra's unanchored `files.line` match also catches `#foo` when you meant `foo`. Puppet's
-  `file_line` has the cleanest options: `line`, `match`, `after`, and `multiple`.
-- **`tsinfra/brew`:** a Brewfile written with `file`, an `ensure` on `brew bundle check --no-upgrade` with
-  `HOMEBREW_NO_AUTO_UPDATE` set, and nix-darwin's cleanup modes. `plan` computes the extras itself, because
-  `brew bundle cleanup` prompts.
-- **`tsinfra/macos`:** each `defaults` key as an `ensure`, with `defaults read` as the check and `defaults write` as the
-  fix, and a run that restarts Dock or Finder after. `defaults read` prints booleans as `1` and `0`. Like nix-darwin, a
-  removed key stays as it was.
-- **`tsinfra/docker`:** container helpers, starting with the `want: []` `ensure` that keeps running containers on the
-  newest images (see [Recipes](./recipes.md#running-the-latest-container-images)), if the Docker container ports repeat
-  it.
-- **A run-once marker,** like chezmoi's `run_once_`: save a hash of the command in the
-  host's [saved state](./transport.md#saved-state), and check for it.
-- **A 1Password reader,** like chezmoi's `onepasswordRead`: run `op read` with Bun `$` on the control machine and pass
-  the value to `file` with `secret`. Every `plan` has to read the secret to compare it, so every plan prompts.
+**Packages**
+
+- apt packages
+- apt repos and keys, as a deb822 `.sources` file with its keyring
+- [Homebrew](#homebrew), a Brewfile and `brew bundle`, with cleanup
+- Mac App Store apps, with `mas`
+- local package files: a `.deb`, or a macOS `.pkg` or `.dmg`
+- [a portable package integration](#portable-integrations), which picks apt, apk, or brew for the host
+- npm, pnpm, and Bun global packages
+- pip, pipx, and uv packages and tools
+- maybe: cargo, `go install`, and gem
+- maybe: flatpak and snap
+- maybe: version managers, like mise, asdf, or pyenv
+- maybe: a GitHub release binary, picked for the host's OS and CPU
+- maybe: a whole-system upgrade, which may be just an `ensure`
+- maybe: unattended-upgrades, which may be just an `ensure`
+
+**Services**
+
+- systemd unit, with reload
+- systemd timers
+- systemd user units
+- [a portable service integration](#portable-integrations), which picks systemd, OpenRC, or launchd for the host
+- maybe: systemd drop-ins, an `override.conf` that changes a few settings of a unit a package shipped
+- maybe: launchd agents and daemons
+- maybe: `brew services`, Homebrew's way to keep a formula's daemon running
+
+**Files**
+
+- `put_files`, a map of local files to their destinations
+- [A managed block in a file](#lines-in-a-file)
+- [A single line in a file](#lines-in-a-file)
+- unarchive
+- maybe: [a remote file](#remote-file), downloaded and checked against a checksum
+- maybe: a directory sync, like rsync
+- maybe: one setting under one section of an INI file, like `smb.conf`
+- maybe: one `key=value` line in a flat file, like `/etc/default/grub`
+- maybe: a file built from fragments that several steps add to
+
+**Users and access**
+
+- users and groups, with group membership
+- SSH: `authorized_keys`, `known_hosts`, and `sshd_config`
+- sudoers drop-ins
+
+**Containers and storage**
+
+- Docker containers
+- Docker Compose project
+- [Docker images kept on the newest version](#docker-images)
+- LXD or LXC
+- ZFS
+
+**The user's setup**
+
+- git config
+- a shell setup: rc lines and `PATH` entries
+- per-program config, like home-manager's `programs.*` for git, ssh, or a prompt
+- [macOS `defaults` keys](#macos-defaults)
+- maybe: default apps and file associations, with `duti` on macOS
+- maybe: fonts
+
+**System**
+
+- maybe: [system settings](#system-settings) in one integration: hostname, timezone, locale, `/etc/hosts`, sysctl, kernel
+  modules, mounts, swap, cron, logrotate, motd, and macOS power settings
+- maybe: a firewall, like ufw
+- maybe: wait for a port or URL
+
+**Other**
+
+- [A run-once marker](#run-once-marker)
+- [A 1Password reader](#1password-reader)
+- [Facts: CPU architecture, platform, and OS release](#fact-helpers)
+- [Full-set cleanup, which removes what isn't declared](#removed-resources)
+
+**Left out:**
+
+- **Editing JSON or replacing by regex** belongs in TypeScript. A script reads the file, changes it, and writes it
+  with `file`.
+- **Databases' users and tables, DNS records, and TLS certificates** are objects inside an app or behind an API (see
+  [Integrations worth shipping](#integrations-worth-shipping)).
+- **Validating a file before it's written** is already `file`'s `validate` option.
+
+### Integration notes
+
+What's known so far about the ideas in [Integration ideas](#integration-ideas).
+
+#### Homebrew
+
+`tsinfra/brew`: a Brewfile written with `file`, an `ensure` on `brew bundle check --no-upgrade` with
+`HOMEBREW_NO_AUTO_UPDATE` set, and nix-darwin's cleanup modes. `plan` computes the extras itself, because
+`brew bundle cleanup` prompts.
+
+#### Portable integrations
+
+One integration over several tools, picking the one the host has, like pyinfra's `server.packages` and `server.service` and
+Ansible's `package` and `service`. A package integration picks apt, apk, or brew, and a service integration picks systemd,
+OpenRC, or launchd. Ansible's docs say its `package` covers only "the minimum intersection" of the tools' options, so
+a script that needs one tool's options uses that tool's integration.
+
+#### Remote file
+
+Like pyinfra's `files.download`, Ansible's `get_url`, and Chef's `remote_file`: fetch a URL on the host and check it
+against a checksum. It may be an `ensure` with a recipe, or an option on `file`, rather than an integration.
+
+#### System settings
+
+One integration that takes an object of the settings to set, and sets only the keys given, like hostname, timezone, locale,
+`/etc/hosts` entries, sysctl, kernel modules, mounts, swap, cron, logrotate, motd, and macOS power settings. Other
+tools have a step per setting (pyinfra's `server.hostname`, `server.sysctl`, and so on).
+
+#### Docker images
+
+`tsinfra/docker`: container integrations, starting with the `want: []` `ensure` that keeps running containers on the newest
+images (see [Recipes](./recipes.md#running-the-latest-container-images)), if the Docker container ports repeat it.
+
+#### Lines in a file
+
+`tsinfra/files`: a managed block between marker lines, like Ansible's `blockinfile`, Salt's `file.blockreplace`, and
+pyinfra's `files.block`. Maybe a single-line function too, though Ansible itself warns against overusing `lineinfile`, and
+pyinfra's unanchored `files.line` match also catches `#foo` when you meant `foo`. Puppet's `file_line` has the cleanest
+options: `line`, `match`, `after`, and `multiple`.
+
+#### macOS defaults
+
+`tsinfra/macos`: each `defaults` key as an `ensure`, with `defaults read` as the check and `defaults write` as the fix,
+and a run that restarts Dock or Finder after. `defaults read` prints booleans as `1` and `0`. Like nix-darwin, a removed
+key stays as it was.
+
+#### Run-once marker
+
+Like chezmoi's `run_once_`: save a hash of the command in the host's [saved state](./transport.md#saved-state), and
+check for it.
+
+#### 1Password reader
+
+Like chezmoi's `onepasswordRead`: run `op read` with Bun `$` on the control machine and pass the value to `file` with
+`secret`. Every `plan` has to read the secret to compare it, so every plan prompts.
 
 ### Maybe later
 
@@ -564,7 +878,7 @@ the automatic approaches are in [Rejected](#rejected). What's left:
   warns about paths in it that the script no longer manages. The machine stays the only source of truth. A path is the
   one thing that identifies a step across edits, so this list can be accurate. It wouldn't cover anything done through
   `ensure`. Add it only if a port shows that forgotten files are a real problem.
-- **A full set whose contents can be listed.** A helper can find the extras in a set the script declares completely.
+- **A full set whose contents can be listed.** An integration can find the extras in a set the script declares completely.
   nix-darwin's Homebrew `cleanup` is `none`, `check`, `uninstall`, or `zap`, and Salt's `file.directory` with
   `clean: True` and chezmoi's `exact_` folders delete every entry the run didn't declare. A managed folder's `plan` must
   list every file it would delete.

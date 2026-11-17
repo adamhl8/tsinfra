@@ -8,7 +8,7 @@ import { nonEmptyStringSchema } from "#session/step.ts"
 type CheckFunction<T> = (tools: ReadTools) => Promise<T>
 
 /**
- * A step's check: a command, or a function given `ReadTools` that returns the value to compare. An object `want` takes
+ * A step's check: a command, or a function given `ReadTools` that returns the value to compare. A record `want` takes
  * only a function, because a command's output has no keys. Checks `[T]` so it doesn't split a union `T`.
  */
 export type Check<T> = [T] extends [RecordWant] ? CheckFunction<T> : string | CheckFunction<T>

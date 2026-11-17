@@ -4,12 +4,12 @@ import { isErr } from "ts-explicit-errors"
 
 import type { Check } from "#session/handlers/ensure/check.ts"
 import { checkSchema } from "#session/handlers/ensure/check.ts"
-import { compareCheck, isRecord } from "#session/handlers/ensure/comparison/comparison.ts"
+import { compareCheck, getWantKind } from "#session/handlers/ensure/comparison/comparison.ts"
 import type { Fix } from "#session/handlers/ensure/fix.ts"
 import { fixSchema, toFixDifference } from "#session/handlers/ensure/fix.ts"
 import { getHostCheckDetails } from "#session/handlers/ensure/host-check-details.ts"
 import type { Want } from "#session/handlers/ensure/want.ts"
-import { wantSchema } from "#session/handlers/ensure/want.ts"
+import { tagWant, wantSchema } from "#session/handlers/ensure/want.ts"
 import type { ChangeStepResult } from "#session/handlers/shared/shared.ts"
 import { converge, withChangeStepResult, runChange, validateInput } from "#session/handlers/shared/shared.ts"
 import type { EnvOptions, HandlerOptions, NeedsOptions } from "#session/handlers/step-options/step-options.ts"
@@ -20,7 +20,7 @@ export type { Check } from "#session/handlers/ensure/check.ts"
 export type { Want } from "#session/handlers/ensure/want.ts"
 export type { EnsureComparisonValues } from "#session/handlers/ensure/comparison/comparison.ts"
 export type { FixDifference } from "#session/handlers/ensure/fix.ts"
-// Re-export the record comparison for `dir`, which is built on it, so its rows render as an object `want`'s.
+// Re-export the record comparison for `dir`, which is built on it, so its rows render as a record `want`'s.
 export type { RecordComparisonValues, RecordValue, RecordWant } from "#session/handlers/ensure/comparison/comparison.ts"
 export { compareRecords } from "#session/handlers/ensure/comparison/comparison.ts"
 
@@ -28,13 +28,14 @@ export { compareRecords } from "#session/handlers/ensure/comparison/comparison.t
 export interface EnsureOptions<T extends Want> extends NeedsOptions, EnvOptions {
   /**
    * The answer `check` gives when already right. `true` means a command exits 0, and `false` means it exits non-zero. A
-   * string is compared to a command's stdout, with trailing newlines ignored on both sides. An array of strings is
-   * compared to a command's lines as a set. An object of string keys and string, number, or boolean values is compared
-   * to a function's object by key, each value exactly, so a number never matches a string.
+   * string is compared to a command's stdout, with trailing newlines ignored on both sides. A list, an array of
+   * strings, is compared to a command's lines as a set. A set, a `Set` of strings, is compared the same way, and a
+   * check function returns a `Set` for it. A record, an object of string keys and string, number, or boolean values, is
+   * compared to a function's object by key, each value exactly, so a number never matches a string.
    */
   want: T
   /**
-   * A command, or a function given `read` that returns the value to compare. An object `want` takes only a function. It
+   * A command, or a function given `read` that returns the value to compare. A record `want` takes only a function. It
    * also runs during `plan`, so it must not change what the script manages.
    */
   check: Check<T>
@@ -52,16 +53,18 @@ export interface EnsureOptions<T extends Want> extends NeedsOptions, EnvOptions 
 
 // Validate the options at runtime too, because a script can get past the types, like with `as` or `@ts-ignore`.
 // Set the defaults in a pipe, because ArkType only allows a default on a required key.
+// Tag `want` with its kind in the same pipe, so later code switches on it instead of working the kind out again.
 const ensureOptionsSchema = type
   .declare<HandlerOptions<EnsureOptions<Want>>>()
   .type(needsOptionsSchema.merge({ want: wantSchema, check: checkSchema, fix: fixSchema, "verify?": "boolean" }))
-  // Refuse a command check for an object `want` before it runs, because a command's output has no keys.
+  // Refuse a command check for a record `want` before it runs, because a command's output has no keys.
   .narrow(({ want, check }, ctx) => {
-    if (typeof check === "string" && isRecord(want))
-      return ctx.reject({ path: ["check"], expected: "a check function for an object want", actual: "a command" })
+    const isCommandForRecord = typeof check === "string" && getWantKind(want) === "record"
+    if (isCommandForRecord)
+      return ctx.reject({ path: ["check"], expected: "a check function for a record want", actual: "a command" })
     return true
   })
-  .pipe((options) => ({ verify: true, needs: NO_NEEDS, ...options }))
+  .pipe((options) => ({ verify: true, needs: NO_NEEDS, ...options, want: tagWant(options.want) }))
 
 export const handleEnsure = async (
   ctx: StepContext<"ensure">,

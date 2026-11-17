@@ -138,7 +138,7 @@ describe("h.ensure", () => {
     })
 
     expect(result).toBe(
-      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> it's of type 'object', but want is of type 'boolean'",
+      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> it's of type 'Error', but want is of type 'boolean'",
     )
   })
 
@@ -322,9 +322,85 @@ describe("h.ensure with a list want", () => {
       "failed to compare the host with what the step wants -> failed to validate the value the check returned -> it's of type 'string', but want is of type 'array'",
     )
   })
+
+  it("should fail validation when a function check returns a list with an item that isn't a string", async () => {
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, { want: ["a"], check: () => castInvalid(["a", 1]), fix: "true" })
+
+    expect(result).toBe(
+      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> value[1] must be a string (was a number)",
+    )
+  })
 })
 
-describe("h.ensure with an object want", () => {
+describe("h.ensure with a set want", () => {
+  it("should take a command check and compare its lines as a set, so order and duplicates don't count", async () => {
+    const { host: h } = await createSession()
+
+    expect(
+      await ensureOrMessage(h, { want: new Set(["a", "b"]), check: String.raw`printf 'b\na\na\n'`, fix: "exit 1" }),
+    ).toMatchObject({ changed: false })
+  })
+
+  it("should compare the Set a function check returns", async () => {
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, {
+      want: new Set(["b", "a"]),
+      check: async ({ read }) => new Set((await read(String.raw`printf 'a\nb\n'`)).split("\n")),
+      fix: "exit 1",
+    })
+
+    expect(result).toMatchObject({ changed: false })
+  })
+
+  it("should give the fix what's missing and extra, and return changed once they're gone", async () => {
+    const marker = path.join(await makeTempDir(), "packages")
+    const { host: h } = await createSession()
+    const differences: unknown[] = []
+    const result = await ensureOrMessage(h, {
+      want: new Set(["a", "b"]),
+      check: String.raw`cat '${marker}' 2>/dev/null || printf 'a\nc\n'`,
+      fix: async ({ exec }, difference) => {
+        differences.push(difference)
+        await exec(String.raw`printf 'a\nb\n' > '${marker}'`)
+      },
+    })
+
+    expect([result, differences]).toStrictEqual([
+      { name: "Make marker", kind: "ensure", changed: true },
+      [{ missing: ["b"], extra: ["c"] }],
+    ])
+  })
+
+  it("should fail validation when a function check returns an array for a set want", async () => {
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, {
+      want: new Set(["a"]),
+      // @ts-expect-error - a set want's check function returns a Set, so an array is a type error
+      check: async ({ read }) => (await read("echo a")).split("\n"),
+      fix: "true",
+    })
+
+    expect(result).toBe(
+      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> it's of type 'array', but want is of type 'Set'",
+    )
+  })
+
+  it("should fail validation when a function check returns a Set with an item that isn't a string", async () => {
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, {
+      want: new Set(["a"]),
+      check: () => castInvalid(new Set(["a", 1])),
+      fix: "true",
+    })
+
+    expect(result).toBe(
+      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> value must be a Set of strings (was a Set holding an item of type 'number')",
+    )
+  })
+})
+
+describe("h.ensure with a record want", () => {
   it("should compare a function's record by key, so key order doesn't count", async () => {
     const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
@@ -402,7 +478,7 @@ describe("h.ensure with an object want", () => {
     expect([result, gotPorts]).toStrictEqual([{ name: "Make marker", kind: "ensure", changed: true }, [80]])
   })
 
-  it("should name the key when a function check returns a nested object for an object want", async () => {
+  it("should name the key when a function check returns a nested object for a record want", async () => {
     const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
       want: toLooseWant({ a: "1" }),
@@ -411,22 +487,22 @@ describe("h.ensure with an object want", () => {
     })
 
     expect(result).toBe(
-      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> its key 'a' is of type 'object', but an object want holds only strings, numbers, and booleans",
+      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> value.a must be a number, a string or boolean (was an object)",
     )
   })
 
-  it("should refuse a command check for an object want without running it", async () => {
+  it("should refuse a command check for a record want without running it", async () => {
     const { marker } = await createMarkerStep()
     const { host: h } = await createSession()
     const result = await ensureOrMessage(h, { want: { a: "1" }, check: castInvalid(`touch '${marker}'`), fix: "true" })
 
     expect([result, await bun.file(marker).exists()]).toStrictEqual([
-      "failed to validate the options given to 'ensure' -> check must be a check function for an object want (was a command)",
+      "failed to validate the options given to 'ensure' -> check must be a check function for a record want (was a command)",
       false,
     ])
   })
 
-  it("should fail validation when a function check returns an array for an object want", async () => {
+  it("should fail validation when a function check returns an array for a record want", async () => {
     const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
       want: toLooseWant({ a: "1" }),
@@ -436,6 +512,19 @@ describe("h.ensure with an object want", () => {
 
     expect(result).toBe(
       "failed to compare the host with what the step wants -> failed to validate the value the check returned -> it's of type 'array', but want is of type 'object'",
+    )
+  })
+
+  it("should fail validation when a function check returns a Map for a record want", async () => {
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, {
+      want: { a: "1" },
+      check: () => castInvalid(new Map([["a", "1"]])),
+      fix: "true",
+    })
+
+    expect(result).toBe(
+      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> value must be a plain object (was Map)",
     )
   })
 })
@@ -647,7 +736,28 @@ describe("h.ensure with invalid input", () => {
       description: "whose want is none of the kinds it can be",
       options: { want: 1, check: "true", fix: "true" },
       message:
-        "want must be a boolean, a string, an array of strings, or an object of strings, numbers, or booleans (was a number)",
+        "want must be a boolean, a string, an array of strings, a Set of strings, or an object of strings, numbers, or booleans (was a number)",
+    },
+    {
+      description: "whose want is a Set with an item that isn't a string",
+      options: { want: new Set(["a", 1]), check: "true", fix: "true" },
+      message: "want must be a Set of strings (was a Set holding an item of type 'number')",
+    },
+    {
+      description: "whose want is a Map",
+      options: { want: new Map([["a", "1"]]), check: "true", fix: "true" },
+      message: "want must be a plain object (was Map)",
+    },
+    {
+      description: "whose want is a Promise, from a missing await",
+      options: { want: Promise.resolve({ a: "1" }), check: "true", fix: "true" },
+      message: "want must be a plain object (was Promise)",
+    },
+    {
+      description: "whose want is a function",
+      options: { want: () => "a", check: "true", fix: "true" },
+      message:
+        "want must be a boolean, a string, an array of strings, a Set of strings, or an object of strings, numbers, or booleans (was Function(want))",
     },
     {
       description: "whose want is an object with a nested object",

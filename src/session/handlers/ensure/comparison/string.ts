@@ -15,9 +15,9 @@ export interface StringComparisonValues {
 }
 
 /** Compares two strings exactly, after stripping their trailing newlines, the way `$(cmd)` does. */
-export const compareStrings = (value: StringWant, wantedValue: StringWant): Comparison => {
-  const got = stripTrailingNewlines(value)
-  const want = stripTrailingNewlines(wantedValue)
+export const compareStrings = (gotString: StringWant, wantString: StringWant): Comparison => {
+  const got = stripTrailingNewlines(gotString)
+  const want = stripTrailingNewlines(wantString)
   const values: StringComparisonValues = { kind: "string", got, want }
   return { inSync: got === want, values }
 }

@@ -60,7 +60,8 @@ tsinfra keeps the script shape and adds what scripts lacked:
 - Ordering between hosts, for now. Run them as separate commands. A [tentative design](./roadmap.md#ordering-between-hosts) comes late.
 - A record of resources, or a state file on the control machine.
 - A template engine. Template literals cover it.
-- A library of built-in operations (apt, brew, systemd). Write helper functions. Some may move into tsinfra later.
+- Built-in integrations for tools like apt, brew, and systemd. Write functions that call steps. Some may move into
+  tsinfra later (see [the roadmap](./roadmap.md#integrations-worth-shipping)).
 - A facts system. `h.read` returns a command's output.
 - Secret source adapters. Decrypt in your script, and mark the file `secret` or pass the value in a step's `secretEnv`.
 

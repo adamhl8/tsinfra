@@ -348,7 +348,7 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   order, then an `extra:` row, with what the check found that `want` doesn't have, in the check's order. A side with
   nothing has no row. Each item follows the rules in Values, in the wanted color for `missing` and the current color for
   `extra`. More than 15 differing items show "N items differ", which suggests `--verbose`.
-- **An object `ensure` value** shows a row per key that differs, labeled by the key like an option's key, from the
+- **A record `ensure` value** shows a row per key that differs, labeled by the key like an option's key, from the
   host's value to the wanted one, in `want`'s key order, then the keys only the check found. A side without the key
   shows `(none)`. More than 15 differing keys show "N keys differ", which suggests `--verbose`.
 

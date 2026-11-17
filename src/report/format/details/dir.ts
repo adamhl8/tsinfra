@@ -39,6 +39,6 @@ const toShownDirValues = (values: RecordComparisonValues): RecordComparisonValue
   }
 }
 
-/** Formats a directory's rows, one per key that differs, like an object `ensure`'s, with its mode like a file's. */
+/** Formats a directory's rows, one per key that differs, like a record `want`'s, with its mode like a file's. */
 export const formatDirValues = (values: RecordComparisonValues, diffLimits: DiffLimits): DetailRows =>
   formatRecordValues(toShownDirValues(values), diffLimits)

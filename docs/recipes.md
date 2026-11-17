@@ -94,7 +94,7 @@ await docker(h, { present: false })
 
 ## The state you want, or what's left to do
 
-A `want` for several things, like packages, is a list or an object, and it takes one of two shapes. Either it's the
+A `want` for several things, like packages, is a list or a record, and it takes one of two shapes. Either it's the
 state you want, and the check returns the host's state the same way, or it's `[]`, and the check lists what's left to
 do. Prefer the state you want, because `plan` then shows exactly which items the fix will change.
 

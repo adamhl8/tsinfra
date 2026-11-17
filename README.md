@@ -245,11 +245,11 @@ it worked. `plan` only runs `check`.
   - A string: compared with `check`'s stdout (or the function's return value). Trailing newlines are ignored.
   - A list of strings: compared with `check`'s lines, blank ones left out (or the function's array), as a set, so order
     and duplicates don't count. `[]` means nothing is left to do.
-  - An object of string keys and string, number, or boolean values: compared with the function's object by key, each
+  - A record of string keys and string, number, or boolean values: compared with the function's object by key, each
     value exactly, so `8080` never matches `"8080"`. It needs a check function.
 - `check`: a command, or an async function given `{ read, inspect }` that returns the answer
 - `fix`: a command, or an async function given `{ exec, inspect }`. The function also gets what `check` found:
-  `{ got }` for a string `want`, `{ missing, extra }` for a list, and `{ missing, extra, changed }` for an object. It
+  `{ got }` for a string `want`, `{ missing, extra }` for a list, and `{ missing, extra, changed }` for a record. It
   only runs in `apply`.
 - `verify` (default: `true`): run `check` again after `fix`, and fail if the state still differs
 - `env`, `secretEnv`: see [Values and secrets](#values-and-secrets)
@@ -271,7 +271,7 @@ How a change shows depends on `want`:
 - A boolean shows only the step's name.
 - A string shows `got:` and `want:` rows. For a multi-line value, the rows hold only the lines that differ.
 - A list shows `missing:` and `extra:` rows.
-- An object shows a row per key that differs.
+- A record shows a row per key that differs.
 
 **A list** is for a set of things, like packages:
 
@@ -300,7 +300,7 @@ await h.ensure("Upgrade brew packages", { want: [], check: "brew outdated --quie
 - `missing` is what `want` has that the check didn't find. `extra` is what the check found that `want` doesn't have.
 - `want: []` is for a check that lists what's left to do, like outdated packages, so everything it lists is `extra`.
 
-**An object** of string keys and string, number, or boolean values is for names with a value each, like packages on
+**A record** of string keys and string, number, or boolean values is for names with a value each, like packages on
 a version each:
 
 ```ts

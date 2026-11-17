@@ -36,8 +36,23 @@ export const splitWords = (text: string): string[] => text.trim().split(WHITESPA
 /** Returns `count` with its noun, like `1 change` or `2 changes`. */
 export const countOf = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`
 
-/** Names the type of `value`, saying "array" for an array, because `typeof` says "object". */
-export const describeType = (value: unknown): string => (Array.isArray(value) ? "array" : typeof value)
+/** Reports whether `value` is a plain object, made by `{}` or `Object.create(null)`, not by a class like `Map`. */
+export const isPlainObject = (value: unknown): value is Record<PropertyKey, unknown> => {
+  if (typeof value !== "object" || value === null) return false
+  const prototype: unknown = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+/**
+ * Names the type of `value`, saying "array" for an array and its class's name for any other object that isn't plain,
+ * like `Set`, because `typeof` says "object" for all of them.
+ */
+export const describeType = (value: unknown): string => {
+  if (Array.isArray(value)) return "array"
+  const isClassInstance = typeof value === "object" && value !== null && !isPlainObject(value)
+  if (isClassInstance) return value.constructor.name
+  return typeof value
+}
 
 /** Wraps each name in single quotes and joins them into a list, like `'a', 'b'`. */
 export const quoteNames = (names: Iterable<string>): string => Array.from(names, (name) => `'${name}'`).join(", ")

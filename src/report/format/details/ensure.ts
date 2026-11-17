@@ -20,12 +20,13 @@ const formatSlowCompareNote = (hasTimeLimit: boolean): string =>
 const formatManyLinesNote = (lineCount: number): string =>
   noteElement(`${lineCount} lines differ, run with ${LINE_LIMIT_FLAG} to see them`)
 
-/** Formats the note in place of `itemCount` differing items of a list, which are too many to show. */
+/** Formats the note in place of `itemCount` differing items of a list or a set, which are too many to show. */
 const formatManyItemsNote = (itemCount: number): string =>
   noteElement(`${itemCount} items differ, run with ${LINE_LIMIT_FLAG} to see them`)
 
 type BooleanWantValues = Extract<EnsureComparisonValues, { kind: "exit" | "boolean" }>
 type ListValues = Extract<EnsureComparisonValues, { kind: "list" }>
+type SetValues = Extract<EnsureComparisonValues, { kind: "set" }>
 
 /** Formats the note in place of `keyCount` differing keys of a record, which are too many to show. */
 const formatManyKeysNote = (keyCount: number): string =>
@@ -118,6 +119,36 @@ const formatListValues = ({ missing, extra }: ListValues, diffLimits: DiffLimits
 }
 
 /**
+ * Formats a set's `missing:` and `extra:` rows, `missing` first, because what the script wants is what a reader checks
+ * first. Shows a row only for a side that has items. More items than `diffLimits` allows become a note.
+ */
+const formatSetValues = ({ missing, extra }: SetValues, diffLimits: DiffLimits): DetailRows => {
+  const itemCount = missing.length + extra.length
+  if (diffLimits.maxLines !== undefined && itemCount > diffLimits.maxLines)
+    return { kind: "unaligned", rows: [formatManyItemsNote(itemCount)] }
+
+  const missingRows =
+    missing.length > 0
+      ? [
+          formatAlignedRow(
+            "missing",
+            missing.map((item) => wantValueElement(item)),
+          ),
+        ]
+      : []
+  const extraRows =
+    extra.length > 0
+      ? [
+          formatAlignedRow(
+            "extra",
+            extra.map((item) => gotValueElement(item)),
+          ),
+        ]
+      : []
+  return { kind: "aligned", rows: [...missingRows, ...extraRows] }
+}
+
+/**
  * Formats a record's rows, one per key that differs, from the host's value to the wanted one, with `(none)` for a side
  * without the key. Shows the keys in `want`'s order, then the extra ones in the check's order. More keys than
  * `diffLimits` allows become a note.
@@ -141,13 +172,14 @@ export const formatRecordValues = (
 }
 
 /**
- * Formats what an `ensure` compared: `got` and `want` rows, a list's `missing` and `extra` rows, a record's row per
- * key, or a note when the lines, items, or keys can't show.
+ * Formats what an `ensure` compared: `got` and `want` rows, a list's or a set's `missing` and `extra` rows, a record's
+ * row per key, or a note when the lines, items, or keys can't show.
  */
 export const formatEnsureValues = (values: EnsureComparisonValues, diffLimits: DiffLimits): DetailRows => {
   if (values.kind === "exit" || values.kind === "boolean")
     return { kind: "aligned", rows: formatBooleanWantRows(values) }
   if (values.kind === "string") return formatStringValues(values.got, values.want, diffLimits)
   if (values.kind === "list") return formatListValues(values, diffLimits)
+  if (values.kind === "set") return formatSetValues(values, diffLimits)
   return formatRecordValues(values, diffLimits)
 }

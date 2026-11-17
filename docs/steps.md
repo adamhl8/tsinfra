@@ -265,9 +265,10 @@ Most change steps read one piece of the host's state, and in `apply` run a fix w
 `ensure` is the step where you write how to read it, as its `check`. [`file`](#file), [`link`](#link), and
 [`dir`](#dir) are steps that read the state themselves. [`run`](#run) is a step that reads no state.
 
-The steps on `h` are primitives: none of them needs to know a tool beyond `sh` and the POSIX commands. A helper that
-does, like installing packages with a package manager, is a function that takes `h` and calls these steps. The ones
-tsinfra ships will be imports, not methods on `h` (see [the roadmap](./roadmap.md#helpers-worth-shipping)).
+The steps on `h` are primitives: none of them needs to know a tool beyond `sh` and the POSIX commands. An
+integration is what does, like installing packages with a package manager: functions that take `h` and call these
+steps to set up one specific program, service, or piece of config. The integrations tsinfra ships will be imports, not
+methods on `h` (see [the roadmap](./roadmap.md#integrations-worth-shipping)).
 
 Name a step like a function, starting with a verb ("Install Caddy"), or as the state it ensures ("Caddy is installed").
 Both read well after `ensure`.
@@ -666,8 +667,8 @@ await h.file("/srv/sonarr/config.xml", sonarrConfig, { needs: [data], user: "son
 Makes sure `path` is a directory, with the mode and owner the script gives, and reports whether it changed. The step is
 named by its path, and its path follows the same rules as `file`'s (see [`file`](#file)).
 
-`dir` is a step of its own, built on the object `want` of [`ensure`](#ensure). It compares a record of what the script
-gave with `ensure`'s comparison, so the report shows a row per key that differs, laid out like an object `ensure`'s,
+`dir` is a step of its own, built on the record `want` of [`ensure`](#ensure). It compares a record of what the script
+gave with `ensure`'s comparison, so the report shows a row per key that differs, laid out like a record `want`'s,
 with its mode in both notations like a file's. A directory has no content to send, hash, or diff, which is what `file`
 exists for.
 
@@ -706,12 +707,12 @@ type EnsureOptions<
   // `true` means exit 0, or a function returning true, is already right. `false` means the opposite.
   // A string is compared to the command's stdout, or the function's value.
   // A list is compared to the command's lines, or the function's array, as a set.
-  // An object is compared to the function's object, by key.
+  // A record is compared to the function's object, by key.
   want: T
-  // An object `want` takes only a function, because a command's output has no keys.
+  // A record `want` takes only a function, because a command's output has no keys.
   check: string | ((tools: ReadTools) => Promise<T>)
   // A function also gets what the check found: `{ got }` for a string `want`, `{ missing, extra }` for a list, and
-  // `{ missing, extra, changed }` for an object. See `FixDifference`.
+  // `{ missing, extra, changed }` for a record. See `FixDifference`.
   fix: string | ((tools: ChangeTools, difference: FixDifference<T>) => Promise<void>)
   verify?: boolean // default true
   env?: Record<string, string> // see EnvOptions
@@ -782,13 +783,14 @@ what's left shows under `extra:`, because you want none of it.
              python
 ```
 
-**An object `want`**, of string keys and string, number, or boolean values, compares values by key, like a package
+**A record `want`**, an object of string keys and string, number, or boolean values, compares values by key, like a package
 name to its version, or a config's settings. Key order doesn't count, and each value is compared exactly, so a number
 never matches a string that reads the same: `8080` and `"8080"` differ, and the report shows the number in italics.
 A value can't be a nested object or array. Only a check function can return one, because a command's output has no
-keys, so `check: "..."` with an object `want` is a type error, and refused before it runs for a script that gets past
-the types. A fix function's `missing`, `extra`, and `changed` hold `want`'s own value type, so a `want` of strings
-gives it strings.
+keys, so `check: "..."` with a record `want` is a type error, and refused before it runs for a script that gets past
+the types. It must be a plain object, so a `Map`, a class instance, or a `Promise` from a missing `await` is refused,
+because it would otherwise be compared by its own keys, which it usually has none of. A fix function's `missing`,
+`extra`, and `changed` hold `want`'s own value type, so a `want` of strings gives it strings.
 
 ```ts
 const wanted: Record<string, string> = {}
@@ -947,7 +949,7 @@ The fix function only runs in `apply`, so it can change things and do work on th
 
 **What the check found.** A fix function gets a second argument after its tools, with what the check found: `{ got }` for
 a string `want`, what the check answered, `{ missing, extra }` for a list, and `{ missing, extra, changed }` for a
-object, the same items and keys the report shows. An object's `missing` maps a key to its wanted value, `extra` maps a
+record, the same items and keys the report shows. A record's `missing` maps a key to its wanted value, `extra` maps a
 key to its current value, and `changed` maps a key to `{ got, want }`. A fix can act on it without reading the host
 again:
 
@@ -963,7 +965,7 @@ await h.ensure("Update Caddy", {
 
 - **It holds only what the fix can't work out from `want`.** `want` is already in the script, so a string comparison,
   which is plain equality, adds only `got`. A list's `got` isn't passed, because it's `want` minus `missing`, plus
-  `extra`, and passing it would only invite redoing the comparison. An object's `got` isn't passed for the same reason.
+  `extra`, and passing it would only invite redoing the comparison. A record's `got` isn't passed for the same reason.
 - **A boolean `want` gives nothing more,** because `got` is just `!want`. A fix function that declares a second argument
   for one is a type error. A `want` typed as the full `Want` union gets the union of the three.
 - **It's a second argument, not part of the tools,** because the tools are what a fix can call, and this is data about
@@ -1153,8 +1155,8 @@ const updateComposeStack = async (h: Host, after: ChangeStepResult[]) => {
 await updateComposeStack(h, [compose])
 ```
 
-The same works for steps with a check, as in `aptPackage(h, "caddy")`. Helpers like these are how tsinfra gets modules,
-whether you write them or tsinfra ships them (see [the roadmap](./roadmap.md#helpers-worth-shipping)).
+The same works for steps with a check, as in `aptPackage(h, "caddy")`. Functions like
+these are how tsinfra gets integrations, whether you write them or tsinfra ships them (see [the roadmap](./roadmap.md#integrations-worth-shipping)).
 
 Anything that can be checked should be an `ensure`, not a `run`. `after` keeps a check out of the trigger, but one can
 still hide in a run function:

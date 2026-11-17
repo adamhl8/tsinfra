@@ -54,11 +54,20 @@ Check new names, comments, docs, and error messages against these words.
   that's right, but whose change is still open from an earlier apply, is **`resume`**.
 - **Follow-up** is a step whose `after` names the steps it follows, today a `run` and later a `reboot`. Use it, not
   "run", in code that would apply to any of them, like `recordFollowUp(followUpName, stepNames)`.
+- **Integration** is a set of functions that take `h` and call steps to set up one specific program, service, or piece
+  of config, like apt packages or systemd units (see the roadmap's Integrations worth shipping), never "helper",
+  "module", or "provider". A function a script writes for itself, without that scope, can still be a helper.
 - **Preparation** is what runs before a host's script, never "preflight" or "host failure".
 - **"Outcome"** isn't a term in the code.
 - **"Note"** is the report's word. **"Diff"** means the line output in the report, so it doesn't name a comparison.
 - **"Owner"** stays the plain word for the concept and for the chmod permission class. The option is `user`, to pair
   with `group` and match `stat` and `chown user:group`. `FileOwner` is the type both take.
+- **A `want`'s kinds** are boolean, string, list, set, and record, in code, comments, docs, and test names
+  (`RecordWant`, "a record `want`"). Never call a record an "object `want`" or a list an "array `want`". A list and a
+  set are different kinds, so neither word stands in for the other. An error message names the JS type where it says
+  what a value must be, like "an array of strings, a Set of strings, or an object of strings, numbers, or booleans", so
+  a reader can match it to their value. Where it talks about a kind, it uses the kind's name, like "a record want needs
+  a check function".
 
 ## Naming values from the host
 

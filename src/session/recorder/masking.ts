@@ -1,3 +1,5 @@
+import { isPlainObject } from "#utils.ts"
+
 /** What a secret shows as wherever it would show, as GitLab CI shows it. */
 export const MASKED_VALUE = "[MASKED]"
 
@@ -49,7 +51,7 @@ const maskUnknown = (value: unknown, pattern: RegExp): unknown => {
     return value
   }
   if (Array.isArray(value)) return value.map((item: unknown) => maskUnknown(item, pattern))
-  if (typeof value === "object" && value !== null && Object.getPrototypeOf(value) === Object.prototype)
+  if (isPlainObject(value))
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, maskUnknown(item, pattern)]))
 
   return value

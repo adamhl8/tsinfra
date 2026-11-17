@@ -38,8 +38,8 @@ const toCurrentDirRecord = (attributes: HostFileAttributeDetails | undefined, op
 }
 
 /**
- * Compares the directory's details on the host with what the script wants, as an object `want`, so the report shows
- * each key that differs as an object `ensure`'s row. Fails a write that can't work.
+ * Compares the directory's details on the host with what the script wants, as a record `want`, so the report shows each
+ * key that differs as a record `want`'s row. Fails a write that can't work.
  */
 export const compareDir = async (
   ctx: StepContext,

@@ -1,17 +1,24 @@
 import { type } from "arktype"
 
 import type { Comparison } from "#session/handlers/shared/shared.ts"
+import { isPlainObject } from "#utils.ts"
 
-/** A value an object `want` holds at a key: a string, a number, or a boolean, never a nested object or array. */
+/** A value a record `want` holds at a key: a string, a number, or a boolean, never a nested object or array. */
 export type RecordValue = string | number | boolean
 
-/** An object `want`, of string keys and `RecordValue`s, which a function's object must match by key. */
-export const recordWantSchema = type("Record<string, string | number | boolean>")
+/**
+ * A record `want`, a plain object of string keys and `RecordValue`s, which a function's object must match by key.
+ * Refuses any other object in a narrow, like a `Map` or a `Promise`, because the `Record` type takes it by its own
+ * keys, usually none.
+ */
+export const recordWantSchema = type("Record<string, string | number | boolean>").narrow(
+  (record, ctx) => isPlainObject(record) || ctx.mustBe("a plain object"),
+)
 
 /** A record of `V` values, `RecordValue`s by default. */
 type ValueRecord<V extends RecordValue = RecordValue> = Record<string, V>
 
-/** An object `want` as a script passes it, readonly so a constant or `as const` works, which the schema can't express. */
+/** A record `want` as a script passes it, readonly so a constant or `as const` works, which the schema can't express. */
 export type RecordWant = Readonly<ValueRecord>
 
 /**
@@ -31,14 +38,6 @@ export interface RecordComparisonValues extends RecordDifference {
   got: ValueRecord
   want: ValueRecord
 }
-
-/** Reports whether `value` is one an object `want` can hold at a key. */
-export const isRecordValue = (value: unknown): value is RecordValue =>
-  typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-
-/** Reports whether `value` is a record, an object that isn't an array, because a list is an object too. */
-export const isRecord = (value: unknown): value is RecordWant =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
 
 /** Returns the entries of `record` whose keys `others` doesn't have, in `record`'s key order. */
 const getEntriesNotIn = (record: RecordWant, others: RecordWant): ValueRecord =>
