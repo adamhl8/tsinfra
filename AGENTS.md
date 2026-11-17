@@ -8,16 +8,9 @@ working on. This file holds only what the docs and the code don't make obvious.
 
 - Give the user a rundown of the next piece and get their go-ahead before building it.
 - Larger work is split into pieces, each reviewed before the next.
-- Project scripts are Bask tasks in `bask.ts`, not `package.json` scripts.
 
 ## Checks
 
-- `bunx tsc --noEmit -p .`
-- `env -u AI_AGENT -u CLAUDECODE bunx bask lint`, which formats files, syncs the docs' TOCs, and runs the tests and
-  knip. Run `tsc` again after it, because its oxlint step runs `--fix-dangerously`, which can break types. It strips
-  `async` from a function that never awaits, and unwraps a returned `Promise.resolve(...)`, so a test's check or fix
-  function that awaits nothing ends up returning a plain value, which `tsc` then refuses. Give such a function a real
-  `await`, like its `read` tool or `exec("true")`.
 - `bunx bask test-docker`, for changes to transports, sudo, or file and link writes. The `*.docker.ts` tests run on
   Alpine (busybox) and Debian (dash), with real root and real `sudo`. Neither `bun test` nor `bask lint` runs them.
 
@@ -104,11 +97,6 @@ whether a reader could mistake it for the wanted value or the host's value.
 - **`src/` holds the CLI (`cli.ts`), the report (`report.ts`), and `core/`,** plus the published `index.ts` and code
   all three share (`mode.ts`, `styles.ts`, `utils.ts`). `core/` holds hosts, the session, and transports, the part of
   tsinfra that does the work. Nothing in `core/` imports the CLI or the report.
-- **A module with parts sits beside the folder that holds them,** like `core/session/handlers/file.ts` and
-  `core/session/handlers/file/write.ts`, never `file/file.ts`. A folder with no central module, like
-  `handlers/shared/filesystem/`, holds peer modules, each named for what it holds.
-- **A test lives in the `__tests__/` beside the module it tests.** A test of `file.ts` runs the whole step, so it sits
-  in `handlers/__tests__/`. A test of one part, like `file/host-file-details.ts`, sits in `file/__tests__/`.
 
 ## Architecture
 
