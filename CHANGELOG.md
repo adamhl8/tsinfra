@@ -1,3 +1,21 @@
+## [0.5.0](https://github.com/adamhl8/tsinfra/compare/v0.4.0..v0.5.0) - 2026-11-17
+
+### 🚀 Features
+
+- compare a list want in order ([dd05558](https://github.com/adamhl8/tsinfra/commit/dd05558fd989170bc7735e1ba5bb77cadf3adf8c) by @adamhl8)
+
+- add set as a want kind ([4e18edc](https://github.com/adamhl8/tsinfra/commit/4e18edc25ed6c51020accaf267091d96cbeb089b) by @adamhl8)
+
+### 🚜 Refactor
+
+- clean up project layout ([a6b4609](https://github.com/adamhl8/tsinfra/commit/a6b46091defb22f3c51cbe2e73b274546b200a18) by @adamhl8)
+
+### 📚 Documentation
+
+- update AGENTS.md ([d7bf8d8](https://github.com/adamhl8/tsinfra/commit/d7bf8d86e94a27de5123c0e82098e227c448df0e) by @adamhl8)
+
+- document set wants and ordered list wants ([d3d9e2a](https://github.com/adamhl8/tsinfra/commit/d3d9e2a4a219f136149f0b91f55ddf7eae3dbe57) by @adamhl8)
+
 ## [0.4.0](https://github.com/adamhl8/tsinfra/compare/v0.3.0..v0.4.0) - 2026-11-17
 
 ### 🚀 Features
