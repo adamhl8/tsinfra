@@ -50,6 +50,8 @@ export type {
   Check,
   ContentComparison,
   EnsureComparisonValues,
+  RecordComparisonValues,
+  RecordValue,
   EnsureOptions,
   FixDifference,
   EnvOptions,
@@ -92,6 +94,7 @@ export {
   PUBLIC_EXECUTABLE_MODE,
   PUBLIC_FILE_MODE,
   toOctalMode,
+  toModeBits,
   toSymbolicMode,
 } from "#session/handlers/handlers.ts"
 export type {

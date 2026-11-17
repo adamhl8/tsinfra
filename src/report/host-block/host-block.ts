@@ -3,6 +3,7 @@ import type { Verbosity } from "#report/verbosity.ts"
 import type {
   ConvergePhase,
   EnsureComparisonValues,
+  RecordComparisonValues,
   FailureHint,
   FileComparisonValues,
   HostRecord,
@@ -80,6 +81,8 @@ export type Detail = PieceLevels
     | { kind: "fileComparisonValues"; values: FileComparisonValues }
     | { kind: "linkComparisonValues"; values: LinkComparisonValues }
     | { kind: "ensureComparisonValues"; values: EnsureComparisonValues }
+    // A `dir` step's record, which shows like an object `ensure`'s, but with its mode in both notations, like a file's.
+    | { kind: "dirComparisonValues"; values: RecordComparisonValues }
     // The stderr of a command that can explain a failure that still differs after its fix.
     | { kind: "stderr"; command: string; stderr: string }
     // tsinfra's own aside about the details around it.

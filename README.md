@@ -27,6 +27,7 @@ has drifted on each machine, and `tsinfra apply` fixes only what needs fixing.
   - [`ensure`](#ensure)
   - [`file`](#file)
   - [`link`](#link)
+  - [`dir`](#dir)
   - [`run`](#run)
   - [`read` and `inspect`](#read-and-inspect)
 - [Commands](#commands)
@@ -212,12 +213,13 @@ if (docker.exitCode !== 0) await h.run("Install docker", installDocker, { after:
 await h.ensure("Install docker", { want: true, check: "command -v docker", fix: installDocker })
 ```
 
-`ensure`, `file`, `link`, and `run` return a `ChangeStepResult`, which you pass to a later step's `after` or `needs`:
+`ensure`, `file`, `link`, `dir`, and `run` return a `ChangeStepResult`, which you pass to a later step's `after` or
+`needs`:
 
 ```ts
 interface ChangeStepResult {
   name: string
-  kind: "file" | "link" | "ensure" | "run"
+  kind: "file" | "link" | "dir" | "ensure" | "run"
   changed: boolean // in plan, this means "would change"
 }
 ```
@@ -418,6 +420,9 @@ await h.file("/etc/ssh/sshd_config", sshdConfig, { sudo: true, validate: (tempPa
 | `PUBLIC_EXECUTABLE_MODE`  | `rwxr-xr-x` | `755` | Scripts and binaries                       |
 | `GROUP_EXECUTABLE_MODE`   | `rwxr-x---` | `750` | A script only a group may run              |
 | `PRIVATE_EXECUTABLE_MODE` | `rwx------` | `700` | A script only its owner may run            |
+| `PUBLIC_DIRECTORY_MODE`   | `rwxr-xr-x` | `755` | Most directories                           |
+| `GROUP_DIRECTORY_MODE`    | `rwxr-x---` | `750` | A directory only a group may enter         |
+| `PRIVATE_DIRECTORY_MODE`  | `rwx------` | `700` | A directory only its owner may enter       |
 
 ---
 
@@ -443,6 +448,30 @@ await h.link("~/.config/fish/config.fish", path.join(DOTFILES, "fish/config.fish
 - A regular file at `path` fails the step unless `force` is set, and there's no backup. A directory with anything in it
   always fails.
 - A missing `target` is allowed, with a warning in the output, because a later step might create it.
+
+---
+
+### `dir`
+
+```ts
+h.dir(path: string, options?: DirOptions): Promise<ChangeStepResult>
+```
+
+Makes sure `path` is a directory. It's absolute, starting with `/` or `~/`, and on the host.
+
+- `mode`: see [Modes](#modes). Left out, an existing directory keeps its own.
+- `user`, `group`: a name or an id. Left out, an existing directory keeps its own.
+- `sudo` (default: `false`): read and make the directory as root
+- `needs`: see [Needs](#needs)
+
+```ts
+const data = await h.dir("/srv/sonarr", { mode: GROUP_DIRECTORY_MODE, user: "sonarr", group: "sonarr", sudo: true })
+await h.file("/srv/sonarr/config.xml", sonarrConfig, { needs: [data], user: "sonarr", sudo: true })
+```
+
+- Missing parents are made too, with the default mode and owner.
+- A symlink, a regular file, or anything else at `path` fails the step.
+- `plan` shows a row for each attribute that differs, like `mode: rwx------ (700) -> rwxr-x--- (750)`.
 
 ---
 
@@ -614,7 +643,7 @@ macbook
   ? waiting: (ensure) Install fish plugins   needs 'Install brew packages'
 ```
 
-- `ensure`, `file`, and `link` take `needs`, and accept results from `ensure`, `file`, and `link`.
+- `ensure`, `file`, `link`, and `dir` take `needs`, and accept results from `ensure`, `file`, `link`, and `dir`.
 - In `plan`, a step waits when any step it needs would change or is waiting.
 - In `apply`, `needs` does nothing, because the needed steps already ran.
 - Only add `needs` when a step's state really depends on the earlier change. When any step would change, `plan` already

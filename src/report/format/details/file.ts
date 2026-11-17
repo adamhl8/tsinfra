@@ -1,8 +1,7 @@
 import prettyBytes from "pretty-bytes"
 
-import type { AlignedRow } from "#report/format/details/aligned-row.ts"
-import { formatAlignedRow } from "#report/format/details/aligned-row.ts"
-import { formatOwnerChange } from "#report/format/details/owner.ts"
+import type { AlignedRow } from "#report/format/details/shared/shared.ts"
+import { formatAlignedRow, formatMode, formatOwnerChange } from "#report/format/details/shared/shared.ts"
 import { changeElement, changeDescriptionElement, wantValueElement } from "#report/format/elements/elements.ts"
 import type {
   FileComparisonValues,
@@ -10,9 +9,7 @@ import type {
   SizeComparison,
   AttributeChange,
   Bytes,
-  ModeBits,
 } from "#session/session.ts"
-import { toOctalMode, toSymbolicMode } from "#session/session.ts"
 
 // Spell out a size in bytes, because a lone `B` reads like "billion".
 const BYTE_UNIT = / B$/v
@@ -40,9 +37,6 @@ const formatSizeComparison = (sizeComparison: SizeComparison): string => {
   const sizes = gotSize === undefined ? wantText : changeElement(formatSize(gotSize), formatSize(wantSize))
   return `${changeDescriptionElement(SIZE_COMPARISON_WORDS[kind])}, ${sizes}`
 }
-
-/** Formats mode bits as both notations, like `rw-r--r-- (644)`, because a script can write either one. */
-const formatMode = (bits: ModeBits) => `${toSymbolicMode(bits)} (${toOctalMode(bits)})`
 
 const formatAttributeChange = (attributeChange: AttributeChange): AlignedRow => {
   if (attributeChange.name !== "mode") return formatOwnerChange(attributeChange)

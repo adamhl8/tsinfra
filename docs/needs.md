@@ -34,10 +34,10 @@ macbook
 
 ## How it works
 
-`needs` takes step results, the values earlier steps returned. `ensure`, `file`, and `link` accept it.
+`needs` takes step results, the values earlier steps returned. `ensure`, `file`, `link`, and `dir` accept it.
 
 ```ts
-needs?: ChangeStepResult<"file" | "link" | "ensure">[]
+needs?: ChangeStepResult<"file" | "link" | "dir" | "ensure">[]
 ```
 
 - **In `plan`,** when any needed step would change or is waiting, the step reports `waiting` and doesn't read the

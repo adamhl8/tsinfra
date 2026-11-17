@@ -15,6 +15,7 @@ Everything a host script does to its host goes through `h`, the context passed t
   - [The write](#the-write)
   - [`sudo` and permissions](#sudo-and-permissions)
 - [`link`](#link)
+- [`dir`](#dir)
 - [`ensure`](#ensure)
   - [What a check may change](#what-a-check-may-change)
   - [`fix`](#fix)
@@ -71,7 +72,7 @@ type InspectResult = {
   exitCode: number
 }
 
-type ChangeStepKind = "file" | "link" | "ensure" | "run"
+type ChangeStepKind = "file" | "link" | "dir" | "ensure" | "run"
 
 // What a change step returns.
 type ChangeStepResult<K extends ChangeStepKind = ChangeStepKind> = {
@@ -97,11 +98,11 @@ The difference is that tsinfra gets the condition and the body separately. That 
 So plain TypeScript control flow is fine in a host script, except for one decision: whether a change is needed. That
 decision belongs in how a step reads the host's state, where tsinfra can see it.
 
-| When the code...                       | Use                                                                                |
-| -------------------------------------- | ---------------------------------------------------------------------------------- |
-| changes state that can be checked      | [`ensure`](#ensure), or [`file`](#file) or [`link`](#link) for a file or a symlink |
-| follows up on a change, or always runs | [`run`](#run) with `after`                                                         |
-| picks which steps apply                | [`read`](#read) or [`inspect`](#inspect), plus an `if`                             |
+| When the code...                       | Use                                                                                                              |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| changes state that can be checked      | [`ensure`](#ensure), or [`file`](#file), [`link`](#link), or [`dir`](#dir) for a file, a symlink, or a directory |
+| follows up on a change, or always runs | [`run`](#run) with `after`                                                                                       |
+| picks which steps apply                | [`read`](#read) or [`inspect`](#inspect), plus an `if`                                                           |
 
 A fact that picks steps is one that no step on the host changes, like the CPU architecture or whether the host is a
 container. Branching on state that an earlier step changes runs into
@@ -261,14 +262,18 @@ There are two kinds:
   others.
 
 Most change steps read one piece of the host's state, and in `apply` run a fix when it differs.
-`ensure` is the step where you write how to read it, as its `check`. [`file`](#file) and [`link`](#link) are steps that
-read the state themselves. [`run`](#run) is a step that reads no state.
+`ensure` is the step where you write how to read it, as its `check`. [`file`](#file), [`link`](#link), and
+[`dir`](#dir) are steps that read the state themselves. [`run`](#run) is a step that reads no state.
+
+The steps on `h` are primitives: none of them needs to know a tool beyond `sh` and the POSIX commands. A helper that
+does, like installing packages with a package manager, is a function that takes `h` and calls these steps. The ones
+tsinfra ships will be imports, not methods on `h` (see [the roadmap](./roadmap.md#helpers-worth-shipping)).
 
 Name a step like a function, starting with a verb ("Install Caddy"), or as the state it ensures ("Caddy is installed").
 Both read well after `ensure`.
 
-A change step's name must be unique in its host script. `file` and `link` are named by their path, so two of them on
-one path clash too. The second step fails the host, under its own name, with
+A change step's name must be unique in its host script. `file`, `link`, and `dir` are named by their path, so two of
+them on one path clash too. The second step fails the host, under its own name, with
 `an earlier ensure step has the same name, and step names must be unique in a host script`. `plan` fails the same way.
 The report, `needs`, and [open changes](#when-an-apply-doesnt-finish) tell steps apart by name. Reads and inspects are named by their command, so reading the same
 thing twice is fine.
@@ -323,7 +328,7 @@ type FileOptions = {
   secret?: boolean // never fetch or show the old content
   overwrite?: boolean // default true. false writes the content only when the file is missing
   validate?: (tempPath: string) => string // a command that checks the new content before it replaces the file
-  needs?: ChangeStepResult<"file" | "link" | "ensure">[]
+  needs?: ChangeStepResult<"file" | "link" | "dir" | "ensure">[]
 }
 ```
 
@@ -377,6 +382,9 @@ current mode, and a step states the mode it wants. A changed mode shows both not
 | `PUBLIC_EXECUTABLE_MODE`  | `rwxr-xr-x` | `755` | Scripts and binaries                       |
 | `GROUP_EXECUTABLE_MODE`   | `rwxr-x---` | `750` | A script only a group may run              |
 | `PRIVATE_EXECUTABLE_MODE` | `rwx------` | `700` | A script only its owner may run            |
+| `PUBLIC_DIRECTORY_MODE`   | `rwxr-xr-x` | `755` | Most directories                           |
+| `GROUP_DIRECTORY_MODE`    | `rwxr-x---` | `750` | A directory only a group may enter         |
+| `PRIVATE_DIRECTORY_MODE`  | `rwx------` | `700` | A directory only its owner may enter       |
 
 **Defaults.** `mode`, `user`, and `group` are managed only when given. An existing file keeps its own otherwise, the
 way Ansible, Salt, Chef, and Puppet all do, so a `file` step never loosens a `0600` file or takes ownership away from an
@@ -578,7 +586,7 @@ type LinkOptions = {
   group?: string | number // a name is compared with the group's name, a number with its gid
   force?: boolean // replace a regular file or an empty directory at the path
   sudo?: boolean // read and make the link as root
-  needs?: ChangeStepResult<"file" | "link" | "ensure">[]
+  needs?: ChangeStepResult<"file" | "link" | "dir" | "ensure">[]
 }
 ```
 
@@ -638,6 +646,56 @@ manages first.
 - **It returns a `ChangeStepResult<"link">`,** so `needs` and `after` accept it the same as a file's. A run can follow a link
   that changed.
 
+## `dir`
+
+```ts
+type DirOptions = {
+  mode?: FileMode // octal like "750", or symbolic like "rwxr-x---", the same forms as file's
+  user?: string | number // a name is compared with the user's name, a number with its uid
+  group?: string | number // a name is compared with the group's name, a number with its gid
+  sudo?: boolean // read and make the directory as root
+  needs?: ChangeStepResult<"file" | "link" | "dir" | "ensure">[]
+}
+```
+
+```ts
+const data = await h.dir("/srv/sonarr", { mode: GROUP_DIRECTORY_MODE, user: "sonarr", group: "sonarr", sudo: true })
+await h.file("/srv/sonarr/config.xml", sonarrConfig, { needs: [data], user: "sonarr", sudo: true })
+```
+
+Makes sure `path` is a directory, with the mode and owner the script gives, and reports whether it changed. The step is
+named by its path, and its path follows the same rules as `file`'s (see [`file`](#file)).
+
+`dir` is a step of its own, built on the object `want` of [`ensure`](#ensure). It compares a record of what the script
+gave with `ensure`'s comparison, so the report shows a row per key that differs, laid out like an object `ensure`'s,
+with its mode in both notations like a file's. A directory has no content to send, hash, or diff, which is what `file`
+exists for.
+
+- **What it compares** is `exists`, and only the attributes the script gave, like
+  `{ exists: true, mode: "750", user: "sonarr", group: "sonarr" }`. A missing directory is `exists: false`, and every
+  other key shows `(none)`.
+- **`mode`** takes the same forms as `file`'s, and the directory constants in its table, and compares as octal. So
+  `"750"`, `"rwxr-x---"`, and `GROUP_DIRECTORY_MODE` all match the same directory. It includes the setuid, setgid, and
+  sticky bits, so `"750"` doesn't match a `2750` directory, and `"2750"` asks for setgid. It's recorded as its bits, and
+  the report shows it like a file's, like `rwx------ (700) -> rwxr-x--- (750)`.
+- **`user` and `group` work as they do for `file`.** A name is compared with the name, and a number with the id, which
+  shows in italics. So do its errors for another user, and for a directory someone else owns.
+- **An attribute left out isn't compared,** so an existing directory keeps its own. With none, `dir` only makes sure the
+  directory exists.
+- **A symlink, a regular file, or anything else at the path is an error,** like
+  `'/srv/sonarr' is a symlink, so dir won't replace it`. A link to a directory counts, because `dir` manages the
+  directory itself.
+- **Missing parents are made too,** with the default mode and owner. Only the directory itself gets `mode`, `user`, and
+  `group`, so a tree that needs its own on each level takes a `dir` for each.
+- **`sudo` works as it does for `file`.** The directory details script and the write both run as root.
+- **The write** is `mkdir -p`, then `chown`, then `chmod` (see [Transport](./transport.md#directory-writes)).
+- **The output** is `~ change: (dir) /srv/sonarr`, with a row per key that differs, like
+  `mode: rwx------ (700) -> rwxr-x--- (750)`.
+- **It returns a `ChangeStepResult<"dir">`,** so `needs` and `after` accept it. A file that goes in a new directory can
+  need it, so `plan` waits instead of reading a path that doesn't exist yet.
+- **It doesn't remove a directory.** Removing one is an `ensure` (see
+  [Recipes](./recipes.md#removing-a-path-with-ensure)).
+
 ## `ensure`
 
 ```ts
@@ -658,7 +716,7 @@ type EnsureOptions<
   verify?: boolean // default true
   env?: Record<string, string> // see EnvOptions
   secretEnv?: Record<string, string>
-  needs?: ChangeStepResult<"file" | "link" | "ensure">[] // earlier steps this step's check depends on
+  needs?: ChangeStepResult<"file" | "link" | "dir" | "ensure">[] // earlier steps this step's check depends on
 }
 ```
 
@@ -1016,7 +1074,7 @@ run's check confirms it. Before reaching for it, try these:
 
 ```ts
 type RunOptions = EnvOptions & {
-  after: ChangeStepResult<"file" | "link" | "ensure" | "run">[] | "always" // run when any of these changed, or "always" on every pass
+  after: ChangeStepResult<"file" | "link" | "dir" | "ensure" | "run">[] | "always" // run when any of these changed, or "always" on every pass
 }
 ```
 

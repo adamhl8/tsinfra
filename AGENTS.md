@@ -41,7 +41,7 @@ Check new names, comments, docs, and error messages against these words.
   `ranFromOpenChanges` status). Those are the only things that make `plan` exit 2. **Run** is a change with no drift
   behind it. Don't coin a word for non-drift changes.
 - **Read step** is a step that tells the script about the host (`read`, `inspect`). **Change step** is a step that can
-  change the host, whether or not it does (`file`, `ensure`, `run`, `link`, later `reboot`).
+  change the host, whether or not it does (`file`, `ensure`, `run`, `link`, `dir`, later `reboot`).
 - **Tools** are named for what they can do, not which step has them. A check function gets `ReadTools`, even though
   `ensure` is a change step, and a fix or run function gets `ChangeTools`.
 - **Fact** is only something read from the host, like the CPU architecture. What a report shows under a step is its

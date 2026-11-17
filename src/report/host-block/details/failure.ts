@@ -38,7 +38,7 @@ const toPhaseStderrDetails = (commandRecords: CommandRecord[], phase: StillDiffe
 
 /** Returns what a failed step found: the values that still differ and their stderr, or the values before the fix. */
 export const toFailedStepDetails = (stepRecord: StepRecord): Detail[] => {
-  const { commands, comparisons } = stepRecord
+  const { kind, commands, comparisons } = stepRecord
   const { before, after } = comparisons
 
   if (after) {
@@ -46,7 +46,7 @@ export const toFailedStepDetails = (stepRecord: StepRecord): Detail[] => {
     if (after.inSync) return []
 
     const stderrDetails = STILL_DIFFERS_PHASES.flatMap((phase) => toPhaseStderrDetails(commands, phase))
-    return [...toComparisonValuesDetails(after.values, 0), ...stderrDetails]
+    return [...toComparisonValuesDetails(after.values, kind, 0), ...stderrDetails]
   }
 
   // Show the state from before the fix only from level 1, because the error already says what went wrong.
@@ -54,7 +54,7 @@ export const toFailedStepDetails = (stepRecord: StepRecord): Detail[] => {
   if (before && !before.inSync) {
     return [
       { kind: "note", note: { kind: "valuesBeforeFix" }, from: 1 },
-      ...toComparisonValuesDetails(before.values, 1),
+      ...toComparisonValuesDetails(before.values, kind, 1),
     ]
   }
 

@@ -9,7 +9,7 @@ Patterns that need no tsinfra feature, only the steps as they are.
 - [An idempotence check](#an-idempotence-check)
 - [Checking a whole config with `run`](#checking-a-whole-config-with-run)
 - [Removing a path with `ensure`](#removing-a-path-with-ensure)
-- [A directory with `ensure`](#a-directory-with-ensure)
+- [A directory](#a-directory)
 - [Turn a step into its removal instead of deleting it](#turn-a-step-into-its-removal-instead-of-deleting-it)
 - [The state you want, or what's left to do](#the-state-you-want-or-whats-left-to-do)
 - [Running the latest container images](#running-the-latest-container-images)
@@ -60,22 +60,17 @@ accepts. `validate` is for a file that must never be broken, even for a moment.
 Check `test -e path || test -L path` with `want: false`, because `test -e` is false for a dead link, so a check with
 `-e` alone never removes one.
 
-## A directory with `ensure`
+## A directory
 
-When only its existence matters, use `want: true` with the check `test -d path`, and fix with `mkdir -p path`. When its mode or
-owner matters too, compare them as a string:
+Use [`dir`](./steps.md#dir). It makes the directory and any missing parents, and manages its mode and owner when they're
+given:
 
 ```ts
-await h.ensure("Create /srv/sonarr", {
-  want: "750 sonarr sonarr",
-  check: "test -d /srv/sonarr && stat -c '%a %U %G' /srv/sonarr",
-  fix: "sudo install -d -m 750 -o sonarr -g sonarr /srv/sonarr",
-})
+await h.dir("/srv/sonarr", { mode: GROUP_DIRECTORY_MODE, user: "sonarr", group: "sonarr", sudo: true })
 ```
 
-A missing directory gives empty output, which doesn't match `want`, so the fix runs. The `test -d` stops a regular file
-with the same mode and owner from looking correct. `stat -c` is GNU only, and macOS needs `stat -f`, so a helper is
-worth writing for a script that manages many directories or runs on both.
+Write an `ensure` only for what `dir` doesn't manage, like a directory's ACLs or its SELinux context. Removing a
+directory is an `ensure` too (see [Removing a path with `ensure`](#removing-a-path-with-ensure)).
 
 ## Turn a step into its removal instead of deleting it
 
@@ -260,8 +255,8 @@ for await (const relativePath of new Glob("**/*").scan({ cwd: siteDir })) {
 }
 ```
 
-`file` creates missing parent directories, and an `ensure` sets a directory's mode when it matters (see
-[A directory with `ensure`](#a-directory-with-ensure)). A file removed from the local directory stays on the host, so
+`file` creates missing parent directories, and `dir` sets a directory's mode and owner when they matter (see
+[A directory](#a-directory)). A file removed from the local directory stays on the host, so
 remove it with its own step, or rebuild the directory.
 
 ## A value from your own environment in a `sudo` command

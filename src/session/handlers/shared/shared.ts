@@ -39,6 +39,7 @@ export {
   TEMP_PATH_ARG,
   toBytes,
   toOctalMode,
+  toModeBits,
   toSymbolicMode,
   toWriteScriptPaths,
   validateHostPath,

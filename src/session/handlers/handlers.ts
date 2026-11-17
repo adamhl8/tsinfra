@@ -3,6 +3,8 @@ export { handleDir } from "#session/handlers/dir/dir.ts"
 export type {
   Check,
   EnsureComparisonValues,
+  RecordComparisonValues,
+  RecordValue,
   EnsureOptions,
   FixDifference,
   Want,
@@ -47,6 +49,7 @@ export {
   PUBLIC_EXECUTABLE_MODE,
   PUBLIC_FILE_MODE,
   toOctalMode,
+  toModeBits,
   toSymbolicMode,
   validateInput,
 } from "#session/handlers/shared/shared.ts"

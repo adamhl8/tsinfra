@@ -215,7 +215,7 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
     together into a detail's rows or an entry's lines. It adds separators, like the colon after a status or the `, `
     between counts, and every word: label and heading names, sentences, count phrases, and the words for the model's
     data, like a warning's or a hint's kind. Each detail kind has its own file in `details/`, so its words live with
-    it.
+    it. What several of them share, like a row's layout or how a mode or an owner reads, is in `details/shared/`.
   - **Layout** (`report/format/layout.ts`) pads and indents the rows into columns.
 - **Status lines.** A host's block is its name, then its entries, or "no steps" for a script that made none. Each entry
   is a status line, with its details and any error on the lines under it. A status line starts with the entry's status,
@@ -223,7 +223,7 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   Then comes the step's kind in dim parentheses, like `(file)`, and then its name. Nothing is padded to match the other
   entries, so each entry stands on its own, and one long name doesn't push the rest of the block to the right. The
   parentheses keep the kind apart from the name without color. A failure no step owns shows `(preparation)` or `(host fn)` in place of a kind,
-  also in italics, so it doesn't read as a kind of step (see [Kinds of failure](#kinds-of-failure)). A `changed` step from `ensure`, `file`, or `link` is `~ change`, and a `ran` step from `run` is
+  also in italics, so it doesn't read as a kind of step (see [Kinds of failure](#kinds-of-failure)). A `changed` step from `ensure`, `file`, `link`, or `dir` is `~ change`, and a `ran` step from `run` is
   `> triggered`, because a step it follows changed. A `ranFromOpenChanges` run is `> triggered` too. A `resume` step
   is `^ resume` in cyan, because it's right, but its change is still open from an earlier apply that didn't finish (see
   [Steps](./steps.md#when-an-apply-doesnt-finish)). Any failed step is `! failed`, because the status matters more than the kind once
@@ -370,7 +370,7 @@ in the order the script called them, and the host's failure, if it failed.
   `unknownHostKey` with the target, and the report picks its words. The kind comes from where the host was when it
   failed: in preparation, in a step, or in the host function outside any step. A host whose preparation failed has no
   steps.
-- **A step** records its kind (`read`, `inspect`, `ensure`, `run`, `file`, or `link`), its name, and its status. A read
+- **A step** records its kind (`read`, `inspect`, `ensure`, `run`, `file`, `link`, or `dir`), its name, and its status. A read
   or inspect has no name, so it records its command. A step records the options it set that the report shows, by
   name, as one record: first its shell options, the ones that change how every command in it runs (`sudo`, `env`, and
   `secretEnv`), then its own, like `file`'s `validate` command or `overwrite: false`. An option at its default isn't

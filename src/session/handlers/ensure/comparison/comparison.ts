@@ -21,7 +21,12 @@ import { createCommandExitError, describeType } from "#utils.ts"
 
 export type { ListDifference, ListWant } from "#session/handlers/ensure/comparison/list.ts"
 export { listWantSchema } from "#session/handlers/ensure/comparison/list.ts"
-export type { RecordDifference, RecordValue, RecordWant } from "#session/handlers/ensure/comparison/record.ts"
+export type {
+  RecordComparisonValues,
+  RecordDifference,
+  RecordValue,
+  RecordWant,
+} from "#session/handlers/ensure/comparison/record.ts"
 export { compareRecords, isRecord, recordWantSchema } from "#session/handlers/ensure/comparison/record.ts"
 export type { StringComparisonValues, StringWant } from "#session/handlers/ensure/comparison/string.ts"
 export { stringWantSchema } from "#session/handlers/ensure/comparison/string.ts"

@@ -30,7 +30,7 @@ import {
   toVerbosity,
 } from "#report/report.ts"
 import type { Verbosity } from "#report/verbosity.ts"
-import { PUBLIC_FILE_MODE } from "#session/handlers/shared/filesystem/mode.ts"
+import { GROUP_DIRECTORY_MODE, PUBLIC_FILE_MODE } from "#session/handlers/shared/filesystem/mode.ts"
 import type { HostRecord } from "#session/session.ts"
 import { createHostRecord } from "#session/session.ts"
 import { runLocal } from "#transport/local.ts"
@@ -131,7 +131,9 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
       // `ensure` records: a row per key that differs, with `(none)` for a key only one side has.
       // `file`: a diff with two hunks, `mode:` and a numeric `group:`, the note for a long diff and a slow one, and each
       // content description. `link`: a changed target, both replacements, and a missing target with its warning, on a
-      // step that changes and one that was already right. A triggered multi-line run and one that didn't trigger.
+      // step that changes and one that was already right. `dir`: a new directory with a `mode:` and a numeric `group:`
+      // row against `(none)`, an existing one whose mode changes, and one that was already right. A triggered multi-line
+      // run and one that didn't trigger.
       // A read with `env` and `secretEnv`, with a multi-line, an empty, a padded, and a masked value.
       // Commands at `-vv`, and their phases, output, and labels at `-vvv`.
       name: "elements",
@@ -148,6 +150,8 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
         await bun.write(marker("old-dotfile"), "set -x EDITOR nano\n")
         await bun.write(marker("real-file"), "a file where the link goes\n")
         await mkdir(marker("empty-dir"))
+        await mkdir(marker("open-dir"), { mode: 0o700 })
+        await mkdir(marker("right-dir"))
         await symlink(marker("old-dotfile"), marker("moved-link"))
         await symlink(marker("missing-dotfile"), marker("broken-link"))
 
@@ -219,6 +223,10 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
         await h.link(marker("empty-dir"), marker("dotfile"), { force: true })
         await h.link(marker("new-link"), marker("missing-config "))
         await h.link(marker("broken-link"), marker("missing-dotfile"))
+
+        await h.dir(marker("data/sonarr"), { mode: GROUP_DIRECTORY_MODE, group: OTHER_GROUP_ID })
+        await h.dir(marker("open-dir"), { mode: GROUP_DIRECTORY_MODE })
+        await h.dir(marker("right-dir"))
 
         await h.run("Reload the shell", "echo reloading\necho done", { after: [packages] })
         const git = await h.ensure("Install git", { want: true, check: "true", fix: "true" })

@@ -48,7 +48,7 @@ export const toStepDetails = (stepRecord: FinishedStepRecord): Detail[] => {
   const values = comparisons.before?.values
   // Show how a changed step's value would change, when its name doesn't already say.
   const showsChange = status === "changed" && values !== undefined && SHOWS_CHANGE_DETAILS[values.kind]
-  const changeDetails = showsChange ? toComparisonValuesDetails(values, 0) : []
+  const changeDetails = showsChange ? toComparisonValuesDetails(values, stepRecord.kind, 0) : []
   const warningDetails = toWarningDetails(stepRecord)
   return [...optionsDetails, ...changeDetails, ...warningDetails, ...commandsDetails]
 }

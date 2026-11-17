@@ -12,6 +12,7 @@ the remote shell.
 - [SSH and ControlMaster](#ssh-and-controlmaster)
   - [How other tools reach hosts](#how-other-tools-reach-hosts)
 - [Link writes](#link-writes)
+- [Directory writes](#directory-writes)
 - [sudo](#sudo)
 - [Saved state](#saved-state)
 
@@ -319,15 +320,34 @@ trap - EXIT
 Of the tools in the table above, only Ansible replaces a link atomically by default, and Salt does with `atomic: true`.
 Both call `rename()` directly, which never follows a link. pyinfra, Chef, Puppet, and cdist remove the old link first.
 
+## Directory writes
+
+`dir` writes with a short script, because a directory has no content to swap in:
+
+```sh
+set -eu
+mkdir -p '/srv/sonarr'
+chown -h -- 'sonarr:sonarr' '/srv/sonarr'   # when there's a value
+chmod 00750 '/srv/sonarr'                   # when there's a mode
+```
+
+- **`mkdir -p` makes missing parents,** with the default mode and owner. Only the directory itself gets the step's
+  attributes.
+- **`chown` runs before `chmod`,** like `file`'s, because POSIX lets `chown` clear the setuid and setgid bits. Linux
+  leaves a directory's alone, but the mode has to win where they're cleared.
+- **The mode is five octal digits,** like `00750`. GNU `chmod` keeps a directory's setuid and setgid bits for a numeric
+  mode with fewer, so `chmod 750` on a `2750` directory would change nothing. GNU documents the leading zeros as the way
+  to clear them, and BSD and busybox read them as plain octal.
+
 ## sudo
 
 Commands say `sudo` themselves, exactly where they need it, like `fix: "sudo systemctl enable --now sonarr"` or
 `curl -fsSL ... | sudo tar -x -C /opt`. Only that command escalates, and the rest of a pipeline runs as the SSH user.
-No command step or tool takes a `sudo` option. `file` and `link` do, because tsinfra writes their commands, so there's
-nowhere else to put it (see [Steps](./steps.md#sudo-and-permissions)).
+No command step or tool takes a `sudo` option. `file`, `link`, and `dir` do, because tsinfra writes their commands, so
+there's nowhere else to put it (see [Steps](./steps.md#sudo-and-permissions)).
 
 A host whose script uses sudo declares `sudo` on `host()`, whether that's a command's own `sudo` or `sudo: true` on
-`file` or `link`. It's off by default:
+`file`, `link`, or `dir`. It's off by default:
 
 ```ts
 export default host({ name: "macbook", target: "@local", sudo: true }, fn) // prompts when passwordless sudo isn't set up

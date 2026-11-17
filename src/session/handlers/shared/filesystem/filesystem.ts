@@ -22,6 +22,7 @@ export {
   statModeSchema,
   SYMBOLIC_MODE_PATTERN,
   toOctalMode,
+  toModeBits,
   toSymbolicMode,
 } from "#session/handlers/shared/filesystem/mode.ts"
 export { checkCanSetOwner, findOwnerChanges } from "#session/handlers/shared/filesystem/owner.ts"

@@ -6,16 +6,16 @@ import type { HostDirDetails } from "#session/handlers/dir/host-dir-details.ts"
 import type { RecordWant } from "#session/handlers/ensure/ensure.ts"
 import { compareRecords } from "#session/handlers/ensure/ensure.ts"
 import type { Comparison, HostFileAttributeDetails } from "#session/handlers/shared/shared.ts"
-import { checkCanSetOwner, parseFileMode, toOctalMode } from "#session/handlers/shared/shared.ts"
+import { checkCanSetOwner, parseFileMode } from "#session/handlers/shared/shared.ts"
 import type { StepContext } from "#session/step.ts"
 
-/** Returns what the script wants: the directory, and each attribute it gave, with the mode in octal. */
+/** Returns what the script wants: the directory, and each attribute it gave, with the mode as its bits. */
 const toDirWant = (options: ValidDirOptions): RecordWant => {
   const { mode, user, group } = options
 
   return {
     exists: true,
-    ...(mode !== undefined && { mode: toOctalMode(parseFileMode(mode)) }),
+    ...(mode !== undefined && { mode: parseFileMode(mode) }),
     ...(user !== undefined && { user }),
     ...(group !== undefined && { group }),
   }
@@ -31,7 +31,7 @@ const toCurrentDirRecord = (attributes: HostFileAttributeDetails | undefined, op
 
   return {
     exists: true,
-    ...(mode !== undefined && { mode: toOctalMode(attributes.mode) }),
+    ...(mode !== undefined && { mode: attributes.mode }),
     ...(user !== undefined && { user: typeof user === "number" ? attributes.uid : attributes.user }),
     ...(group !== undefined && { group: typeof group === "number" ? attributes.gid : attributes.group }),
   }

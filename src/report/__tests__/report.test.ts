@@ -543,10 +543,10 @@ describe("renderHostBlock for a dir step", () => {
       [
         "a",
         `  ~ change: (dir) ${directory}`,
-        "      mode: 700 -> 750",
+        "      mode: rwx------ (700) -> rwxr-x--- (750)",
         `  ~ change: (dir) ${missingPath}`,
         "      exists: false -> true",
-        "      mode:   (none) -> 750",
+        "      mode:   (none) -> rwxr-x--- (750)",
         "      group:  (none) -> web",
       ].join("\n"),
     )

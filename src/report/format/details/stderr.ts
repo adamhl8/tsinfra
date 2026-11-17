@@ -1,5 +1,5 @@
-import type { AlignedRow } from "#report/format/details/aligned-row.ts"
-import { formatAlignedRow } from "#report/format/details/aligned-row.ts"
+import type { AlignedRow } from "#report/format/details/shared/shared.ts"
+import { formatAlignedRow } from "#report/format/details/shared/shared.ts"
 import { failedCommandLineElement, stderrLineElement } from "#report/format/elements/elements.ts"
 import { splitNonEmptyLines } from "#utils.ts"
 

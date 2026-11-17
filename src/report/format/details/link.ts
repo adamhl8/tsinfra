@@ -1,6 +1,5 @@
-import type { AlignedRow } from "#report/format/details/aligned-row.ts"
-import { formatAlignedRow } from "#report/format/details/aligned-row.ts"
-import { formatOwnerChange } from "#report/format/details/owner.ts"
+import type { AlignedRow } from "#report/format/details/shared/shared.ts"
+import { formatAlignedRow, formatOwnerChange } from "#report/format/details/shared/shared.ts"
 import { changeElement, changeDescriptionElement, wantValueElement } from "#report/format/elements/elements.ts"
 import type { LinkComparisonValues, LinkChange } from "#session/session.ts"
 
