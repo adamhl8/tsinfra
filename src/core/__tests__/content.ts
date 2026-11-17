@@ -2,7 +2,7 @@ import crypto from "node:crypto"
 
 import { CryptoHasher } from "bun"
 
-/** The most content `file` takes. */
+/** The most content `file` or `input` takes. */
 export const CONTENT_LIMIT_BYTES = 10_000_000
 
 // Fill the bytes in chunks, because `getRandomValues` takes at most 65,536 bytes at a time.

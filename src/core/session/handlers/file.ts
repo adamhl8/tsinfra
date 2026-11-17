@@ -13,6 +13,8 @@ import { fileAttributeOptionsSchema, NO_NEEDS, needsOptionsSchema } from "#core/
 import type { HandlerOptions, SudoOptions } from "#core/session/handlers/options/shell.ts"
 import type { ChangeStepResult } from "#core/session/handlers/shared/change-step-result.ts"
 import { withChangeStepResult } from "#core/session/handlers/shared/change-step-result.ts"
+import type { Content } from "#core/session/handlers/shared/content.ts"
+import { contentSchema, INVALID_CONTENT_REASON } from "#core/session/handlers/shared/content.ts"
 import { converge } from "#core/session/handlers/shared/converge.ts"
 import { validateHostPath } from "#core/session/handlers/shared/filesystem/path.ts"
 import { validateInput } from "#core/session/handlers/shared/validate-input.ts"
@@ -22,15 +24,7 @@ import type { HandlerReturn, StepContext } from "#core/session/step.ts"
  * What the file should hold: a string or bytes computed on the control machine, or a `Blob` like `bun.file(...)` for a
  * file there.
  */
-export type FileContent = string | Uint8Array | Blob
-
-// Widen `Uint8Array` with `as`, because ArkType infers `Uint8Array<ArrayBuffer>` and `FileContent` takes any buffer.
-const fileContentSchema = type
-  .declare<FileContent>()
-  .type(type("string").or(type.instanceOf(Uint8Array).as<Uint8Array>()).or(type.instanceOf(Blob)))
-
-// Write the reason here, because ArkType's summary names different types depending on the value.
-const INVALID_CONTENT_REASON = "must be a string, bytes, or a Blob"
+export type FileContent = Content
 
 /** Returns a command that checks the new content, given the temp file's path already quoted for the shell. */
 export type ValidateFunction = (tempPath: string) => string
@@ -77,7 +71,7 @@ export const handleFile = async (
   const absolutePath = validateHostPath(path, home, { inputLabel: "path", givenTo: kind })
   if (isErr(absolutePath)) return absolutePath
 
-  const validContent = validateInput(content, fileContentSchema, {
+  const validContent = validateInput(content, contentSchema, {
     inputLabel: "content",
     givenTo: kind,
     reason: INVALID_CONTENT_REASON,
