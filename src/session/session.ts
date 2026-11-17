@@ -5,6 +5,7 @@ import type { HomeDirectory } from "#hosts/hosts.ts"
 import type { Mode } from "#mode.ts"
 import type {
   EnsureOptions,
+  SetWant,
   Want,
   FileContent,
   FileOptions,
@@ -179,7 +180,11 @@ export interface Host extends Record<StepKind, unknown> {
    *
    * A failing fix, or a check that still differs after it, fails the host and throws.
    */
-  ensure: <T extends Want>(name: string, options: EnsureOptions<T>) => Promise<ChangeStepResult<"ensure">>
+  ensure: {
+    // Try a set `want` first, so an empty `new Set()` is a set of strings, not of `unknown`.
+    (name: string, options: EnsureOptions<SetWant>): Promise<ChangeStepResult<"ensure">>
+    <T extends Want>(name: string, options: EnsureOptions<T>): Promise<ChangeStepResult<"ensure">>
+  }
   /**
    * Runs `cmd`, a command or a function given `exec`, when a step in `after` changed, or on every pass with `after:
    * "always"`. It doesn't read the host's state, so it never counts as drift. In `plan` it never runs, and reports
@@ -329,7 +334,7 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
     link: async (path, target, options) =>
       callStep(path, "link", async (ctx) => handleLink(ctx, path, target, options), options),
     dir: async (path, options) => callStep(path, "dir", async (ctx) => handleDir(ctx, path, options), options),
-    ensure: async (stepName, options) =>
+    ensure: async <T extends Want>(stepName: string, options: EnsureOptions<T>) =>
       callStep(stepName, "ensure", async (ctx) => handleEnsure(ctx, options), options),
     run: async (stepName, cmd, options) =>
       callStep(stepName, "run", async (ctx) => handleRun(ctx, cmd, options), options),

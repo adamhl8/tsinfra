@@ -5,22 +5,20 @@ import type {
   RecordValue,
   SetDifference,
   SetWant,
-  StringComparisonValues,
+  StringDifference,
   StringWant,
 } from "#session/handlers/ensure/comparison/comparison.ts"
 import type { Want } from "#session/handlers/ensure/want.ts"
 import type { Change, Comparison } from "#session/handlers/shared/shared.ts"
 import { changeSchema } from "#session/handlers/shared/shared.ts"
 
-/** What a string's fix gets: what the check answered. */
-type StringDifference = Pick<StringComparisonValues, "got">
-
 /**
  * What a fix function gets after its tools, which it can't work out from `want`: what the check answered for a string
- * `want`, what's missing and extra for a list or a set, and what's missing, extra, and changed for a record. A list's,
- * a set's, or a record's `got` isn't passed, because it can be rebuilt from `want` and its parts. A record's difference
- * holds the type of `want`'s values, so a `want` of strings gets strings. A `want` that may be any of them gets the one
- * for its kind. Checks `[T]` so it doesn't split a union `T`.
+ * or a list `want`, what's missing and extra for a set, and what's missing, extra, and changed for a record. A list
+ * gets its `got`, because `missing` and `extra` can't describe a reorder. A set's or a record's `got` isn't passed,
+ * because it can be rebuilt from `want` and its parts. A record's difference holds the type of `want`'s values, so a
+ * `want` of strings gets strings. A `want` that may be any of them gets the one for its kind. Checks `[T]` so it
+ * doesn't split a union `T`.
  */
 export type FixDifference<T extends Want> = [T] extends [boolean]
   ? undefined
@@ -44,12 +42,12 @@ export type Fix<T extends Want> = [T] extends [boolean] ? Change : Change<[diffe
 export const fixSchema = changeSchema.as<Fix<Want>>()
 
 /**
- * Returns what a fix function gets from how the check compared: nothing for a boolean, `got` for a string, and the
- * parts for a list, a set, or a record.
+ * Returns what a fix function gets from how the check compared: nothing for a boolean, `got` for a string or a list,
+ * and the parts for a set or a record.
  */
 export const toFixDifference = ({ values }: Comparison): FixDifference<Want> => {
   if (values.kind === "string") return { got: values.got }
-  if (values.kind === "list") return { missing: values.missing, extra: values.extra }
+  if (values.kind === "list") return { got: values.got }
   if (values.kind === "set") return { missing: values.missing, extra: values.extra }
   if (values.kind === "record") return { missing: values.missing, extra: values.extra, changed: values.changed }
   return undefined

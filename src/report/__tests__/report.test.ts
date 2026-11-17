@@ -462,40 +462,95 @@ describe("renderHostBlock for a step that would change a string", () => {
 })
 
 describe("renderHostBlock for a step that would change a list", () => {
-  it("should show missing items, then extra ones, each in the order its side lists them", async () => {
+  it("should show a reorder as the item leaving one place and arriving in another", async () => {
     const hostBlock = await formatBlock(async (h) => {
-      await h.ensure("Install packages", {
-        want: ["jq", "fd", "rg"],
-        check: String.raw`printf 'zsh\nfd\nbat\n'`,
+      await h.ensure("Set the search domains", {
+        want: ["lan", "home.arpa"],
+        check: String.raw`printf 'home.arpa\nlan\n'`,
         fix: "true",
       })
     }, "plan")
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
-      "      missing: jq",
-      "               rg",
-      "      extra:   zsh",
-      "               bat",
+      "      ──────────",
+      "      -home.arpa",
+      "       lan",
+      "      +home.arpa",
+      "      ──────────",
     ])
   })
 
-  it("should leave out the row of a side with no items", async () => {
+  it("should show an added and a removed item, each with one unchanged item around it", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Set the items", {
+        want: ["a", "b", "new", "c", "d", "f"],
+        check: String.raw`printf 'a\nb\nc\nd\ne\nf\n'`,
+        fix: "true",
+      })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
+      "      ────",
+      "       b",
+      "      +new",
+      "       c",
+      "       d",
+      "      -e",
+      "       f",
+      "      ────",
+    ])
+  })
+
+  it("should split changes far apart into hunks, with a rule between them", async () => {
+    const items = Array.from({ length: 12 }, (_, index) => `i${index}`)
+    const wantItems = items.with(1, "I1").with(10, "I10")
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Set the items", { want: wantItems, check: `printf '%s\\n' ${items.join(" ")}`, fix: "true" })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
+      "      ────",
+      "       i0",
+      "      -i1",
+      "      +I1",
+      "       i2",
+      "      ────",
+      "       i9",
+      "      -i10",
+      "      +I10",
+      "       i11",
+      "      ────",
+    ])
+  })
+
+  it("should show each item by the value rules, like an empty item and one with a trailing space", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Set the items", {
+        want: ["a", "", "b"],
+        check: async ({ read }) => [await read("echo a"), "b "],
+        fix: "true",
+      })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
+      "      ────────",
+      "       a",
+      "      -'b '",
+      "      +(empty)",
+      "      +b",
+      "      ────────",
+    ])
+  })
+
+  it("should show each item of an empty want as a removed line", async () => {
     const hostBlock = await formatBlock(async (h) => {
       await h.ensure("Upgrade packages", { want: [], check: String.raw`printf 'fd\nrg\n'`, fix: "true" })
     }, "plan")
 
-    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      extra: fd", "             rg"])
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      ───", "      -fd", "      -rg", "      ───"])
   })
 
-  it("should show each item by the value rules, like an item with a trailing space quoted", async () => {
-    const hostBlock = await formatBlock(async (h) => {
-      await h.ensure("Install packages", { want: ["fd"], check: String.raw`printf 'fd \n'`, fix: "true" })
-    }, "plan")
-
-    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      missing: fd", "      extra:   'fd '"])
-  })
-
-  it("should show a note for more than 15 differing items, and every item with --verbose", async () => {
+  it("should show a note for a diff longer than 15 lines, and the full diff with --verbose", async () => {
     const items = Array.from({ length: 16 }, (_, index) => `pkg${index}`)
     const upgrade = async (h: Host) => {
       await h.ensure("Upgrade packages", { want: [], check: `printf '%s\\n' ${items.join(" ")}`, fix: "true" })
@@ -504,8 +559,8 @@ describe("renderHostBlock for a step that would change a list", () => {
     const hostBlock = await formatBlock(upgrade, "plan")
     const verboseLines = (await formatVerboseBlock(upgrade))?.split("\n").slice(2)
 
-    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      16 items differ, run with --verbose to see them"])
-    expect([verboseLines?.length, verboseLines?.[0]]).toStrictEqual([16, "      extra: pkg0"])
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      long diff (16 lines), run with --verbose to see it"])
+    expect([verboseLines?.length, verboseLines?.[1]]).toStrictEqual([18, "      -pkg0"])
   })
 })
 
@@ -573,16 +628,62 @@ describe("renderHostBlock for a dir step", () => {
 })
 
 describe("renderHostBlock for a step that would change a set", () => {
-  it("should show missing items, then extra ones, like a list", async () => {
+  it("should show missing items, then extra ones, each in the order its side lists them", async () => {
     const hostBlock = await formatBlock(async (h) => {
       await h.ensure("Install packages", {
-        want: new Set(["jq", "fd"]),
-        check: String.raw`printf 'zsh\nfd\n'`,
+        want: new Set(["jq", "fd", "rg"]),
+        check: String.raw`printf 'zsh\nfd\nbat\n'`,
         fix: "true",
       })
     }, "plan")
 
-    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      missing: jq", "      extra:   zsh"])
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
+      "      missing: jq",
+      "               rg",
+      "      extra:   zsh",
+      "               bat",
+    ])
+  })
+
+  it("should leave out the row of a side with no items", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Upgrade packages", { want: new Set(), check: String.raw`printf 'fd\nrg\n'`, fix: "true" })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      extra: fd", "             rg"])
+  })
+
+  it("should leave out the extra row when the check found only what want has", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Install packages", { want: new Set(["fd", "rg"]), check: "echo fd", fix: "true" })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      missing: rg"])
+  })
+
+  it("should show each item by the value rules, like an item with a trailing space quoted", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Install packages", { want: new Set(["fd"]), check: String.raw`printf 'fd \n'`, fix: "true" })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      missing: fd", "      extra:   'fd '"])
+  })
+
+  it("should show a note for more than 15 differing items, and every item with --verbose", async () => {
+    const items = Array.from({ length: 16 }, (_, index) => `pkg${index}`)
+    const upgrade = async (h: Host) => {
+      await h.ensure("Upgrade packages", {
+        want: new Set(),
+        check: `printf '%s\\n' ${items.join(" ")}`,
+        fix: "true",
+      })
+    }
+
+    const hostBlock = await formatBlock(upgrade, "plan")
+    const verboseLines = (await formatVerboseBlock(upgrade))?.split("\n").slice(2)
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      16 items differ, run with --verbose to see them"])
+    expect([verboseLines?.length, verboseLines?.[0]]).toStrictEqual([16, "      extra: pkg0"])
   })
 })
 

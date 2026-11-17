@@ -242,12 +242,28 @@ describe("h.ensure with a string want", () => {
 })
 
 describe("h.ensure with a list want", () => {
-  it("should compare a command's lines as a set, so order and duplicates don't count", async () => {
+  it("should compare a command's lines in order", async () => {
     const { host: h } = await createSession()
 
     expect(
-      await ensureOrMessage(h, { want: ["a", "b"], check: String.raw`printf 'b\na\na\n'`, fix: "exit 1" }),
+      await ensureOrMessage(h, { want: ["a", "b"], check: String.raw`printf 'a\nb\n'`, fix: "exit 1" }),
     ).toMatchObject({ changed: false })
+  })
+
+  it("should find a reorder", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(
+      await ensureOrMessage(h, { want: ["a", "b"], check: String.raw`printf 'b\na\n'`, fix: "true" }),
+    ).toMatchObject({ changed: true })
+  })
+
+  it("should count a duplicate", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(await ensureOrMessage(h, { want: ["a"], check: String.raw`printf 'a\na\n'`, fix: "true" })).toMatchObject({
+      changed: true,
+    })
   })
 
   it("should leave out a command's empty and whitespace-only lines", async () => {
@@ -272,13 +288,19 @@ describe("h.ensure with a list want", () => {
     expect(await ensureOrMessage(h, { want: [], check: "true", fix: "exit 1" })).toMatchObject({ changed: false })
   })
 
-  it("should give the fix what's missing and extra, and return changed once they're gone", async () => {
-    const marker = path.join(await makeTempDir(), "packages")
+  it("should not be in sync with an empty want when the check prints items", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(await ensureOrMessage(h, { want: [], check: "echo a", fix: "true" })).toMatchObject({ changed: true })
+  })
+
+  it("should give the fix the host's list as got, and return changed once it matches", async () => {
+    const marker = path.join(await makeTempDir(), "domains")
     const { host: h } = await createSession()
     const differences: unknown[] = []
     const result = await ensureOrMessage(h, {
       want: ["a", "b"],
-      check: String.raw`cat '${marker}' 2>/dev/null || printf 'a\nc\n'`,
+      check: String.raw`cat '${marker}' 2>/dev/null || printf 'b\na\n'`,
       fix: async ({ exec }, difference) => {
         differences.push(difference)
         await exec(String.raw`printf 'a\nb\n' > '${marker}'`)
@@ -287,7 +309,7 @@ describe("h.ensure with a list want", () => {
 
     expect([result, differences]).toStrictEqual([
       { name: "Make marker", kind: "ensure", changed: true },
-      [{ missing: ["b"], extra: ["c"] }],
+      [{ got: ["b", "a"] }],
     ])
   })
 
@@ -299,15 +321,15 @@ describe("h.ensure with a list want", () => {
     )
   })
 
-  it("should compare the list a function check returns", async () => {
-    const { host: h } = await createSession()
+  it("should compare the list a function check returns in order", async () => {
+    const { host: h } = await createSession("plan")
     const result = await ensureOrMessage(h, {
       want: ["b", "a"],
       check: async ({ read }) => (await read(String.raw`printf 'a\nb\n'`)).split("\n"),
-      fix: "exit 1",
+      fix: "true",
     })
 
-    expect(result).toMatchObject({ changed: false })
+    expect(result).toMatchObject({ changed: true })
   })
 
   it("should fail validation when a function check returns a string for a list want", async () => {
@@ -370,6 +392,22 @@ describe("h.ensure with a set want", () => {
       { name: "Make marker", kind: "ensure", changed: true },
       [{ missing: ["b"], extra: ["c"] }],
     ])
+  })
+
+  it("should take an empty Set as a set of strings, and give its fix what's extra", async () => {
+    const { host: h } = await createSession()
+    const extras: string[][] = []
+    await h.ensure("Clear the items", {
+      want: new Set(),
+      check: "echo a",
+      fix: async ({ exec }, { extra }) => {
+        extras.push(extra)
+        await exec("true")
+      },
+      verify: false,
+    })
+
+    expect(extras).toStrictEqual([["a"]])
   })
 
   it("should fail validation when a function check returns an array for a set want", async () => {

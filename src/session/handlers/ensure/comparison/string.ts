@@ -7,10 +7,14 @@ import { stripTrailingNewlines } from "#utils.ts"
 export const stringWantSchema = type("string")
 export type StringWant = typeof stringWantSchema.infer
 
-/** A string the check gave and the one it wanted, with their trailing newlines stripped. */
-export interface StringComparisonValues {
-  kind: "string"
+/** What a string's fix gets: what the check answered. */
+export interface StringDifference {
   got: StringWant
+}
+
+/** A string the check gave and the one it wanted, with their trailing newlines stripped. */
+export interface StringComparisonValues extends StringDifference {
+  kind: "string"
   want: StringWant
 }
 

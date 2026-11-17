@@ -7,6 +7,7 @@ export type {
   RecordValue,
   EnsureOptions,
   FixDifference,
+  SetWant,
   Want,
 } from "#session/handlers/ensure/ensure.ts"
 export { handleEnsure } from "#session/handlers/ensure/ensure.ts"

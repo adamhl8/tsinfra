@@ -1,25 +1,25 @@
 import { describe, expect, it } from "bun:test"
 
-import { formatDiff, toDiffLimits } from "#report/format/details/diff.ts"
+import { formatFileDiff, toDiffLimits } from "#report/format/details/diff/diff.ts"
 
 const numberedLines = (prefix: string, count: number) =>
   Array.from({ length: count }, (_, index) => `${prefix}${index}`).join("\n")
 
-describe("formatDiff", () => {
+describe("formatFileDiff", () => {
   it.each([0, 1] as const)("should show a note, not a diff, when the diff takes too long at level %d", (verbosity) => {
-    expect(formatDiff(numberedLines("a", 20_000), numberedLines("b", 20_000), toDiffLimits(verbosity))).toStrictEqual([
-      "diff took too long to compute, run with -vv to see it",
-    ])
+    expect(
+      formatFileDiff(numberedLines("a", 20_000), numberedLines("b", 20_000), toDiffLimits(verbosity)),
+    ).toStrictEqual(["diff took too long to compute, run with -vv to see it"])
   })
 
   it("should hide a diff longer than 15 lines, and say how long it is", () => {
-    expect(formatDiff(numberedLines("a", 10), numberedLines("b", 10), toDiffLimits(0))).toStrictEqual([
+    expect(formatFileDiff(numberedLines("a", 10), numberedLines("b", 10), toDiffLimits(0))).toStrictEqual([
       "long diff (20 lines), run with --verbose to see it",
     ])
   })
 
   it("should show a long diff in full from level 1, framed by a rule above and below", () => {
-    const diffLines = formatDiff(numberedLines("a", 10), numberedLines("b", 10), toDiffLimits(1))
+    const diffLines = formatFileDiff(numberedLines("a", 10), numberedLines("b", 10), toDiffLimits(1))
     const rule = "─".repeat(6)
 
     expect(diffLines).toHaveLength(22)

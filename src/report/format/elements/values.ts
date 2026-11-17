@@ -41,6 +41,23 @@ export const gotValueElement: FormatSideValue = (value: Value, describe?: (value
 export const wantValueElement: FormatSideValue = (value: Value, describe?: (value: boolean | number) => string) =>
   applyValueRules(value, styleWanted, describe)
 
+/** Formats a value neither side changes, like a list diff's unchanged item, in the terminal's own text color. */
+export const unchangedValueElement = (value: Value): string => applyValueRules(value, (text) => text)
+
+/** Whether a list diff's item is only on the host, only in `want`, or on both. */
+export type ListItemChange = "removed" | "added" | "unchanged"
+
+/**
+ * Formats a list diff's item after its mark, by the value rules: a removed one like what's on the host, an added one
+ * like what the script wants, and an unchanged one in the terminal's own text color. Styles the mark and the item
+ * apart, because the value rules leave the quotes around edge whitespace unstyled.
+ */
+export const listDiffItemElement = (itemChange: ListItemChange, item: string): string => {
+  if (itemChange === "removed") return `${styleCurrent("-")}${gotValueElement(item)}`
+  if (itemChange === "added") return `${styleWanted("+")}${wantValueElement(item)}`
+  return ` ${unchangedValueElement(item)}`
+}
+
 /** Formats a value that changes, like `alice -> bob`, with a muted `(none)` for a side that has no value. */
 export const changeElement = (got: Value | undefined, want: Value | undefined): string => {
   const gotText = got === undefined ? styleMuted(NONE_MARKER) : gotValueElement(got)

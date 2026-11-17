@@ -24,10 +24,12 @@ export {
   warningLabelElement,
 } from "#report/format/elements/messages.ts"
 export { statusTextElement, warningCountElement } from "#report/format/elements/summary.ts"
+export type { ListItemChange } from "#report/format/elements/values.ts"
 export {
   changeElement,
   exitCodeElement,
   gotValueElement,
+  listDiffItemElement,
   optionValueLineElements,
   wantValueElement,
   warningValueElement,

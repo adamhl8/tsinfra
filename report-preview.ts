@@ -127,7 +127,8 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
     {
       // Every element on steps that succeed. `ensure` strings: `got:` and `want:` rows, multi-line rows with a lone side,
       // `(empty)` for a value and a line, a quoted trailing space, and the notes for too many lines and a slow compare.
-      // `ensure` lists: `missing:` and `extra:` rows, and `want: []` with only `extra:`.
+      // `ensure` sets: `missing:` and `extra:` rows. `ensure` lists: a diff for a reorder, and `want: []` with only `-`
+      // lines.
       // `ensure` records: a row per key that differs, with `(none)` for a key only one side has.
       // `file`: a diff with two hunks, `mode:` and a numeric `group:`, the note for a long diff and a slow one, and each
       // content description. `link`: a changed target, both replacements, and a missing target with its warning, on a
@@ -162,11 +163,19 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
         )
         await h.ensure("Install packages", linesStep("installed", String.raw`printf 'fd\njq\n'`, "fd\njq\nripgrep"))
         await h.ensure("Sync the package list", {
-          want: ["fd", "jq", "ripgrep"],
+          want: new Set(["fd", "jq", "ripgrep"]),
           check: String.raw`cat '${marker("package-list")}' 2>/dev/null || printf 'zsh\nfd\nbat\n'`,
           fix: async ({ exec }, { missing, extra }) => {
             await exec(`echo 'installing ${missing.join(" ")}, removing ${extra.join(" ")}'`)
             await exec(String.raw`printf 'fd\njq\nripgrep\n' > '${marker("package-list")}'`)
+          },
+        })
+        await h.ensure("Set the search domains", {
+          want: ["lan", "home.arpa"],
+          check: String.raw`cat '${marker("search-domains")}' 2>/dev/null || printf 'home.arpa\nlan\n'`,
+          fix: async ({ exec }, { got }) => {
+            await exec(`echo 'reordering ${got.join(" ")}'`)
+            await exec(String.raw`printf 'lan\nhome.arpa\n' > '${marker("search-domains")}'`)
           },
         })
         await h.ensure("Upgrade brew packages", {

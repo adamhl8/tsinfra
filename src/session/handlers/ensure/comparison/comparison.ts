@@ -28,7 +28,7 @@ export type {
 export { compareRecords, recordWantSchema } from "#session/handlers/ensure/comparison/record.ts"
 export type { SetDifference, SetWant } from "#session/handlers/ensure/comparison/set.ts"
 export { setWantSchema } from "#session/handlers/ensure/comparison/set.ts"
-export type { StringComparisonValues, StringWant } from "#session/handlers/ensure/comparison/string.ts"
+export type { StringDifference, StringWant } from "#session/handlers/ensure/comparison/string.ts"
 export { stringWantSchema } from "#session/handlers/ensure/comparison/string.ts"
 
 /** A boolean `want`, which a command's exit status or a function's value must match. */

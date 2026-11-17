@@ -18,6 +18,7 @@ import type { HandlerReturn, StepContext } from "#session/step.ts"
 
 export type { Check } from "#session/handlers/ensure/check.ts"
 export type { Want } from "#session/handlers/ensure/want.ts"
+export type { SetWant } from "#session/handlers/ensure/comparison/comparison.ts"
 export type { EnsureComparisonValues } from "#session/handlers/ensure/comparison/comparison.ts"
 export type { FixDifference } from "#session/handlers/ensure/fix.ts"
 // Re-export the record comparison for `dir`, which is built on it, so its rows render as a record `want`'s.

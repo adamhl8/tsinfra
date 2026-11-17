@@ -1,9 +1,6 @@
-import type { StructuredPatchHunk } from "diff"
-import { structuredPatch } from "diff"
-
-import { diffGutterElement, diffLineElement, diffRuleElement, noteElement } from "#report/format/elements/elements.ts"
+import { diffRuleElement, noteElement } from "#report/format/elements/elements.ts"
 import type { Verbosity } from "#report/verbosity.ts"
-import { endWithNewline, getMaxWidth } from "#utils.ts"
+import { getMaxWidth } from "#utils.ts"
 
 /**
  * How far a diff, or a comparison of an `ensure`'s lines, may go before it becomes a note that names the flag that
@@ -35,10 +32,10 @@ export const toDiffLimits = (verbosity: Verbosity): DiffLimits => ({
 // Stop computing a full diff after this long anyway, so a value that's hard to diff can't hang the run.
 export const FULL_DIFF_TIMEOUT_MS = 10_000
 // Show one unchanged line around each change, so a plan stays short.
-const DIFF_CONTEXT_LINES = 1
+export const DIFF_CONTEXT_LINES = 1
 
 /** Formats the note in place of a diff that took too long, naming the flag that shows it only when one does. */
-const formatSlowDiffNote = (hasTimeLimit: boolean): string =>
+export const formatSlowDiffNote = (hasTimeLimit: boolean): string =>
   noteElement(`diff took too long to compute${hasTimeLimit ? `, run with ${TIME_LIMIT_FLAG} to see it` : ""}`)
 
 /** Formats the note in place of a diff of `lineCount` lines, which is too long to show. */
@@ -46,39 +43,10 @@ const formatLongDiffNote = (lineCount: number): string =>
   noteElement(`long diff (${lineCount} lines), run with ${LINE_LIMIT_FLAG} to see it`)
 
 /**
- * Returns a hunk's lines, each after a gutter with its line number in `want`. A removed line gets a blank gutter,
- * because it isn't in `want`.
+ * Returns a diff's formatted hunks as one diff, with a dim rule between hunks and one above and below. A diff longer
+ * than `diffLimits` allows, counting the rules between hunks, becomes a note that names the flag that shows it.
  */
-const formatHunk = (hunk: StructuredPatchHunk, gutterWidth: number): string[] => {
-  let lineNumber = hunk.newStart
-  return hunk.lines.map((diffLine) => {
-    if (diffLine.startsWith("-")) return `${" ".repeat(gutterWidth)} ${diffLineElement(diffLine)}`
-
-    const gutter = diffGutterElement(lineNumber, gutterWidth)
-    lineNumber += 1
-    return `${gutter} ${diffLineElement(diffLine)}`
-  })
-}
-
-/**
- * Returns a line diff from `got` to `want`, numbered by `want`'s lines, with a dim rule between hunks. A diff that goes
- * past one of `diffLimits` becomes a note that names the flag that shows it.
- */
-export const formatDiff = (got: string, want: string, diffLimits: DiffLimits): string[] => {
-  const timeout = diffLimits.timeoutMs ?? FULL_DIFF_TIMEOUT_MS
-  // End both sides with a newline, so jsdiff never adds its "No newline at end of file" line.
-  const patch = structuredPatch("", "", endWithNewline(got), endWithNewline(want), undefined, undefined, {
-    context: DIFF_CONTEXT_LINES,
-    timeout,
-  })
-
-  if (patch === undefined) return [formatSlowDiffNote(diffLimits.timeoutMs !== undefined)]
-
-  // Pad every gutter to the widest line number, so the diff lines start in one column.
-  const lastLineNumbers = patch.hunks.map(({ newStart, newLines }) => newStart + newLines - 1)
-  const gutterWidth = String(Math.max(1, ...lastLineNumbers)).length
-  const hunkLines = patch.hunks.map((hunk) => formatHunk(hunk, gutterWidth))
-
+export const formatFramedDiff = (hunkLines: string[][], diffLimits: DiffLimits): string[] => {
   // Draw the rule as wide as the diff's widest line, so it reads as a divider within the diff.
   const ruleWidth = getMaxWidth(hunkLines.flat())
   const rule = diffRuleElement(ruleWidth)
