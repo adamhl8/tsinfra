@@ -2,6 +2,7 @@ import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
 import type { CommandOutput } from "#core/transport.ts"
+import { wrapCommandWithInput } from "#core/transport/utils.ts"
 import { createCommandExitError } from "#utils.ts"
 
 export interface CommandOptions {
@@ -9,6 +10,8 @@ export interface CommandOptions {
   label?: string
   /** The text to record in place of the command, for one that holds content. */
   recordedCmd?: string
+  /** The data the command reads on its stdin, which the record never holds. */
+  input?: Uint8Array
   /** Whether the command's output is a secret, which the record masks from this command on. */
   maskOutput?: boolean
 }
@@ -25,9 +28,16 @@ export interface Shell {
 
 /** Binds `transport` into the two ways the session runs commands. A plain `Transport` records nothing. */
 export const createShell = (transport: RecordingTransport): Shell => {
-  const inspect = transport
+  const inspect = async (cmd: string, options: CommandOptions = {}): Promise<Result<CommandOutput>> => {
+    const { input, recordedCmd = cmd } = options
+    if (input === undefined) return transport(cmd, options)
 
-  const exec = async (cmd: string, options?: CommandOptions): Promise<Result<string>> => {
+    const cmdWithInput = wrapCommandWithInput(cmd, input)
+    // Record `cmd` as the script wrote it, because `cmdWithInput` holds the input.
+    return transport(cmdWithInput, { ...options, recordedCmd })
+  }
+
+  const exec = async (cmd: string, options: CommandOptions = {}): Promise<Result<string>> => {
     const output = await inspect(cmd, options)
     if (isErr(output)) return output
     if (output.exitCode !== 0) return createCommandExitError(output)

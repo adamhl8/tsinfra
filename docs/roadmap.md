@@ -150,10 +150,11 @@ Nothing changes in behavior.
 
 - **2a.** Add `wrapCommandWithInput` to `core/transport/utils.ts`, next to `wrapCommand`, building the shape above.
   Move the `__TSINFRA_EOF__` delimiter there too, and have `file/write.ts` import it.
-- **2b.** Add `input` (bytes) to the options `Shell`'s `exec` and `inspect` take. With an input, `createShell` sends the
-  wrapped command, and passes the command as the script wrote it as `recordedCmd`, with the input's size.
-- **2c.** Add `inputSize` to `CommandOptions` and `CommandRecord`, and have `createRecordingTransport` copy it onto the
-  record.
+- **2b.** Add `input` (bytes) to `CommandOptions`, above `maskOutput`. With an input, `createShell` sends the wrapped
+  command, and passes the command as the script wrote it as `recordedCmd`.
+- **2c.** Add `inputSize` to `CommandRecord`, and have `createRecordingTransport` set it from the input's length. The
+  options carry the input, not its size, because `core/transport/` imports nothing from `core/session/`, where `Bytes`
+  lives.
 - **2d.** Tests on the local transport, in a new `src/core/transport/__tests__/shell.test.ts`:
   - binary input arrives intact
   - the command's exit code comes back, through `exec` and `inspect`
@@ -164,9 +165,10 @@ Nothing changes in behavior.
 
 #### 3. `input` on the tools and the read steps
 
-- **3a.** Add `InputOptions` and `inputOptionsSchema` to `handlers/options/handler.ts`, next to `MaskOptions`.
-- **3b.** Add `ToolOptions`, extending both, for `Exec` and `Inspect` in `handlers/tools.ts`, and validate it with both
-  schemas merged. Export `InputOptions` and `ToolOptions` from `src/index.ts`.
+- **3a.** Add `InputOptions` and `inputOptionsSchema` to `handlers/options/handler.ts`, above `MaskOptions`.
+- **3b.** Add `ToolOptions`, extending `InputOptions` then `MaskOptions`, for `Exec` and `Inspect` in
+  `handlers/tools.ts`, and validate it with both schemas merged, in that order. Export `InputOptions` and `ToolOptions`
+  from `src/index.ts`.
 - **3c.** In `execCommand` and `inspectCommand`, read the input with `readContentBytes`, named as
   `the input given to '<tool>'`, and pass the bytes to the shell.
 - **3d.** Have `ReadOptions` and `InspectOptions` extend `InputOptions`. Their handlers already pass their options to

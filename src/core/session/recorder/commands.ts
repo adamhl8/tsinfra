@@ -1,5 +1,6 @@
 import type { Result } from "ts-explicit-errors"
 
+import { toBytes } from "#core/session/handlers/shared/filesystem/bytes.ts"
 import type { CommandRecord } from "#core/session/recorder/records.ts"
 import type { CommandOutput, Transport } from "#core/transport.ts"
 import type { CommandOptions, RecordingTransport } from "#core/transport/shell.ts"
@@ -17,8 +18,12 @@ export const createRecordingTransport =
   (transport: Transport, commandRecorder: CommandRecorder): RecordingTransport =>
   async (cmd, options = {}) => {
     const { recordCommand, recordOutput } = commandRecorder
-    const { label, recordedCmd = cmd } = options
-    const commandRecord: CommandRecord = { cmd: recordedCmd, ...(label !== undefined && { label }) }
+    const { label, recordedCmd = cmd, input } = options
+    const commandRecord: CommandRecord = {
+      cmd: recordedCmd,
+      ...(label !== undefined && { label }),
+      ...(input !== undefined && { inputSize: toBytes(input.length) }),
+    }
     // Record the command before it runs, so commands run at once keep the order they were called in.
     recordCommand(commandRecord)
     const output = await transport(cmd)

@@ -6,6 +6,7 @@ import type { FileOptions } from "#core/session/handlers/file.ts"
 import type { LinkOptions } from "#core/session/handlers/link.ts"
 import type { StepShellOptions } from "#core/session/handlers/options/shell.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
+import type { Bytes } from "#core/session/handlers/shared/filesystem/bytes.ts"
 import type { StepKind, StepStatus } from "#core/session/step.ts"
 import type { CommandOutput } from "#core/transport.ts"
 
@@ -129,9 +130,11 @@ export interface StepOptionsRecord
 
 export interface CommandRecord {
   cmd: string
-  /** A short name for a command tsinfra wrote itself. Unset for a script's command. */
+  /** The size of the data the command read on its stdin. Unset for a command given none. */
   label?: string
   /** The part of `converge` that ran the command. Unset for a step that doesn't converge. */
+  inputSize?: Bytes
+  /** A short name for a command tsinfra wrote itself. Unset for a script's command. */
   phase?: ConvergePhase
   /** Unset until the command finishes. */
   output?: Result<CommandOutput>

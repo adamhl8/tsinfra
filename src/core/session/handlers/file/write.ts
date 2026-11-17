@@ -1,5 +1,3 @@
-import { Buffer } from "node:buffer"
-
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
@@ -21,9 +19,9 @@ import {
   toWriteScriptPaths,
 } from "#core/session/handlers/shared/filesystem/write-script.ts"
 import type { StepContext } from "#core/session/step.ts"
+import { HEREDOC_DELIMITER } from "#core/transport/utils.ts"
 import { createCommandExitError } from "#utils.ts"
 
-const HEREDOC_DELIMITER = "__TSINFRA_EOF__"
 // Stand in for the content in the record, because it may be a secret and it can be large.
 const RECORDED_CONTENT = "<content as base64>"
 // Mark a failed validation on stdout, which the write script doesn't otherwise use, so it can't be mistaken for output.
@@ -115,7 +113,7 @@ export const writeFile = async (
   const { resolvedContent, validateCommand } = fileWrite
 
   const withContent = buildFileWriteScript(hostFileDetails, validateCommand, options)
-  const encodedContent = Buffer.from(resolvedContent.bytes).toString("base64")
+  const encodedContent = resolvedContent.bytes.toBase64()
   const writeScript = withContent(encodedContent)
 
   const writeScriptOutput = await shell.inspect(writeScript, {
