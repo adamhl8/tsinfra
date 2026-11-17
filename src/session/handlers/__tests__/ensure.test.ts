@@ -356,6 +356,65 @@ describe("h.ensure with an object want", () => {
     ])
   })
 
+  it("should compare numbers and booleans by key", async () => {
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, {
+      want: { port: 8080, enabled: true, name: "web" },
+      check: async ({ read }) => ({
+        port: Number(await read("echo 8080")),
+        enabled: (await read("echo yes")) === "yes",
+        name: "web",
+      }),
+      fix: "exit 1",
+    })
+
+    expect(result).toMatchObject({ changed: false })
+  })
+
+  it("should never match a number to a string that reads the same", async () => {
+    const hostSession = await createSession("plan")
+    const result = await ensureOrMessage(hostSession.host, {
+      want: toLooseWant({ port: 8080 }),
+      check: async ({ read }) => ({ port: await read("echo 8080") }),
+      fix: "true",
+    })
+
+    expect([result, hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values]).toMatchObject([
+      { changed: true },
+      { kind: "record", changed: { port: { got: "8080", want: 8080 } } },
+    ])
+  })
+
+  it("should give the fix the values that differ with the want's own type", async () => {
+    const marker = path.join(await makeTempDir(), "port")
+    const { host: h } = await createSession()
+    // Type the list as numbers, so the test stops compiling if a want of numbers gives the fix wider values.
+    const gotPorts: number[] = []
+    const result = await ensureOrMessage(h, {
+      want: { port: 8080 },
+      check: async ({ read }) => ({ port: Number(await read(`cat '${marker}' 2>/dev/null || echo 80`)) }),
+      fix: async ({ exec }, { changed }) => {
+        gotPorts.push(...Object.values(changed).map(({ got }) => got))
+        await exec(`echo 8080 > '${marker}'`)
+      },
+    })
+
+    expect([result, gotPorts]).toStrictEqual([{ name: "Make marker", kind: "ensure", changed: true }, [80]])
+  })
+
+  it("should name the key when a function check returns a nested object for an object want", async () => {
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, {
+      want: toLooseWant({ a: "1" }),
+      check: async ({ read }) => castInvalid({ a: { b: await read("echo 1") } }),
+      fix: "true",
+    })
+
+    expect(result).toBe(
+      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> its key 'a' is of type 'object', but an object want holds only strings, numbers, and booleans",
+    )
+  })
+
   it("should refuse a command check for an object want without running it", async () => {
     const { marker } = await createMarkerStep()
     const { host: h } = await createSession()
@@ -587,12 +646,13 @@ describe("h.ensure with invalid input", () => {
     {
       description: "whose want is none of the kinds it can be",
       options: { want: 1, check: "true", fix: "true" },
-      message: "want must be a boolean, a string, an array of strings, or an object of strings (was a number)",
+      message:
+        "want must be a boolean, a string, an array of strings, or an object of strings, numbers, or booleans (was a number)",
     },
     {
-      description: "whose want is an object with a value that isn't a string",
-      options: { want: { a: 1 }, check: "true", fix: "true" },
-      message: "want.a must be a string (was a number)",
+      description: "whose want is an object with a nested object",
+      options: { want: { a: { b: "1" } }, check: "true", fix: "true" },
+      message: "want.a must be a number, a string or boolean (was an object)",
     },
     {
       description: "whose want is a list with an item that isn't a string",

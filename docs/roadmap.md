@@ -41,9 +41,9 @@ rest of the docs describe tsinfra as it is.
 ### A directory step
 
 `h.dir(path, options)` makes sure a directory exists, with the mode and owner the script gives. It's a step kind of its
-own, `dir`, so the report shows `(dir)`, but it's built on `ensure`: `ensure` compares, fixes, and verifies it, and the
-report shows its values as an object `ensure`'s rows. So it needs no `converge` spec, comparison values type, record
-shape, or detail renderer of its own.
+own, `dir`, so the report shows `(dir)`. It reuses `ensure`'s record comparison, so it records an object `ensure`'s
+comparison values, and the report shows them as an object `ensure`'s rows. So it needs no comparison values type or
+detail renderer of its own.
 
 ```ts
 const data = await h.dir("/srv/sonarr", { mode: GROUP_DIRECTORY_MODE, user: "sonarr", group: "sonarr", sudo: true })
@@ -63,17 +63,32 @@ filesystem primitive like `file` and `link`: it needs no knowledge of any tool b
 `user`, `group`, `sudo`, and `needs` options, and accepts `~/`. A helper that needs a tool's knowledge ships as an
 import.
 
-**How it's built.** `h.dir` calls `callStep(path, "dir", (ctx) => handleDir(ctx, path, options))`. `handleDir`
-(`handlers/dir.ts`) validates the path and options like any handler, then builds `EnsureOptions` and passes them to
-`handleEnsure` with the same `ctx`. `handleEnsure` takes a context of either kind, and `withChangeStepResult` already
-uses `ctx.kind`, so the result is a `ChangeStepResult<"dir">` and a validation error says `given to dir`. It doesn't
-call `h.ensure` after validating outside a step, because a bad option would then fail before the step started, as a
-`(host fn)` failure, not under the step. So `dir` keeps the rule that a step's inputs are validated inside the step, and
-`ensure` does all the comparing, fixing, and verifying.
+**How it's built.** `h.dir` calls `callStep(path, "dir", (ctx) => handleDir(ctx, path, options), options)`.
+`handleDir` (`handlers/dir/dir.ts`) validates the path and options like any handler, then runs `converge` itself, like
+`file` and `link`, with `ensure`'s `compareRecords` as its compare:
 
-**The kind is only its identity.** A step kind is a name in `CHANGE_STEP_KINDS` and an entry in the maps keyed by it.
-The bulk of a standalone step, its `converge` spec, its comparison values type, and its detail renderer, stays with
-`ensure`, because the report picks a step's details by its comparison values' kind, not its step kind.
+```ts
+const status = await converge(ctx, {
+  needs,
+  getHostDetails: async () => getHostDirDetails(shell, absolutePath),
+  compare: (hostDirDetails) => compareRecords(toDirValues(hostDirDetails), want),
+  fix: async () => writeDir(shell, absolutePath),
+  verify: true,
+})
+return withChangeStepResult(ctx, status)
+```
+
+`withChangeStepResult` uses `ctx.kind`, so the result is a `ChangeStepResult<"dir">`, and a validation error says
+`given to dir`. It doesn't pass options to `handleEnsure`, because an object `want` takes a check function, and
+`ensure` calls it with `readTools`, which never use `sudo`. A check and a fix that ignore their tools for the step's
+shell would also have to throw to fail, which only `session.ts` does, and their commands would show unlabeled. It
+doesn't call `h.ensure` after validating outside a step either, because a bad option would then fail before the step
+started, as a `(host fn)` failure, not under the step.
+
+**What it shares with `ensure`.** A step kind is a name in `CHANGE_STEP_KINDS` and an entry in the maps keyed by it.
+The rest of a standalone step is its `converge` spec, its comparison values type, and its detail renderer. `dir` writes
+only the spec, because the report picks a step's details by its comparison values' kind, not its step kind, and
+`compareRecords` gives an object `ensure`'s.
 
 **Options.**
 
@@ -90,25 +105,28 @@ interface DirOptions extends FileAttributeOptions, SudoOptions, NeedsOptions {}
   `PRIVATE_DIRECTORY_MODE` (`rwx------`), because the `..._EXECUTABLE_MODE` constants have the right bits under a name
   that's wrong for a directory.
 
-**What it compares.** An object `want`, with only the keys the script gave, so the report shows one row per key that
-differs, the way an object `ensure` already does:
+**What it compares.** A record, with only the keys the script gave, so the report shows one row per key that differs,
+the way an object `ensure` already does. It relies on an object `want` taking numbers and booleans (piece 2):
 
 ```ts
 { exists: true, mode: "750", user: "sonarr", group: "sonarr" }
 ```
 
-- **The check** runs a directory details script on the step's shell, labeled `directory details script`, like `file`'s
-  details script. It says what's at the path, and for a directory, its mode, uid, gid, user, and group, with the same
-  `stat -c ... || stat -f ...` line as `file`'s.
-- **A missing directory** gives `{ exists: false }`, so every other key shows `(none)` against what's wanted.
+- **The details script** runs on the step's shell, labeled `directory details script`, like `file`'s details script,
+  and returns its errors as values. It says what's at the path, and for a directory, its mode, uid, gid, user, and
+  group, with `buildStatCommand`.
+- **A missing directory** gives `{ exists: false }`, so its row is `exists: false -> true`, and every other key shows
+  `(none)` against what's wanted.
 - **A symlink, a regular file, or anything else at the path fails the step,** like `file` does for what it won't
   replace: `'/srv/sonarr' is a regular file, so dir won't replace it`. `mkdir -p` would fail on it anyway, with a worse
   message.
 - **`mode`** compares as octal, from `parseFileMode` and `toOctalMode`, so `"750"`, `"rwxr-x---"`, and
   `GROUP_DIRECTORY_MODE` all match the same directory.
 - **`user` and `group`** compare a name with the name and a number with the id, the same rule as `file`'s owner rows.
+  An id is a number on both sides, so its row is italic, like `file`'s.
 
-**The fix** is a write script on the step's shell, labeled `directory write script`: `mkdir -p`, then `chmod` when
+**The fix** is a write script on the step's shell, labeled `directory write script`, so `sudo: true` applies to it:
+`set -eu`, `mkdir -p`, then `chmod` when
 `mode` is given, then `chown` from `buildChownLines` when `user` or `group` is. `checkCanSetOwner` runs before it, so
 an owner the SSH user can't set fails in `plan` too, the same as `file`. `mkdir -p` makes missing parents with the
 default mode and owner, and only the directory itself gets `mode`, `user`, and `group`. `ensure` compares again after
@@ -143,51 +161,73 @@ A refactor that changes nothing `file` or `link` does.
 - **1c.** Run the existing tests and the Docker suite, because the scripts' text is rebuilt, and busybox has its own
   `stat`. They prove nothing changed, so this piece adds none.
 
-#### 2. A `dir` that makes sure the directory exists
+#### 2. Numbers and booleans in an object `want`
 
-- **2a.** Add `"dir"` to `CHANGE_STEP_KINDS`, and an entry to each map keyed by `StepKind`, which the compiler finds:
-  `STEP_NAME_LABELS` in `session.ts` (`"path"`), `STEP_NAME_KINDS` in `report/host-block/entries.ts` (`"value"`), and
-  `LISTS_COMMANDS` in `report/host-block/details/commands.ts`. Add it to `NeedableStepKind` and `after`'s type. Let
-  `handleEnsure` take a `StepContext<"ensure" | "dir">` and return a result of that kind.
-- **2b.** Add `DirOptions` with `sudo` and `needs`, and its schema from `sudoOptionsSchema` and `needsOptionsSchema`.
-- **2c.** Add the directory details script and its parser in `handlers/dir/`, using the shared `stat` line from piece
-  1. It says what's at the path: missing, a directory, a symlink, or something else. A symlink or something else is an
-     error naming the path, like `file`'s.
-- **2d.** Add `handleDir`: validate the path with `validateHostPath` and the options with the schema, then pass
-  `handleEnsure` a `want` of `{ exists: true }`, a check that runs the details script on the step's shell, labeled
-  `directory details script`, and a fix that runs `mkdir -p`, labeled `directory write script`.
-- **2e.** Add `dir` to `Host` in `session.ts`, with its JSDoc.
-- **2f.** Test on `@local`: a missing directory is made, an existing one is `unchanged`, `plan` shows it and makes
-  nothing, a file and a symlink at the path fail, a bad option fails under the step, `needs` takes the result and a run
-  can follow it, and a `dir` and a `file` on one path clash. Test the report's `(dir)` line, with the path styled as a
-  value and the `exists` row under it.
+An `ensure` feature that stands on its own, and that `dir` uses for `exists` and owner ids.
 
-#### 3. Mode and owner
+- **2a.** Widen `recordWantSchema` (`handlers/ensure/comparison/record.ts`) to
+  `Record<string, string | number | boolean>`, with `RecordWant`, `RecordDifference`, and `RecordComparisonValues`
+  following, and a fix function's difference with them. `compareRecords` compares with `!==`, which already works for
+  each, so a number never equals a string that reads the same. Still no nested objects or arrays.
+- **2b.** Update the wording: `EnsureOptions`' `want` JSDoc, `want.ts`'s, and `wantSchema`'s problem, which says
+  "an object of strings" today.
+- **2c.** The report needs nothing, because `changeElement` already takes a string, a boolean, or a number, and makes
+  the last two italic.
+- **2d.** Update [Steps](./steps.md)' `ensure` section and the README's.
+- **2e.** Test: a number and a boolean key compare, a number against a string that reads the same differs, a check
+  that returns a nested object fails its validation, and the report's rows for a number and a boolean are italic.
 
-- **3a.** Add `PUBLIC_DIRECTORY_MODE`, `GROUP_DIRECTORY_MODE`, and `PRIVATE_DIRECTORY_MODE`, exported where the file
+#### 3. A `dir` that makes sure the directory exists
+
+- **3a.** Move `ensure`'s record comparison (`handlers/ensure/comparison/record.ts`) into `handlers/shared/`, because
+  two handlers use it. A pure move, with `ensure` importing it from there.
+- **3b.** Add `"dir"` to `CHANGE_STEP_KINDS` and `NEEDABLE_STEP_KINDS`, and an entry to each map keyed by `StepKind`,
+  which the compiler finds: `STEP_NAME_LABELS` in `session.ts` (`"path"`), `STEP_NAME_KINDS` in
+  `report/host-block/entries.ts` (`"value"`), and `LISTS_COMMANDS` in `report/host-block/details/commands.ts`
+  (`true`). As a change step, it falls under the unique names rule and open changes with no more code.
+- **3c.** Add `DirOptions` with `sudo` and `needs`, and its schema from `sudoOptionsSchema` and `needsOptionsSchema`.
+- **3d.** Add the directory details script and `getHostDirDetails` in `handlers/dir/`, labeled `directory details
+  script`. The script prints `kind=absent`, `kind=directory`, `kind=link`, or `kind=other`, and `stat` waits for
+  piece 4. A link is the error `'<path>' is a symlink, so dir won't replace it`, and anything else is
+  `'<path>' isn't a directory, so dir won't replace it`.
+- **3e.** Add the write script, labeled `directory write script`: `set -eu` and `mkdir -p`, on the step's shell.
+- **3f.** Add `handleDir`: validate the path with `validateHostPath`, which handles `~/`, and the options with the
+  schema, then run `converge` with a `want` of `{ exists: true }`, the details script, `compareRecords`, and the
+  write script.
+- **3g.** Add `dir` to `Host` in `session.ts`, returning `ChangeStepResult<"dir">`, with its JSDoc.
+- **3h.** Test on `@local`, in `handlers/__tests__/dir.test.ts`: a missing directory is made, an existing one is
+  `unchanged`, `plan` shows it and makes nothing, a file and a symlink at the path fail, a bad option fails under the
+  step, `needs` takes the result and a run can follow it, a `dir` and a `file` on one path clash, and `~/` resolves. In
+  `report.test.ts`, the `(dir)` line, with the path styled as a value and an `exists: false -> true` row, and the
+  labeled commands at `-vv`.
+
+#### 4. Mode and owner
+
+- **4a.** Add `PUBLIC_DIRECTORY_MODE`, `GROUP_DIRECTORY_MODE`, and `PRIVATE_DIRECTORY_MODE`, exported where the file
   mode constants are.
-- **3b.** Add `mode`, `user`, and `group` to `DirOptions`, from `fileAttributeOptionsSchema`.
-- **3c.** Add the keys the script gave to `want`, with `mode` as octal from `parseFileMode` and `toOctalMode`, and have
-  the check return the directory's values for those keys, a name for a name and an id for a number.
-- **3d.** Add `chmod` and the `chown` from `buildChownLines` to the fix, and run `checkCanSetOwner` before it.
-- **3e.** Test on `@local`: each key alone is made and fixed, an octal and a symbolic mode match the same directory, a
+- **4b.** Add `mode`, `user`, and `group` to `DirOptions`, from `fileAttributeOptionsSchema`.
+- **4c.** Add the keys the script gave to `want`, with `mode` as octal from `parseFileMode` and `toOctalMode`, and have
+  the check return the directory's values for those keys, a name for a name and an id, as a number, for a number. Add
+  `buildStatCommand(..., ["mode", "owner"])` and `STAT_OWNER_COLUMNS` to the details script and its parser.
+- **4d.** Add `chmod` and the `chown` from `buildChownLines` to the fix, and run `checkCanSetOwner` before it.
+- **4e.** Test on `@local`: each key alone is made and fixed, an octal and a symbolic mode match the same directory, a
   key left out keeps the directory's own value, parents get the default mode, an owner the SSH user can't set fails
-  in `plan`, and the report shows a row per key that differs.
+  in `plan`, skipped as root, where any owner can be set, and the report shows a row per key that differs.
 
-#### 4. Docker tests
+#### 5. Docker tests
 
-- **4a.** On Alpine and Debian, `sudo: true` makes a root-owned directory under `/etc` with `user` and `group`, and the
+- **5a.** On Alpine and Debian, `sudo: true` makes a root-owned directory under `/etc` with `user` and `group`, and the
   next apply is `unchanged`.
-- **4b.** The same over ssh, for busybox's and dash's `stat` and `mkdir`.
+- **5b.** The same over ssh, for busybox's and dash's `stat` and `mkdir`.
 
-#### 5. Docs
+#### 6. Docs
 
-- **5a.** Add a `dir` section to [Steps](./steps.md), next to `file` and `link`, and to the README's API. Say why `dir`
+- **6a.** Add a `dir` section to [Steps](./steps.md), next to `file` and `link`, and to the README's API. Say why `dir`
   is on `h` and a tool's helper is an import. Add `dir` to the step kinds [CLI](./cli.md) lists, and to the change
   steps in AGENTS.md's Vocabulary.
-- **5b.** Change the [directory recipe](./recipes.md#a-directory-with-ensure) to point at `dir`, and keep the `ensure`
+- **6b.** Change the [directory recipe](./recipes.md#a-directory-with-ensure) to point at `dir`, and keep the `ensure`
   form only for what `dir` doesn't do.
-- **5c.** Remove this section from the roadmap.
+- **6c.** Remove this section from the roadmap.
 
 ## Planned
 

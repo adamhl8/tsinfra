@@ -642,7 +642,9 @@ manages first.
 
 ```ts
 // `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string.
-type EnsureOptions<T extends boolean | string | readonly string[] | Readonly<Record<string, string>>> = {
+type EnsureOptions<
+  T extends boolean | string | readonly string[] | Readonly<Record<string, string | number | boolean>>,
+> = {
   // `true` means exit 0, or a function returning true, is already right. `false` means the opposite.
   // A string is compared to the command's stdout, or the function's value.
   // A list is compared to the command's lines, or the function's array, as a set.
@@ -722,10 +724,13 @@ what's left shows under `extra:`, because you want none of it.
              python
 ```
 
-**An object `want`**, of string keys and string values, compares values by key, like a package name to its version, or a config's settings. Key order
-doesn't count, and each value is compared exactly. Only a check function can return one, because a command's output
-has no keys, so `check: "..."` with an object `want` is a type error, and refused before it runs for a script that gets
-past the types. The values are strings, so a version of `11` is `"11"`.
+**An object `want`**, of string keys and string, number, or boolean values, compares values by key, like a package
+name to its version, or a config's settings. Key order doesn't count, and each value is compared exactly, so a number
+never matches a string that reads the same: `8080` and `"8080"` differ, and the report shows the number in italics.
+A value can't be a nested object or array. Only a check function can return one, because a command's output has no
+keys, so `check: "..."` with an object `want` is a type error, and refused before it runs for a script that gets past
+the types. A fix function's `missing`, `extra`, and `changed` hold `want`'s own value type, so a `want` of strings
+gives it strings.
 
 ```ts
 const wanted: Record<string, string> = {}

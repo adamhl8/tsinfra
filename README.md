@@ -243,8 +243,8 @@ it worked. `plan` only runs `check`.
   - A string: compared with `check`'s stdout (or the function's return value). Trailing newlines are ignored.
   - A list of strings: compared with `check`'s lines, blank ones left out (or the function's array), as a set, so order
     and duplicates don't count. `[]` means nothing is left to do.
-  - An object of string keys and string values: compared with the function's object by key. It needs a check
-    function.
+  - An object of string keys and string, number, or boolean values: compared with the function's object by key, each
+    value exactly, so `8080` never matches `"8080"`. It needs a check function.
 - `check`: a command, or an async function given `{ read, inspect }` that returns the answer
 - `fix`: a command, or an async function given `{ exec, inspect }`. The function also gets what `check` found:
   `{ got }` for a string `want`, `{ missing, extra }` for a list, and `{ missing, extra, changed }` for an object. It
@@ -298,7 +298,8 @@ await h.ensure("Upgrade brew packages", { want: [], check: "brew outdated --quie
 - `missing` is what `want` has that the check didn't find. `extra` is what the check found that `want` doesn't have.
 - `want: []` is for a check that lists what's left to do, like outdated packages, so everything it lists is `extra`.
 
-**An object** of string keys and string values is for names with a value each, like packages on a version each:
+**An object** of string keys and string, number, or boolean values is for names with a value each, like packages on
+a version each:
 
 ```ts
 // The newest version each package's range allows, read from the registry.

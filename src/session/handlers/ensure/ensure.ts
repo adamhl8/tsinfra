@@ -26,8 +26,8 @@ export interface EnsureOptions<T extends Want> extends NeedsOptions, EnvOptions 
   /**
    * The answer `check` gives when already right. `true` means a command exits 0, and `false` means it exits non-zero. A
    * string is compared to a command's stdout, with trailing newlines ignored on both sides. An array of strings is
-   * compared to a command's lines as a set. An object of string keys and string values is compared to a function's
-   * object by key.
+   * compared to a command's lines as a set. An object of string keys and string, number, or boolean values is compared
+   * to a function's object by key, each value exactly, so a number never matches a string.
    */
   want: T
   /**

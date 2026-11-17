@@ -535,6 +535,21 @@ describe("renderHostBlock for a step that would change a record", () => {
     ])
   })
 
+  it("should show numbers and booleans in a record's rows", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Configure the server", {
+        want: { port: 8080, enabled: true },
+        check: async ({ read }) => ({
+          port: Number(await read("echo 80")),
+          enabled: (await read("echo no")) === "yes",
+        }),
+        fix: "true",
+      })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      port:    80 -> 8080", "      enabled: false -> true"])
+  })
+
   it("should show a note for more than 15 differing keys, and every key with --verbose", async () => {
     const want = Object.fromEntries(Array.from({ length: 16 }, (_, index) => [`key${index}`, "new"]))
     const sync = async (h: Host) => {

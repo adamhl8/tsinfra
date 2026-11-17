@@ -2,7 +2,7 @@ import type {
   ListDifference,
   ListWant,
   RecordDifference,
-  RecordWant,
+  RecordValue,
   StringComparisonValues,
   StringWant,
 } from "#session/handlers/ensure/comparison/comparison.ts"
@@ -16,8 +16,9 @@ type StringDifference = Pick<StringComparisonValues, "got">
 /**
  * What a fix function gets after its tools, which it can't work out from `want`: what the check answered for a string
  * `want`, what's missing and extra for an array, and what's missing, extra, and changed for an object. An array's or an
- * object's `got` isn't passed, because it can be rebuilt from `want` and its parts. A `want` that may be any of them
- * gets the one for its kind. Checks `[T]` so it doesn't split a union `T`.
+ * object's `got` isn't passed, because it can be rebuilt from `want` and its parts. An object's difference holds the
+ * type of `want`'s values, so a `want` of strings gets strings. A `want` that may be any of them gets the one for its
+ * kind. Checks `[T]` so it doesn't split a union `T`.
  */
 export type FixDifference<T extends Want> = [T] extends [boolean]
   ? undefined
@@ -25,8 +26,8 @@ export type FixDifference<T extends Want> = [T] extends [boolean]
     ? StringDifference
     : [T] extends [ListWant]
       ? ListDifference
-      : [T] extends [RecordWant]
-        ? RecordDifference
+      : [T] extends [Readonly<Record<string, infer V extends RecordValue>>]
+        ? RecordDifference<V>
         : undefined | StringDifference | ListDifference | RecordDifference
 
 /**

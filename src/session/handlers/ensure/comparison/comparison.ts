@@ -5,7 +5,12 @@ import { err } from "ts-explicit-errors"
 import type { ListComparisonValues } from "#session/handlers/ensure/comparison/list.ts"
 import { compareLists, listWantSchema, toListItems } from "#session/handlers/ensure/comparison/list.ts"
 import type { RecordComparisonValues, RecordWant } from "#session/handlers/ensure/comparison/record.ts"
-import { compareRecords, isRecord, recordWantSchema } from "#session/handlers/ensure/comparison/record.ts"
+import {
+  compareRecords,
+  isRecord,
+  isRecordValue,
+  recordWantSchema,
+} from "#session/handlers/ensure/comparison/record.ts"
 import type { StringComparisonValues } from "#session/handlers/ensure/comparison/string.ts"
 import { compareStrings, stringWantSchema } from "#session/handlers/ensure/comparison/string.ts"
 import type { HostCheckDetails } from "#session/handlers/ensure/host-check-details.ts"
@@ -16,7 +21,7 @@ import { createCommandExitError, describeType } from "#utils.ts"
 
 export type { ListDifference, ListWant } from "#session/handlers/ensure/comparison/list.ts"
 export { listWantSchema } from "#session/handlers/ensure/comparison/list.ts"
-export type { RecordDifference, RecordWant } from "#session/handlers/ensure/comparison/record.ts"
+export type { RecordDifference, RecordValue, RecordWant } from "#session/handlers/ensure/comparison/record.ts"
 export { isRecord, recordWantSchema } from "#session/handlers/ensure/comparison/record.ts"
 export type { StringComparisonValues, StringWant } from "#session/handlers/ensure/comparison/string.ts"
 export { stringWantSchema } from "#session/handlers/ensure/comparison/string.ts"
@@ -40,12 +45,21 @@ const checkFnValueSchema = type({ value: booleanWantSchema, want: booleanWantSch
   .or({ value: listWantSchema, want: listWantSchema })
   .or({ value: recordWantSchema, want: recordWantSchema })
 
-/** Describes a check function's value whose type isn't `want`'s. */
-const toTypeMismatchError = (value: unknown, want: Want) =>
-  err(
-    "failed to validate the value the check returned",
-    err(`it's of type '${describeType(value)}', but want is of type '${describeType(want)}'`, undefined),
-  )
+/** Returns the first entry of `record` whose value no object `want` can hold, if it has one. */
+const findBadRecordEntry = (record: object) =>
+  Object.entries(record).find(([, entryValue]) => !isRecordValue(entryValue))
+
+/**
+ * Describes a check function's value whose type isn't `want`'s. Names the first key whose value no object `want` can
+ * hold, when both are records, because their types alone read the same.
+ */
+const toTypeMismatchError = (value: unknown, want: Want) => {
+  const badEntry = isRecord(value) && isRecord(want) ? findBadRecordEntry(value) : undefined
+  const problem = badEntry
+    ? `its key '${badEntry[0]}' is of type '${describeType(badEntry[1])}', but an object want holds only strings, numbers, and booleans`
+    : `it's of type '${describeType(value)}', but want is of type '${describeType(want)}'`
+  return err("failed to validate the value the check returned", err(problem, undefined))
+}
 
 /**
  * Validates a check function's value against `want`'s type, then compares the two. The value is `unknown` because a
