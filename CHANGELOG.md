@@ -1,3 +1,25 @@
+## [0.4.0](https://github.com/adamhl8/tsinfra/compare/v0.3.0..v0.4.0) - 2026-11-17
+
+### 🚀 Features
+
+- add dir step options ([b84db8c](https://github.com/adamhl8/tsinfra/commit/b84db8c0a7f03388d2c239ea25722d4c3544ece7) by @adamhl8)
+
+- add dir step ([018d6f2](https://github.com/adamhl8/tsinfra/commit/018d6f2ce8a2f827837dcdfdf902e8d95d267295) by @adamhl8)
+
+- allow an object want to take numbers and booleans ([d391daf](https://github.com/adamhl8/tsinfra/commit/d391dafaa23b768cddec0ad38ca2bce1fd3476a2) by @adamhl8)
+
+### 🚜 Refactor
+
+- share the stat command and owner columns between file and link ([96ca867](https://github.com/adamhl8/tsinfra/commit/96ca86723415ff7fd668e836247e4d64e1d362e0) by @adamhl8)
+
+### ⚙️ Miscellaneous Tasks
+
+- add dir tests ([7a6a632](https://github.com/adamhl8/tsinfra/commit/7a6a63200c2416c455404ddc29993fb88e43bbba) by @adamhl8)
+
+### 📚 Documentation
+
+- document h.dir ([236ee58](https://github.com/adamhl8/tsinfra/commit/236ee585d332c5b13b21e00ce0a206704b369fda) by @adamhl8)
+
 ## [0.3.0](https://github.com/adamhl8/tsinfra/compare/v0.2.0..v0.3.0) - 2026-11-16
 
 ### 🚀 Features
