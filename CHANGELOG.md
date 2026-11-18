@@ -1,3 +1,17 @@
+## [0.9.0](https://github.com/adamhl8/tsinfra/compare/v0.8.0..v0.9.0) - 2026-11-18
+
+### 🚀 Features
+
+- allow link steps to set target attributes ([5cdc05d](https://github.com/adamhl8/tsinfra/commit/5cdc05d011c96172ad2687460e63794732192634) by @adamhl8)
+
+- hide always runs in plan unless verbose ([37428f2](https://github.com/adamhl8/tsinfra/commit/37428f265f36df02593835ad9c1c2a50fe2356aa) by @adamhl8)
+
+### 🐛 Bug Fixes
+
+- resolve a path step's path before claiming it ([9f1294b](https://github.com/adamhl8/tsinfra/commit/9f1294b86701df09bb0234876331a53f79c84755) by @adamhl8)
+
+- narrow h.meta based on the host options ([6f6d0be](https://github.com/adamhl8/tsinfra/commit/6f6d0be9e6faa2da8c2be3af397918e2c3839efd) by @adamhl8)
+
 ## [0.8.0](https://github.com/adamhl8/tsinfra/compare/v0.7.0..v0.8.0) - 2026-11-18
 
 ### 🚀 Features
