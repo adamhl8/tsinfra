@@ -1,3 +1,13 @@
+## [0.10.0](https://github.com/adamhl8/tsinfra/compare/v0.9.0..v0.10.0) - 2026-11-18
+
+### 🚀 Features
+
+- give a record want its unmet keys/values ([d9592a3](https://github.com/adamhl8/tsinfra/commit/d9592a3b8d72a8eecaa4fa852e1ccb714a6f4ca5) by @adamhl8)
+
+### 📚 Documentation
+
+- update docs ([d945b23](https://github.com/adamhl8/tsinfra/commit/d945b238336d1e6cc3290458dc67b393f4e58360) by @adamhl8)
+
 ## [0.9.0](https://github.com/adamhl8/tsinfra/compare/v0.8.0..v0.9.0) - 2026-11-18
 
 ### 🚀 Features
