@@ -450,7 +450,7 @@ describe("h.ensure with a record want", () => {
     expect(result).toMatchObject({ changed: false })
   })
 
-  it("should give the fix what's missing, extra, and changed, and return changed once they're gone", async () => {
+  it("should give the fix what's missing, changed, unmet, and extra, and return changed once they're gone", async () => {
     const marker = path.join(await makeTempDir(), "versions")
     const { host: h } = await createSession()
     const differences: unknown[] = []
@@ -466,8 +466,31 @@ describe("h.ensure with a record want", () => {
 
     expect([result, differences]).toStrictEqual([
       { name: "Make marker", kind: "ensure", changed: true },
-      [{ missing: { d: "4" }, extra: { c: "3" }, changed: { b: { got: "9", want: "2" } } }],
+      [
+        {
+          missing: { d: "4" },
+          changed: { b: { got: "9", want: "2" } },
+          unmet: { b: "2", d: "4" },
+          extra: { c: "3" },
+        },
+      ],
     ])
+  })
+
+  it("should give the fix unmet in want's key order", async () => {
+    const marker = path.join(await makeTempDir(), "versions")
+    const { host: h } = await createSession()
+    const unmetKeys: string[][] = []
+    await ensureOrMessage(h, {
+      want: { a: "1", b: "2", d: "4" },
+      check: async ({ read }) => toRecord(await read(String.raw`cat '${marker}' 2>/dev/null || printf 'b=9\n'`)),
+      fix: async ({ exec }, { unmet }) => {
+        unmetKeys.push(Object.keys(unmet))
+        await exec(String.raw`printf 'a=1\nb=2\nd=4\n' > '${marker}'`)
+      },
+    })
+
+    expect(unmetKeys).toStrictEqual([["a", "b", "d"]])
   })
 
   it("should compare numbers and booleans by key", async () => {

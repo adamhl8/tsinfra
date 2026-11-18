@@ -1,5 +1,6 @@
 import type { ListDifference, ListWant } from "#core/session/handlers/ensure/comparison/list.ts"
 import type { RecordDifference, RecordValue } from "#core/session/handlers/ensure/comparison/record.ts"
+import { toUnmet } from "#core/session/handlers/ensure/comparison/record.ts"
 import type { SetDifference, SetWant } from "#core/session/handlers/ensure/comparison/set.ts"
 import type { StringDifference, StringWant } from "#core/session/handlers/ensure/comparison/string.ts"
 import type { Want } from "#core/session/handlers/ensure/want.ts"
@@ -9,11 +10,12 @@ import type { Comparison } from "#core/session/handlers/shared/converge.ts"
 
 /**
  * What a fix function gets after its tools, which it can't work out from `want`: what the check answered for a string
- * or a list `want`, what's missing and extra for a set, and what's missing, extra, and changed for a record. A list
- * gets its `got`, because `missing` and `extra` can't describe a reorder. A set's or a record's `got` isn't passed,
- * because it can be rebuilt from `want` and its parts. A record's difference holds the type of `want`'s values, so a
- * `want` of strings gets strings. A `want` that may be any of them gets the one for its kind. Checks `[T]` so it
- * doesn't split a union `T`.
+ * or a list `want`, what's missing and extra for a set, and what's missing, changed, and extra for a record. A record
+ * also gets `unmet`, which repeats `missing` and `changed` for a fix that sets every wanted value. A list gets its
+ * `got`, because `missing` and `extra` can't describe a reorder. A set's or a record's `got` isn't passed, because it
+ * can be rebuilt from `want` and its parts. A record's difference holds the type of `want`'s values, so a `want` of
+ * strings gets strings. A `want` that may be any of them gets the one for its kind. Checks `[T]` so it doesn't split a
+ * union `T`.
  */
 export type FixDifference<T extends Want> = [T] extends [boolean]
   ? undefined
@@ -44,6 +46,7 @@ export const toFixDifference = ({ values }: Comparison): FixDifference<Want> => 
   if (values.kind === "string") return { got: values.got }
   if (values.kind === "list") return { got: values.got }
   if (values.kind === "set") return { missing: values.missing, extra: values.extra }
-  if (values.kind === "record") return { missing: values.missing, extra: values.extra, changed: values.changed }
+  if (values.kind === "record")
+    return { missing: values.missing, changed: values.changed, unmet: toUnmet(values), extra: values.extra }
   return undefined
 }

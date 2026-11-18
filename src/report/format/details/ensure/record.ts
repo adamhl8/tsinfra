@@ -16,7 +16,7 @@ const formatManyKeysNote = (keyCount: number): string =>
  * `diffLimits` allows become a note.
  */
 export const formatRecordValues = (
-  { want, missing, extra, changed }: RecordComparisonValues,
+  { want, missing, changed, extra }: RecordComparisonValues,
   diffLimits: DiffLimits,
 ): DetailRows => {
   const wantRows = Object.keys(want).flatMap((key) => {

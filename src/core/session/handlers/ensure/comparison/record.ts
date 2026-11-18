@@ -22,18 +22,24 @@ type ValueRecord<V extends RecordValue = RecordValue> = Record<string, V>
 export type RecordWant = Readonly<ValueRecord>
 
 /**
- * How a record the check gave differs from the one it wanted, by key. `missing` maps a key the host doesn't have to its
- * wanted value, `extra` maps a key `want` doesn't have to its current value, and `changed` maps a key both have to its
- * two values, because the pairing is the difference.
+ * What a record's fix gets: how the record the check gave differs from the one it wanted, by key. `missing` maps a key
+ * the host doesn't have to its wanted value, and `changed` maps a key both have to its two values, because the pairing
+ * is the difference. `unmet` maps every key that's `missing` or `changed` to its wanted value, in `want`'s key order,
+ * which repeats the two for a fix that sets every wanted value. `extra` maps a key `want` doesn't have to its current
+ * value.
  */
 export interface RecordDifference<V extends RecordValue = RecordValue> {
   missing: ValueRecord<V>
-  extra: ValueRecord<V>
   changed: Record<string, { got: V; want: V }>
+  unmet: ValueRecord<V>
+  extra: ValueRecord<V>
 }
 
-/** A record the check gave and the one it wanted, and how they differ. */
-export interface RecordComparisonValues extends RecordDifference {
+/**
+ * A record the check gave and the one it wanted, and how they differ. It leaves out `unmet`, because only the fix needs
+ * it.
+ */
+export interface RecordComparisonValues extends Omit<RecordDifference, "unmet"> {
   kind: "record"
   got: ValueRecord
   want: ValueRecord
@@ -43,28 +49,36 @@ export interface RecordComparisonValues extends RecordDifference {
 const getEntriesNotIn = (record: RecordWant, others: RecordWant): ValueRecord =>
   Object.fromEntries(Object.entries(record).filter(([key]) => !Object.hasOwn(others, key)))
 
+/** Returns the entries of `want` whose keys are `missing` or `changed`, in `want`'s key order. */
+export const toUnmet = (values: RecordComparisonValues): ValueRecord => {
+  const { want, missing, changed } = values
+  return Object.fromEntries(
+    Object.entries(want).filter(([key]) => Object.hasOwn(missing, key) || Object.hasOwn(changed, key)),
+  )
+}
+
 /**
  * Compares two records by key, with each value compared exactly, so their key order doesn't count. `missing` and
  * `changed` keep `want`'s key order, and `extra` keeps the check's.
  */
 export const compareRecords = (gotRecord: RecordWant, wantRecord: RecordWant): Comparison => {
   const missing = getEntriesNotIn(wantRecord, gotRecord)
-  const extra = getEntriesNotIn(gotRecord, wantRecord)
   const changed = Object.fromEntries(
     Object.entries(wantRecord).flatMap(([key, want]) => {
       const got = gotRecord[key]
       return got !== undefined && got !== want ? [[key, { got, want }]] : []
     }),
   )
+  const extra = getEntriesNotIn(gotRecord, wantRecord)
 
   const values: RecordComparisonValues = {
     kind: "record",
     got: { ...gotRecord },
     want: { ...wantRecord },
     missing,
-    extra,
     changed,
+    extra,
   }
-  const inSync = [missing, extra, changed].every((part) => Object.keys(part).length === 0)
+  const inSync = [missing, changed, extra].every((part) => Object.keys(part).length === 0)
   return { inSync, values }
 }

@@ -819,7 +819,7 @@ type EnsureOptions<
   // A record `want` takes only a function, because a command's output has no keys.
   check: string | ((tools: ReadTools) => Promise<T>)
   // A function also gets what the check found: `{ got }` for a string or a list `want`, `{ missing, extra }` for a
-  // set, and `{ missing, extra, changed }` for a record. See `FixDifference`.
+  // set, and `{ missing, changed, unmet, extra }` for a record. See `FixDifference`.
   fix: string | ((tools: ChangeTools, difference: FixDifference<T>) => Promise<void>)
   verify?: boolean // default true
   env?: Record<string, string> // see EnvOptions
@@ -937,7 +937,7 @@ A value can't be a nested object or array. Only a check function can return one,
 keys, so `check: "..."` with a record `want` is a type error, and refused before it runs for a script that gets past
 the types. It must be a plain object, so a `Map`, a class instance, or a `Promise` from a missing `await` is refused,
 because it would otherwise be compared by its own keys, which it usually has none of. A fix function's `missing`,
-`extra`, and `changed` hold `want`'s own value type, so a `want` of strings gives it strings.
+`changed`, `unmet`, and `extra` hold `want`'s own value type, so a `want` of strings gives it strings.
 
 ```ts
 const wanted: Record<string, string> = {}
@@ -948,8 +948,8 @@ for (const [name, spec] of Object.entries(specs)) {
 await h.ensure("Sync bun global packages", {
   want: wanted,
   check: async ({ read }) => toVersions(await read("bun pm ls -g")),
-  fix: async ({ exec }, { missing, extra, changed }) => {
-    const installs = [...Object.keys(missing), ...Object.keys(changed)].map((name) => `${name}@${wanted[name]}`)
+  fix: async ({ exec }, { extra, unmet }) => {
+    const installs = Object.entries(unmet).map(([name, version]) => `${name}@${version}`)
     if (installs.length > 0) await exec(`bun add -g ${installs.join(" ")}`)
     if (Object.keys(extra).length > 0) await exec(`bun remove -g ${Object.keys(extra).join(" ")}`)
   },
@@ -1101,12 +1101,11 @@ fix: async ({ exec }) => {
 The fix function only runs in `apply`, so it can change things and do work on the control machine.
 
 **What the check found.** A fix function gets a second argument after its tools, with what the check found: `{ got }` for
-a string or a list `want`, what the check answered, `{ missing, extra }` for a set, and `{ missing, extra, changed }`
-for a record, the same items and keys the report shows. A record's `missing` maps a key to its wanted value, `extra` maps a
-key to its current value, and `changed` maps a key to `{ got, want }`. A fix that sets every key that differs takes the
-keys of `missing` and `changed`, and looks each value up in `want`, as the bun packages
-example above does. A fix can act on it without reading the host
-again:
+a string or a list `want`, what the check answered, `{ missing, extra }` for a set, and
+`{ missing, changed, unmet, extra }` for a record, the same items and keys the report shows. A record's `missing` maps a
+key to its wanted value, and `changed` maps a key to `{ got, want }`. Its `unmet` maps every key that's `missing` or
+`changed` to its wanted value, in `want`'s key order, for a fix that sets each one, like the bun packages example above.
+Its `extra` maps a key to its current value. A fix can act on it without reading the host again:
 
 ```ts
 await h.ensure("Update Caddy", {
@@ -1118,11 +1117,12 @@ await h.ensure("Update Caddy", {
 })
 ```
 
-- **It holds only what the fix can't work out from `want`.** `want` is already in the script, so a string comparison,
+- **It holds what the fix can't work out from `want`, plus a record's `unmet`.** `want` is already in the script, so a string comparison,
   which is plain equality, adds only `got`. A set's `got` isn't passed, because it's `want` minus `missing`, plus
   `extra`, and passing it would only invite redoing the comparison. A record's `got` isn't passed for the same reason.
   A list's is, because `missing` and `extra` can't describe a reorder: with every item there but out of order, both
-  would be empty.
+  would be empty. A record's `unmet` repeats `missing` and `changed`, because setting every wanted value is the most
+  common record fix, and building it from them means merging two shapes.
 - **A boolean `want` gives nothing more,** because `got` is just `!want`. A fix function that declares a second argument
   for one is a type error. A `want` typed as the full `Want` union gets the union of the four.
 - **It's a second argument, not part of the tools,** because the tools are what a fix can call, and this is data about

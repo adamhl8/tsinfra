@@ -20,7 +20,7 @@ const toShownDirRecord = (record: Record<string, RecordValue>): Record<string, R
  * The values compare as data, so the mode is recorded as its bits.
  */
 const toShownDirValues = (values: RecordComparisonValues): RecordComparisonValues => {
-  const { got, want, missing, extra, changed } = values
+  const { got, want, missing, changed, extra } = values
 
   const shownChanged = Object.fromEntries(
     Object.entries(changed).map(([key, change]): [string, { got: RecordValue; want: RecordValue }] => [
@@ -34,8 +34,8 @@ const toShownDirValues = (values: RecordComparisonValues): RecordComparisonValue
     got: toShownDirRecord(got),
     want: toShownDirRecord(want),
     missing: toShownDirRecord(missing),
-    extra: toShownDirRecord(extra),
     changed: shownChanged,
+    extra: toShownDirRecord(extra),
   }
 }
 

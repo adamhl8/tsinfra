@@ -251,8 +251,8 @@ it worked. `plan` only runs `check`.
     value exactly, so `8080` never matches `"8080"`. It needs a check function.
 - `check`: a command, or an async function given `{ read, inspect }` that returns the answer
 - `fix`: a command, or an async function given `{ exec, inspect }`. The function also gets what `check` found:
-  `{ got }` for a string or a list `want`, `{ missing, extra }` for a set, and `{ missing, extra, changed }` for a
-  record. It only runs in `apply`.
+  `{ got }` for a string or a list `want`, `{ missing, extra }` for a set, and `{ missing, changed, unmet, extra }` for
+  a record, where `unmet` maps each key that's missing or changed to its wanted value. It only runs in `apply`.
 - `verify` (default: `true`): run `check` again after `fix`, and fail if the state still differs
 - `env`, `secretEnv`: see [Values and secrets](#values-and-secrets)
 - `needs`: see [Needs](#needs)
@@ -338,8 +338,8 @@ const wanted: Record<string, string> = { pnpm: "11.2.0", turbo: "2.5.4", zx: "8.
 await h.ensure("Sync bun global packages", {
   want: wanted,
   check: async ({ read }) => toVersions(await read("bun pm ls -g")), // { name: version } for each installed package
-  fix: async ({ exec }, { missing, extra, changed }) => {
-    const installs = [...Object.keys(missing), ...Object.keys(changed)].map((name) => `${name}@${wanted[name]}`)
+  fix: async ({ exec }, { extra, unmet }) => {
+    const installs = Object.entries(unmet).map(([name, version]) => `${name}@${version}`)
     if (installs.length > 0) await exec(`bun add -g ${installs.join(" ")}`)
     if (Object.keys(extra).length > 0) await exec(`bun remove -g ${Object.keys(extra).join(" ")}`)
   },

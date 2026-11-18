@@ -114,8 +114,8 @@ for (const [name, spec] of Object.entries(specs)) {
 await h.ensure("Sync bun global packages", {
   want: wanted,
   check: async ({ read }) => toVersions(await read("bun pm ls -g")),
-  fix: async ({ exec }, { missing, extra, changed }) => {
-    const installs = [...Object.keys(missing), ...Object.keys(changed)].map((name) => `${name}@${wanted[name]}`)
+  fix: async ({ exec }, { extra, unmet }) => {
+    const installs = Object.entries(unmet).map(([name, version]) => `${name}@${version}`)
     if (installs.length > 0) await exec(`bun add -g ${installs.join(" ")}`)
     if (Object.keys(extra).length > 0) await exec(`bun remove -g ${Object.keys(extra).join(" ")}`)
   },
@@ -123,7 +123,8 @@ await h.ensure("Sync bun global packages", {
 ```
 
 `specs` maps each package to its range, like `{ pnpm: "11", turbo: "latest" }`, and `toVersions` turns the listing into
-the same name-to-version shape. The fix installs every key in `missing` or `changed` at its version in `wanted`. `plan` shows a row per package that differs:
+the same name-to-version shape. The fix installs each package in `unmet` at its wanted version, and removes each one
+in `extra`. `plan` shows a row per package that differs:
 
 ```
   ~ change: (ensure) Sync bun global packages

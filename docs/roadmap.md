@@ -7,7 +7,6 @@ rest of the docs describe tsinfra as it is.
 
 - [Next](#next)
   - [`env` and `secretEnv` on tool calls](#env-and-secretenv-on-tool-calls)
-  - [`unmet` for a record `want`](#unmet-for-a-record-want)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
   - [Live progress](#live-progress)
@@ -68,29 +67,6 @@ fix: async ({ exec }) => {
 When it's built, [Commands](./steps.md#commands) drops "The tools don't take them" and "A tool call shows none of its
 options", and its note that `input` isn't masked points to a call's `secretEnv`. The Maybe later entry for an argument
 list as a command loses its case where `env` feels heavy for one value.
-
-### `unmet` for a record `want`
-
-A record `want`'s fix gets a fourth field, `unmet`, which maps every key the host doesn't have at its wanted value to
-that value. It holds the keys of `missing` and `changed`, with `want`'s values. Setting every wanted value is the most
-common record fix, and today it merges two shapes or looks each key up in `want`:
-
-```ts
-// The host has `displaysleep` at 10 and no `sleep`, so `unmet` is `{ displaysleep: "0", sleep: "0" }`.
-await h.ensure("Set the power settings", {
-  want: { displaysleep: "0", sleep: "0", womp: "1" },
-  check: async ({ read }) => toPowerSettings(await read("pmset -g custom")),
-  fix: async ({ exec }, { unmet }) => {
-    await exec(`sudo pmset -a ${Object.entries(unmet).flat().join(" ")}`)
-  },
-})
-```
-
-- **The name is a placeholder.** Like `missing`, `extra`, and `changed`, it's named for how the host compares with
-  `want`, not for what the fix does.
-- **It repeats the other fields,** which breaks the rule in [`fix`](./steps.md#fix) that the difference "holds only
-  what the fix can't work out from `want`". That rule's wording changes with it.
-- **The report doesn't show it,** because the report's row for each key that differs already does.
 
 ## Planned
 
