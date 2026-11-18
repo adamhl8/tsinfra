@@ -9,6 +9,7 @@ import { attempt, isErr, messageChain } from "ts-explicit-errors"
 import {
   createFakeSudoSession,
   createSession,
+  dirOrMessage,
   ensureOrMessage,
   getFailureMessage,
   getStepRecords,
@@ -232,6 +233,43 @@ describe("step names", () => {
     await h.file(filePath, "a\n")
 
     expect(await linkOrMessage(h, filePath, path.join(directory, "target"))).toBe(
+      "an earlier file step has the same name, and step names must be unique in a host script",
+    )
+  })
+
+  it("should fail a path step on a path an earlier one wrote with ~/", async () => {
+    const { host: h, home } = await createSession("plan")
+    await h.file("~/app.conf", "a\n")
+
+    expect(await dirOrMessage(h, path.join(home, "app.conf"))).toBe(
+      "an earlier file step has the same path, and a path can have only one file, link, or dir step in a host script",
+    )
+  })
+
+  it("should fail a path step on a path an earlier one spelled differently", async () => {
+    const directory = await makeTempDir()
+    const { host: h } = await createSession("plan")
+    await h.dir(path.join(directory, "app"))
+
+    expect(await dirOrMessage(h, `${directory}//./app/`)).toBe(
+      "an earlier dir step has the same path, and a path can have only one file, link, or dir step in a host script",
+    )
+  })
+
+  it("should allow a run named for the path an earlier path step resolved", async () => {
+    const { host: h, home } = await createSession("plan")
+    await h.file("~/app.conf", "a\n")
+
+    expect(await h.run(path.join(home, "app.conf"), "true", { after: "always" })).toMatchObject({ kind: "run" })
+  })
+
+  it("should fail a run named the way an earlier path step wrote its path", async () => {
+    const { host: h } = await createSession("plan")
+    await h.file("~/app.conf", "a\n")
+
+    const runResult = await attempt(async () => h.run("~/app.conf", "true", { after: "always" }))
+
+    expect(toPlainResult(runResult)).toBe(
       "an earlier file step has the same name, and step names must be unique in a host script",
     )
   })

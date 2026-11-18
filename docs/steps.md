@@ -324,6 +324,9 @@ Both read well after `ensure`.
 A change step's name must be unique in its host script. `file`, `link`, and `dir` are named by their path, so two of
 them on one path clash too. The second step fails the host, under its own name, with
 `an earlier ensure step has the same name, and step names must be unique in a host script`. `plan` fails the same way.
+Two path steps also clash when their paths are spelled differently but [resolve](#file) to the same one, like `~/x` and
+`/home/adam/x`, with `an earlier file step has the same path, and a path can have only one file, link, or dir step in a
+host script`. The step keeps its name as written in the report.
 The report, `needs`, and [open changes](#when-an-apply-doesnt-finish) tell steps apart by name. Reads and inspects are named by their command, so reading the same
 thing twice is fine.
 
@@ -460,6 +463,10 @@ resolves `~/` itself:
   the script uses `~`. `printf` prints nothing whether `HOME` is unset or empty, so one check covers both. Over SSH,
   sshd sets `HOME` from the user's account, so this only happens when tsinfra itself runs without one. A `HOME` of `/`
   is odd but valid, so it's allowed.
+- **Empty and `.` segments and a trailing `/` are dropped,** so `/etc//app/./app.conf/` writes `/etc/app/app.conf`.
+- **A `..` segment is an error,** like `must be a path without a '..' segment (was "/etc/../app.conf")`. The host
+  resolves `..` through symlinks, so `/a/link/../b` isn't `/a/b` when `link` points elsewhere, and tsinfra can't
+  resolve it as text.
 - **`~otheruser/` is an error,** because it isn't an absolute path. Resolving another user's home would need an
   account lookup that nothing needs yet.
 

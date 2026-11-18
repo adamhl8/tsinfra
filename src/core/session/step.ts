@@ -30,6 +30,15 @@ export type ChangeStepKind = (typeof CHANGE_STEP_KINDS)[number]
 export const isChangeStepKind = (kind: StepKind): kind is ChangeStepKind =>
   CHANGE_STEP_KINDS.some((changeStepKind) => changeStepKind === kind)
 
+const PATH_STEP_KINDS = ["file", "link", "dir"] as const satisfies ChangeStepKind[]
+
+/** The change steps named by the path they manage. */
+type PathStepKind = (typeof PATH_STEP_KINDS)[number]
+
+/** Reports whether `kind` is a step named by the path it manages. */
+export const isPathStepKind = (kind: StepKind): kind is PathStepKind =>
+  PATH_STEP_KINDS.some((pathStepKind) => pathStepKind === kind)
+
 /**
  * What a step's handler is given: the step's name and kind, and the session's mode, shell, home directory, saved state,
  * tools, and recorders. `K` keeps a step's kind in its type, so a script can't give a run's result to `needs`.

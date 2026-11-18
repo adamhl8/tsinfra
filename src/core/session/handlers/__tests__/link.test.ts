@@ -376,6 +376,14 @@ describe("h.link with invalid input", () => {
     )
   })
 
+  it("should refuse a target with a '..' segment", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(await linkOrMessage(h, "/tmp/link", "/etc/../target")).toBe(
+      `failed to validate the target given to 'link' -> must be a path without a '..' segment (was "/etc/../target")`,
+    )
+  })
+
   it("should fail a target that isn't a string", async () => {
     const { host: h } = await createSession("plan")
 

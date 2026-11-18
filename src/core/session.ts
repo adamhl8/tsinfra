@@ -23,6 +23,7 @@ import type { RunOptions } from "#core/session/handlers/run.ts"
 import { handleRun } from "#core/session/handlers/run.ts"
 import type { ChangeStepResult } from "#core/session/handlers/shared/change-step-result.ts"
 import type { Change } from "#core/session/handlers/shared/change.ts"
+import { resolvePath } from "#core/session/handlers/shared/filesystem/path.ts"
 import { validateInput } from "#core/session/handlers/shared/validate-input.ts"
 import type { ChangeTools, Exec, Inspect, InspectResult, ReadTools } from "#core/session/handlers/tools.ts"
 import { execCommand, inspectCommand } from "#core/session/handlers/tools.ts"
@@ -30,7 +31,7 @@ import type { HostMeta } from "#core/session/host-meta.ts"
 import type { SessionRecorder } from "#core/session/recorder/session-recorder.ts"
 import type { SavedStateManager } from "#core/session/saved-state.ts"
 import type { ChangeStepKind, HandlerReturn, StepContext, StepKind } from "#core/session/step.ts"
-import { isChangeStepKind, nonEmptyStringSchema } from "#core/session/step.ts"
+import { isChangeStepKind, isPathStepKind, nonEmptyStringSchema } from "#core/session/step.ts"
 import type { Shell } from "#core/transport/shell.ts"
 import type { Mode } from "#mode.ts"
 
@@ -163,7 +164,9 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
   }
 
   const stepKindsByName = new Map<string, ChangeStepKind>()
+  const stepKindsByPath = new Map<string, ChangeStepKind>()
   // Refuse a name an earlier change step has, because the report and `needs` tell steps apart by name.
+  // Refuse a path an earlier path step has under another spelling, like `~/x` and `/home/user/x`.
   const claimStepName = (stepName: string, kind: StepKind): Result => {
     if (!isChangeStepKind(kind)) return
 
@@ -175,7 +178,17 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
       )
     }
 
+    const resolvedPath = isPathStepKind(kind) ? resolvePath(stepName, home) : undefined
+    const earlierPathKind = resolvedPath === undefined ? undefined : stepKindsByPath.get(resolvedPath)
+    if (earlierPathKind) {
+      return err(
+        `an earlier ${earlierPathKind} step has the same path, and a path can have only one file, link, or dir step in a host script`,
+        undefined,
+      )
+    }
+
     stepKindsByName.set(stepName, kind)
+    if (resolvedPath !== undefined) stepKindsByPath.set(resolvedPath, kind)
   }
 
   // Share these sets across the session's steps, because a step checks whether the steps it follows or needs changed.

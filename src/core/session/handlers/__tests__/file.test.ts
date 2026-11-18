@@ -467,6 +467,14 @@ describe("h.file refusals", () => {
     )
   })
 
+  it("should refuse a path with a '..' segment", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(await fileOrMessage(h, "/etc/../app.conf", "a\n")).toBe(
+      `failed to validate the path given to 'file' -> must be a path without a '..' segment (was "/etc/../app.conf")`,
+    )
+  })
+
   it("should refuse a symlink", async () => {
     const filePath = await createFilePath()
     await symlink("/etc/hosts", filePath)
