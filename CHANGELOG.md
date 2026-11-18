@@ -1,3 +1,21 @@
+## [0.6.0](https://github.com/adamhl8/tsinfra/compare/v0.5.0..v0.6.0) - 2026-11-18
+
+### 🚀 Features
+
+- show a read step's input in the report ([f857410](https://github.com/adamhl8/tsinfra/commit/f8574101613944f8663a51d8816f3fd64f031af0) by @adamhl8)
+
+- take input on the tools and the read steps ([0330053](https://github.com/adamhl8/tsinfra/commit/0330053b6539463152412282d0ba394caf7ff678) by @adamhl8)
+
+- send input to a command's stdin through the shell ([205323c](https://github.com/adamhl8/tsinfra/commit/205323cb3fcdd492126846d7180cb0b3b1e85ff7) by @adamhl8)
+
+### 🐛 Bug Fixes
+
+- give the 10 MB content tests room on macOS sh ([0bfab30](https://github.com/adamhl8/tsinfra/commit/0bfab30f0cd009c7ff0ca0ecba2d553b6e47a73b) by @adamhl8)
+
+### 🚜 Refactor
+
+- share file's content reading ([e6d8391](https://github.com/adamhl8/tsinfra/commit/e6d8391038e6f330ac1b6812c7878d1b0c2d0e4f) by @adamhl8)
+
 ## [0.5.0](https://github.com/adamhl8/tsinfra/compare/v0.4.0..v0.5.0) - 2026-11-17
 
 ### 🚀 Features
