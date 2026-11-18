@@ -1,3 +1,9 @@
+## [0.7.0](https://github.com/adamhl8/tsinfra/compare/v0.6.0..v0.7.0) - 2026-11-18
+
+### 🚀 Features
+
+- add h.meta property ([84ac76e](https://github.com/adamhl8/tsinfra/commit/84ac76ecac551c49bb65ca391855d333f810e770) by @adamhl8)
+
 ## [0.6.0](https://github.com/adamhl8/tsinfra/compare/v0.5.0..v0.6.0) - 2026-11-18
 
 ### 🚀 Features
