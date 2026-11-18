@@ -1,7 +1,7 @@
 import type { LinkComparisonValues, LinkChange } from "#core/session/handlers/link/comparison.ts"
 import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { formatAlignedRow } from "#report/format/details/shared/aligned-row.ts"
-import { formatOwnerChange } from "#report/format/details/shared/attributes.ts"
+import { formatAttributeChange } from "#report/format/details/shared/attributes.ts"
 import { changeDescriptionElement } from "#report/format/elements/messages.ts"
 import { changeElement, wantValueElement } from "#report/format/elements/values.ts"
 
@@ -17,10 +17,16 @@ const formatLinkChange = (linkChange: Exclude<LinkChange, { kind: "same" }>): st
   return `${changeDescriptionElement(REPLACEMENT_WORDS[linkChange.kind])} ${wantValueElement(linkChange.want)}`
 }
 
-/** Formats how a link changes as its rows: one for its target, then one for each owner that changes. */
+/**
+ * Formats how a link changes as its rows: one for its target, then one for each owner that changes, then one for each
+ * of the target's attributes that changes.
+ */
 export const formatLinkValues = (values: LinkComparisonValues): AlignedRow[] => {
-  const { linkChange, ownerChanges } = values
+  const { linkChange, ownerChanges, targetAttributeChanges } = values
   const linkChangeRows = linkChange.kind === "same" ? [] : [formatAlignedRow("target", [formatLinkChange(linkChange)])]
-  const ownerRows = ownerChanges.map((ownerChange) => formatOwnerChange(ownerChange))
-  return [...linkChangeRows, ...ownerRows]
+  const ownerRows = ownerChanges.map((ownerChange) => formatAttributeChange(ownerChange))
+  const targetAttributeRows = targetAttributeChanges.map((attributeChange) =>
+    formatAttributeChange(attributeChange, "target"),
+  )
+  return [...linkChangeRows, ...ownerRows, ...targetAttributeRows]
 }

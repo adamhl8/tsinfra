@@ -6,7 +6,7 @@ import { $ } from "bun"
 import { createSession, dirOrMessage } from "#core/__tests__/session.ts"
 import type { Host } from "#core/session.ts"
 import type { DirOptions } from "#core/session/handlers/dir.ts"
-import { GROUP_DIRECTORY_MODE } from "#core/session/handlers/shared/filesystem/mode.ts"
+import { GROUP_DIRECTORY_MODE } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 
 const ROOT_OWNED_DIR = "/etc/tsinfra-docker-dirs"
 

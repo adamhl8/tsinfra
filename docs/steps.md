@@ -327,8 +327,9 @@ them on one path clash too. The second step fails the host, under its own name, 
 Two path steps also clash when their paths are spelled differently but [resolve](#file) to the same one, like `~/x` and
 `/home/adam/x`, with `an earlier file step has the same path, and a path can have only one file, link, or dir step in a
 host script`. The step keeps its name as written in the report.
-The report, `needs`, and [open changes](#when-an-apply-doesnt-finish) tell steps apart by name. Reads and inspects are named by their command, so reading the same
-thing twice is fine.
+The report, `needs`, and [open changes](#when-an-apply-doesnt-finish) tell steps apart by name. Reads and inspects
+are named by their command, so reading the same thing twice is fine. Two steps that set one attribute of a path
+differently fail too, which also covers a link's target (see [`file`](#file)).
 
 A step in a loop puts the item in its name, like `` `Install ${name}` ``. A helper that adds steps can be called twice
 on one host only when its step names differ, like by including its arguments.
@@ -443,6 +444,16 @@ current mode, and a step states the mode it wants. A changed mode shows both not
 way Ansible, Salt, Chef, and Puppet all do, so a `file` step never loosens a `0600` file or takes ownership away from an
 app. A new file gets mode `644`, or `600` with `secret`, and is owned by whichever user ran the write: the SSH user, or
 root under `sudo`.
+
+**Two steps can't set one attribute differently.** Each apply would undo the other, and the plan would never come out
+clean. So a step that sets a `mode`, `user`, or `group` an earlier step set differently on the same path fails, in
+`plan` too, naming the earlier step, like
+`'/home/adam/dotfiles/ssh/config' already gets mode '600' from link '~/.ssh/config', so it can't get '644'`. This covers
+`file`, [`dir`](#dir), and a link's [`targetAttributes`](#link), so a `file` and a link to it can't fight over its mode.
+Paths compare after `~/` is resolved. Each attribute compares on its own, so one step can set a path's mode and another
+its user, and an attribute left out never conflicts. Modes compare by value, so `"600"` and `PRIVATE_FILE_MODE` agree.
+A user or group compares as written, so `"adam"` and `1000` conflict even when they're the same user, because telling
+would take a read from the host.
 
 **Paths.** A path must be absolute, starting with `/` or `~/`. A relative path fails, like `must be an absolute
 path, starting with / or ~/ (was "app.conf")`, because it would land wherever the shell starts. A leading `~/` means the
@@ -639,9 +650,10 @@ passes, and they show in `plan` too:
 
 ```ts
 type LinkOptions = {
-  user?: string | number // a name is compared with the user's name, a number with its uid
-  group?: string | number // a name is compared with the group's name, a number with its gid
+  user?: string | number // the link's own owner. A name is compared with the user's name, a number with its uid
+  group?: string | number // the link's own group. A name is compared with the group's name, a number with its gid
   force?: boolean // replace a regular file or an empty directory at the path
+  targetAttributes?: { mode?: FileMode; user?: string | number; group?: string | number } // the target's, see below
   sudo?: boolean // read and make the link as root
   needs?: ChangeStepResult<"file" | "link" | "dir" | "ensure">[]
 }
@@ -651,6 +663,10 @@ type LinkOptions = {
 // The file at ~/.config/fish/config.fish links to the repo's copy.
 const fishConfig = new URL("../dotfiles/fish/config.fish", import.meta.url).pathname
 await h.link("~/.config/fish/config.fish", fishConfig)
+
+// ssh refuses a config others can write, so the repo's copy gets 600.
+const sshConfig = new URL("../dotfiles/ssh/config", import.meta.url).pathname
+await h.link("~/.ssh/config", sshConfig, { targetAttributes: { mode: PRIVATE_FILE_MODE } })
 ```
 
 Makes `path` a symlink to `target`, and reports whether it changed. This is how dotfiles in a repo can be linked into
@@ -658,8 +674,8 @@ place on the control machine, so an edit in the repo shows up straight away. The
 follows the same rules as `file`'s (see [`file`](#file)).
 
 `link` is a step of its own, not a form of `file`, because the two share only the path and the owner. A link has no
-content, mode, or `secret`, and `force` means nothing for a regular file. Their details scripts, output, and writes
-differ too.
+content, mode of its own, or `secret`, and `force` means nothing for a regular file. Their details scripts, output, and
+writes differ too.
 
 The words are easy to mix up. In `ln -s TARGET LINK`, the target is the original file the link points to, and the link
 is the new path. `h.link` takes them the other way around, `path` then `target`, because every step names the path it
@@ -680,7 +696,9 @@ manages first.
   The warning shows even when the link is already right, without `--verbose`, and the summary counts it. It's not
   drift, so it doesn't change the exit code.
 - **The link details script** reads the existing link's target with `readlink` and compares it with `target` as an exact
-  string, after `~/` is resolved. It is in sync when `path` is a symlink that points there, with the right owner.
+  string, after `~/` is resolved. It also reads the mode and owner of the file at the end of `target`, with `stat -L`.
+  It is in sync when `path` is a symlink that points there, with the right owner, and the target has the
+  `targetAttributes` given.
 - **An existing symlink is always updated** to point at `target`, because managing it is the point.
 - **A regular file at `path` is an error** unless `force: true`, like `'/home/adam/.config/fish/config.fish' is a
   regular file, so link won't replace it without force: true`. This is the first run for dotfiles, where the real file
@@ -690,16 +708,38 @@ manages first.
 - **A directory with anything in it is always an error,** even with `force`, because replacing it would throw away
   everything in it. A hidden file counts. Anything else that isn't a link or a regular file, like a socket, is always
   an error too.
-- **`sudo` works as it does for `file`.** The link details script and the write both run as root.
+- **`sudo` works as it does for `file`.** The link details script and the write both run as root, for the link and its
+  target. So a link made as root is owned by root, unless the step sets the link's own `user` and `group`. That covers
+  a link that shouldn't be root's, pointing at a target only root can change, with one `sudo`.
 - **The output** shows `target: new link to /home/adam/dotfiles/fish/config.fish` for a new link, and a changed target
   as an attribute line, like `target: /home/adam/old -> /home/adam/new`. Paths are absolute, because that's what
-  `readlink` gives back. Forcing something out shows `replaces a file` or `replaces an empty directory`.
+  `readlink` gives back. Forcing something out shows `replaces a file` or `replaces an empty directory`. The target's
+  attributes show after the link's own rows, prefixed with `target`, like `target user: root -> adam` and
+  `target mode: rw-r--r-- (644) -> rw------- (600)`.
 - **The write** makes the link in a temp directory next to `path`, then renames it into place, so there is almost never
   a moment with nothing at `path`. The exceptions are a forced empty directory, and replacing a link to a directory on
-  busybox (see [Transport](./transport.md#link-writes)).
-- **`user` and `group` work as they do for `file`:** the value given, then what's at `path` now, then the default for
-  something new. So do its errors for `user` naming another user, and for something someone else owns. There's no
-  `mode`, because a symlink's mode doesn't apply to it. `chown -h` changes the link, not what it points to.
+  busybox (see [Transport](./transport.md#link-writes)). The target's `chown` and `chmod` run after it. A link that's
+  already right isn't remade, so a change to only the target leaves the link and its owner alone.
+- **`user` and `group` are the link's own owner,** and work as they do for `file`: the value given, then what's at
+  `path` now, then the default for something new. So do its errors for `user` naming another user, and for something
+  someone else owns. `chown -h` changes the link, not what it points to. They never mean the target, so an option means
+  the same file everywhere.
+- **`targetAttributes` manages the file the link points to.** A link has no mode of its own: Linux ignores a symlink's
+  mode, and `chmod` follows the link. So for dotfiles linked into a repo, the mode that matters is the repo file's.
+  Its type is the exported `FileAttributes`: `mode`, `user`, and `group`, like `file`'s.
+  - **Only the attributes given are managed,** like `file`. The target keeps its own value of any left out.
+  - **It follows the target to the file at the end.** A target that's itself a link gets the attributes on what it
+    points to, because `chmod` and `chown` without `-h` follow links, and the read uses `stat -L`, so both look at the
+    same file.
+  - **A missing target is skipped,** with the `nothing exists at target` warning. The step decides from what's on the
+    host when it runs. In `plan`, a target an earlier step would create is still missing, so it's skipped. In `apply`,
+    that step has run, so the attributes are set.
+  - **A change to only the target is a change of the link step.** It reports `changed`, so a run with
+    `after: [theLink]` runs, and a step that `needs` it waits in `plan`.
+  - **The owner check runs for the target too,** so a target `user` that needs root fails in `plan`, and so does a
+    `mode` on a target someone else owns, without `sudo`.
+  - **Two steps that set one of the target's attributes differently fail,** whether they're two links or a link and a
+    `file` or `dir` on its target (see [`file`](#file)).
 - **It returns a `ChangeStepResult<"link">`,** so `needs` and `after` accept it the same as a file's. A run can follow a link
   that changed.
 
@@ -739,6 +779,8 @@ exists for.
   shows in italics. So do its errors for another user, and for a directory someone else owns.
 - **An attribute left out isn't compared,** so an existing directory keeps its own. With none, `dir` only makes sure the
   directory exists.
+- **Two steps can't set one attribute differently,** like `file`'s (see [`file`](#file)). A link whose
+  `targetAttributes` set this directory's mode counts.
 - **A symlink, a regular file, or anything else at the path is an error,** like
   `'/srv/sonarr' is a symlink, so dir won't replace it`. A link to a directory counts, because `dir` manages the
   directory itself.

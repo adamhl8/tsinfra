@@ -16,6 +16,7 @@ import { withChangeStepResult } from "#core/session/handlers/shared/change-step-
 import type { Content } from "#core/session/handlers/shared/content.ts"
 import { contentSchema, INVALID_CONTENT_REASON } from "#core/session/handlers/shared/content.ts"
 import { converge } from "#core/session/handlers/shared/converge.ts"
+import { claimPathAttributes } from "#core/session/handlers/shared/filesystem/attributes/claims.ts"
 import { validateHostPath } from "#core/session/handlers/shared/filesystem/path.ts"
 import { validateInput } from "#core/session/handlers/shared/validate-input.ts"
 import type { HandlerReturn, StepContext } from "#core/session/step.ts"
@@ -91,6 +92,10 @@ export const handleFile = async (
 
   // Record `validate` as the command it built, because the script passed a function.
   recordOptions({ validate: validateCommand, secret, overwrite })
+
+  // Claim the file's attributes before `converge`, so a conflict fails in `plan` too, even for a step that waits.
+  const attributeClaimResult = claimPathAttributes(ctx, absolutePath, validOptions)
+  if (isErr(attributeClaimResult)) return attributeClaimResult
 
   const fileWrite: FileWrite = { resolvedContent, validateCommand }
 

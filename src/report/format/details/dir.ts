@@ -1,5 +1,5 @@
 import type { RecordComparisonValues, RecordValue } from "#core/session/handlers/ensure/comparison/record.ts"
-import { toModeBits } from "#core/session/handlers/shared/filesystem/mode.ts"
+import { toModeBits } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 import type { DetailRows } from "#report/format/details.ts"
 import type { DiffLimits } from "#report/format/details/diff/limits.ts"
 import { formatRecordValues } from "#report/format/details/ensure/record.ts"

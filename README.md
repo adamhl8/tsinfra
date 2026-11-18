@@ -428,6 +428,8 @@ await h.file("/etc/ssh/sshd_config", sshdConfig, { sudo: true, validate: (tempPa
 - Missing parent directories are created.
 - `path` must be a regular file or missing. A symlink, a directory, or anything else fails the step.
 - Content over 10 MB fails the step.
+- A `mode`, `user`, or `group` that an earlier step set differently on the same path fails the step, including a link's
+  `targetAttributes`, because each apply would undo the other.
 
 > [!TIP]
 > `Bun.file("files/x")` resolves against the directory tsinfra runs from. Build paths from your script's own location
@@ -462,20 +464,28 @@ h.link(path: string, target: string, options?: LinkOptions): Promise<ChangeStepR
 
 Makes `path` a symlink to `target`. Both are absolute, starting with `/` or `~/`, and both are on the host.
 
-- `user`, `group`: a name or an id
+- `user`, `group`: a name or an id, for the link itself
 - `force` (default: `false`): replace a regular file or an empty directory at `path`
-- `sudo` (default: `false`): read and make the link as root
+- `targetAttributes`: the `mode`, `user`, and `group` of the file the link points to, like `file`'s. Left out, the
+  target keeps its own.
+- `sudo` (default: `false`): read and make the link, and set its target's attributes, as root
 - `needs`: see [Needs](#needs)
 
 ```ts
 // on "@local": link a dotfile into your repo
 await h.link("~/.config/fish/config.fish", path.join(DOTFILES, "fish/config.fish"))
+
+// ssh refuses a config others can write, so the repo's copy gets 600
+await h.link("~/.ssh/config", path.join(DOTFILES, "ssh/config"), { targetAttributes: { mode: PRIVATE_FILE_MODE } })
 ```
 
 - An existing symlink is always pointed at `target`.
+- A symlink has no mode of its own, so `targetAttributes` is how a linked dotfile gets one. It follows a target that's
+  itself a link to the file at the end, and `plan` shows its rows like `target mode: rw-r--r-- (644) -> rw------- (600)`.
 - A regular file at `path` fails the step unless `force` is set, and there's no backup. A directory with anything in it
   always fails.
-- A missing `target` is allowed, with a warning in the output, because a later step might create it.
+- A missing `target` is allowed, with a warning in the output, because a later step might create it. Its
+  `targetAttributes` are set once it exists.
 
 ---
 
@@ -499,6 +509,7 @@ await h.file("/srv/sonarr/config.xml", sonarrConfig, { needs: [data], user: "son
 
 - Missing parents are made too, with the default mode and owner.
 - A symlink, a regular file, or anything else at `path` fails the step.
+- A `mode`, `user`, or `group` that an earlier step set differently on the same path fails the step, like `file`'s.
 - `plan` shows a row for each attribute that differs, like `mode: rwx------ (700) -> rwxr-x--- (750)`.
 
 ---

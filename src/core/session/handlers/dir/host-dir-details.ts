@@ -3,10 +3,9 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { HostFileAttributeDetails } from "#core/session/handlers/shared/filesystem/attributes.ts"
-import { statModeSchema } from "#core/session/handlers/shared/filesystem/mode.ts"
-import { buildStatCommand, STAT_OWNER_COLUMNS } from "#core/session/handlers/shared/filesystem/stat.ts"
+import { buildStatCommand, statAttributesLineSchema } from "#core/session/handlers/shared/filesystem/stat.ts"
 import type { Shell } from "#core/transport/shell.ts"
-import { quoteShellArg, splitWords } from "#utils.ts"
+import { quoteShellArg } from "#utils.ts"
 
 /** The path of a directory that doesn't exist on the host yet. */
 interface NewHostDirDetails {
@@ -31,11 +30,6 @@ const kindLineSchema = type("string")
   .narrow((line) => line.startsWith(KIND_PREFIX))
   .pipe((line) => line.slice(KIND_PREFIX.length))
   .to("'absent' | 'link' | 'other' | 'directory'")
-
-const statLineSchema = type("string")
-  .pipe(splitWords)
-  .to([statModeSchema, ...STAT_OWNER_COLUMNS])
-  .pipe(([mode, uid, gid, user, group]): HostFileAttributeDetails => ({ mode, uid, gid, user, group }))
 
 /**
  * Returns one command that says what is at `path`, and for a directory, its mode and owner. It checks for a symlink
@@ -68,7 +62,7 @@ export const parseDirDetailsOutput = (stdout: string, path: string): Result<Host
   if (kind === "link") return err(`'${path}' is a symlink, so dir won't replace it`, undefined)
   if (kind === "other") return err(`'${path}' isn't a directory, so dir won't replace it`, undefined)
 
-  const attributes = statLineSchema(statLine)
+  const attributes = statAttributesLineSchema(statLine)
   if (attributes instanceof type.errors) {
     return err(
       `the directory details script printed '${statLine}' instead of the directory's mode and owner`,

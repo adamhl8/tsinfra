@@ -2,10 +2,13 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { ValidLinkOptions } from "#core/session/handlers/link.ts"
+import { findLinkChanges, isLinkItselfInSync } from "#core/session/handlers/link/comparison.ts"
 import type { HostLinkDetails } from "#core/session/handlers/link/host-link-details.ts"
+import { parseFileMode } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 import {
   REMOVE_TEMP_DIRECTORY_LINES,
   TEMP_PATH_ARG,
+  buildAttributeLines,
   buildChownLines,
   buildTempDirectoryLines,
   toWriteScriptPaths,
@@ -13,8 +16,8 @@ import {
 import type { StepContext } from "#core/session/step.ts"
 import { quoteShellArg } from "#utils.ts"
 
-/** Returns the script that makes the link under a temp name, then renames it into place (see `docs/transport.md`). */
-const buildLinkWriteScript = (hostLinkDetails: HostLinkDetails, target: string, options: ValidLinkOptions): string => {
+/** Returns the lines that make the link under a temp name, then rename it into place (see `docs/transport.md`). */
+const buildLinkLines = (hostLinkDetails: HostLinkDetails, target: string, options: ValidLinkOptions): string[] => {
   const { path } = hostLinkDetails
   const currentOwner = hostLinkDetails.kind === "new" ? undefined : hostLinkDetails.owner
 
@@ -35,7 +38,6 @@ const buildLinkWriteScript = (hostLinkDetails: HostLinkDetails, target: string, 
       : moveCommand
 
   return [
-    "set -eu",
     `mkdir -p ${quotedDirectory}`,
     ...buildTempDirectoryLines(writeScriptPaths),
     // Try the flag on a file of our own, because a plain `mv` follows a link to a directory, and POSIX has no flag for it.
@@ -48,7 +50,38 @@ const buildLinkWriteScript = (hostLinkDetails: HostLinkDetails, target: string, 
     ...rmdirLines,
     moveLine,
     ...REMOVE_TEMP_DIRECTORY_LINES,
-  ].join("\n")
+  ]
+}
+
+/**
+ * Returns the lines that set the mode and owner of the file at the end of the target. Sets every attribute the step
+ * gives once any differs, because `compareLink` checked the write can make them.
+ */
+const buildTargetAttributeLines = (
+  hostLinkDetails: HostLinkDetails,
+  target: string,
+  options: ValidLinkOptions,
+): string[] => {
+  const { targetAttributes } = hostLinkDetails
+  const { targetAttributes: targetAttributeOptions } = options
+  const { mode } = targetAttributeOptions
+
+  const modeBits = mode === undefined ? undefined : parseFileMode(mode)
+  return buildAttributeLines(targetAttributes, quoteShellArg(target), {
+    ...targetAttributeOptions,
+    modeBits,
+    follow: true,
+  })
+}
+
+/** Returns the script that writes what differs: the link, then the file at the end of its target. */
+const buildLinkWriteScript = (hostLinkDetails: HostLinkDetails, target: string, options: ValidLinkOptions): string => {
+  const linkChanges = findLinkChanges(hostLinkDetails, target, options)
+  const isTargetInSync = linkChanges.targetAttributeChanges.length === 0
+  const linkLines = isLinkItselfInSync(linkChanges) ? [] : buildLinkLines(hostLinkDetails, target, options)
+  const targetLines = isTargetInSync ? [] : buildTargetAttributeLines(hostLinkDetails, target, options)
+
+  return ["set -eu", ...linkLines, ...targetLines].join("\n")
 }
 
 /**

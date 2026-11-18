@@ -2,25 +2,31 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { HostOwner } from "#core/session/handlers/shared/filesystem/attributes.ts"
-import { buildStatCommand, STAT_OWNER_COLUMNS } from "#core/session/handlers/shared/filesystem/stat.ts"
+import type { HostFileAttributeDetails, HostOwner } from "#core/session/handlers/shared/filesystem/attributes.ts"
+import {
+  buildStatCommand,
+  STAT_OWNER_COLUMNS,
+  statAttributesLineSchema,
+} from "#core/session/handlers/shared/filesystem/stat.ts"
 import type { Shell } from "#core/transport/shell.ts"
 import { quoteShellArg, splitWords, stripOneTrailingNewline } from "#utils.ts"
 
-/** What the link details script found at a link's path, and whether the link's target exists. */
+/** What the link details script found at a link's path, and the mode and owner of the link's target. */
 export type HostLinkDetails = ExistingLinkDetails | NewLinkDetails | ReplaceableLinkDetails
 
 interface NewLinkDetails {
   kind: "new"
   path: string
-  targetExists: boolean
+  /** The mode and owner of the file at the end of the target, or `undefined` when the target is missing. */
+  targetAttributes: HostFileAttributeDetails | undefined
 }
 
 /** A symlink at the path. */
 interface ExistingLinkDetails {
   kind: "link"
   path: string
-  targetExists: boolean
+  /** The mode and owner of the file at the end of the target, or `undefined` when the target is missing. */
+  targetAttributes: HostFileAttributeDetails | undefined
   /** What the link points to now, which may differ from the target the script wants. */
   currentTarget: string
   owner: HostOwner
@@ -30,7 +36,8 @@ interface ExistingLinkDetails {
 interface ReplaceableLinkDetails {
   kind: "file" | "emptyDirectory"
   path: string
-  targetExists: boolean
+  /** The mode and owner of the file at the end of the target, or `undefined` when the target is missing. */
+  targetAttributes: HostFileAttributeDetails | undefined
   owner: HostOwner
 }
 
@@ -47,12 +54,11 @@ const statLineSchema = type("string")
   .to([...STAT_OWNER_COLUMNS])
   .pipe(([uid, gid, user, group]): HostOwner => ({ uid, gid, user, group }))
 
-const targetLineSchema = type("'target=exists' | 'target=missing'").pipe((line) => line === "target=exists")
-
 /**
- * Returns one command that says what is at `path`, its owner when the step can replace it, and then whether `target`
- * exists. `stat` reads a link itself, not what it points to. A new link prints an empty line in place of the owner, so
- * every line keeps its place. `readlink` goes last, so a target with a newline still parses.
+ * Returns one command that says what is at `path`, its owner when the step can replace it, and then the mode and owner
+ * of `target`. The path's `stat` reads a link itself, and the target's follows links to the file at the end. A new link
+ * and a missing target each print an empty line, so every line keeps its place. `readlink` goes last, so a target with
+ * a newline still parses.
  */
 const buildLinkDetailsScript = (path: string, target: string): string =>
   [
@@ -74,7 +80,7 @@ const buildLinkDetailsScript = (path: string, target: string): string =>
     "  absent) echo ;;",
     `  *) ${buildStatCommand('"$p"', ["owner"])} ;;`,
     "esac",
-    `if [ -e "$t" ]; then echo target=exists; else echo target=missing; fi`,
+    `if [ -e "$t" ]; then ${buildStatCommand('"$t"', ["mode", "owner"], { follow: true })}; else echo; fi`,
     `if [ "$kind" = link ]; then readlink "$p"; fi`,
   ].join("\n")
 
@@ -83,7 +89,7 @@ const buildLinkDetailsScript = (path: string, target: string): string =>
  * replace.
  */
 export const parseLinkDetailsOutput = (stdout: string, path: string): Result<HostLinkDetails> => {
-  const [kindLine = "", statLine = "", targetLine = "", ...readlinkLines] = stdout.split("\n")
+  const [kindLine = "", statLine = "", targetStatLine = "", ...readlinkLines] = stdout.split("\n")
 
   const kind = kindLineSchema(kindLine)
   if (kind instanceof type.errors)
@@ -92,21 +98,25 @@ export const parseLinkDetailsOutput = (stdout: string, path: string): Result<Hos
   if (kind === "directory") return err(`'${path}' is a directory with files in it, so link won't replace it`, undefined)
   if (kind === "other") return err(`'${path}' isn't a link or a regular file, so link won't replace it`, undefined)
 
-  const targetExists = targetLineSchema(targetLine)
-  if (targetExists instanceof type.errors)
-    return err(`the link details script printed '${targetLine}' instead of whether the target exists`, undefined)
+  const targetAttributes = targetStatLine === "" ? undefined : statAttributesLineSchema(targetStatLine)
+  if (targetAttributes instanceof type.errors) {
+    return err(
+      `the link details script printed '${targetStatLine}' instead of the mode and owner of the target`,
+      undefined,
+    )
+  }
 
-  if (kind === "absent") return { kind: "new", path, targetExists }
+  if (kind === "absent") return { kind: "new", path, targetAttributes }
 
   const owner = statLineSchema(statLine)
   if (owner instanceof type.errors)
     return err(`the link details script printed '${statLine}' instead of the owner of the path`, undefined)
 
-  if (kind !== "link") return { kind, path, targetExists, owner }
+  if (kind !== "link") return { kind, path, targetAttributes, owner }
 
   // Strip only the newline `readlink` adds, because a target can end in a newline of its own.
   const currentTarget = stripOneTrailingNewline(readlinkLines.join("\n"))
-  return { kind, path, targetExists, currentTarget, owner }
+  return { kind, path, targetAttributes, currentTarget, owner }
 }
 
 /**

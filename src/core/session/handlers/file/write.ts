@@ -5,16 +5,16 @@ import type { ValidFileOptions } from "#core/session/handlers/file.ts"
 import type { HostFileDetails } from "#core/session/handlers/file/host-file-details.ts"
 import type { ResolvedFileContent } from "#core/session/handlers/file/resolved-content.ts"
 import type { HostFileAttributeDetails } from "#core/session/handlers/shared/filesystem/attributes.ts"
+import type { ModeBits } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 import {
   PRIVATE_FILE_MODE,
   PUBLIC_FILE_MODE,
   parseFileMode,
-  toOctalMode,
-} from "#core/session/handlers/shared/filesystem/mode.ts"
+} from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 import {
   REMOVE_TEMP_DIRECTORY_LINES,
   TEMP_PATH_ARG,
-  buildChownLines,
+  buildAttributeLines,
   buildTempDirectoryLines,
   toWriteScriptPaths,
 } from "#core/session/handlers/shared/filesystem/write-script.ts"
@@ -34,12 +34,11 @@ export interface FileWrite {
 }
 
 /** Returns the mode to write: the one given, then the file's own, then the default for a new file. */
-const getModeArg = (attributes: HostFileAttributeDetails | undefined, options: ValidFileOptions): string => {
+const getModeBits = (attributes: HostFileAttributeDetails | undefined, options: ValidFileOptions): ModeBits => {
   const { mode, secret } = options
 
   const defaultMode = secret ? PRIVATE_FILE_MODE : PUBLIC_FILE_MODE
-  const bits = mode === undefined ? (attributes?.mode ?? parseFileMode(defaultMode)) : parseFileMode(mode)
-  return toOctalMode(bits)
+  return mode === undefined ? (attributes?.mode ?? parseFileMode(defaultMode)) : parseFileMode(mode)
 }
 
 /**
@@ -57,9 +56,9 @@ const buildFileWriteScript = (
 
   const writeScriptPaths = toWriteScriptPaths(path)
   const { quotedPath, quotedDirectory } = writeScriptPaths
-  const modeArg = getModeArg(attributes, options)
+  const modeBits = getModeBits(attributes, options)
 
-  const chownLines = buildChownLines(attributes, TEMP_PATH_ARG, options)
+  const attributeLines = buildAttributeLines(attributes, TEMP_PATH_ARG, { ...options, modeBits })
   // Ignore a failure, because `chcon` can exist on a system with SELinux off, and then it fails.
   const chconLines = isNewFile
     ? []
@@ -85,8 +84,7 @@ const buildFileWriteScript = (
   ]
   const linesAfterContent = [
     HEREDOC_DELIMITER,
-    ...chownLines,
-    `chmod ${modeArg} ${TEMP_PATH_ARG}`,
+    ...attributeLines,
     ...chconLines,
     ...validateLines,
     `mv -f ${TEMP_PATH_ARG} ${quotedPath}`,

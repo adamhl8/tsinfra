@@ -2,6 +2,8 @@ import nodePath from "node:path"
 
 import type { OwnerOptions } from "#core/session/handlers/options/handler.ts"
 import type { HostOwner } from "#core/session/handlers/shared/filesystem/attributes.ts"
+import type { ModeBits } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
+import { toOctalMode } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 import { quoteShellArg } from "#utils.ts"
 
 /** The temp path, inside the temp directory, as both write scripts name it, quoted for the shell. */
@@ -9,6 +11,10 @@ export const TEMP_PATH_ARG = '"$tmppath"'
 
 /** The lines that remove the temp directory once the rename has put the new path in place. */
 export const REMOVE_TEMP_DIRECTORY_LINES = [`rm -rf "$tmp"`, "trap - EXIT"]
+
+// Write every mode as five octal digits, because GNU `chmod` keeps a directory's setuid and setgid bits for a numeric
+// mode with fewer. BSD and busybox read the leading zeros as plain octal.
+const FULL_OCTAL_MODE_WIDTH = 5
 
 /** The quoted paths a write script uses. */
 interface WriteScriptPaths {
@@ -54,16 +60,50 @@ export const buildTempDirectoryLines = (writeScriptPaths: WriteScriptPaths): str
   return [`tmp=$(mktemp -d ${quotedTempTemplate})`, `trap 'rm -rf "$tmp"' EXIT`, `tmppath="$tmp"/${quotedName}`]
 }
 
-/** Returns the `chown` line for the temp path, already quoted for the shell, or no lines when there's no owner to set. */
+interface ChownLinesOptions extends OwnerOptions {
+  /** Sets the owner of the file at the end of a symlink instead of the link itself. */
+  follow?: boolean
+}
+
+interface AttributeLinesOptions extends ChownLinesOptions {
+  /** The mode to set. The mode stays as it is when this is `undefined`. */
+  modeBits?: ModeBits | undefined
+}
+
+/**
+ * Returns the `chown` line for the path, already quoted for the shell, or no lines when there's no owner to set.
+ * Without `follow`, a link gets the owner and not what it points to.
+ */
 export const buildChownLines = (
   currentOwner: HostOwner | undefined,
-  quotedTempPath: string,
-  options: OwnerOptions,
+  quotedPath: string,
+  options: ChownLinesOptions,
 ): string[] => {
+  const { follow = false } = options
+
   const ownerArg = getOwnerArg(currentOwner, options)
   if (ownerArg === undefined) return []
 
-  // Use `-h`, so a link gets the owner and not what it points to. It changes nothing for a regular file.
   // Keep `--`, because a user or group name comes from the script.
-  return [`chown -h -- ${quoteShellArg(ownerArg)} ${quotedTempPath}`]
+  const chown = follow ? "chown --" : "chown -h --"
+  return [`${chown} ${quoteShellArg(ownerArg)} ${quotedPath}`]
+}
+
+/**
+ * Returns the `chown` line, then the `chmod` line, for the path, already quoted for the shell. Leaves out the `chown`
+ * when there's no owner to set, and the `chmod` when there's no mode. `chmod` always follows a link.
+ */
+export const buildAttributeLines = (
+  currentOwner: HostOwner | undefined,
+  quotedPath: string,
+  options: AttributeLinesOptions,
+): string[] => {
+  const { modeBits } = options
+
+  const chownLines = buildChownLines(currentOwner, quotedPath, options)
+  const modeArg = modeBits === undefined ? undefined : toOctalMode(modeBits).padStart(FULL_OCTAL_MODE_WIDTH, "0")
+  const chmodLines = modeArg === undefined ? [] : [`chmod ${modeArg} ${quotedPath}`]
+
+  // Set the owner before the mode, because POSIX lets `chown` clear the setuid and setgid bits, and the mode must win.
+  return [...chownLines, ...chmodLines]
 }

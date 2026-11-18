@@ -7,8 +7,8 @@ import type { RecordWant } from "#core/session/handlers/ensure/comparison/record
 import { compareRecords } from "#core/session/handlers/ensure/comparison/record.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
 import type { HostFileAttributeDetails } from "#core/session/handlers/shared/filesystem/attributes.ts"
-import { parseFileMode } from "#core/session/handlers/shared/filesystem/mode.ts"
-import { checkCanSetOwner } from "#core/session/handlers/shared/filesystem/owner.ts"
+import { parseFileMode } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
+import { checkCanSetOwner } from "#core/session/handlers/shared/filesystem/attributes/owner.ts"
 import type { StepContext } from "#core/session/step.ts"
 
 /** Returns what the script wants: the directory, and each attribute it gave, with the mode as its bits. */

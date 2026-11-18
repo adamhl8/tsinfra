@@ -11,6 +11,7 @@ import type { HandlerOptions, SudoOptions } from "#core/session/handlers/options
 import type { ChangeStepResult } from "#core/session/handlers/shared/change-step-result.ts"
 import { withChangeStepResult } from "#core/session/handlers/shared/change-step-result.ts"
 import { converge } from "#core/session/handlers/shared/converge.ts"
+import { claimPathAttributes } from "#core/session/handlers/shared/filesystem/attributes/claims.ts"
 import { validateHostPath } from "#core/session/handlers/shared/filesystem/path.ts"
 import { validateInput } from "#core/session/handlers/shared/validate-input.ts"
 import type { HandlerReturn, StepContext } from "#core/session/step.ts"
@@ -41,6 +42,10 @@ export const handleDir = async (
   if (isErr(validOptions)) return validOptions
 
   const { needs } = validOptions
+
+  // Claim the directory's attributes before `converge`, so a conflict fails in `plan` too, even for a step that waits.
+  const attributeClaimResult = claimPathAttributes(ctx, absolutePath, validOptions)
+  if (isErr(attributeClaimResult)) return attributeClaimResult
 
   const status = await converge(ctx, {
     needs,

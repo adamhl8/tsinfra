@@ -4,6 +4,7 @@ import type { HomeDirectory } from "#core/hosts/prepare/host-details.ts"
 import type { EnsureComparisonValues } from "#core/session/handlers/ensure/comparison.ts"
 import type { FileComparisonValues } from "#core/session/handlers/file/comparison.ts"
 import type { LinkComparisonValues } from "#core/session/handlers/link/comparison.ts"
+import type { PathAttributeClaim } from "#core/session/handlers/shared/filesystem/attributes/claims.ts"
 import type { ChangeTools, ReadTools } from "#core/session/handlers/tools.ts"
 import type { StepOptionsToRecord } from "#core/session/recorder/records.ts"
 import type { ConvergeRecorder } from "#core/session/recorder/session-recorder.ts"
@@ -62,6 +63,11 @@ export interface StepContext<K extends StepKind = StepKind> {
   changedStepNames: Set<string>
   /** The names of the runs in `changedStepNames` that run on every pass, so a run that follows only them does too. */
   ranAlwaysStepNames: Set<string>
+  /**
+   * The claims steps made on each path's attributes, by its resolved path, so two steps can't set one differently. A
+   * file's and a directory's are under their own path, and a link's `targetAttributes` are under its target.
+   */
+  pathAttributeClaims: Map<string, PathAttributeClaim[]>
   /** Given to a check function. */
   readTools: ReadTools
   /** Given to a fix or run function. */

@@ -4,8 +4,8 @@ import type { ChangeStepResult } from "#core/session/handlers/shared/change-step
 import { changeStepResultSchema } from "#core/session/handlers/shared/change-step-result.ts"
 import type { Content } from "#core/session/handlers/shared/content.ts"
 import { CONTENT_DESCRIPTION, contentSchema } from "#core/session/handlers/shared/content.ts"
-import type { FileMode } from "#core/session/handlers/shared/filesystem/mode.ts"
-import { OCTAL_MODE_PATTERN, SYMBOLIC_MODE_PATTERN } from "#core/session/handlers/shared/filesystem/mode.ts"
+import type { FileMode } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
+import { OCTAL_MODE_PATTERN, SYMBOLIC_MODE_PATTERN } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 import type { ChangeStepKind } from "#core/session/step.ts"
 
 /** The `input` option, for a command that reads data on its stdin. */

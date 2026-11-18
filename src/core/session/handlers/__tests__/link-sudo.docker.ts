@@ -92,6 +92,38 @@ describe("h.link with real sudo", () => {
   })
 })
 
+describe("h.link targetAttributes with real sudo", () => {
+  it("should give the target its user, group, and mode, and leave the link root's", async () => {
+    const linkPath = `${ROOT_OWNED_DIR}/target-owner`
+    const target = `${ROOT_OWNED_DIR}/target-owner-file`
+    await $`sudo sh -c ${`echo a > ${target} && chmod 644 ${target}`}`
+    const targetAttributes = { user: "sonarr", group: "sonarr", mode: "600" } as const
+
+    expect(await applyLink(linkPath, target, { sudo: true, targetAttributes })).toMatchObject({ changed: true })
+
+    expect(await getOwner(target)).toBe("sonarr sonarr")
+    expect((await $`sudo stat -c '%a' ${target}`.text()).trim()).toBe("600")
+    expect(await getOwner(linkPath)).toBe("root root")
+    expect(await applyLink(linkPath, target, { sudo: true, targetAttributes })).toMatchObject({ changed: false })
+  })
+
+  it("should give the link its own user and group apart from the target's", async () => {
+    const linkPath = `${ROOT_OWNED_DIR}/both-owners`
+    const target = `${ROOT_OWNED_DIR}/both-owners-file`
+    await $`sudo sh -c ${`echo a > ${target}`}`
+
+    await applyLink(linkPath, target, {
+      sudo: true,
+      user: "sonarr",
+      group: "sonarr",
+      targetAttributes: { user: "root", group: "sonarr" },
+    })
+
+    expect(await getOwner(linkPath)).toBe("sonarr sonarr")
+    expect(await getOwner(target)).toBe("root sonarr")
+  })
+})
+
 describe("h.link without sudo, as a user who could use it", () => {
   it("should refuse another user", async () => {
     const linkPath = path.join(await makeTempDir(), "link")
@@ -109,6 +141,28 @@ describe("h.link without sudo, as a user who could use it", () => {
 
     expect(await linkOrMessage(h, linkPath, TARGET)).toBe(
       `failed to compare the host with what the step wants -> '${linkPath}' is owned by 'root', so writing it needs sudo: true`,
+    )
+  })
+
+  it("should refuse another user for the target", async () => {
+    const directory = await makeTempDir()
+    const target = path.join(directory, "target")
+    await $`echo a > ${target}`
+    const { host: h } = await createSession("plan")
+
+    expect(await linkOrMessage(h, path.join(directory, "link"), target, { targetAttributes: { user: "sonarr" } })).toBe(
+      "failed to compare the host with what the step wants -> user 'sonarr' needs sudo: true, because only root can change a file's owner to another user",
+    )
+  })
+
+  it("should refuse a mode on a target root owns", async () => {
+    const directory = await makeTempDir()
+    const target = path.join(directory, "target")
+    await $`sudo sh -c ${`echo a > ${target} && chmod 644 ${target}`}`
+    const { host: h } = await createSession("plan")
+
+    expect(await linkOrMessage(h, path.join(directory, "link"), target, { targetAttributes: { mode: "600" } })).toBe(
+      `failed to compare the host with what the step wants -> '${target}' is owned by 'root', so writing it needs sudo: true`,
     )
   })
 

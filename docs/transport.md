@@ -130,7 +130,7 @@ base64 -d > "$tmppath" <<'__TSINFRA_EOF__'             # 4. the content, decoded
 <content as base64>
 __TSINFRA_EOF__
 chown -h -- '1000:1000' "$tmppath"                     # 5. user and group first
-chmod 644 "$tmppath"                                   #    then the mode
+chmod 00644 "$tmppath"                                 #    then the mode
 chcon --reference='/etc/app/app.conf' "$tmppath"       # 6. an existing file's SELinux label, when chcon exists
 ( <validate command>                                   # 7. the validate command, when there is one
 ) >&2 || { status=$?; echo validate=failed; exit "$status"; }
@@ -159,9 +159,9 @@ Each step's place in the order matters:
    the file details script found them, or the defaults for a new file. `chown` runs whenever there's a value, because
    the temp file's owner is whoever ran the script. So a write without `sudo` to a file owned by someone else is refused
    before it starts (see [Steps](./steps.md#sudo-and-permissions)), and never takes ownership away from an app. A new file with no `user` or `group` skips it.
-   `chown` keeps its `--`, because a user or group name comes from the script. It takes `-h` too, because `link` shares
-   this line, and `-h` changes nothing for a regular file. Paths need none, because they're always
-   absolute.
+   `chown` keeps its `--`, because a user or group name comes from the script. It takes `-h` too, because a link's own
+   `chown` shares this line, and `-h` changes nothing for a regular file. Paths need none, because they're always
+   absolute. The mode is five octal digits, for every write (see [Directory writes](#directory-writes)).
 6. **SELinux.** `mv` keeps the temp file's label, so the replacement takes the old file's label first. Both SELinux
    steps run only when the command exists, and a failure is ignored, because `chcon` can exist on a system with SELinux
    off, and then it fails.
@@ -339,6 +339,8 @@ rmdir '/home/adam/.config/fish/config.fish'         # only for a forced empty di
 mv -f "$flag" "$tmppath" '/home/adam/.config/fish/config.fish'   # with a fallback when replacing a link, see below
 rm -rf "$tmp"
 trap - EXIT
+chown -- 'adam:staff' '/home/adam/dotfiles/fish/config.fish'     # the target's, when targetAttributes differ
+chmod 00600 '/home/adam/dotfiles/fish/config.fish'
 ```
 
 - **A temp directory, not a temp name.** `mktemp` can't create a symlink, and a fixed name could be a symlink someone
@@ -354,6 +356,11 @@ trap - EXIT
   new link also points to a directory, and busybox has nothing else that renames a link. So when `mv` fails on an
   existing link, the script runs `rm -f` and tries again. That leaves the same brief moment, on busybox, in this case
   only. GNU and BSD rename it directly.
+- **Only what differs is written.** A link that's already right skips the link's own lines, so a
+  change to only the target never remakes the link, and the link keeps its owner. The target's lines run only when one
+  of its `targetAttributes` differs, and then set all of them, because the target's owner check has passed.
+- **The target's `chown` leaves out `-h`,** so it follows the link to the file at the end, like `chmod` always does.
+  Its mode is five octal digits, because a target can be a directory (see [Directory writes](#directory-writes)).
 
 Of the tools in the table above, only Ansible replaces a link atomically by default, and Salt does with `atomic: true`.
 Both call `rename()` directly, which never follows a link. pyinfra, Chef, Puppet, and cdist remove the old link first.
@@ -375,7 +382,8 @@ chmod 00750 '/srv/sonarr'                   # when there's a mode
   leaves a directory's alone, but the mode has to win where they're cleared.
 - **The mode is five octal digits,** like `00750`. GNU `chmod` keeps a directory's setuid and setgid bits for a numeric
   mode with fewer, so `chmod 750` on a `2750` directory would change nothing. GNU documents the leading zeros as the way
-  to clear them, and BSD and busybox read them as plain octal.
+  to clear them, and BSD and busybox read them as plain octal. Every write uses the same form, `file`'s and a link
+  target's too, because a link's target can be a directory, and a regular file reads it the same either way.
 
 ## sudo
 

@@ -2,14 +2,14 @@ import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
 import type { ValidFileOptions } from "#core/session/handlers/file.ts"
-import { findAttributeChanges } from "#core/session/handlers/file/comparison/attributes.ts"
 import type { ContentComparison } from "#core/session/handlers/file/comparison/content.ts"
 import { compareContent } from "#core/session/handlers/file/comparison/content.ts"
 import type { HostFileDetails } from "#core/session/handlers/file/host-file-details.ts"
 import type { ResolvedFileContent } from "#core/session/handlers/file/resolved-content.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
 import type { AttributeChange } from "#core/session/handlers/shared/filesystem/attributes.ts"
-import { checkCanSetOwner } from "#core/session/handlers/shared/filesystem/owner.ts"
+import { findAttributeChanges } from "#core/session/handlers/shared/filesystem/attributes.ts"
+import { checkCanSetOwner } from "#core/session/handlers/shared/filesystem/attributes/owner.ts"
 import type { StepContext } from "#core/session/step.ts"
 
 /** How a file on the host differs from what the script wants: its content, and each managed attribute that differs. */

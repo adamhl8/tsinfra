@@ -137,8 +137,9 @@ whether a reader could mistake it for the wanted value or the host's value.
   `validateInput` and `validateHostPath`. It's for building blocks no one step owns.
 - A step can build on another step's internals. It imports them from the module that declares them, like `dir`
   importing `compareRecords` from `ensure/comparison/record.ts`.
-- `handlers/shared/filesystem/` holds the filesystem building blocks (paths, owners, modes, sizes, attribute types,
-  write-script pieces), even when only one step uses one.
+- `handlers/shared/filesystem/` holds the filesystem building blocks (paths, sizes, stat commands, write-script pieces,
+  and attributes), even when only one step uses one. `attributes.ts` holds the attribute types and their comparison,
+  and its parts sit in `attributes/`: modes, owners, and the claims that keep two steps from setting one differently.
 - `handlers/options/` holds every options interface a step's options extend. Each handler keeps its own options
   interface and schema, extending these.
 - A value a script function returns is validated where it's used, not in `handlers/`'s top level.

@@ -915,6 +915,53 @@ describe("renderHostBlock for a file step", () => {
     ])
   })
 
+  it("should show a change to only a link's target mode, in both notations", async () => {
+    const directory = await makeTempDir()
+    const linkPath = path.join(directory, "link")
+    const target = path.join(directory, "target")
+    await bun.write(target, "a\n")
+    await chmod(target, 0o644)
+    await symlink(target, linkPath)
+    const hostBlock = await formatBlock(async (h) => {
+      await h.link(linkPath, target, { targetAttributes: { mode: "600" } })
+    }, "plan")
+
+    expect(hostBlock).toBe(
+      ["a", `  ~ change: (link) ${linkPath}`, "      target mode: rw-r--r-- (644) -> rw------- (600)"].join("\n"),
+    )
+  })
+
+  it("should show a link's target mode after its target, lined up", async () => {
+    const directory = await makeTempDir()
+    const linkPath = path.join(directory, "link")
+    const target = path.join(directory, "target")
+    await bun.write(target, "a\n")
+    await chmod(target, 0o644)
+    await symlink("/old", linkPath)
+    const hostBlock = await formatBlock(async (h) => {
+      await h.link(linkPath, target, { targetAttributes: { mode: "600" } })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
+      `      target:      /old -> ${target}`,
+      "      target mode: rw-r--r-- (644) -> rw------- (600)",
+    ])
+  })
+
+  it("should show a link's target user with its prefix", async () => {
+    const directory = await makeTempDir()
+    const linkPath = path.join(directory, "link")
+    const target = path.join(directory, "target")
+    await bun.write(target, "a\n")
+    await symlink(target, linkPath)
+    const { uid } = await stat(target)
+    const { hostSession } = await createFakeSudoSession("plan")
+    await hostSession.host.link(linkPath, target, { sudo: true, targetAttributes: { user: uid + 1 } })
+    const hostBlock = renderRecord(hostSession.hostRecord, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([`      target user: ${uid} -> ${uid + 1}`])
+  })
+
   it("should show a note for a new file", async () => {
     const filePath = path.join(await makeTempDir(), "app.conf")
     const hostBlock = await formatBlock(async (h) => {

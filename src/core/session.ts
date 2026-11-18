@@ -23,6 +23,7 @@ import type { RunOptions } from "#core/session/handlers/run.ts"
 import { handleRun } from "#core/session/handlers/run.ts"
 import type { ChangeStepResult } from "#core/session/handlers/shared/change-step-result.ts"
 import type { Change } from "#core/session/handlers/shared/change.ts"
+import type { PathAttributeClaim } from "#core/session/handlers/shared/filesystem/attributes/claims.ts"
 import { resolvePath } from "#core/session/handlers/shared/filesystem/path.ts"
 import { validateInput } from "#core/session/handlers/shared/validate-input.ts"
 import type { ChangeTools, Exec, Inspect, InspectResult, ReadTools } from "#core/session/handlers/tools.ts"
@@ -74,11 +75,13 @@ export interface Host<O extends HostOptions = HostOptions> extends Record<StepKi
    */
   file: (path: string, content: FileContent, options?: FileOptions) => Promise<ChangeStepResult<"file">>
   /**
-   * Makes `path` a symlink to `target`, on the same host, and manages its user and group when they are given. Both must
-   * be absolute, and a leading `~/` means the SSH user's home. In `plan` it only reads what's at the path.
+   * Makes `path` a symlink to `target`, on the same host, and manages its user and group when they are given, and the
+   * target's mode and owner with `targetAttributes`. Both must be absolute, and a leading `~/` means the SSH user's
+   * home. In `plan` it only reads what's at the path and the target.
    *
    * A regular file or an empty directory at the path fails the host and throws, unless `force` is set. So does a
-   * directory with files in it, always, and a failed write.
+   * directory with files in it, always, and a failed write. So does a target attribute an earlier step set
+   * differently.
    */
   link: (path: string, target: string, options?: LinkOptions) => Promise<ChangeStepResult<"link">>
   /**
@@ -191,10 +194,11 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
     if (resolvedPath !== undefined) stepKindsByPath.set(resolvedPath, kind)
   }
 
-  // Share these sets across the session's steps, because a step checks whether the steps it follows or needs changed.
-  // A run also checks whether the steps it follows run on every pass.
+  // Share these across the session's steps, because a step checks whether the steps it follows or needs changed.
+  // A run also checks whether the steps it follows run on every pass, and a path step checks what earlier ones set.
   const changedStepNames = new Set<string>()
   const ranAlwaysStepNames = new Set<string>()
+  const pathAttributeClaims = new Map<string, PathAttributeClaim[]>()
 
   const callStep = async <K extends StepKind, T>(
     stepName: unknown,
@@ -238,6 +242,7 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
         savedStateManager,
         changedStepNames,
         ranAlwaysStepNames,
+        pathAttributeClaims,
         readTools,
         changeTools,
         convergeRecorder,

@@ -15,7 +15,7 @@ import {
   fileOrMessage,
   getStepRecords,
 } from "#core/__tests__/session.ts"
-import { GROUP_DIRECTORY_MODE } from "#core/session/handlers/shared/filesystem/mode.ts"
+import { GROUP_DIRECTORY_MODE } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 
 const COMPARE_ERROR = "failed to compare the host with what the step wants"
 const isRoot = process.getuid?.() === 0

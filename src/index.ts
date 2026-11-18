@@ -13,7 +13,7 @@ export type { RunOptions, RunTrigger } from "#core/session/handlers/run.ts"
 export type { ChangeStepResult } from "#core/session/handlers/shared/change-step-result.ts"
 export type { Change } from "#core/session/handlers/shared/change.ts"
 export type { Content } from "#core/session/handlers/shared/content.ts"
-export type { FileMode, OctalMode, SymbolicMode } from "#core/session/handlers/shared/filesystem/mode.ts"
+export type { FileMode, OctalMode, SymbolicMode } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 export {
   GROUP_DIRECTORY_MODE,
   GROUP_EXECUTABLE_MODE,
@@ -24,7 +24,7 @@ export {
   PUBLIC_DIRECTORY_MODE,
   PUBLIC_EXECUTABLE_MODE,
   PUBLIC_FILE_MODE,
-} from "#core/session/handlers/shared/filesystem/mode.ts"
+} from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 export type {
   FileAttributeOptions as FileAttributes,
   FileOwner,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { chmod, lstat, mkdir, readdir, readlink, symlink } from "node:fs/promises"
+import { chmod, lstat, mkdir, readdir, readlink, stat, symlink } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import process from "node:process"
@@ -11,10 +11,12 @@ import {
   castInvalid,
   createFakeSudoSession,
   createSession,
+  dirOrMessage,
   getStepRecords,
   linkOrMessage,
   runOrMessage,
 } from "#core/__tests__/session.ts"
+import { PRIVATE_FILE_MODE, toModeBits } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 
 const COMPARE_ERROR = "failed to compare the host with what the step wants"
 const isRoot = process.getuid?.() === 0
@@ -26,6 +28,18 @@ const createPaths = async () => {
 
 const getLabels = (hostSession: Awaited<ReturnType<typeof createSession>>) =>
   getStepRecords(hostSession.hostRecord)[0]?.commands.map(({ label }) => label)
+
+const getMode = async (filePath: string) => (await stat(filePath)).mode % 0o1_0000
+
+/** Makes a link to a target file with mode 644, like one the step already made. */
+const createLinkedTarget = async () => {
+  const paths = await createPaths()
+  const { linkPath, target } = paths
+  await bun.write(target, "a\n")
+  await chmod(target, 0o644)
+  await symlink(target, linkPath)
+  return paths
+}
 
 describe("h.link in plan", () => {
   it("should report a new link without making it", async () => {
@@ -40,6 +54,7 @@ describe("h.link in plan", () => {
       kind: "link",
       linkChange: { kind: "new", want: target },
       ownerChanges: [],
+      targetAttributeChanges: [],
       target,
       targetExists: true,
     })
@@ -359,6 +374,250 @@ describe("h.link with other steps", () => {
   })
 })
 
+describe("h.link targetAttributes in plan", () => {
+  it("should report a target mode that differs, and leave it alone", async () => {
+    const { linkPath, target } = await createLinkedTarget()
+    const hostSession = await createSession("plan")
+
+    expect(
+      await linkOrMessage(hostSession.host, linkPath, target, { targetAttributes: { mode: "600" } }),
+    ).toMatchObject({ changed: true })
+    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toMatchObject({
+      linkChange: { kind: "same" },
+      targetAttributeChanges: [{ name: "mode", got: toModeBits(0o644), want: toModeBits(0o600) }],
+    })
+    expect(await getMode(target)).toBe(0o644)
+  })
+
+  it("should be unchanged when the target's mode matches", async () => {
+    const { linkPath, target } = await createLinkedTarget()
+    const { host: h } = await createSession("plan")
+
+    expect(await linkOrMessage(h, linkPath, target, { targetAttributes: { mode: "644" } })).toMatchObject({
+      changed: false,
+    })
+  })
+
+  it("should be unchanged with a warning when the target is missing", async () => {
+    const { linkPath, target } = await createPaths()
+    await symlink(target, linkPath)
+    const hostSession = await createSession("plan")
+
+    expect(
+      await linkOrMessage(hostSession.host, linkPath, target, { targetAttributes: { mode: "600" } }),
+    ).toMatchObject({ changed: false })
+    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toMatchObject({
+      targetAttributeChanges: [],
+      targetExists: false,
+    })
+  })
+})
+
+describe("h.link targetAttributes in apply", () => {
+  it("should set the target's mode, and be unchanged on the next apply with no write", async () => {
+    const { linkPath, target } = await createLinkedTarget()
+    const { host: h } = await createSession("apply")
+
+    expect(await linkOrMessage(h, linkPath, target, { targetAttributes: { mode: "600" } })).toMatchObject({
+      changed: true,
+    })
+    expect(await getMode(target)).toBe(0o600)
+
+    const next = await createSession("apply")
+    expect(await linkOrMessage(next.host, linkPath, target, { targetAttributes: { mode: "600" } })).toMatchObject({
+      changed: false,
+    })
+    expect(getLabels(next)).toStrictEqual(["link details script"])
+  })
+
+  it("should set the target's mode on a new link", async () => {
+    const { linkPath, target } = await createPaths()
+    await bun.write(target, "a\n")
+    await chmod(target, 0o644)
+    const { host: h } = await createSession("apply")
+
+    await linkOrMessage(h, linkPath, target, { targetAttributes: { mode: "600" } })
+
+    expect(await readlink(linkPath)).toBe(target)
+    expect(await getMode(target)).toBe(0o600)
+  })
+
+  it("should leave a link in sync alone while it sets the target's mode, and run a run after it", async () => {
+    const { linkPath, target } = await createLinkedTarget()
+    const { ino } = await lstat(linkPath)
+    const hostSession = await createSession("apply")
+    const link = await hostSession.host.link(linkPath, target, { targetAttributes: { mode: "600" } })
+
+    expect(link.changed).toBe(true)
+    expect(await runOrMessage(hostSession.host, "true", { after: [link] })).toMatchObject({ changed: true })
+    expect((await lstat(linkPath)).ino).toBe(ino)
+  })
+
+  it("should set the mode of the file at the end when the target is itself a link", async () => {
+    const { directory, linkPath, target } = await createPaths()
+    const filePath = path.join(directory, "file")
+    await bun.write(filePath, "a\n")
+    await chmod(filePath, 0o644)
+    await symlink(filePath, target)
+    const { host: h } = await createSession("apply")
+
+    await linkOrMessage(h, linkPath, target, { targetAttributes: { mode: "600" } })
+
+    expect(await getMode(filePath)).toBe(0o600)
+    expect(await readlink(target)).toBe(filePath)
+  })
+
+  it("should set the mode of a target that's a directory", async () => {
+    const { linkPath, target } = await createPaths()
+    await mkdir(target, { mode: 0o755 })
+    const { host: h } = await createSession("apply")
+
+    await linkOrMessage(h, linkPath, target, { targetAttributes: { mode: "rwx------" } })
+
+    expect(await getMode(target)).toBe(0o700)
+  })
+
+  it("should treat a mode in octal and the same mode as a constant alike", async () => {
+    const { linkPath, target } = await createLinkedTarget()
+    const { host: h } = await createSession("apply")
+    await linkOrMessage(h, linkPath, target, { targetAttributes: { mode: "600" } })
+
+    const next = await createSession("apply")
+
+    expect(
+      await linkOrMessage(next.host, linkPath, target, { targetAttributes: { mode: PRIVATE_FILE_MODE } }),
+    ).toMatchObject({ changed: false })
+  })
+
+  it("should skip a target an earlier step creates in plan, and set it in apply", async () => {
+    const { linkPath, target } = await createPaths()
+    await symlink(target, linkPath)
+
+    const plan = await createSession("plan")
+    await plan.host.file(target, "a\n")
+    expect(await linkOrMessage(plan.host, linkPath, target, { targetAttributes: { mode: "600" } })).toMatchObject({
+      changed: false,
+    })
+
+    const apply = await createSession("apply")
+    await apply.host.file(target, "a\n")
+    expect(await linkOrMessage(apply.host, linkPath, target, { targetAttributes: { mode: "600" } })).toMatchObject({
+      changed: true,
+    })
+    expect(await getMode(target)).toBe(0o600)
+  })
+})
+
+describe("h.link targetAttributes on one target from two links", () => {
+  it("should pass two links that give a target the same mode, written two ways", async () => {
+    const { directory, target } = await createLinkedTarget()
+    const { host: h } = await createSession("plan")
+
+    await linkOrMessage(h, path.join(directory, "a"), target, { targetAttributes: { mode: "600" } })
+
+    expect(
+      await linkOrMessage(h, path.join(directory, "b"), target, { targetAttributes: { mode: PRIVATE_FILE_MODE } }),
+    ).toMatchObject({ changed: true })
+  })
+
+  it("should fail the second link that gives a target a different mode, naming the first, even when it waits", async () => {
+    const { directory, target } = await createLinkedTarget()
+    const firstLink = path.join(directory, "a")
+    const hostSession = await createSession("plan")
+    const needed = await hostSession.host.file(path.join(directory, "needed"), "a\n")
+    await linkOrMessage(hostSession.host, firstLink, target, { targetAttributes: { mode: "600" } })
+
+    expect(
+      await linkOrMessage(hostSession.host, path.join(directory, "b"), target, {
+        targetAttributes: { mode: "640" },
+        needs: [needed],
+      }),
+    ).toBe(`'${target}' already gets mode '600' from link '${firstLink}', so it can't get '640'`)
+  })
+
+  it("should pass two links that set different attributes of one target", async () => {
+    const { directory, target } = await createLinkedTarget()
+    const { uid } = os.userInfo()
+    const { host: h } = await createSession("plan")
+
+    await linkOrMessage(h, path.join(directory, "a"), target, { targetAttributes: { mode: "600" } })
+
+    expect(
+      await linkOrMessage(h, path.join(directory, "b"), target, { targetAttributes: { user: uid } }),
+    ).toMatchObject({ changed: true })
+  })
+
+  it("should pass a link without targetAttributes next to one with them", async () => {
+    const { directory, target } = await createLinkedTarget()
+    const { host: h } = await createSession("plan")
+
+    await linkOrMessage(h, path.join(directory, "a"), target, { targetAttributes: { mode: "600" } })
+
+    expect(await linkOrMessage(h, path.join(directory, "b"), target)).toMatchObject({ changed: true })
+  })
+
+  it("should fail a user given as a name after the same user given as a number", async () => {
+    const { directory, target } = await createLinkedTarget()
+    const firstLink = path.join(directory, "a")
+    const { uid, username } = os.userInfo()
+    const { host: h } = await createSession("plan")
+    await linkOrMessage(h, firstLink, target, { targetAttributes: { user: uid } })
+
+    expect(await linkOrMessage(h, path.join(directory, "b"), target, { targetAttributes: { user: username } })).toBe(
+      `'${target}' already gets user '${uid}' from link '${firstLink}', so it can't get '${username}'`,
+    )
+  })
+
+  it("should count a target written with ~/ and written out in full as one target", async () => {
+    const hostSession = await createSession("plan")
+    const { home } = hostSession
+    const directory = await makeTempDir()
+
+    await linkOrMessage(hostSession.host, path.join(directory, "a"), "~/target", { targetAttributes: { mode: "600" } })
+
+    expect(
+      await linkOrMessage(hostSession.host, path.join(directory, "b"), path.join(home, "target"), {
+        targetAttributes: { mode: "640" },
+      }),
+    ).toBe(
+      `'${path.join(home, "target")}' already gets mode '600' from link '${path.join(directory, "a")}', so it can't get '640'`,
+    )
+  })
+})
+
+describe("h.link targetAttributes on a path another step sets", () => {
+  it("should fail a link that gives a file step's path a different mode, naming the file step", async () => {
+    const { directory, target } = await createPaths()
+    const { host: h } = await createSession("plan")
+    await h.file(target, "a\n", { mode: "644" })
+
+    expect(await linkOrMessage(h, path.join(directory, "link"), target, { targetAttributes: { mode: "600" } })).toBe(
+      `'${target}' already gets mode '644' from file '${target}', so it can't get '600'`,
+    )
+  })
+
+  it("should fail a dir step that gives a link's target a different mode, naming the link", async () => {
+    const { linkPath, target } = await createPaths()
+    await mkdir(target)
+    const { host: h } = await createSession("plan")
+    await linkOrMessage(h, linkPath, target, { targetAttributes: { mode: "700" } })
+
+    expect(await dirOrMessage(h, target, { mode: "755" })).toBe(
+      `'${target}' already gets mode '700' from link '${linkPath}', so it can't get '755'`,
+    )
+  })
+
+  it("should pass a file step without a mode next to a link that sets its target's mode", async () => {
+    const { linkPath, target } = await createPaths()
+    const { host: h } = await createSession("plan")
+    await h.file(target, "a\n")
+
+    expect(await linkOrMessage(h, linkPath, target, { targetAttributes: { mode: "600" } })).toMatchObject({
+      changed: true,
+    })
+  })
+})
+
 describe("h.link with invalid input", () => {
   it.each(["link", "./link", "~bob/link"])("should refuse the path '%s'", async (linkPath) => {
     const { host: h } = await createSession("plan")
@@ -398,5 +657,13 @@ describe("h.link with invalid input", () => {
     expect(await linkOrMessage(h, "/tmp/link", "/target", { force: castInvalid("yes") })).toBe(
       `failed to validate the options given to 'link' -> force must be boolean (was "yes")`,
     )
+  })
+
+  it("should fail a target mode that isn't valid", async () => {
+    const { host: h } = await createSession("plan")
+
+    expect(
+      await linkOrMessage(h, "/tmp/link", "/target", { targetAttributes: castInvalid({ mode: "999" }) }),
+    ).toStartWith("failed to validate the options given to 'link' -> targetAttributes.mode must be matched by")
   })
 })

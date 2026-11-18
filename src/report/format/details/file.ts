@@ -2,11 +2,10 @@ import prettyBytes from "pretty-bytes"
 
 import type { FileComparisonValues } from "#core/session/handlers/file/comparison.ts"
 import type { ContentComparison, SizeComparison } from "#core/session/handlers/file/comparison/content.ts"
-import type { AttributeChange } from "#core/session/handlers/shared/filesystem/attributes.ts"
 import type { Bytes } from "#core/session/handlers/shared/filesystem/bytes.ts"
 import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { formatAlignedRow } from "#report/format/details/shared/aligned-row.ts"
-import { formatMode, formatOwnerChange } from "#report/format/details/shared/attributes.ts"
+import { formatAttributeChange } from "#report/format/details/shared/attributes.ts"
 import { changeDescriptionElement } from "#report/format/elements/messages.ts"
 import { changeElement, wantValueElement } from "#report/format/elements/values.ts"
 
@@ -35,13 +34,6 @@ const formatSizeComparison = (sizeComparison: SizeComparison): string => {
   const wantText = wantValueElement(formatSize(wantSize))
   const sizes = gotSize === undefined ? wantText : changeElement(formatSize(gotSize), formatSize(wantSize))
   return `${changeDescriptionElement(SIZE_COMPARISON_WORDS[kind])}, ${sizes}`
-}
-
-const formatAttributeChange = (attributeChange: AttributeChange): AlignedRow => {
-  if (attributeChange.name !== "mode") return formatOwnerChange(attributeChange)
-
-  const { name, got, want } = attributeChange
-  return formatAlignedRow(name, [changeElement(formatMode(got), formatMode(want))])
 }
 
 /** Formats how a file differs as its rows: a note for content the output can't diff, then each attribute that changes. */
