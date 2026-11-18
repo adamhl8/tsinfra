@@ -24,9 +24,9 @@ export default host({ name: "sonarr", target: "sonarr.lan" }, async (h) => { ...
 export default host({ name: "macbook", target: "@local" }, async (h) => { ... }) // the control machine itself
 ```
 
-`"@local"` is the same magic name pyinfra uses, and the one `~/homelab/pyinfra/inventory.py` already uses.
+`"@local"` is the same magic name pyinfra uses.
 
-Any other target goes to `ssh` exactly as written, so it can name a user, like `adam@incus.lan`. Without one, ssh logs
+Any other target goes to `ssh` exactly as written, so it can name a user, like `alice@incus.lan`. Without one, ssh logs
 in as the `User` that `~/.ssh/config` gives the host, or else as the local user. Each user gets its own connection.
 
 ## Commands travel on stdin
@@ -42,8 +42,7 @@ sh -s                           # local
 A command that escalates says `sudo` inside the script, so the shell itself never starts under sudo (see [sudo](#sudo)).
 
 The remote login shell only ever parses the command that starts the shell, like `sh -s`, so the content of a command never needs quoting for it. Whether that
-login shell is bash or fish, nothing changes. This is the fix for the "three shells involved" quoting problem in
-`~/homelab/archive/incus-update/utils.ts`.
+login shell is bash or fish, nothing changes. So a command is never quoted once for each shell it passes through.
 
 The script is wrapped as `{ <script>\n} </dev/null`. The shell parses the whole group before running it, then runs it
 with stdin from `/dev/null`. Without that wrapper, a command in the script that reads stdin (`apt` asking a question, a
@@ -106,8 +105,8 @@ seconds to read (see [File writes](#file-writes)).
 
 ## Login shells
 
-`sh -s` is not a login shell, so PATH additions from `.bashrc` or `.profile` do not load. The archived Bun scripts used
-`bash -li` for exactly that (Go's path lives in `.bashrc` on the caddy container).
+`sh -s` is not a login shell, so PATH additions from `.bashrc` or `.profile` do not load. A tool whose directory only
+those files add to PATH, like Go's, isn't found by name.
 
 A `shell` host option that replaces `sh -s` is planned (see
 [The `shell` host option](./roadmap.md#the-shell-host-option)), and a `path` option that adds to PATH is an idea (see
@@ -277,7 +276,7 @@ read fails the host there, with ssh's error. Then tsinfra fills in only what ssh
 - **A changed key always fails,** because `accept-new` refuses one too, and a changed key can mean the host isn't the
   one it was. tsinfra adds `if the host was recreated, remove its old key from the known_hosts line named above`, and
   offers no way around it. ssh names that line as `Offending ED25519 key in ~/.ssh/known_hosts:12`. At `LogLevel=ERROR`
-  it leaves out the `ssh-keygen -R` command it would otherwise print. A homelab container recreated under the same name hits this, unless cloud-init gives it a stable key.
+  it leaves out the `ssh-keygen -R` command it would otherwise print. A container recreated under the same name hits this, unless cloud-init gives it a stable key.
 - **`ConnectTimeout=10`** is passed when `-G` shows `connecttimeout none`, ssh's default, which leaves it to the OS and
   can take about 75 seconds. A timeout the user set is kept.
 - **Connect retries are left to ssh.** `ConnectionAttempts` defaults to 1, and `-G` can't tell that from an explicit 1.
@@ -326,21 +325,21 @@ into that directory, so the script has to tell `mv` not to follow it:
 
 ```sh
 set -eu
-mkdir -p '/home/adam/.config/fish'
-tmp=$(mktemp -d '/home/adam/.config/fish/.config.fish.tsinfra.XXXXXX')
+mkdir -p '/home/alice/.config/fish'
+tmp=$(mktemp -d '/home/alice/.config/fish/.config.fish.tsinfra.XXXXXX')
 trap 'rm -rf "$tmp"' EXIT
 tmppath="$tmp"/'config.fish'
 touch "$tmp/probe"
 if mv -T "$tmp/probe" "$tmp/probed" 2>/dev/null; then flag=-T; else flag=-h; fi
 rm -f "$tmp/probe" "$tmp/probed"
-ln -s '/home/adam/dotfiles/fish/config.fish' "$tmppath"
+ln -s '/home/alice/dotfiles/fish/config.fish' "$tmppath"
 chown -h -- '501:20' "$tmppath"                     # when there's a value
-rmdir '/home/adam/.config/fish/config.fish'         # only for a forced empty directory
-mv -f "$flag" "$tmppath" '/home/adam/.config/fish/config.fish'   # with a fallback when replacing a link, see below
+rmdir '/home/alice/.config/fish/config.fish'        # only for a forced empty directory
+mv -f "$flag" "$tmppath" '/home/alice/.config/fish/config.fish'   # with a fallback when replacing a link, see below
 rm -rf "$tmp"
 trap - EXIT
-chown -- 'adam:staff' '/home/adam/dotfiles/fish/config.fish'     # the target's, when targetAttributes differ
-chmod 00600 '/home/adam/dotfiles/fish/config.fish'
+chown -- 'alice:staff' '/home/alice/dotfiles/fish/config.fish'    # the target's, when targetAttributes differ
+chmod 00600 '/home/alice/dotfiles/fish/config.fish'
 ```
 
 - **A temp directory, not a temp name.** `mktemp` can't create a symlink, and a fixed name could be a symlink someone
@@ -439,7 +438,7 @@ because of this: by the time its script runs, it's too late to ask.
 
   ```
   Ctrl-D to skip this host · Ctrl-C to cancel the entire run
-  To run host 'macbook', enter the sudo password for user 'adam'.
+  To run host 'macbook', enter the sudo password for user 'alice'.
   Password:
   ```
 
@@ -466,7 +465,7 @@ because of this: by the time its script runs, it's too late to ask.
 that defines `sudo` as a shell function, with the helper's absolute path quoted:
 
 ```sh
-sudo() { TSINFRA_SUDO_PASSWORD='...' SUDO_ASKPASS='/home/adam/.tsinfra/askpass.sh' command sudo -A "$@"; }
+sudo() { TSINFRA_SUDO_PASSWORD='...' SUDO_ASKPASS='/home/alice/.tsinfra/askpass.sh' command sudo -A "$@"; }
 ```
 
 - **The helper stays between runs.** It only prints `$TSINFRA_SUDO_PASSWORD`, so it holds no secret. Preparation writes

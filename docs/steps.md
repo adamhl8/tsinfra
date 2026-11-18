@@ -200,9 +200,9 @@ await h.read('PATH="/opt/go/bin:$PATH" go version')
 ```
 
 `env` and `secretEnv` belong to the step, so they reach every command it runs: a string `check` or `fix`, a run's
-command, and every tool call inside a check, fix, or run function. The tools don't take them. A value that only exists
-inside a function, like a container ID from one `exec`, goes into the next command's string, and quoting it is up to
-the script.
+command, and every tool call inside a check, fix, or run function. The tools don't take them yet (see
+[the roadmap](./roadmap.md#env-and-secretenv-on-tool-calls)). A value that only exists inside a function, like a
+container ID from one `exec`, goes into the next command's string, and quoting it is up to the script.
 
 **A value that could hold shell syntax goes in through `env`, not into the command string.** A command string is code,
 and tsinfra runs it as written, so a value put into it is read as code too. A space or a newline in it breaks the
@@ -246,8 +246,11 @@ fix function reaches `input` through its tools. A `sudo` in the command passes t
 
 The record never holds the input, because it can be a secret, and it can be large. A read or inspect shows it in its
 options as `<content>` (see [CLI](./cli.md#output)). A tool call shows none of its options, so its command's text is
-what says it reads stdin, like `--file=-` or `diff -`. There's no `secret` flag, because nothing records the input, and
-`maskOutput` covers output that repeats it.
+what says it reads stdin, like `--file=-` or `diff -`.
+
+The input itself is never recorded, but it isn't masked either, so a command that prints it, in its output or in an
+error, shows it in the record. A secret belongs in `secretEnv` (see [the roadmap](./roadmap.md#env-and-secretenv-on-tool-calls)
+for one a fix fetches itself).
 
 The command reads a pipe, not a file. Many commands take `-` or `/dev/stdin` in place of a path. One that only takes a
 path, or that seeks in its input, gets the data written to a temp file first:
@@ -325,7 +328,7 @@ A change step's name must be unique in its host script. `file`, `link`, and `dir
 them on one path clash too. The second step fails the host, under its own name, with
 `an earlier ensure step has the same name, and step names must be unique in a host script`. `plan` fails the same way.
 Two path steps also clash when their paths are spelled differently but [resolve](#file) to the same one, like `~/x` and
-`/home/adam/x`, with `an earlier file step has the same path, and a path can have only one file, link, or dir step in a
+`/home/alice/x`, with `an earlier file step has the same path, and a path can have only one file, link, or dir step in a
 host script`. The step keeps its name as written in the report.
 The report, `needs`, and [open changes](#when-an-apply-doesnt-finish) tell steps apart by name. Reads and inspects
 are named by their command, so reading the same thing twice is fine. Two steps that set one attribute of a path
@@ -448,11 +451,11 @@ root under `sudo`.
 **Two steps can't set one attribute differently.** Each apply would undo the other, and the plan would never come out
 clean. So a step that sets a `mode`, `user`, or `group` an earlier step set differently on the same path fails, in
 `plan` too, naming the earlier step, like
-`'/home/adam/dotfiles/ssh/config' already gets mode '600' from link '~/.ssh/config', so it can't get '644'`. This covers
+`'/home/alice/dotfiles/ssh/config' already gets mode '600' from link '~/.ssh/config', so it can't get '644'`. This covers
 `file`, [`dir`](#dir), and a link's [`targetAttributes`](#link), so a `file` and a link to it can't fight over its mode.
 Paths compare after `~/` is resolved. Each attribute compares on its own, so one step can set a path's mode and another
 its user, and an attribute left out never conflicts. Modes compare by value, so `"600"` and `PRIVATE_FILE_MODE` agree.
-A user or group compares as written, so `"adam"` and `1000` conflict even when they're the same user, because telling
+A user or group compares as written, so `"alice"` and `1000` conflict even when they're the same user, because telling
 would take a read from the host.
 
 **Paths.** A path must be absolute, starting with `/` or `~/`. A relative path fails, like `must be an absolute
@@ -598,7 +601,7 @@ working one. A bad `sshd_config` or sudoers file can lock tsinfra out of the hos
 
 ```ts
 await h.file("/etc/ssh/sshd_config", sshdConfig, { sudo: true, validate: (tempPath) => `sshd -t -f ${tempPath}` })
-await h.file("/etc/sudoers.d/adam", sudoers, {
+await h.file("/etc/sudoers.d/alice", sudoers, {
   sudo: true,
   mode: "440",
   validate: (tempPath) => `visudo -cf ${tempPath}`,
@@ -700,7 +703,7 @@ manages first.
   It is in sync when `path` is a symlink that points there, with the right owner, and the target has the
   `targetAttributes` given.
 - **An existing symlink is always updated** to point at `target`, because managing it is the point.
-- **A regular file at `path` is an error** unless `force: true`, like `'/home/adam/.config/fish/config.fish' is a
+- **A regular file at `path` is an error** unless `force: true`, like `'/home/alice/.config/fish/config.fish' is a
   regular file, so link won't replace it without force: true`. This is the first run for dotfiles, where the real file
   still sits where the link will go. Move it into the repo, or set `force` to replace it. That is the same as `ln -f`,
   and there's no backup.
@@ -711,10 +714,10 @@ manages first.
 - **`sudo` works as it does for `file`.** The link details script and the write both run as root, for the link and its
   target. So a link made as root is owned by root, unless the step sets the link's own `user` and `group`. That covers
   a link that shouldn't be root's, pointing at a target only root can change, with one `sudo`.
-- **The output** shows `target: new link to /home/adam/dotfiles/fish/config.fish` for a new link, and a changed target
-  as an attribute line, like `target: /home/adam/old -> /home/adam/new`. Paths are absolute, because that's what
+- **The output** shows `target: new link to /home/alice/dotfiles/fish/config.fish` for a new link, and a changed target
+  as an attribute line, like `target: /home/alice/old -> /home/alice/new`. Paths are absolute, because that's what
   `readlink` gives back. Forcing something out shows `replaces a file` or `replaces an empty directory`. The target's
-  attributes show after the link's own rows, prefixed with `target`, like `target user: root -> adam` and
+  attributes show after the link's own rows, prefixed with `target`, like `target user: root -> alice` and
   `target mode: rw-r--r-- (644) -> rw------- (600)`.
 - **The write** makes the link in a temp directory next to `path`, then renames it into place, so there is almost never
   a moment with nothing at `path`. The exceptions are a forced empty directory, and replacing a link to a directory on
@@ -946,9 +949,8 @@ await h.ensure("Sync bun global packages", {
   want: wanted,
   check: async ({ read }) => toVersions(await read("bun pm ls -g")),
   fix: async ({ exec }, { missing, extra, changed }) => {
-    const installs = [...Object.entries(missing), ...Object.entries(changed).map(([name, { want }]) => [name, want])]
-    if (installs.length > 0)
-      await exec(`bun add -g ${installs.map(([name, version]) => `${name}@${version}`).join(" ")}`)
+    const installs = [...Object.keys(missing), ...Object.keys(changed)].map((name) => `${name}@${wanted[name]}`)
+    if (installs.length > 0) await exec(`bun add -g ${installs.join(" ")}`)
     if (Object.keys(extra).length > 0) await exec(`bun remove -g ${Object.keys(extra).join(" ")}`)
   },
 })
@@ -977,6 +979,13 @@ A broken check must not look converged. If the command exits non-zero and its ou
 a list, or a set, the step fails
 instead of reporting `unchanged`. A check whose non-zero exit is legitimate (`systemctl is-active` exits 3 for inactive)
 already produces output that differs from `want`, so this only catches the broken case.
+
+`grep` is the exception to watch for. It exits 1 when nothing matches, which is an answer, not a failure, but it looks
+broken whenever no match is what you want. `grep -c '^#' file` with `want: "0"` prints `0` and exits 1, and
+`grep '^Port' file` with `want: []` prints nothing and exits 1, so both fail the step. When the question is only whether
+a line exists, use `grep -q` with a boolean `want`, which compares the exit code instead. When you need the output, add
+`|| [ $? -eq 1 ]`. It turns "no match" into exit 0, but a missing file or a bad pattern still exits non-zero, so a
+broken check still can't look converged. A bare `|| true` would make those exit 0 too.
 
 There is no number form for a specific exit code. `want: 0` would mean the same as `want: true`, and the cases that
 need a specific code, like `systemctl is-active`, read better as output. It can be added later without breaking
@@ -1094,7 +1103,9 @@ The fix function only runs in `apply`, so it can change things and do work on th
 **What the check found.** A fix function gets a second argument after its tools, with what the check found: `{ got }` for
 a string or a list `want`, what the check answered, `{ missing, extra }` for a set, and `{ missing, extra, changed }`
 for a record, the same items and keys the report shows. A record's `missing` maps a key to its wanted value, `extra` maps a
-key to its current value, and `changed` maps a key to `{ got, want }`. A fix can act on it without reading the host
+key to its current value, and `changed` maps a key to `{ got, want }`. A fix that sets every key that differs takes the
+keys of `missing` and `changed`, and looks each value up in `want`, as the bun packages
+example above does. A fix can act on it without reading the host
 again:
 
 ```ts

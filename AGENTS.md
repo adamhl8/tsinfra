@@ -24,6 +24,8 @@ The docs describe tsinfra as it is. Everything not built lives in `docs/roadmap.
 - A new design for an unbuilt feature goes in the roadmap, not in the doc it will later belong to.
 - When a piece is built, move its design out of the roadmap into the current-state doc and delete the roadmap entry.
 - Other docs link to roadmap anchors for gaps.
+- Docs never name the maintainer's own setup, like a personal repo, path, or username, because outside users read them.
+  Example users and home directories are `alice` and `/home/alice`.
 
 ## Vocabulary
 

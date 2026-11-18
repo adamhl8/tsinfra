@@ -36,7 +36,7 @@ With no host names, `plan` and `apply` run every host. An unknown name is an err
 
 - **`plan`** reads the host's state for every step and runs no fix. See [Steps](./steps.md).
 - **`apply`** reads the host's state for every step and runs every needed fix, in order, with no confirmation prompt. Run `plan` first to see
-  what will happen. That is the workflow `~/homelab/justfile` already uses, with `apply` passing `-y` to pyinfra.
+  what will happen.
 
 Hosts run one at a time, in the order of their names (see
 [Running hosts in parallel](./roadmap.md#running-hosts-in-parallel)). Steps within a host always run one at a time, in
@@ -180,8 +180,7 @@ sonarr    2 changes
 ```
 
 Each line names its status in words after the symbol. A status reads the same in `plan` and `apply`, because `plan`
-never changes anything the script manages, so its words have no tense, and a line needs no "would". The exact format is
-open (see [the roadmap](./roadmap.md#what-plan-output-should-look-like)).
+never changes anything the script manages, so its words have no tense, and a line needs no "would".
 
 ### How the report is built
 

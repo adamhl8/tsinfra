@@ -6,6 +6,8 @@ rest of the docs describe tsinfra as it is.
 <!-- toc -->
 
 - [Next](#next)
+  - [`env` and `secretEnv` on tool calls](#env-and-secretenv-on-tool-calls)
+  - [`unmet` for a record `want`](#unmet-for-a-record-want)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
   - [Live progress](#live-progress)
@@ -15,10 +17,10 @@ rest of the docs describe tsinfra as it is.
   - [The `shell` host option](#the-shell-host-option)
   - [Ordering between hosts](#ordering-between-hosts)
   - [Interactive commands](#interactive-commands)
+  - [Waiting for a fix to take effect](#waiting-for-a-fix-to-take-effect)
+  - [Manual steps](#manual-steps)
 - [Follow-ups](#follow-ups)
 - [Open questions](#open-questions)
-  - [What `plan` output should look like](#what-plan-output-should-look-like)
-  - [Published, or personal](#published-or-personal)
   - [Integrations worth shipping](#integrations-worth-shipping)
   - [Fact helpers](#fact-helpers)
   - [Following symlinks in `file`](#following-symlinks-in-file)
@@ -38,6 +40,57 @@ rest of the docs describe tsinfra as it is.
 ## Next
 
 In the order they'll be built.
+
+### `env` and `secretEnv` on tool calls
+
+The tools take `env` and `secretEnv`, like a step does, for a value that only exists inside a step's function:
+
+```ts
+fix: async ({ exec }) => {
+  const token = await $`op read op://vault/runner/token`.text()
+  await exec('./config.sh --token "$TOKEN"', { secretEnv: { TOKEN: token } })
+}
+```
+
+- **The cases.** A secret only a fix needs can be fetched inside the fix, so `plan` never fetches it. A step's
+  `secretEnv` is a plain value, so a 1Password read there prompts on every `plan`. A value from an earlier command,
+  like a container ID from one `exec`, goes into the next command's string today. A value with spaces goes in through
+  `input` and `IFS= read -r`, and `input` isn't masked.
+- **A call extends the step's environment.** Its variables are added to the step's `env` and `secretEnv` for that one
+  command. A name the step also sets takes the call's value, only for that call.
+- **A call's `secretEnv` masks like a step's.** Its values join the host's secrets, so they're masked in that command's
+  output and in every later command's.
+- **A name can't be in both of one call's `env` and `secretEnv`,** the same rule as a step's.
+- **Tool calls record their options.** Today a tool call records none of its options, and only a step records its
+  variables. Part of this work is recording each call's options with its command, the way a read's are: `env`, and
+  `secretEnv` with its values masked, `input` as `<content>`, and `maskOutput`.
+
+When it's built, [Commands](./steps.md#commands) drops "The tools don't take them" and "A tool call shows none of its
+options", and its note that `input` isn't masked points to a call's `secretEnv`. The Maybe later entry for an argument
+list as a command loses its case where `env` feels heavy for one value.
+
+### `unmet` for a record `want`
+
+A record `want`'s fix gets a fourth field, `unmet`, which maps every key the host doesn't have at its wanted value to
+that value. It holds the keys of `missing` and `changed`, with `want`'s values. Setting every wanted value is the most
+common record fix, and today it merges two shapes or looks each key up in `want`:
+
+```ts
+// The host has `displaysleep` at 10 and no `sleep`, so `unmet` is `{ displaysleep: "0", sleep: "0" }`.
+await h.ensure("Set the power settings", {
+  want: { displaysleep: "0", sleep: "0", womp: "1" },
+  check: async ({ read }) => toPowerSettings(await read("pmset -g custom")),
+  fix: async ({ exec }, { unmet }) => {
+    await exec(`sudo pmset -a ${Object.entries(unmet).flat().join(" ")}`)
+  },
+})
+```
+
+- **The name is a placeholder.** Like `missing`, `extra`, and `changed`, it's named for how the host compares with
+  `want`, not for what the fix does.
+- **It repeats the other fields,** which breaks the rule in [`fix`](./steps.md#fix) that the difference "holds only
+  what the fix can't work out from `want`". That rule's wording changes with it.
+- **The report doesn't show it,** because the report's row for each key that differs already does.
 
 ## Planned
 
@@ -92,7 +145,7 @@ which host is running. The live area replaces it. These details are still open:
 
 ### Reboot
 
-The Incus host needs it after a kernel change. Until then, it reboots by hand, or with the
+A host running Incus needs it after a kernel change. Until then, it reboots by hand, or with the
 [reboot recipe](./recipes.md#a-reboot).
 
 ```ts
@@ -219,10 +272,10 @@ A `path` option may fit that case better (see [Maybe later](#maybe-later)).
 
 ### Ordering between hosts
 
-A tentative design, to build after `--parallel` and most of the rest of this section. Until then, the Incus host and its
+A tentative design, to build after `--parallel` and most of the rest of this section. Until then, an Incus host and its
 containers run as separate commands.
 
-One host can rely on another. The Incus host has to create a container before the container's own script can run, and a
+One host can rely on another. An Incus host has to create a container before the container's own script can run, and a
 database host may need to be up before an app host. A host declares this with `needs`, which takes the host scripts it
 imports:
 
@@ -258,7 +311,7 @@ Other approaches, and why they lost:
 - **Stages or numbered folders.** The whole order is in one place, but a stage also waits on hosts it doesn't depend on.
 - **The Incus host declaring its containers.** Adding a container would mean editing the Incus file.
 - **Batches and serial runs,** like Ansible's `serial` and `order` and Salt's batch mode. These are for rolling a change
-  through a fleet, which isn't the homelab's problem.
+  through a fleet, which isn't the problem tsinfra solves.
 - **An orchestration layer,** like Salt's orchestrate runner, which runs states on one group of hosts, then another.
   That's a second language for the order of hosts.
 
@@ -320,6 +373,43 @@ Other approaches, and why they lost:
   terminal sends it to every process in the foreground group. With a PTY, tsinfra passes the keypress on to the
   command instead.
 
+### Waiting for a fix to take effect
+
+Some changes show only a moment after the command that makes them returns. `launchctl bootstrap` returns before the
+job is running, and a container's health check starts as `starting`. The check after a fix runs straight away, so it
+can see the old state and fail the step even though the fix worked. Today the fix waits itself, with a loop at its end
+(see [Recipes](./recipes.md#waiting-for-a-change-to-take-effect)).
+
+tsinfra needs a way to wait between a fix and the check after it. How is still open:
+
+- **A wait on `verify`,** like `verify: { timeout: 30_000 }`, which runs the check again until it matches or the time
+  is up. `plan` runs the check once, so it never waits. When time runs out, the step fails with the last check's
+  `got:` and `want:`, like any fix that didn't work.
+- **A helper the fix calls,** like `waitFor`, at the end of the fix.
+
+A fix may also need to wait between its own commands. `launchctl bootout` returns before the job is gone, so a fix that
+reloads a job waits before its `bootstrap`. A `verify` option can't reach that, and a helper can, so the two may both be
+needed. [Retries on a fix](#maybe-later) is a different case, a fix that fails now and then.
+
+### Manual steps
+
+For work no command can do: pressing a pairing button, a login URL from `tailscale up`, an App Store sign-in for `mas`,
+a macOS permission like Full Disk Access, or a setting only a GUI can change. It's shaped like `ensure` with
+instructions in place of a fix, like `h.manual(name, { want, check, instructions })`.
+
+- **`plan` shows it as `manual`,** with the instructions under its status line, so work you have to do doesn't read
+  like a `~ change` tsinfra will make. It's still drift, so `plan` exits 2. The symbol is open, because `!` is
+  `failed`'s.
+- **`apply` prints the instructions, waits for Enter, then checks again.** A step with a check stops prompting once the
+  work is done, which an unconditional pause like Ansible's `pause` can't do. An unconditional pause also makes a second
+  `apply` stop again, and hangs an unattended run.
+- **It reuses the sudo prompt's pieces:** `readHiddenLine`, Ctrl-D to skip the host, Ctrl-C to cancel the run, and
+  failing the host without a TTY. A host script can't prompt by itself, because tsinfra owns the terminal once hosts
+  run in parallel. Its prompt comes mid-run, not in preparation, so it waits for the terminal lock in
+  [Interactive commands](#interactive-commands), and the live progress area pauses while it's open.
+- **Today** an `ensure` whose fix fails with the instructions does the same job with a rerun, because every earlier
+  step is already right (see [Recipes](./recipes.md#a-reboot)).
+
 ## Follow-ups
 
 Fixes and finishing work for what's already built.
@@ -337,7 +427,7 @@ Fixes and finishing work for what's already built.
   Docker and download images and packages, so nothing runs them automatically yet.
 - **Check SELinux labels on a VM.** `file`'s `chcon` and `restorecon` are untested on real labels, because containers
   run with SELinux off.
-- **The user docs.** When the full docs get written, start from [Recipes](./recipes.md), and add the comparison with
+- **The user docs.** These docs will be published as a full documentation site. When it gets written, start from [Recipes](./recipes.md), and add the comparison with
   other config tools from the [design notes](./README.md#compared-with-other-tools), led by tsinfra's strengths. Warn
   about a login shell's pitfalls once [the `shell` option](#the-shell-host-option) exists.
 
@@ -345,23 +435,11 @@ Fixes and finishing work for what's already built.
 
 What still needs an answer. Most are best settled by porting real hosts first.
 
-### What `plan` output should look like
-
-[CLI](./cli.md#output) has a first guess. The evidence so far is `~/homelab/justfile`, whose `plan` recipe filters
-pyinfra's JSON down to just the names of pending changes. That suggests the default should be terse, with diffs. Settle
-it by running `plan` on the ported Mac and reacting to what it shows. How the report is built is settled (see
-[CLI](./cli.md#how-the-report-is-built)), so this is only about what it shows.
-
-### Published, or personal
-
-The package is set up for npm (`exports`, `bin`, publint, release-it). If tsinfra stays personal tooling for
-`~/homelab`, the packaging work is optional. If it is published, it stays.
-
 ### Integrations worth shipping
 
 An integration is a set of functions that take `h` and call steps to set up one specific program, service, or piece
 of config, like apt packages or systemd units. The candidates are in [Integration ideas](#integration-ideas). Start
-each as a function in `~/homelab/lib`, and move one into tsinfra only once two hosts use it the same way.
+each as a function in a host repo, and move one into tsinfra only once two hosts use it the same way.
 
 An integration configures the host itself: its packages, services, files, users, and settings. It doesn't manage
 objects inside an app, like a database's users, or resources behind an API, like DNS records, because those belong to
@@ -415,7 +493,7 @@ await h.ensure("Install the arm build", { want: true, check: "...", fix: `... ${
   immutable facts in deploy code (installed OS, Arch, etc)".
 - **Container detection is left out** until a port needs it, because it differs across Docker, LXC, and systemd.
 
-Build them once the Mac and container ports show which facts the scripts actually branch on.
+Build them once ported hosts show which facts the scripts actually branch on.
 
 ### Following symlinks in `file`
 
@@ -505,7 +583,7 @@ types, nix-darwin, and home-manager).
 - systemd user units
 - [a portable service integration](#portable-integrations), which picks systemd, OpenRC, or launchd for the host
 - maybe: systemd drop-ins, an `override.conf` that changes a few settings of a unit a package shipped
-- maybe: launchd agents and daemons
+- [launchd agents and daemons](#launchd)
 - maybe: `brew services`, Homebrew's way to keep a formula's daemon running
 
 **Files**
@@ -612,6 +690,21 @@ options: `line`, `match`, `after`, and `multiple`.
 and a run that restarts Dock or Finder after. `defaults read` prints booleans as `1` and `0`. Like nix-darwin, a removed
 key stays as it was.
 
+#### launchd
+
+What a port with about 100 lines of launchd handling ran into. The
+[waiting recipe](./recipes.md#waiting-for-a-change-to-take-effect) works around all of them.
+
+- **`launchctl bootout` returns before the job is gone,** so a `bootstrap` straight after it fails with an I/O error.
+  Reloading a job waits for `launchctl print` to fail before the `bootstrap`.
+- **`launchctl bootstrap` returns before the job is running,** so the check after the fix waits for it (see
+  [Waiting for a fix to take effect](#waiting-for-a-fix-to-take-effect)).
+- **A loaded job isn't a running one.** launchd keeps a `KeepAlive` job loaded while it crashes on every start, so the
+  check reads the job's `state` from `launchctl print`, like `running` or `spawn scheduled`. systemd has the same trap,
+  where an enabled unit isn't necessarily `active`.
+- **`launchctl print` has nested `state` lines,** like `state = active` for an endpoint, so the job's own is the one
+  indented by one tab.
+
 #### Run-once marker
 
 Like chezmoi's `run_once_`: save a hash of the command in the host's [saved state](./transport.md#saved-state), and
@@ -635,18 +728,21 @@ Opt-in features with no real case yet:
   whose shape isn't fully trusted could then go into a command's text safely, like
   `` `apt-get install -y ${missing.map(quoteShellArg).join(" ")}` ``, which `env` doesn't handle well, because a
   variable holds one string. It adds to the public API, so add it when a script needs it.
+- **Host scripts found by a glob,** like `--hosts 'machines/*/host.ts'`, for a repo that keeps each machine's files
+  together in its own folder. Discovery only reads the `.ts` files directly inside `--hosts-dir`, so today each machine
+  gets a one-line re-export in `hosts/`, like `export { default } from "../machines/macbook/host.ts"`. tsinfra has no
+  config file, so the glob would be on every command.
 - **`tsinfra exec <host> -- <cmd>`** runs an ad-hoc command on a host's target without its script, like
   `pyinfra INVENTORY exec`.
 - **`--fail-fast`** stops starting new hosts once one fails, like Ansible's `any_errors_fatal` and Salt's `failhard`.
   With `--parallel 1`, it works as a canary rollout.
 - **`apply --confirm`** plans, prints the report, asks, then applies, like Terraform's `apply` prompt.
 - **Retries on a fix,** like Ansible's `until`, Salt's `retry`, Chef's `retries`, and pyinfra's `_retries`. A `retry()`
-  helper inside the fix may be enough.
+  helper inside the fix may be enough. Waiting for a fix that worked to show is planned separately (see
+  [Waiting for a fix to take effect](#waiting-for-a-fix-to-take-effect)).
 - **`backup` on `link`,** for the first dotfiles run, where real files sit where the links go. home-manager's `-b`
   moves them aside and aborts if the backup already exists. If backups come back for `file`, Puppet's same-folder copy
   with an extension is the lightest model (see [Backups](#backups-of-replaced-files)).
-- **`env` on a tool call,** for a value that only exists inside a step's function, like a container ID from one
-  `exec`, which goes into the next command's string today. Add it if a port needs one.
 - **A `tempFile` tool,** for a command that only takes a path, not `input` on its stdin (see
   [Steps](./steps.md#commands)). It would write the data to a temp file and remove the file when the step ends. It
   would be a change tool only, because a temp file a check writes is a write during `plan`. The tools have no hook for
@@ -693,22 +789,12 @@ Opt-in features with no real case yet:
     preparation reads, like `file`'s paths. An entry can't hold `:`, because PATH splits on it.
   - **Why not `env`:** a step's `env` sets literal values for that one step, so it can't extend `PATH`. `path` would
     prepend to it in every command on the host.
-- **A manual step,** for work no command can do: pressing a pairing button, a login URL from `tailscale up`, an App
-  Store sign-in for `mas`, or a macOS permission like Full Disk Access. It's shaped like `ensure` with instructions in
-  place of a fix, like `h.manual(name, { want, check, instructions })`. `plan` shows the instructions under `~ change`.
-  `apply` prints them, waits for Enter, then checks again. A step with a check stops prompting once the work is done,
-  which an unconditional pause like Ansible's `pause` can't do. An unconditional pause also makes a second `apply`
-  stop again, and hangs an unattended run. Today an `ensure` whose fix fails with the instructions does the same job
-  with a rerun, because every earlier step is already right.
 - **A prompt step that returns a value,** a `read` answered by the user, like `h.prompt(name, { secret: true })`, for
   values that only exist at run time, like a Plex claim token or a 2FA code. The script decides when to ask, like only
   when a `read` shows the server isn't claimed yet. It prompts in `plan` too, so later steps can show a real diff.
   Ansible's `pause` saves its answer the same way.
 
-  Both steps reuse the sudo prompt's pieces: `readHiddenLine`, Ctrl-D to skip the host, Ctrl-C to cancel the run, and
-  failing the host without a TTY. A host script can't prompt by itself, because tsinfra owns the terminal once hosts
-  run in parallel. The cost is that these prompts come mid-run, not in preparation, so prompts from parallel hosts take
-  turns and the live progress area pauses while one is open.
+  It reuses the sudo prompt's pieces and the terminal lock, the same way a [manual step](#manual-steps) does.
 
 ### Removed resources
 

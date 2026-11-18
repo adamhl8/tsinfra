@@ -129,7 +129,7 @@ Each file in `hosts/` default exports a `host()`.
   scripts, and has letters, digits, `.`, `_`, and `-`, starting with a letter or a digit.
 - `target`: where the commands run
   - `"@local"`: the machine tsinfra runs on
-  - Anything else goes to `ssh` as written, like `"sonarr.lan"` or `"adam@incus.lan"`
+  - Anything else goes to `ssh` as written, like `"sonarr.lan"` or `"alice@incus.lan"`
 - `sudo`: declares that the script uses sudo (see [sudo](#sudo))
 - `fn`: the host function. It's given `h`, which has every [step](#steps).
 

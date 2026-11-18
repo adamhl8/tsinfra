@@ -34,7 +34,7 @@ everything, and there was no way to see what had drifted before touching a machi
 what had to run first meant reading through everything.
 
 **pyinfra.** It gave a plan mode and diffs, but it is Python. Most of the real work ended up in a hand-rolled `converge`
-helper anyway (`~/homelab/pyinfra/lib/operations/converge.py`), which is a check, a fix, and an optional diff.
+helper anyway, which is a check, a fix, and an optional diff.
 
 tsinfra keeps the script shape and adds what scripts lacked:
 
@@ -52,6 +52,8 @@ tsinfra keeps the script shape and adds what scripts lacked:
 - **Nothing on hosts** beyond `sh` and `sshd`.
 - **`plan` is honest.** It shows what each step sees on the host right now, and marks the places where an earlier change matters.
 - **Small.** Buildable in a few weeks and maintainable alone.
+- **Integrations for common tools.** tsinfra ships integrations for tools like apt, brew, and systemd, as functions that
+  call steps, so a script doesn't have to write its own (see [the roadmap](./roadmap.md#integrations-worth-shipping)).
 
 ## Non-goals
 
@@ -60,8 +62,6 @@ tsinfra keeps the script shape and adds what scripts lacked:
 - Ordering between hosts, for now. Run them as separate commands. A [tentative design](./roadmap.md#ordering-between-hosts) comes late.
 - A record of resources, or a state file on the control machine.
 - A template engine. Template literals cover it.
-- Built-in integrations for tools like apt, brew, and systemd. Write functions that call steps. Some may move into
-  tsinfra later (see [the roadmap](./roadmap.md#integrations-worth-shipping)).
 - A facts system. `h.read` returns a command's output.
 - Secret source adapters. Decrypt in your script, and mark the file `secret` or pass the value in a step's `secretEnv`.
 
@@ -116,7 +116,7 @@ strengths:
 
 ## Example
 
-Host files live in the repo that uses tsinfra (`~/homelab`), not in tsinfra itself.
+Host scripts live in the repo that uses tsinfra, not in tsinfra itself.
 
 ```ts
 // hosts/sonarr.ts

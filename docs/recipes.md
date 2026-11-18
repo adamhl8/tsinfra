@@ -14,6 +14,7 @@ Patterns that need no tsinfra feature, only the steps as they are.
 - [The state you want, or what's left to do](#the-state-you-want-or-whats-left-to-do)
 - [Running the latest container images](#running-the-latest-container-images)
 - [A reboot](#a-reboot)
+- [Waiting for a change to take effect](#waiting-for-a-change-to-take-effect)
 - [A config file an app owns](#a-config-file-an-app-owns)
 - [A directory of files](#a-directory-of-files)
 - [A value from your own environment in a `sudo` command](#a-value-from-your-own-environment-in-a-sudo-command)
@@ -114,23 +115,15 @@ await h.ensure("Sync bun global packages", {
   want: wanted,
   check: async ({ read }) => toVersions(await read("bun pm ls -g")),
   fix: async ({ exec }, { missing, extra, changed }) => {
-    const installs = {
-      ...missing,
-      ...Object.fromEntries(Object.entries(changed).map(([name, { want }]) => [name, want])),
-    }
-    if (Object.keys(installs).length > 0)
-      await exec(
-        `bun add -g ${Object.entries(installs)
-          .map(([name, version]) => `${name}@${version}`)
-          .join(" ")}`,
-      )
+    const installs = [...Object.keys(missing), ...Object.keys(changed)].map((name) => `${name}@${wanted[name]}`)
+    if (installs.length > 0) await exec(`bun add -g ${installs.join(" ")}`)
     if (Object.keys(extra).length > 0) await exec(`bun remove -g ${Object.keys(extra).join(" ")}`)
   },
 })
 ```
 
 `specs` maps each package to its range, like `{ pnpm: "11", turbo: "latest" }`, and `toVersions` turns the listing into
-the same name-to-version shape. `plan` shows a row per package that differs:
+the same name-to-version shape. The fix installs every key in `missing` or `changed` at its version in `wanted`. `plan` shows a row per package that differs:
 
 ```
   ~ change: (ensure) Sync bun global packages
@@ -216,7 +209,54 @@ await h.ensure("Reboot to load ZFS", {
 host's steps, and the next run starts past this one, because the check passes after the reboot. `plan` shows it as a
 change, which a bare `throw` in the script wouldn't. For a kernel update, compare `uname -r` with the newest
 `/boot/vmlinuz-*`. The same shape works as a pause for a manual login, with a fix that only fails with the
-instructions, like `ssh in and run 'ob login'`.
+instructions, like `ssh in and run 'ob login'`, until manual steps exist (see [Manual steps](./roadmap.md#manual-steps)).
+
+## Waiting for a change to take effect
+
+Some commands return before their change shows. `launchctl bootout` returns before the job is gone, so a `bootstrap`
+straight after it fails with an I/O error, and `launchctl bootstrap` returns before the job is running. The check after
+the fix would then see the old state and fail the step. Wait at the end of the fix, until the state is what you want or
+a time limit passes:
+
+```ts
+import type { Inspect } from "tsinfra"
+
+const label = "com.example.exporter"
+const job = `gui/$(id -u)/${label}`
+
+// Match one tab, because nested sections in `launchctl print` have `state` lines of their own.
+const readJobState = async (inspect: Inspect) => {
+  const { stdout, exitCode } = await inspect(`launchctl print "${job}"`)
+  if (exitCode !== 0) return "not loaded"
+  return /^\tstate = (.+)$/m.exec(stdout)?.[1] ?? "unknown"
+}
+
+const waitForJobState = async (inspect: Inspect, state: string) => {
+  const deadline = Date.now() + 30_000
+  while ((await readJobState(inspect)) !== state && Date.now() < deadline) await Bun.sleep(500)
+}
+
+await h.ensure(`Run ${label}`, {
+  want: "running",
+  check: async ({ inspect }) => readJobState(inspect),
+  fix: async ({ exec, inspect }) => {
+    if ((await readJobState(inspect)) !== "not loaded") {
+      await exec(`launchctl bootout "${job}"`)
+      await waitForJobState(inspect, "not loaded")
+    }
+    await exec(`launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/${label}.plist"`)
+    await waitForJobState(inspect, "running")
+  },
+})
+```
+
+A built-in way to wait is planned (see [Waiting for a fix to take effect](./roadmap.md#waiting-for-a-fix-to-take-effect)).
+
+- **Wait in the fix, not the check.** The check also runs in `plan`, so a wait there slows every `plan`.
+- **Stop waiting without throwing.** When time runs out, the check after the fix fails the step with what it found,
+  like `got: spawn scheduled`, which says more than a timeout error.
+- **Check that it's running, not that it's loaded.** launchd keeps a `KeepAlive` job loaded while it crashes on every
+  start, so a check for loaded passes on a broken job. On systemd, check `systemctl is-active`, not `is-enabled`.
 
 ## A config file an app owns
 
@@ -225,7 +265,7 @@ Some apps create their config on first start and rewrite it when a setting chang
 each value you care about with its own `ensure`:
 
 ```ts
-const configPath = "/home/adam/.sonarr/config.xml"
+const configPath = "/home/alice/.sonarr/config.xml"
 await h.file(configPath, `<Config><Port>8000</Port><ApiKey>${sonarrApiKey}</ApiKey></Config>\n`, {
   secret: true,
   overwrite: false,
