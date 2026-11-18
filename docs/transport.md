@@ -494,6 +494,12 @@ passed `sudo: { password }` or preparation prompted for it, and `undefined` when
 `sudo: true` on passwordless sudo. Both ways give the same value, so an integration reads it from `h` and never takes it
 as an option.
 
+- **Its type follows the `sudo` option.** `host()` passes the type of the host's options on to its function's `h`, and
+  `HostMeta` derives each field's type from them, so
+  `h.meta.sudoPassword` is a `string` with `sudo: { password }`, and `undefined` with `sudo` left off. With `sudo: true`
+  it stays `string | undefined`, because a host with passwordless sudo gets no prompt and so has no password. A
+  function typed with the plain `Host`, like an integration's, gets `string | undefined`, and takes any host's `h`.
+
 - **It's masked from the start.** The session adds it to the host's secrets before the script runs, so it shows as
   `[MASKED]` in every command's output and error, and in the record, like a `secretEnv` value. A script still gives it
   to a command through `secretEnv`, never in the command's text.

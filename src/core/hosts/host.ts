@@ -9,10 +9,11 @@ export interface HostDefinition {
   fn: HostFunction
 }
 
-export type HostFunction = (h: Host) => Promise<void>
+/** The function that configures a host. `O` is the type of the host's options, which narrows `h.meta`. */
+export type HostFunction<O extends HostOptions = HostOptions> = (h: Host<O>) => Promise<void>
 
-/** What a host is called, where its commands run, and how it runs them. */
-export interface HostConfig extends HostIdentity, HostOptions {}
+/** What a host is called, where its commands run, and how it runs them. `O` is the type of its options. */
+export type HostConfig<O extends HostOptions = HostOptions> = HostIdentity & O
 
 /** What a host is called, and where its commands run. */
 interface HostIdentity {
@@ -27,7 +28,7 @@ interface HostIdentity {
 }
 
 /** How a host runs its commands. */
-interface HostOptions {
+export interface HostOptions {
   /**
    * Declares that the host's script uses sudo, so preparation makes sure sudo works before any host changes anything.
    * Set it even with passwordless sudo, and give `{ password }` only when the run can't prompt (see
@@ -71,5 +72,15 @@ export type ValidHostDefinition = typeof hostDefinitionSchema.infer
 /** A host's options once they're validated, with their defaults filled in. */
 export type ValidHostOptions = Pick<ValidHostDefinition["config"], keyof HostOptions>
 
-/** Defines a host. A host script must `export default` what this function returns. */
-export const host = (config: HostConfig, fn: HostFunction): HostDefinition => ({ config, fn })
+/**
+ * Defines a host. A host script must `export default` what this function returns. `fn`'s `h.meta.sudoPassword` is a
+ * `string` with `sudo: { password }`, and `undefined` when `sudo` is left off.
+ */
+// oxlint-disable-next-line typescript/no-generated-empty-object-type - inference falls back to it when the config sets no option, so `h.meta` sees none
+export const host = <O extends HostOptions = Record<never, never>>(
+  config: HostConfig<O>,
+  fn: HostFunction<O>,
+): HostDefinition => ({
+  config,
+  fn,
+})

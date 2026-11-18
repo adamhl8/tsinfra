@@ -1,6 +1,7 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
+import type { HostOptions } from "#core/hosts/host.ts"
 import type { HomeDirectory } from "#core/hosts/prepare/host-details.ts"
 import type { DirOptions } from "#core/session/handlers/dir.ts"
 import { handleDir } from "#core/session/handlers/dir.ts"
@@ -45,9 +46,9 @@ export interface SessionContext {
 
 // Extend `Record<StepKind, unknown>` so a step kind with no method fails to compile.
 /** What a host's function is given. Each method call is one step, and steps run one at a time at the top level. */
-export interface Host extends Record<StepKind, unknown> {
-  /** What the script is given about the host besides its steps, like its name. */
-  readonly meta: HostMeta
+export interface Host<O extends HostOptions = HostOptions> extends Record<StepKind, unknown> {
+  /** What the script is given about the host besides its steps, like its name. `O` is the type of its options. */
+  readonly meta: HostMeta<O>
   /**
    * Runs `cmd` on the host and returns its stdout, trimmed. It must not change what the script manages, because it also
    * runs during `plan`.

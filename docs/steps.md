@@ -27,8 +27,9 @@ Everything a host script does to its host goes through `h`, the context passed t
 <!-- tocstop -->
 
 ```ts
-interface Host {
-  readonly meta: HostMeta
+// `O` is the type of the host's options, which `host()` passes on to its function's `h`.
+interface Host<O extends HostOptions = HostOptions> {
+  readonly meta: HostMeta<O>
   read(cmd: string, options?: ReadOptions): Promise<string>
   inspect(cmd: string, options?: InspectOptions): Promise<InspectResult>
   file(path: string, content: string | Uint8Array | Blob, options?: FileOptions): Promise<ChangeStepResult>
@@ -42,9 +43,12 @@ interface Host {
 }
 
 // What the script is given about the host besides its steps, known before it runs. It's frozen.
-interface HostMeta {
+// Each field's type is derived from the host's options.
+interface HostMeta<O extends HostOptions = HostOptions> {
   readonly name: string // the host script's name, e.g. "sonarr"
-  readonly sudoPassword: string | undefined // see Transport's sudo section
+  // `string` with sudo: { password }, `string | undefined` with sudo: true, `undefined` with sudo off.
+  // See Transport's sudo section.
+  readonly sudoPassword: SudoPassword<O["sudo"]>
 }
 
 // Tools that only read the host, given to a check function. These are the same as `h.read` and `h.inspect`.
