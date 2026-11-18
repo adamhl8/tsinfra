@@ -63,6 +63,14 @@ describe("createHostSession", () => {
   })
 })
 
+describe("h.meta", () => {
+  it("should be frozen", async () => {
+    const { host: h } = await createSession()
+
+    expect(Object.isFrozen(h.meta)).toBe(true)
+  })
+})
+
 describe("step results", () => {
   it("should give the script only what ChangeStepResult declares", async () => {
     const hostSession = await createSession("plan")

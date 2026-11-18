@@ -4,7 +4,7 @@ import { rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
-import { $ } from "bun"
+import bun, { $ } from "bun"
 import type { Result } from "ts-explicit-errors"
 import { isErr, messageChain } from "ts-explicit-errors"
 
@@ -43,6 +43,24 @@ describe("a user whose sudo needs a password", () => {
     const { preparationCommands } = hostSession.hostRecord
     const passwordCheck = preparationCommands.find(({ label }) => label === "sudo password check")
     expect(passwordCheck?.cmd).toBe(String.raw`printf '%s\n' <sudo password> | sudo -k -S -p '' true`)
+  })
+
+  it("should give the script the password from host() in h.meta, and mask it from the start", async () => {
+    const { host: h, hostRecord } = await createSession("apply", { sudo: { password: PASSWORD } })
+
+    expect(h.meta.sudoPassword).toBe(PASSWORD)
+    // Print the password through `env`, which masks nothing, so only the masking from the start can hide it.
+    expect(await readOrMessage(h, 'printf "%s" "$PASSWORD"', { env: { PASSWORD } })).toBe(PASSWORD)
+    expect(JSON.stringify(hostRecord)).not.toContain(PASSWORD)
+    expect(hostRecord.stepRecords[0]?.commands[0]?.output).toMatchObject({ stdout: "[MASKED]" })
+  })
+
+  it("should leave the sudo password out of h.meta when it's logged, spread, or stringified", async () => {
+    const { host: h } = await createSession("apply", { sudo: { password: PASSWORD } })
+
+    expect(bun.inspect(h.meta)).not.toContain(PASSWORD)
+    expect(Object.keys({ ...h.meta })).toStrictEqual(["name"])
+    expect(JSON.stringify(h.meta)).not.toContain(PASSWORD)
   })
 
   it("should fail in preparation with only its own message for a wrong password from host()", async () => {

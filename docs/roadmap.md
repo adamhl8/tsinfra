@@ -14,10 +14,10 @@ rest of the docs describe tsinfra as it is.
   - [Diagnostic logs](#diagnostic-logs)
   - [The `shell` host option](#the-shell-host-option)
   - [Ordering between hosts](#ordering-between-hosts)
+  - [Interactive commands](#interactive-commands)
 - [Follow-ups](#follow-ups)
 - [Open questions](#open-questions)
   - [What `plan` output should look like](#what-plan-output-should-look-like)
-  - [Interactive commands](#interactive-commands)
   - [Published, or personal](#published-or-personal)
   - [Integrations worth shipping](#integrations-worth-shipping)
   - [Fact helpers](#fact-helpers)
@@ -259,6 +259,64 @@ Other approaches, and why they lost:
 - **An orchestration layer,** like Salt's orchestrate runner, which runs states on one group of hosts, then another.
   That's a second language for the order of hosts.
 
+### Interactive commands
+
+A tentative design. Some commands need a person at the keyboard, like an installer that asks questions, or a `sudo`
+that askpass can't reach (see [Transport](./transport.md#sudo)). Commands normally run with their script on stdin and
+their output captured, so nothing can answer a prompt.
+
+**A command says it's interactive, and tsinfra never tries to detect a prompt.** Nothing tells a terminal that a
+program is waiting for input. The program just reads its stdin. The only signals are guesses:
+
+- **Output that stops partway through a line,** which is how `expect` works. Progress bars, slow downloads, and
+  spinners that redraw with `\r` look the same.
+- **A PTY with echo turned off,** which is what a password prompt does. It only works locally, because over `ssh -tt`
+  the PTY is on the host, and tsinfra can't see its settings.
+- **A process blocked reading its terminal,** which only the OS knows (`/proc/<pid>/wchan` on Linux), and only for a
+  local process.
+
+A wrong guess either hangs the run or sends what you typed to the wrong place, so a guess is never good enough.
+
+**An interactive command borrows the terminal.** It's one command, and you answer whatever it asks, as many times as it
+asks:
+
+- **What takes it.** A `run`'s or a `fix`'s command takes `interactive: true` as a step option. In a function, `exec`
+  takes it as a tool option, so only the command that asks borrows the terminal. `read` and `inspect` don't take it,
+  because they run in `plan`, which never stops for input. It can't go with `input`, because stdin is the person.
+- **A terminal lock in the CLI.** A host waits for the lock before its interactive command starts, and releases it
+  when the command exits. Hosts waiting for it queue in the order they asked. With hosts one at a time, nothing ever
+  waits. With `--parallel`, other hosts keep running until they reach an interactive command of their own, then wait
+  their turn. The sudo password prompts in preparation go through the same lock.
+- **What you see.** The live area pauses, and a header names the host and the step, like `host 'macbook' · Upgrade
+  casks`. The command's output goes straight to the terminal. When it exits, the live area comes back, along with any
+  host blocks that finished while the terminal was borrowed. Ink has no built-in pause, so how the live area steps
+  aside is decided with [Live progress](#live-progress).
+- **The command gets a real terminal.** That's a PTY locally (`Bun.spawn`'s `terminal` option), and `ssh -tt`
+  remotely. A PTY merges stdout and stderr, and would echo a script sent on stdin, so the script travels the normal way
+  to a temp file on the host first, and the terminal runs `sh <file>`. The login shell still only parses a fixed
+  command, so the content needs no quoting for it. `BatchMode` stays, because it covers ssh's own prompts, not the
+  command's.
+- **The record holds no output.** tsinfra doesn't see what goes to the terminal, so the step's record has the command,
+  that it ran interactively, and the exit code. A PTY could copy the output into the record, but it arrives with
+  stdout and stderr merged and full of escape codes, so that waits until it's needed.
+- **Ctrl-C goes to the command,** not the run, while the command has the terminal.
+- **No terminal, no interactive command.** When stdin or stderr isn't a TTY, an interactive command fails its step
+  without running, the same way a host that needs a sudo password prompt fails in preparation.
+- **`plan` marks a step with `interactive: true`** that would change, so the need for a terminal shows before `apply`.
+  An interactive `exec` inside a function only shows when it runs, because `plan` never runs a fix.
+
+**Answers a script gives itself** could come later, as an `answers: [{ match, send }]` option, for a prompt you'd
+rather automate than answer by hand. It would detect prompts the `expect` way, so it fits only a prompt whose text is
+known and that waits with nothing else printing.
+
+Other approaches, and why they lost:
+
+- **A PTY that relays each prompt.** tsinfra would run every command under a PTY, spot each prompt, and queue it as a
+  question to answer. Spotting the prompt is the guessing problem above.
+- **Handing a local command the terminal itself** (`stdio: "inherit"`). Ctrl-C would reach tsinfra too, because the
+  terminal sends it to every process in the foreground group. With a PTY, tsinfra passes the keypress on to the
+  command instead.
+
 ## Follow-ups
 
 Fixes and finishing work for what's already built.
@@ -290,23 +348,6 @@ What still needs an answer. Most are best settled by porting real hosts first.
 pyinfra's JSON down to just the names of pending changes. That suggests the default should be terse, with diffs. Settle
 it by running `plan` on the ported Mac and reacting to what it shows. How the report is built is settled (see
 [CLI](./cli.md#how-the-report-is-built)), so this is only about what it shows.
-
-### Interactive commands
-
-Some commands need a person at the keyboard, like an installer that asks questions. Commands normally run with their
-script on stdin and their output captured, so nothing can answer a prompt.
-
-Two ways to allow it:
-
-- **Inherit the terminal.** Connect the command to the CLI's own terminal (`stdio: "inherit"` locally, `ssh -t`
-  remotely). The user answers prompts directly, and tsinfra sees none of the output.
-- **A pseudo-terminal.** `Bun.spawn`'s `terminal` option attaches a PTY, so tsinfra sits between the command and the
-  user. It can show and record the output, or answer a prompt itself. A sudo password doesn't need this, because
-  askpass covers it (see [Transport](./transport.md#sudo)).
-
-Either way it is a separate mode, not how commands normally run. A PTY merges stdout and stderr and would echo a script
-sent on stdin, so the command would travel as an argument instead. An interactive command also needs the terminal to
-itself, which conflicts with hosts running in parallel and with `BatchMode`. Settle it when a real host needs one.
 
 ### Published, or personal
 

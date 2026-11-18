@@ -25,6 +25,7 @@ import type { Change } from "#core/session/handlers/shared/change.ts"
 import { validateInput } from "#core/session/handlers/shared/validate-input.ts"
 import type { ChangeTools, Exec, Inspect, InspectResult, ReadTools } from "#core/session/handlers/tools.ts"
 import { execCommand, inspectCommand } from "#core/session/handlers/tools.ts"
+import type { HostMeta } from "#core/session/host-meta.ts"
 import type { SessionRecorder } from "#core/session/recorder/session-recorder.ts"
 import type { SavedStateManager } from "#core/session/saved-state.ts"
 import type { ChangeStepKind, HandlerReturn, StepContext, StepKind } from "#core/session/step.ts"
@@ -34,7 +35,7 @@ import type { Mode } from "#mode.ts"
 
 /** What a host's session needs, set up before any script runs. */
 export interface SessionContext {
-  name: string
+  meta: HostMeta
   /** The SSH user's home directory. */
   home: HomeDirectory
   /** The host's saved state, read when it was prepared. */
@@ -45,7 +46,8 @@ export interface SessionContext {
 // Extend `Record<StepKind, unknown>` so a step kind with no method fails to compile.
 /** What a host's function is given. Each method call is one step, and steps run one at a time at the top level. */
 export interface Host extends Record<StepKind, unknown> {
-  readonly name: string
+  /** What the script is given about the host besides its steps, like its name. */
+  readonly meta: HostMeta
   /**
    * Runs `cmd` on the host and returns its stdout, trimmed. It must not change what the script manages, because it also
    * runs during `plan`.
@@ -126,7 +128,7 @@ const STEP_NAME_LABELS: Record<StepKind, string> = {
  * as values.
  */
 export const createHostSession = (sessionContext: SessionContext, mode: Mode): Host => {
-  const { name, home, savedStateManager, sessionRecorder } = sessionContext
+  const { meta, home, savedStateManager, sessionRecorder } = sessionContext
   const { getStepShells, recordOptions, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder } =
     sessionRecorder
 
@@ -236,7 +238,7 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
     })
 
   const host: Host = {
-    name,
+    meta,
     // Pass `cmd` as the step name, because `h.read` and `h.inspect` take no name.
     read: async (cmd, options) => callStep(cmd, "read", async (ctx) => handleRead(ctx, cmd, options), options),
     inspect: async (cmd, options) => callStep(cmd, "inspect", async (ctx) => handleInspect(ctx, cmd, options), options),

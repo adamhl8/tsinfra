@@ -28,7 +28,7 @@ Everything a host script does to its host goes through `h`, the context passed t
 
 ```ts
 interface Host {
-  readonly name: string // the host script's name, e.g. "sonarr"
+  readonly meta: HostMeta
   read(cmd: string, options?: ReadOptions): Promise<string>
   inspect(cmd: string, options?: InspectOptions): Promise<InspectResult>
   file(path: string, content: string | Uint8Array | Blob, options?: FileOptions): Promise<ChangeStepResult>
@@ -39,6 +39,12 @@ interface Host {
     cmd: string | ((tools: ChangeTools) => Promise<void>),
     options: RunOptions,
   ): Promise<ChangeStepResult>
+}
+
+// What the script is given about the host besides its steps, known before it runs. It's frozen.
+interface HostMeta {
+  readonly name: string // the host script's name, e.g. "sonarr"
+  readonly sudoPassword: string | undefined // see Transport's sudo section
 }
 
 // Tools that only read the host, given to a check function. These are the same as `h.read` and `h.inspect`.

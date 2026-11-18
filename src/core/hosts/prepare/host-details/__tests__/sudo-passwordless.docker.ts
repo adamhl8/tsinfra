@@ -14,6 +14,7 @@ describe("a user with passwordless sudo", () => {
     const { host: h } = await createSession("plan", { sudo: true })
 
     expect(await readOrMessage(h, "sudo id -u")).toBe("0")
+    expect(h.meta.sudoPassword).toBeUndefined()
   })
 
   it("should pass preparation with any password from host(), because sudo never asks for it", async () => {
@@ -21,6 +22,7 @@ describe("a user with passwordless sudo", () => {
 
     expect(existsSync(ASKPASS_HELPER_PATH)).toBe(true)
     expect(await readOrMessage(h, "sudo id -u")).toBe("0")
+    expect(h.meta.sudoPassword).toBe("unused")
   })
 
   it("should not hint at the sudo option on a host that sets it", async () => {

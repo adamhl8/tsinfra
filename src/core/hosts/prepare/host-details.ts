@@ -28,6 +28,8 @@ export interface NeedsPasswordHostDetails extends BaseHostDetails {
 export interface ReadyHostDetails extends BaseHostDetails {
   kind: "ready"
   transport: Transport
+  /** The password the transport gives sudo, from `host()` or the prompt. It's undefined on a host that has none. */
+  sudoPassword: string | undefined
 }
 
 /** What preparation reads from every host, whether or not its transport is built yet. */
@@ -118,12 +120,14 @@ export const buildHostDetails = async (
 
   if (resolvedSudo.kind === "needsPassword") return { kind: "needsPassword", home, user, baseTransport, hostShell }
 
-  const transport =
-    resolvedSudo.kind === "password"
-      ? createAskpassSudoTransport(baseTransport, resolvedSudo.password, askpassHelperPath)
-      : createPasswordlessSudoTransport(baseTransport)
+  if (resolvedSudo.kind === "password") {
+    const { password } = resolvedSudo
+    const transport = createAskpassSudoTransport(baseTransport, password, askpassHelperPath)
+    return { kind: "ready", home, user, baseTransport, hostShell, transport, sudoPassword: password }
+  }
 
-  return { kind: "ready", home, user, baseTransport, hostShell, transport }
+  const transport = createPasswordlessSudoTransport(baseTransport)
+  return { kind: "ready", home, user, baseTransport, hostShell, transport, sudoPassword: undefined }
 }
 
 /**
@@ -140,5 +144,5 @@ export const finishHostDetails = async (
   if (isErr(password)) return password
 
   const transport = createAskpassSudoTransport(baseTransport, password, toAskpassHelperPath(home))
-  return { ...hostDetails, kind: "ready", transport }
+  return { ...hostDetails, kind: "ready", transport, sudoPassword: password }
 }

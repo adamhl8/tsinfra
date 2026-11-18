@@ -7,6 +7,7 @@ import type { HostDetails } from "#core/hosts/prepare/host-details.ts"
 import { buildHostDetails, finishHostDetails } from "#core/hosts/prepare/host-details.ts"
 import { toSavedStatePath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
 import type { SessionContext } from "#core/session.ts"
+import { createHostMeta } from "#core/session/host-meta.ts"
 import { createPreparationRecorder } from "#core/session/recorder/preparation-recorder.ts"
 import type { PreparationRecorder } from "#core/session/recorder/preparation-recorder.ts"
 import { createHostRecord } from "#core/session/recorder/records.ts"
@@ -84,9 +85,10 @@ const finishHost = async (initializedHost: InitializedHost): Promise<Result<Prep
   const readyHostDetails = hostDetails.kind === "ready" ? hostDetails : await finishHostDetails(loadedHost, hostDetails)
   if (isErr(readyHostDetails)) return readyHostDetails
 
-  const { home, transport } = readyHostDetails
-  const sessionRecorder = createSessionRecorder(hostRecord, loadedHost.options, transport)
-  const sessionContext: SessionContext = { name: loadedHost.name, home, savedStateManager, sessionRecorder }
+  const { home, transport, sudoPassword } = readyHostDetails
+  const meta = createHostMeta(loadedHost.name, sudoPassword)
+  const sessionRecorder = createSessionRecorder(hostRecord, loadedHost.options, transport, meta)
+  const sessionContext: SessionContext = { meta, home, savedStateManager, sessionRecorder }
   return { preparation: "prepared", hostFn: loadedHost.fn, hostRecord, sessionContext }
 }
 

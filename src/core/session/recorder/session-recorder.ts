@@ -5,6 +5,7 @@ import { err, isErr } from "ts-explicit-errors"
 import type { ValidHostOptions } from "#core/hosts/host.ts"
 import type { ValidStepShellOptions } from "#core/session/handlers/options/shell.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
+import type { HostMeta } from "#core/session/host-meta.ts"
 import type { CommandRecorder } from "#core/session/recorder/commands.ts"
 import { createRecordingTransport } from "#core/session/recorder/commands.ts"
 import { getFailureHints } from "#core/session/recorder/failure-hints.ts"
@@ -106,9 +107,14 @@ export const createSessionRecorder = (
   hostRecord: HostRecord,
   hostOptions: ValidHostOptions,
   transport: Transport,
+  meta: HostMeta,
 ): SessionRecorder => {
   let currentPhase: ConvergePhase | undefined
   const secrets = new Set<string>()
+
+  // Mask the sudo password before any step, because the script can pass it to a command through `h.meta`.
+  if (meta.sudoPassword !== undefined) addSecret(secrets, meta.sudoPassword)
+
   const mask = <T>(value: T): T => maskSecrets(value, secrets)
 
   const commandRecorder: CommandRecorder = {

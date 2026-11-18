@@ -485,8 +485,24 @@ new session with no terminal.
   random delimiter, because a path in the script can hold any line. The record holds the step's script as tsinfra wrote
   it, without the nesting.
 - **A `sudo` inside a child process,** like a script file the command runs, or `xargs sudo`, doesn't see the function.
-  Exporting `SUDO_ASKPASS` doesn't cover it, because sudo only runs the helper with `-A`, so those need passwordless
-  sudo.
+  Exporting `SUDO_ASKPASS` doesn't cover it, because sudo only runs the helper with `-A`. Such a program needs
+  passwordless sudo, or the password from `h.meta.sudoPassword`, passed the way that program takes it (see
+  [Recipes](./recipes.md#a-program-that-runs-sudo-itself)).
+
+**The script gets the password as `h.meta.sudoPassword`.** It's a string when the host has a password, whether `host()`
+passed `sudo: { password }` or preparation prompted for it, and `undefined` when the host leaves `sudo` off or sets
+`sudo: true` on passwordless sudo. Both ways give the same value, so an integration reads it from `h` and never takes it
+as an option.
+
+- **It's masked from the start.** The session adds it to the host's secrets before the script runs, so it shows as
+  `[MASKED]` in every command's output and error, and in the record, like a `secretEnv` value. A script still gives it
+  to a command through `secretEnv`, never in the command's text.
+- **It's a non-enumerable getter,** so `console.log(h.meta)` shows `[Getter]`, and `{ ...h.meta }` and
+  `JSON.stringify(h.meta)` leave it out. Bun's `console.log` prints a plain non-enumerable value, unlike Node's. Masking
+  only covers what the recorder sees, and a script's own output goes straight to the terminal.
+- **There's no step option that hands it to a program.** Each program that runs sudo itself takes the password its own
+  way. One that passes `-A` to sudo runs `SUDO_ASKPASS`, but Homebrew, which does, drops every variable but its own
+  `HOMEBREW_*` ones, so `TSINFRA_SUDO_PASSWORD` never reaches the helper. Only the script knows what its program needs.
 
 **A host without a password,** one that leaves `sudo` out or sets `sudo: true` on passwordless sudo, gets a preamble
 that defines `sudo` as `sudo -n`. On a passwordless host that's all it needs. Where a password is needed, a plain

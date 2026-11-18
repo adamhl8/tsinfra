@@ -17,6 +17,7 @@ Patterns that need no tsinfra feature, only the steps as they are.
 - [A config file an app owns](#a-config-file-an-app-owns)
 - [A directory of files](#a-directory-of-files)
 - [A value from your own environment in a `sudo` command](#a-value-from-your-own-environment-in-a-sudo-command)
+- [A program that runs sudo itself](#a-program-that-runs-sudo-itself)
 
 <!-- tocstop -->
 
@@ -269,3 +270,36 @@ fix: 'fish_path="$(command -v fish)" && echo "$fish_path" | sudo tee -a /etc/she
 ```
 
 `command -v fish` runs with your `PATH`, and the variable expands before `sudo` sees it, so root's `PATH` never matters.
+
+## A program that runs sudo itself
+
+A program that runs `/usr/bin/sudo` itself never sees tsinfra's `sudo` function, so it can't get the password the way
+a command's own `sudo` does (see [Transport](./transport.md#sudo)). Homebrew does this when a cask installs a `.pkg`.
+Give it the password from `h.meta.sudoPassword` the way the program takes it.
+
+Homebrew runs `sudo -A` when `SUDO_ASKPASS` is set, and keeps only its own `HOMEBREW_*` variables, so the helper reads
+the password from one:
+
+```ts
+// Give an absolute path, because sudo does not expand `~` in `SUDO_ASKPASS`.
+const helperPath = "/Users/me/.local/bin/brew-askpass"
+await h.file(
+  helperPath,
+  String.raw`#!/bin/sh
+printf '%s\n' "$HOMEBREW_SUDO_PASSWORD"
+`,
+  { mode: "755" },
+)
+
+const { sudoPassword } = h.meta
+const askpass =
+  sudoPassword === undefined
+    ? {}
+    : { env: { SUDO_ASKPASS: helperPath }, secretEnv: { HOMEBREW_SUDO_PASSWORD: sudoPassword } }
+
+await h.run("Upgrade casks", "brew upgrade --cask", { after: "always", ...askpass })
+```
+
+- **The helper holds no secret.** It only prints the variable, which `secretEnv` sets for that one step.
+- **`SUDO_ASKPASS` is set only with a password.** Homebrew runs `sudo -A` whenever it's set, so a helper with nothing to
+  print would fail the cask.

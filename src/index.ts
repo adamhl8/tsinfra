@@ -35,3 +35,4 @@ export type {
 export type { EnvOptions } from "#core/session/handlers/options/shell.ts"
 export type { ChangeTools, Exec, Inspect, InspectResult, ReadTools, ToolOptions } from "#core/session/handlers/tools.ts"
 export type { Host } from "#core/session.ts"
+export type { HostMeta } from "#core/session/host-meta.ts"

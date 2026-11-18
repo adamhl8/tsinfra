@@ -43,6 +43,8 @@ Check new names, comments, docs, and error messages against these words.
   change the host, whether or not it does (`file`, `ensure`, `run`, `link`, `dir`, later `reboot`).
 - **Tools** are named for what they can do, not which step has them. A check function gets `ReadTools`, even though
   `ensure` is a change step, and a fix or run function gets `ChangeTools`.
+- **Meta** is what `h` holds besides its steps, known before the script runs (`h.meta`, `HostMeta`), like the host's
+  name and sudo password. A value goes in it only when it's about the host and isn't a step.
 - **Fact** is only something read from the host, like the CPU architecture. What a report shows under a step is its
   **details**.
 - **State** appears only in prose, for the host's version of something, not in identifiers (`compareFile`, not

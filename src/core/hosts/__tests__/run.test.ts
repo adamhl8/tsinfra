@@ -17,6 +17,7 @@ import type { HostFunction } from "#core/hosts/host.ts"
 import { host } from "#core/hosts/host.ts"
 import { toSavedStatePath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
 import type { Host } from "#core/session.ts"
+import type { HostMeta } from "#core/session/host-meta.ts"
 import type { HostRecord } from "#core/session/recorder/records.ts"
 
 const throwBoom = () => {
@@ -83,14 +84,14 @@ describe("runHost", () => {
     expect(getMessage(failure)).toBe("boom")
   })
 
-  it("should pass the host's name to its function", async () => {
-    const names: string[] = []
+  it("should pass the host's name to its function, with no sudo password on a host that leaves sudo off", async () => {
+    const metas: HostMeta[] = []
     // oxlint-disable-next-line typescript/require-await - a `HostFunction` must return a promise
-    const recordName = async (h: Host) => void names.push(h.name)
+    const recordMeta = async (h: Host) => void metas.push(h.meta)
 
-    await runHostA(recordName)
+    await runHostA(recordMeta)
 
-    expect(names).toStrictEqual(["a"])
+    expect(metas.map(({ name, sudoPassword }) => [name, sudoPassword])).toStrictEqual([["a", undefined]])
   })
 
   it("should stop the host function at a failed call", async () => {

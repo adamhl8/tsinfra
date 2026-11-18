@@ -4,6 +4,7 @@ import { err, messageChain } from "ts-explicit-errors"
 
 import type { ValidStepShellOptions } from "#core/session/handlers/options/shell.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
+import { createHostMeta } from "#core/session/host-meta.ts"
 import type { HostRecord, StepRecord } from "#core/session/recorder/records.ts"
 import { createHostRecord } from "#core/session/recorder/records.ts"
 import { createSessionRecorder } from "#core/session/recorder/session-recorder.ts"
@@ -18,7 +19,7 @@ const NO_SHELL_OPTIONS: ValidStepShellOptions = { sudo: false, env: {}, secretEn
 /** Starts a step on a new recorder, and returns the host record and the step's shells, built from `shellOptions`. */
 const startStepWithShells = (shellOptions: ValidStepShellOptions) => {
   const hostRecord = createHostRecord("a", "@local")
-  const sessionRecorder = createSessionRecorder(hostRecord, { sudo: false }, transport)
+  const sessionRecorder = createSessionRecorder(hostRecord, { sudo: false }, transport, createHostMeta("a", undefined))
   sessionRecorder.startStep("a", "file")
   return { hostRecord, sessionRecorder, ...sessionRecorder.getStepShells(shellOptions) }
 }
@@ -87,7 +88,12 @@ describe("SessionRecorder.getStepShells", () => {
 describe("SessionRecorder steps", () => {
   it("should keep a step as the running step until it finishes, then add it to the step records", async () => {
     const hostRecord = createHostRecord("a", "@local")
-    const sessionRecorder = createSessionRecorder(hostRecord, { sudo: false }, transport)
+    const sessionRecorder = createSessionRecorder(
+      hostRecord,
+      { sudo: false },
+      transport,
+      createHostMeta("a", undefined),
+    )
     sessionRecorder.startStep("a", "file")
     await sessionRecorder.getStepShells(NO_SHELL_OPTIONS).stepShell.exec("echo hi")
     const whileRunning = [hostRecord.runningStep?.name, hostRecord.stepRecords.length]
@@ -105,7 +111,12 @@ describe("SessionRecorder steps", () => {
 
   it("should give a failed step to the host's failure, not to the step records", () => {
     const hostRecord = createHostRecord("a", "@local")
-    const sessionRecorder = createSessionRecorder(hostRecord, { sudo: false }, transport)
+    const sessionRecorder = createSessionRecorder(
+      hostRecord,
+      { sudo: false },
+      transport,
+      createHostMeta("a", undefined),
+    )
     const error = new Error("boom")
     sessionRecorder.startStep("a", "file")
 

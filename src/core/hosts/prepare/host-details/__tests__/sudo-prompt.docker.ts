@@ -27,13 +27,14 @@ const applyInTerminal = async (answers: string[]) =>
   })
 
 describe("a user whose sudo needs a password, typed at the prompt", () => {
-  it("should write a root-only file with the password typed at the prompt", async () => {
+  it("should write root-only files with the password typed at the prompt, through sudo and through h.meta", async () => {
     const { screen, exitCode } = await applyInTerminal([`${PASSWORD}\r`])
 
     expect(screen).toStartWith(`${PROMPT_HEADER}${PASSWORD_PROMPT}\r\n`)
     expect(screen).not.toContain(PASSWORD)
     expect(exitCode).toBe(0)
     expect((await $`stat -c %U /etc/tsinfra-docker-prompt.conf`.text()).trim()).toBe("root")
+    expect((await $`stat -c %U /etc/tsinfra-docker-prompt-meta.conf`.text()).trim()).toBe("root")
   })
 
   it(

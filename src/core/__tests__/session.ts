@@ -163,7 +163,12 @@ export const createWrappedSession = async (
   if (isErr(hostDetails)) throw hostDetails
   if (hostDetails.kind !== "ready") throw new Error("the host needs a sudo password prompt")
 
-  const sessionRecorder = createSessionRecorder(hostRecord, options, wrapTransport(hostDetails.transport))
+  const sessionRecorder = createSessionRecorder(
+    hostRecord,
+    options,
+    wrapTransport(hostDetails.transport),
+    sessionContext.meta,
+  )
   return {
     host: createHostSession({ ...sessionContext, sessionRecorder }, mode),
     hostRecord,
