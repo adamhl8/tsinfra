@@ -1,3 +1,9 @@
+## [0.8.0](https://github.com/adamhl8/tsinfra/compare/v0.7.0..v0.8.0) - 2026-11-18
+
+### 🚀 Features
+
+- show live progress ([f5c2a85](https://github.com/adamhl8/tsinfra/commit/f5c2a85657ac7acf7f9e3dfc29ebc08f6d75f178) by @adamhl8)
+
 ## [0.7.0](https://github.com/adamhl8/tsinfra/compare/v0.6.0..v0.7.0) - 2026-11-18
 
 ### 🚀 Features
