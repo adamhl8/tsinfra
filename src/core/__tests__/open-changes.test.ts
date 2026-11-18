@@ -210,6 +210,18 @@ describe("runs triggered by open changes", () => {
     expect(getStatus(hostSession, "Restart")).toBe("ran")
   })
 
+  it("should mark a run after an always run ranAlways, though an earlier apply never reached it", async () => {
+    const loadedHost = loadTestHost()
+    const firstApply = await prepareSession(loadedHost, "apply")
+    await firstApply.host.run("Prune", "true", { after: "always" })
+    expect(await readOpenChanges(firstApply)).toStrictEqual({ Prune: [] })
+    const hostSession = await prepareSession(loadedHost, "apply")
+    const prune = await hostSession.host.run("Prune", "true", { after: "always" })
+    await hostSession.host.run("Restart", "true", { after: [prune] })
+
+    expect(getStatus(hostSession, "Restart")).toBe("ranAlways")
+  })
+
   it("should trigger a run that failed in an earlier apply", async () => {
     const { loadedHost, marker } = await loadHostWithMarker()
     const firstApply = await prepareSession(loadedHost, "apply")

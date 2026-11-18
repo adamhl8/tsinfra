@@ -49,7 +49,7 @@ const keepShownInDetail = (detail: Detail, verbosity: Verbosity): Detail => {
 }
 
 /** Keeps the entries that show at `verbosity`, each with only the note parts and details that show. */
-const keepShown = (hostBlockEntries: HostBlockEntry[], verbosity: Verbosity): HostBlockEntry[] =>
+const keepShownEntries = (hostBlockEntries: HostBlockEntry[], verbosity: Verbosity): HostBlockEntry[] =>
   hostBlockEntries.flatMap((hostBlockEntry) => {
     const note = hostBlockEntry.note.filter((notePart) => isShownAt(notePart, verbosity))
     const shownDetails = hostBlockEntry.details.filter((detail) => isShownAt(detail, verbosity))
@@ -60,8 +60,19 @@ const keepShown = (hostBlockEntries: HostBlockEntry[], verbosity: Verbosity): Ho
   })
 
 /**
- * Renders a host's block at the level `reportOptions` asks for: its name, then each entry that shows, with only the
- * pieces that show. A host with no steps still gets a block at every level, so it's clear the host ran.
+ * Returns a host's block with only what shows at `verbosity`: each entry that shows, with only the pieces that show. A
+ * host with no steps keeps its block at every level, so it's clear the host ran.
+ */
+export const toShownHostBlock = (hostBlock: HostBlock, verbosity: Verbosity): HostBlock => {
+  if (hostBlock.kind === "noSteps") return hostBlock
+
+  const entries = keepShownEntries(hostBlock.entries, verbosity)
+  return { ...hostBlock, entries }
+}
+
+/**
+ * Renders a block from `toShownHostBlock` at the level `reportOptions` asks for. Filter first, so nothing hidden is
+ * formatted or measured for a column.
  */
 export const renderHostBlock = (hostBlock: HostBlock, reportOptions: ReportOptions): string | undefined => {
   const { verbosity } = reportOptions
@@ -69,10 +80,8 @@ export const renderHostBlock = (hostBlock: HostBlock, reportOptions: ReportOptio
   const diffLimits = toDiffLimits(verbosity)
   if (hostBlock.kind === "noSteps") return formatHostBlock(hostBlock, diffLimits)
 
-  // Filter before formatting, so nothing hidden is formatted or measured for a column.
-  const entries = keepShown(hostBlock.entries, verbosity)
   // Give a host whose steps are all hidden no block, because its line in the summary already says how it went.
-  if (entries.length === 0) return
+  if (hostBlock.entries.length === 0) return
 
-  return formatHostBlock({ ...hostBlock, entries }, diffLimits)
+  return formatHostBlock(hostBlock, diffLimits)
 }

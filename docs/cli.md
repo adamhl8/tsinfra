@@ -56,8 +56,9 @@ shows everything the one before it does. `-vvv`, `-v -v`, and `--verbose -vv` al
 three. Every command is already recorded with its output (see [What a host records](#what-a-host-records)), so the
 levels only change what's printed:
 
-- **`-v`** (`--verbose`) adds the rest of the steps: steps that were already right as `=` lines, and each read or
-  inspect as a `·` line named by its command. It also shows a long diff and every differing line in full, and a failed
+- **`-v`** (`--verbose`) adds the rest of the steps: steps that were already right as `=` lines, each read or
+  inspect as a `·` line named by its command, and in `plan`, each run that runs on every pass as a `>` line. It also
+  shows a long diff and every differing line in full, and a failed
   fix's values from before the fix.
 - **`-vv`** also shows how each step ran. A diff or a comparison that took longer than 200 ms gets up to 10 seconds and
   shows in full. A step given options that change how its commands run gets an `options:` line under it, naming the
@@ -240,7 +241,9 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   entries, so each entry stands on its own, and one long name doesn't push the rest of the block to the right. The
   parentheses keep the kind apart from the name without color. A failure no step owns shows `(preparation)` or `(host fn)` in place of a kind,
   also in italics, so it doesn't read as a kind of step (see [Kinds of failure](#kinds-of-failure)). A `changed` step from `ensure`, `file`, `link`, or `dir` is `~ change`, and a `ran` step from `run` is
-  `> triggered`, because a step it follows changed. A `ranFromOpenChanges` run is `> triggered` too. A `resume` step
+  `> triggered`, because a step it follows changed. A `ranFromOpenChanges` run is `> triggered` too. A `ranAlways` run
+  is `> always`, because it runs on every pass rather than after a change: its `after` is `"always"`, or the only steps
+  it follows that changed are runs like it. A `resume` step
   is `^ resume` in cyan, because it's right, but its change is still open from an earlier apply that didn't finish (see
   [Steps](./steps.md#when-an-apply-doesnt-finish)). Any failed step is `! failed`, because the status matters more than the kind once
   something broke, and the error already says what failed. In `--verbose`, every other step that was already right is `= unchanged`,
@@ -329,17 +332,22 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   warning isn't drift, so it doesn't change the exit code.
 - **Levels.** Every piece of a block has the lowest level it shows at: a step's own line, each part of its note, each
   detail under it, and the pieces inside a detail, like an option's value or what a command printed. A piece's level comes from what it is, like 1 for the line of a step that was
-  already right, 2 for the options line, and 0 for a warning. A piece can also stop at a level, like the "run with -vvv"
+  already right, 2 for the options line, and 0 for a warning. A `ranAlways` run's line is the one piece whose level also
+  depends on the mode: 1 in `plan`, where it's never news, and 0 in `apply`, where it ran. A piece can also stop at a
+  level, like the "run with -vvv"
   note, which goes away at 3, where the stderr it points at shows. A piece shows once its own level is reached, or when
   anything inside it shows, and a step that shows always prints its own line. So a warning, at 0, shows its step at the
   default level, even when the step was already right. The report builds every piece for every step, then keeps the ones
-  the level shows, before it lines up the columns, so a hidden piece never widens one. A diff, and a string `ensure`
+  the level shows, before it lines up the columns, so a hidden piece never widens one. The summary counts what those
+  kept blocks show, and the exit code reads the full blocks, because drift is a fact about the host, not about what the
+  report shows. A diff, and a string `ensure`
   value's rows, are the exception. Each is one piece at every level, and the level only sets its limits, because
   computing a full diff only to drop it would be slow.
 - **A host with nothing to show** gets no block, only its line in the summary. A host whose script made no steps
   isn't one, because its "no steps" block shows that it ran.
-- **The summary** has one line per host: `unchanged`, `failed`, or a count of changes, where a count includes both
-  `changed`, `ran`, and `ranFromOpenChanges` steps, so it matches the `~` and `>` lines in the blocks. A `resume` step
+- **The summary** has one line per host: `unchanged`, `failed`, or a count of changes. The count is of the `changed`,
+  `ran`, `ranAlways`, and `ranFromOpenChanges` lines the block shows, so it matches the `~` and `>` lines above it. A
+  `ranAlways` run counts in `apply`, and in `plan` only from `-v`, where its line shows. A `resume` step
   isn't counted, because it changed nothing. A count of warnings follows, like `unchanged, 1 warning`, so one isn't lost
   once the blocks have scrolled away. In `plan`, when there's drift (see [Exit codes](#exit-codes)), it starts with the
   reminder that steps after a change were checked without it (see
@@ -424,11 +432,14 @@ A step never records anything itself. It returns its one status, or an error, an
 the wrappers the step runs through: the shell's transport records commands, and `converge` records comparisons. So a
 failure keeps what the step found before it.
 
-A step's status is `unchanged`, `changed`, `ran`, `ranFromOpenChanges`, `waiting`, `resume`, or `observed`. `changed`
-means the host's state differed. `ran` means a run's trigger fired, or its `after` was `"always"`. `ranFromOpenChanges`
+A step's status is `unchanged`, `changed`, `ran`, `ranAlways`, `ranFromOpenChanges`, `waiting`, `resume`, or
+`observed`. `changed` means the host's state differed. `ran` means a step a run follows changed, other than a
+`ranAlways` run. `ranAlways` means a run runs on every pass, because its `after` is `"always"`, or every step it follows
+that changed is a `ranAlways` run. `ranFromOpenChanges`
 means only changes still open from an earlier apply triggered a run. `resume` means a change step was right, but its
 change is still open from an earlier apply. `waiting` means a step it needs would change. A read
-or inspect is always `observed`. The record is the same in `plan` and `apply`, and so is each step's status line. A changed
+or inspect is always `observed`. The record is the same in `plan` and `apply`, and so is each step's status line, though
+`plan` shows a `ranAlways` run's line only from `-v`. A changed
 step's details come from its `before` comparison, so `apply` can show what a step changed too.
 
 A failed step has no status. Its record never joins the host's steps. The host's failure holds it, with its error, so
@@ -471,6 +482,7 @@ things succeeded.
 `plan` exits 2 on drift: a step that reads the host's state found it different from the script, which is a `changed`
 status. A `run` shows up in the plan as a `>` line and counts as a change in the summary, but it usually isn't drift,
 because it doesn't read the host's state, and the step that triggered it already counts. See [Steps](./steps.md#run).
+A `ranAlways` run is hidden at the default level, so a plan whose only change is one shows `unchanged` and exits 0.
 The exception is a `ranFromOpenChanges` run, which only changes still open from an earlier apply triggered. Nothing in
 the pass explains it, and `apply` would run it, so it's drift too (see
 [Steps](./steps.md#when-an-apply-doesnt-finish)).

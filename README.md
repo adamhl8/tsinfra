@@ -534,6 +534,8 @@ await h.run(
 ```
 
 - `plan` never runs it, and shows it as `> triggered` when it would run.
+- A run with `after: "always"`, or one that follows only those, shows as `> always`. `plan` shows it only with `-v`,
+  because it runs on every `apply`.
 - A run counts as drift only when an apply that didn't finish left it to do.
 - A run can follow another run, like `after: [reload]`.
 
@@ -702,6 +704,7 @@ By default, a block lists only the steps that changed, would change, are waiting
 | ------------- | ----------------------------------------------------------------- |
 | `~ change`    | The host's state differed, so the fix ran (would run in `plan`)   |
 | `> triggered` | A run's `after` fired                                             |
+| `> always`    | A run on every pass, like `after: "always"` (`-v` in `plan`)      |
 | `? waiting`   | A step it needs would change                                      |
 | `^ resume`    | Already right, but an earlier apply that changed it didn't finish |
 | `! failed`    | The step failed. Its error is under it.                           |

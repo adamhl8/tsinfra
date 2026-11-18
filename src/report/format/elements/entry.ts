@@ -7,6 +7,7 @@ const STATUS_SYMBOLS: Record<EntryStatus, string> = {
   observed: "·",
   changed: "~",
   ran: ">",
+  ranAlways: ">",
   ranFromOpenChanges: ">",
   waiting: "?",
   failed: "!",

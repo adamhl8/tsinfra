@@ -24,7 +24,7 @@ import type { HostRecord } from "#core/session/recorder/records.ts"
 import { createHostRecord } from "#core/session/recorder/records.ts"
 import { runLocal } from "#core/transport/local.ts"
 import type { Mode } from "#mode.ts"
-import { renderHostBlock } from "#report.ts"
+import { renderHostBlock, toShownHostBlock } from "#report.ts"
 import { printTsinfraError } from "#report/errors.ts"
 import { getExitCode } from "#report/exit-code.ts"
 import type { HostBlock } from "#report/host-block.ts"
@@ -110,6 +110,25 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
       },
     },
     {
+      // An always run alone, which shows no block, only `unchanged` in the summary, and `> always` from `-v`.
+      name: "always",
+      target: "@local",
+      pass: "plan",
+      fn: async (h) => {
+        await h.run("Prune docker", "true", { after: "always" })
+      },
+    },
+    {
+      // An always run next to a change, which hides only the always run, and leaves it out of the summary's count.
+      name: "always-with-change",
+      target: "@local",
+      pass: "plan",
+      fn: async (h) => {
+        await h.ensure("Install docker", touchStep("docker"))
+        await h.run("Prune docker", "true", { after: "always" })
+      },
+    },
+    {
       // One bare step for each status `apply` shows, and the summary's count.
       name: "statuses",
       target: "@local",
@@ -117,6 +136,7 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
       fn: async (h) => {
         const caddy = await h.ensure("Install Caddy", touchStep("caddy"))
         await h.run("Reload Caddy", "true", { after: [caddy] })
+        await h.run("Prune docker", "true", { after: "always" })
         await h.ensure("Install git", { want: true, check: "true", fix: "true" })
         await h.read("uname -m")
         await h.inspect("test -d /etc")
@@ -402,12 +422,19 @@ const FAKE_SUDO = [
   "exit 1",
 ].join("\n")
 
-/** Prints a host's block, if it has one at `verbosity`, and returns the block for the summary. */
-const printHostBlock = (hostRecord: HostRecord, verbosity: Verbosity): HostBlock => {
-  const hostBlock = toHostBlock(hostRecord)
-  const renderedHostBlock = renderHostBlock(hostBlock, { verbosity })
+/** A host's full block, for the exit code, and the part of it that shows, for the summary. */
+interface PrintedHostBlock {
+  hostBlock: HostBlock
+  shownHostBlock: HostBlock
+}
+
+/** Prints a host's block, if it has one at `verbosity`, and returns its blocks for the summary and the exit code. */
+const printHostBlock = (hostRecord: HostRecord, mode: Mode, verbosity: Verbosity): PrintedHostBlock => {
+  const hostBlock = toHostBlock(hostRecord, mode)
+  const shownHostBlock = toShownHostBlock(hostBlock, verbosity)
+  const renderedHostBlock = renderHostBlock(shownHostBlock, { verbosity })
   if (renderedHostBlock) console.log(`${renderedHostBlock}\n`)
-  return hostBlock
+  return { hostBlock, shownHostBlock }
 }
 
 /**
@@ -429,20 +456,22 @@ const previewPass = async (pass: PreviewPass, verbosity: Verbosity) => {
     )
     const hostInitializations = await initializeHosts(loadedHosts)
     const hostEntries = await finishHosts(hostInitializations)
-    const hostBlocks: HostBlock[] = []
+    const printedHostBlocks: PrintedHostBlock[] = []
     for (const hostEntry of hostEntries) {
       // oxlint-disable-next-line no-await-in-loop - hosts run one at a time, the same as the CLI
-      hostBlocks.push(printHostBlock(await runHost(hostEntry, mode), verbosity))
+      printedHostBlocks.push(printHostBlock(await runHost(hostEntry, mode), mode, verbosity))
     }
     if (pass === "apply") {
-      hostBlocks.push(
-        printHostBlock(createResumeRecord(), verbosity),
-        printHostBlock(createHintsRecord(), verbosity),
-        printHostBlock(createSavedStateFailureRecord(), verbosity),
+      printedHostBlocks.push(
+        printHostBlock(createResumeRecord(), mode, verbosity),
+        printHostBlock(createHintsRecord(), mode, verbosity),
+        printHostBlock(createSavedStateFailureRecord(), mode, verbosity),
       )
     }
 
-    console.log(renderSummary(hostBlocks, mode))
+    const shownHostBlocks = printedHostBlocks.map(({ shownHostBlock }) => shownHostBlock)
+    const hostBlocks = printedHostBlocks.map(({ hostBlock }) => hostBlock)
+    console.log(renderSummary(shownHostBlocks, mode))
 
     console.log(pc.dim(`\nexit code ${getExitCode(hostBlocks, mode)}`))
     console.log()

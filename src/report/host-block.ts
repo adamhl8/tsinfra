@@ -4,6 +4,7 @@ import type { FileComparisonValues } from "#core/session/handlers/file/compariso
 import type { LinkComparisonValues } from "#core/session/handlers/link/comparison.ts"
 import type { ConvergePhase, FailureHint, HostRecord, RecordedUnownedFailure } from "#core/session/recorder/records.ts"
 import type { StepKind, StepStatus } from "#core/session/step.ts"
+import type { Mode } from "#mode.ts"
 import { toHostBlockEntries } from "#report/host-block/entries.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 
@@ -149,10 +150,10 @@ export type StillDiffersPhase = Extract<ConvergePhase, "fix" | "after">
  * step, then the host's failure, if it failed. A host whose script made no steps and didn't fail gets "no steps"
  * instead, so it's clear the host ran.
  */
-export const toHostBlock = (hostRecord: HostRecord): HostBlock => {
+export const toHostBlock = (hostRecord: HostRecord, mode: Mode): HostBlock => {
   const { name, stepRecords, failure } = hostRecord
   if (stepRecords.length === 0 && !failure) return { name, kind: "noSteps" }
 
-  const entries = toHostBlockEntries(hostRecord)
+  const entries = toHostBlockEntries(hostRecord, mode)
   return { name, kind: "entries", entries }
 }

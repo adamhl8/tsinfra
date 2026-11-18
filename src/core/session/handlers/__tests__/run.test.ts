@@ -63,6 +63,66 @@ describe("h.run", () => {
   })
 })
 
+/** Returns each finished step's status, by its name. */
+const getStatuses = (hostSession: Awaited<ReturnType<typeof createSession>>) => {
+  const { hostRecord } = hostSession
+  return Object.fromEntries(hostRecord.stepRecords.map(({ name, status }) => [name, status]))
+}
+
+describe("h.run's status", () => {
+  it.each(["apply", "plan"] as const)("should mark an always run ranAlways in %s", async (mode) => {
+    const hostSession = await createSession(mode)
+    await hostSession.host.run("Prune", "true", { after: "always" })
+
+    expect(getStatuses(hostSession)).toStrictEqual({ Prune: "ranAlways" })
+  })
+
+  it.each(["apply", "plan"] as const)(
+    "should mark a chain of runs after an always run ranAlways in %s",
+    async (mode) => {
+      const hostSession = await createSession(mode)
+      const prune = await hostSession.host.run("Prune", "true", { after: "always" })
+      const restart = await hostSession.host.run("Restart", "true", { after: [prune] })
+      await hostSession.host.run("Notify", "true", { after: [restart] })
+
+      expect(getStatuses(hostSession)).toStrictEqual({ Prune: "ranAlways", Restart: "ranAlways", Notify: "ranAlways" })
+    },
+  )
+
+  it.each(["apply", "plan"] as const)(
+    "should mark a run after an always run and a step that changed ran in %s",
+    async (mode) => {
+      const hostSession = await createSession(mode)
+      const prune = await hostSession.host.run("Prune", "true", { after: "always" })
+      const changed = await hostSession.host.ensure("Change", {
+        want: true,
+        check: "false",
+        fix: "true",
+        verify: false,
+      })
+      await hostSession.host.run("Restart", "true", { after: [prune, changed] })
+
+      expect(getStatuses(hostSession)).toStrictEqual({ Prune: "ranAlways", Change: "changed", Restart: "ran" })
+    },
+  )
+
+  it.each(["apply", "plan"] as const)(
+    "should mark a run after an always run and a step that was already right ranAlways in %s",
+    async (mode) => {
+      const hostSession = await createSession(mode)
+      const prune = await hostSession.host.run("Prune", "true", { after: "always" })
+      const unchanged = await hostSession.host.ensure("Stay right", { want: true, check: "true", fix: "true" })
+      await hostSession.host.run("Restart", "true", { after: [prune, unchanged] })
+
+      expect(getStatuses(hostSession)).toStrictEqual({
+        Prune: "ranAlways",
+        "Stay right": "unchanged",
+        Restart: "ranAlways",
+      })
+    },
+  )
+})
+
 describe("h.run with a function", () => {
   it("should run the commands in order", async () => {
     const file = path.join(await makeTempDir(), "lines")

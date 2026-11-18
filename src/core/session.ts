@@ -178,8 +178,10 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
     stepKindsByName.set(stepName, kind)
   }
 
-  // Share one set across the session's steps, because a step checks whether the steps it follows or needs changed.
+  // Share these sets across the session's steps, because a step checks whether the steps it follows or needs changed.
+  // A run also checks whether the steps it follows run on every pass.
   const changedStepNames = new Set<string>()
+  const ranAlwaysStepNames = new Set<string>()
 
   const callStep = async <K extends StepKind, T>(
     stepName: unknown,
@@ -222,6 +224,7 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
         home,
         savedStateManager,
         changedStepNames,
+        ranAlwaysStepNames,
         readTools,
         changeTools,
         convergeRecorder,

@@ -25,7 +25,7 @@ import type { Want } from "#core/session/handlers/ensure/want.ts"
 import type { Exec } from "#core/session/handlers/tools.ts"
 import type { HostRecord } from "#core/session/recorder/records.ts"
 import type { Mode } from "#mode.ts"
-import { renderHostBlock } from "#report.ts"
+import { renderHostBlock, toShownHostBlock } from "#report.ts"
 import { getExitCode } from "#report/exit-code.ts"
 import { toHostBlock } from "#report/host-block.ts"
 import { renderSummary, hasDrift } from "#report/summary.ts"
@@ -37,28 +37,28 @@ const runNamedHost = async (name: string, fn: HostFunction, mode: Mode) =>
 const isRoot = process.getuid?.() === 0
 
 /** Builds a host's block from its record and renders it, as the CLI does. */
-const renderRecord = (hostRecord: HostRecord, verbosity: Verbosity = 0) =>
-  renderHostBlock(toHostBlock(hostRecord), { verbosity })
+const renderRecord = (hostRecord: HostRecord, mode: Mode, verbosity: Verbosity = 0) =>
+  renderHostBlock(toShownHostBlock(toHostBlock(hostRecord, mode), verbosity), { verbosity })
 
 /** Builds each host's block from its record and renders their summary, as the CLI does. */
-const renderRecordsSummary = (hostRecords: HostRecord[], mode: Mode) =>
+const renderRecordsSummary = (hostRecords: HostRecord[], mode: Mode, verbosity: Verbosity = 0) =>
   renderSummary(
-    hostRecords.map((hostRecord) => toHostBlock(hostRecord)),
+    hostRecords.map((hostRecord) => toShownHostBlock(toHostBlock(hostRecord, mode), verbosity)),
     mode,
   )
 
-const formatBlock = async (fn: HostFunction, mode: Mode) => renderRecord(await runNamedHost("a", fn, mode))
+const formatBlock = async (fn: HostFunction, mode: Mode) => renderRecord(await runNamedHost("a", fn, mode), mode)
 
-const formatVerboseBlock = async (fn: HostFunction) => renderRecord(await runNamedHost("a", fn, "plan"), 1)
+const formatVerboseBlock = async (fn: HostFunction) => renderRecord(await runNamedHost("a", fn, "plan"), "plan", 1)
 
 const changeAndRun = async (h: Host) => {
-  await h.ensure("Write the unit", { want: true, check: "false", fix: "true" })
-  await h.run("Reload systemd", "true", { after: "always" })
+  const unit = await h.ensure("Write the unit", { want: true, check: "false", fix: "true" })
+  await h.run("Reload systemd", "true", { after: [unit] })
   await h.run("Prune", "true", { after: "always" })
 }
 
 const runOnce = async (h: Host) => {
-  await h.run("Reload systemd", "true", { after: "always" })
+  await h.run("Prune", "true", { after: "always" })
 }
 
 const stayRight = async (h: Host) => {
@@ -138,12 +138,21 @@ const failSecondCompare = async (h: Host) => {
 describe("renderHostBlock", () => {
   it("should mark a changed step with '~' and a ran step with '>' in plan", async () => {
     expect(await formatBlock(changeAndRun, "plan")).toBe(
-      "a\n  ~ change: (ensure) Write the unit\n  > triggered: (run) Reload systemd\n  > triggered: (run) Prune",
+      "a\n  ~ change: (ensure) Write the unit\n  > triggered: (run) Reload systemd",
     )
   })
 
-  it("should mark a ran step with '>' in apply", async () => {
-    expect(await formatBlock(runOnce, "apply")).toBe("a\n  > triggered: (run) Reload systemd")
+  it("should mark a ranAlways step with '>' in apply", async () => {
+    expect(await formatBlock(runOnce, "apply")).toBe("a\n  > always: (run) Prune")
+  })
+
+  it("should hide a ranAlways step in plan, and show it with -v", async () => {
+    const hostRecord = await runNamedHost("a", runOnce, "plan")
+
+    expect([renderRecord(hostRecord, "plan"), renderRecord(hostRecord, "plan", 1)]).toStrictEqual([
+      undefined,
+      "a\n  > always: (run) Prune",
+    ])
   })
 
   it("should return nothing when every step was already right", async () => {
@@ -230,25 +239,28 @@ describe("renderHostBlock", () => {
     const startError =
       "failed to read the ssh config for 'unreachable host' -> exited with code 255: hostname contains invalid characters"
 
-    expect([renderRecord(hostRecord), renderRecordsSummary([hostRecord], "plan")]).toStrictEqual([
+    expect([renderRecord(hostRecord, "plan"), renderRecordsSummary([hostRecord], "plan")]).toStrictEqual([
       `a\n  ! failed: (preparation) ${UNREACHABLE_TARGET}\n      ${startError}`,
       "a   failed",
     ])
   })
 
   it("should show a hint under a host that couldn't be prepared", () => {
-    const hostBlock = renderRecord({
-      name: "a",
-      target: "a.lan",
-      preparationCommands: [],
-      runningStep: undefined,
-      stepRecords: [],
-      failure: {
-        kind: "preparation",
-        error: new Error("Host key verification failed."),
-        hints: [{ kind: "unknownHostKey", target: "a.lan" }],
+    const hostBlock = renderRecord(
+      {
+        name: "a",
+        target: "a.lan",
+        preparationCommands: [],
+        runningStep: undefined,
+        stepRecords: [],
+        failure: {
+          kind: "preparation",
+          error: new Error("Host key verification failed."),
+          hints: [{ kind: "unknownHostKey", target: "a.lan" }],
+        },
       },
-    })
+      "plan",
+    )
 
     expect(hostBlock).toBe(
       [
@@ -261,18 +273,21 @@ describe("renderHostBlock", () => {
   })
 
   it("should show a saved state failure with its note, after every step ran", () => {
-    const hostBlock = renderRecord({
-      name: "a",
-      target: "a.lan",
-      preparationCommands: [],
-      runningStep: undefined,
-      stepRecords: [],
-      failure: {
-        kind: "saved state",
-        error: new Error("failed to delete the saved state in '/home/a/.tsinfra/state/a.json'"),
-        hints: [],
+    const hostBlock = renderRecord(
+      {
+        name: "a",
+        target: "a.lan",
+        preparationCommands: [],
+        runningStep: undefined,
+        stepRecords: [],
+        failure: {
+          kind: "saved state",
+          error: new Error("failed to delete the saved state in '/home/a/.tsinfra/state/a.json'"),
+          hints: [],
+        },
       },
-    })
+      "apply",
+    )
 
     expect(hostBlock).toBe(
       [
@@ -285,14 +300,17 @@ describe("renderHostBlock", () => {
   })
 
   it("should show the hint for a host key that changed", () => {
-    const hostBlock = renderRecord({
-      name: "a",
-      target: "a.lan",
-      preparationCommands: [],
-      runningStep: undefined,
-      stepRecords: [],
-      failure: { kind: "preparation", error: new Error("failed"), hints: [{ kind: "changedHostKey" }] },
-    })
+    const hostBlock = renderRecord(
+      {
+        name: "a",
+        target: "a.lan",
+        preparationCommands: [],
+        runningStep: undefined,
+        stepRecords: [],
+        failure: { kind: "preparation", error: new Error("failed"), hints: [{ kind: "changedHostKey" }] },
+      },
+      "plan",
+    )
 
     expect(hostBlock?.split("\n").at(-1)).toBe(
       "        if the host was recreated, remove its old key from the known_hosts line named above",
@@ -306,8 +324,8 @@ describe("renderHostBlock", () => {
     )
 
     expect([
-      renderRecord(hostRecord, 1)?.split("\n").length,
-      renderRecord(hostRecord, 2)?.split("\n").slice(3),
+      renderRecord(hostRecord, "plan", 1)?.split("\n").length,
+      renderRecord(hostRecord, "plan", 2)?.split("\n").slice(3),
     ]).toStrictEqual([3, ["        commands:", "          $ <ssh config>"]])
   })
 
@@ -328,6 +346,7 @@ describe("renderHostBlock", () => {
           hints: [{ kind: "unknownHostKey", target: "a.lan" }],
         },
       },
+      "plan",
       2,
     )
 
@@ -618,7 +637,7 @@ describe("renderHostBlock for a dir step", () => {
       await h.dir(dirPath)
     }
 
-    expect(renderRecord(await runNamedHost("a", makeDir, "apply"), 2)).toBe(
+    expect(renderRecord(await runNamedHost("a", makeDir, "apply"), "apply", 2)).toBe(
       [
         "a",
         `  ~ change: (dir) ${dirPath}`,
@@ -805,7 +824,7 @@ describe("renderHostBlock for a file step", () => {
     const { uid, gid } = await stat(filePath)
     const { hostSession } = await createFakeSudoSession("plan")
     await hostSession.host.file(filePath, "a\n", { user: uid + 1, group: gid + 1, sudo: true })
-    const hostBlock = renderRecord(hostSession.hostRecord)
+    const hostBlock = renderRecord(hostSession.hostRecord, "plan")
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
       `      user:  ${uid} -> ${uid + 1}`,
@@ -888,7 +907,7 @@ describe("renderHostBlock for a file step", () => {
     const { uid } = await lstat(linkPath)
     const { hostSession } = await createFakeSudoSession("plan")
     await hostSession.host.link(linkPath, directory, { user: uid + 1, sudo: true })
-    const hostBlock = renderRecord(hostSession.hostRecord)
+    const hostBlock = renderRecord(hostSession.hostRecord, "plan")
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
       `      target: /old -> ${directory}`,
@@ -1110,8 +1129,8 @@ describe("renderHostBlock for the stderr of a step that still differs", () => {
       "apply",
     )
 
-    expect(renderRecord(hostRecord, 2)).toContain("run with -vvv to see what they printed")
-    const verboseBlock = renderRecord(hostRecord, 3)
+    expect(renderRecord(hostRecord, "apply", 2)).toContain("run with -vvv to see what they printed")
+    const verboseBlock = renderRecord(hostRecord, "apply", 3)
     expect(verboseBlock).not.toContain("run with -vvv")
     expect(verboseBlock).toContain("stderr: warn")
   })
@@ -1164,7 +1183,7 @@ describe("renderHostBlock for the stderr of a step that still differs", () => {
     const hostSession = await createNoisySession(filePath)
     await attempt(async () => hostSession.host.file(filePath, "a\n"))
 
-    const hostBlock = renderRecord(hostSession.hostRecord)
+    const hostBlock = renderRecord(hostSession.hostRecord, "apply")
 
     expect(hostBlock).toContain("the host's state still differs after the fix")
     expect(hostBlock).not.toContain("noise")
@@ -1187,7 +1206,7 @@ describe("renderHostBlock for a step that failed before it could compare again",
     ["the compare after the fix failed", failSecondCompare],
   ])("should show the labelled values from before the fix with verbose when %s", async (_, fn) => {
     const hostRecord = await runNamedHost("a", fn, "apply")
-    const lines = renderRecord(hostRecord, 1)?.split("\n").slice(3)
+    const lines = renderRecord(hostRecord, "apply", 1)?.split("\n").slice(3)
 
     expect(lines).toStrictEqual(["        values before the fix", "        got:  old", "        want: new"])
   })
@@ -1301,7 +1320,7 @@ describe("renderHostBlock and renderSummary for a warning", () => {
       "plan",
     )
 
-    expect([renderRecord(hostRecord), renderRecordsSummary([hostRecord], "plan")]).toStrictEqual([
+    expect([renderRecord(hostRecord, "plan"), renderRecordsSummary([hostRecord], "plan")]).toStrictEqual([
       ["a", `  = unchanged: (link) ${linkPath}`, `      warning: nothing exists at target -> ${target}`].join("\n"),
       "a   unchanged, 1 warning",
     ])
@@ -1393,7 +1412,7 @@ describe("renderHostBlock for a step still open from an earlier apply", () => {
   it.each(["apply", "plan"] as const)(
     "should show it as resume, and the run it triggers, at level 0 in %s",
     async (mode) => {
-      expect(renderRecord(await resumeAfterFailedApply(mode))).toBe(
+      expect(renderRecord(await resumeAfterFailedApply(mode), mode)).toBe(
         [
           "a",
           "  ^ resume: (ensure) Make marker   an earlier apply didn't finish, so its follow-ups that didn't complete still trigger",
@@ -1404,7 +1423,7 @@ describe("renderHostBlock for a step still open from an earlier apply", () => {
   )
 
   it("should leave the note off a run it triggers that fails, which shows its error", async () => {
-    expect(renderRecord(await resumeAfterFailedApply("apply", "exit 1"))).toBe(
+    expect(renderRecord(await resumeAfterFailedApply("apply", "exit 1"), "apply")).toBe(
       [
         "a",
         "  ^ resume: (ensure) Make marker   an earlier apply didn't finish, so its follow-ups that didn't complete still trigger",
@@ -1434,7 +1453,7 @@ describe("renderSummary", () => {
         "",
         "caddy    unchanged",
         "immich   failed",
-        "sonarr   3 changes",
+        "sonarr   2 changes",
         "web      1 change",
       ].join("\n"),
     )
@@ -1446,10 +1465,16 @@ describe("renderSummary", () => {
     expect(renderRecordsSummary(hostRecords, "plan").split("\n").at(-1)).toBe("macbook   1 change, 1 waiting")
   })
 
-  it("should leave out the reminder when only runs would run", async () => {
+  it("should leave out the reminder, and count nothing, when only an always run would run", async () => {
     const hostRecords = [await runNamedHost("a", runOnce, "plan")]
 
-    expect(renderRecordsSummary(hostRecords, "plan")).toBe("a   1 change")
+    expect(renderRecordsSummary(hostRecords, "plan")).toBe("a   unchanged")
+  })
+
+  it("should count an always run in plan with -v, where its line shows", async () => {
+    const hostRecords = [await runNamedHost("a", runOnce, "plan")]
+
+    expect(renderRecordsSummary(hostRecords, "plan", 1)).toBe("a   1 change")
   })
 
   it("should show the reminder when only an open change triggered a run", async () => {
@@ -1466,7 +1491,7 @@ describe("renderSummary", () => {
 })
 
 /** Plans a host with `fn` and returns its block, as the CLI builds it. */
-const planBlock = async (fn: HostFunction, name = "a") => toHostBlock(await runNamedHost(name, fn, "plan"))
+const planBlock = async (fn: HostFunction, name = "a") => toHostBlock(await runNamedHost(name, fn, "plan"), "plan")
 
 describe("hasDrift", () => {
   it("should be true when a step's check did not pass", async () => {
@@ -1482,17 +1507,20 @@ describe("hasDrift", () => {
   })
 
   it("should be true when only an open change triggered a run", async () => {
-    const hostBlock = toHostBlock(await resumeAfterFailedApply("plan"))
+    const hostBlock = toHostBlock(await resumeAfterFailedApply("plan"), "plan")
 
     expect(hasDrift(hostBlock)).toBe(true)
   })
 
   it("should be false for a resume step whose run already completed", async () => {
-    const hostBlock = toHostBlock(await resumeAfterRunCompleted("plan"))
+    const hostBlock = toHostBlock(await resumeAfterRunCompleted("plan"), "plan")
 
     expect(hasDrift(hostBlock)).toBe(false)
   })
 })
+
+// Match a status line for a change or a triggered run, like `  ~ change: (ensure) Pending`.
+const CHANGE_STATUS_LINE = /^ {2}[>~] /mv
 
 describe("getExitCode", () => {
   it("should be 0 from plan when the only change is a run", async () => {
@@ -1504,7 +1532,7 @@ describe("getExitCode", () => {
   })
 
   it("should be 2 from plan when only an open change triggered a run", async () => {
-    const hostBlock = toHostBlock(await resumeAfterFailedApply("plan"))
+    const hostBlock = toHostBlock(await resumeAfterFailedApply("plan"), "plan")
 
     expect(getExitCode([hostBlock], "plan")).toBe(2)
   })
@@ -1526,6 +1554,21 @@ describe("getExitCode", () => {
     const hostBlocks = [await planBlock(changeOnce, "a"), await planBlock(failRead, "b")]
 
     expect(getExitCode(hostBlocks, "plan")).toBe(1)
+  })
+
+  // Cover each status `hasDrift` counts, so a drift entry can't be hidden at the default level.
+  it.each([
+    { description: "a step that would change", runHostRecord: async () => runNamedHost("a", changeOnce, "plan") },
+    { description: "a run only an open change triggered", runHostRecord: async () => resumeAfterFailedApply("plan") },
+  ])("should show a line and the reminder when plan exits 2 for $description", async ({ runHostRecord }) => {
+    const hostBlock = toHostBlock(await runHostRecord(), "plan")
+    const shownHostBlock = toShownHostBlock(hostBlock, 0)
+
+    expect(getExitCode([hostBlock], "plan")).toBe(2)
+    expect(renderHostBlock(shownHostBlock, { verbosity: 0 })).toMatch(CHANGE_STATUS_LINE)
+    expect(renderSummary([shownHostBlock], "plan")).toStartWith(
+      "Steps after a change were checked without that change, so apply may differ.",
+    )
   })
 })
 
@@ -1552,9 +1595,9 @@ describe("renderHostBlock for what a command printed", () => {
       { after: "always" },
     )
 
-    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n")).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n")).toStrictEqual([
       "a",
-      "  > triggered: (run) Check it",
+      "  > always: (run) Check it",
       "      commands:",
       "        $ true",
       "            output:",
@@ -1569,7 +1612,7 @@ describe("renderHostBlock for what a command printed", () => {
     const hostSession = await createSession("apply")
     await hostSession.host.run("Print it", String.raw`printf '  one\ntwo  \n\n'; echo oops >&2`, { after: "always" })
 
-    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(4)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n").slice(4)).toStrictEqual([
       "            output:",
       "              exit:   0",
       "              stdout:   one",
@@ -1582,7 +1625,7 @@ describe("renderHostBlock for what a command printed", () => {
     const hostSession = await createSession()
     await hostSession.host.read("seq 25")
 
-    const lines = renderRecord(hostSession.hostRecord, 3)?.split("\n")
+    const lines = renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n")
     expect([lines?.length, lines?.at(-1)]).toStrictEqual([29, "                25"])
   })
 
@@ -1590,7 +1633,7 @@ describe("renderHostBlock for what a command printed", () => {
     const hostSession = await createSession()
     await hostSession.host.read('printf %s "$TOKEN"', { secretEnv: { TOKEN: "s3cret-value" } })
 
-    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(-3)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n").slice(-3)).toStrictEqual([
       "      output:",
       "        exit:   0",
       "        stdout: [MASKED]",
@@ -1606,7 +1649,7 @@ describe("renderHostBlock for what a command printed", () => {
       fix: `printf web1 > '${filePath}'`,
     })
 
-    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(4)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n").slice(4)).toStrictEqual([
       "      commands:",
       `        (before) $ cat '${filePath}' 2>/dev/null || true`,
       "                     output:",
@@ -1625,7 +1668,7 @@ describe("renderHostBlock for what a command printed", () => {
     const hostSession = await createSession("apply")
     await hostSession.host.ensure("Check it", { want: true, check: "true", fix: "true" })
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(2)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 2)?.split("\n").slice(2)).toStrictEqual([
       "      commands:",
       "        $ true",
     ])
@@ -1635,7 +1678,7 @@ describe("renderHostBlock for what a command printed", () => {
     const hostSession = await createSession("apply")
     await hostSession.host.ensure("Check it", { want: true, check: "echo hi\ntrue", fix: "true" })
 
-    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(2, 6)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n").slice(2, 6)).toStrictEqual([
       "      commands:",
       "        (before) $ echo hi",
       "                   true",
@@ -1647,7 +1690,7 @@ describe("renderHostBlock for what a command printed", () => {
     const hostSession = await createSession("apply")
     await hostSession.host.run("Check it", "true", { after: "always" })
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(2)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 2)?.split("\n").slice(2)).toStrictEqual([
       "      commands:",
       "        $ true",
     ])
@@ -1658,7 +1701,7 @@ describe("renderHostBlock for what a command printed", () => {
     await hostSession.host.read("true")
     await hostSession.host.read("true", { env: { A: "1" } })
 
-    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n")).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n")).toStrictEqual([
       "a",
       "  · observed: (read) true",
       "      output:",
@@ -1678,7 +1721,7 @@ describe("renderHostBlock for what a command printed", () => {
     const hostSession = await createWrappedSession("apply", () => async () => err("the connection dropped", undefined))
     await attempt(async () => hostSession.host.run("Check it", "true", { after: "always" }))
 
-    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(3)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n").slice(3)).toStrictEqual([
       "        commands:",
       "          $ true",
       "              output:",
@@ -1697,7 +1740,7 @@ describe("renderHostBlock for a step's commands", () => {
       fix: `printf web1 > '${filePath}'`,
     })
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 2)?.split("\n")).toStrictEqual([
       "a",
       "  ~ change: (ensure) Set the hostname",
       "      got:  (empty)",
@@ -1713,14 +1756,20 @@ describe("renderHostBlock for a step's commands", () => {
     const hostSession = await createSession("apply")
     await hostSession.host.run("Say hi", "echo hi", { after: "always" })
 
-    expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")).toStrictEqual(["a", "  > triggered: (run) Say hi"])
+    expect(renderRecord(hostSession.hostRecord, "apply", 1)?.split("\n")).toStrictEqual([
+      "a",
+      "  > always: (run) Say hi",
+    ])
   })
 
   it("should list no commands for a read, because its name is its command", async () => {
     const hostSession = await createSession()
     await hostSession.host.read("true")
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")).toStrictEqual(["a", "  · observed: (read) true"])
+    expect(renderRecord(hostSession.hostRecord, "apply", 2)?.split("\n")).toStrictEqual([
+      "a",
+      "  · observed: (read) true",
+    ])
   })
 
   it("should show a command tsinfra wrote by its label, in angle brackets", async () => {
@@ -1728,7 +1777,7 @@ describe("renderHostBlock for a step's commands", () => {
     const hostSession = await createSession("plan")
     await hostSession.host.file(newPath, "a\n")
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(2)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "plan", 2)?.split("\n").slice(2)).toStrictEqual([
       "      content: new file, 2 bytes",
       "      commands:",
       "        $ <file details script>",
@@ -1739,7 +1788,7 @@ describe("renderHostBlock for a step's commands", () => {
     const hostSession = await createSession("apply")
     await hostSession.host.run("Say hi twice", "echo hi\necho hi", { after: "always" })
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(2)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 2)?.split("\n").slice(2)).toStrictEqual([
       "      commands:",
       "        $ echo hi",
       "          echo hi",
@@ -1752,7 +1801,7 @@ describe("renderHostBlock for a step's commands", () => {
       hostSession.host.ensure("Set it", { want: true, check: "false", fix: NEEDS_PASSWORD_CMD }),
     )
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(3)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 2)?.split("\n").slice(3)).toStrictEqual([
       "        values before the fix",
       "        got:  exit code 1",
       "        want: exit code 0",
@@ -1770,7 +1819,7 @@ describe("renderHostBlock for a step's commands", () => {
       secretEnv: { TOKEN: "s3cret-value" },
     })
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(-2)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 2)?.split("\n").slice(-2)).toStrictEqual([
       "      commands:",
       '        $ test "$TOKEN" = [MASKED]',
     ])
@@ -1785,7 +1834,7 @@ describe("renderHostBlock for a step's options", () => {
     await hostSession.host.file(newPath, "a\n", { sudo: true })
     await hostSession.host.ensure("Install git", { want: true, check: "true", fix: "true" })
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "plan", 2)?.split("\n")).toStrictEqual([
       "a",
       `  = unchanged: (file) ${oldPath}`,
       "      options: sudo",
@@ -1807,7 +1856,7 @@ describe("renderHostBlock for a step's options", () => {
     const { hostSession } = await createFakeSudoSession("plan")
     await hostSession.host.file(newPath, "a\n", { sudo: true })
 
-    expect(renderRecord(hostSession.hostRecord, 1)?.split("\n")).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "plan", 1)?.split("\n")).toStrictEqual([
       "a",
       `  ~ change: (file) ${newPath}`,
       "      content: new file, 2 bytes",
@@ -1821,7 +1870,7 @@ describe("renderHostBlock for a step's options", () => {
     await hostSession.host.file(newPath, "a\n", { needs: [brew], sudo: true })
     await hostSession.host.ensure("Install fish", { needs: [brew], want: true, check: "true", fix: "true" })
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "plan", 2)?.split("\n")).toStrictEqual([
       "a",
       "  ~ change: (ensure) Install brew packages",
       "      commands:",
@@ -1840,7 +1889,7 @@ describe("renderHostBlock for a step's options", () => {
 
     try {
       await attempt(async () => hostSession.host.file(newPath, "a\n", { sudo: true }))
-      const lines = renderRecord(hostSession.hostRecord, 2)?.split("\n")
+      const lines = renderRecord(hostSession.hostRecord, "plan", 2)?.split("\n")
       expect([lines?.[1], lines?.[3]]).toStrictEqual([`  ! failed: (file) ${newPath}`, "        options: sudo"])
     } finally {
       await chmod(directory, 0o755)
@@ -1851,7 +1900,7 @@ describe("renderHostBlock for a step's options", () => {
     const hostSession = await createSession()
     await hostSession.host.read("true", { env: { URL: "u", PORT: "1" }, secretEnv: { TOKEN: "t" } })
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 2)?.split("\n")).toStrictEqual([
       "a",
       "  · observed: (read) true",
       "      options: env { URL, PORT }, secretEnv { TOKEN }",
@@ -1863,7 +1912,7 @@ describe("renderHostBlock for a step's options", () => {
     await hostSession.host.read("cat >/dev/null", { input: "secret input" })
     await hostSession.host.inspect("cat >/dev/null", { input: "secret input" })
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 2)?.split("\n")).toStrictEqual([
       "a",
       "  · observed: (read) cat >/dev/null",
       "      options: input",
@@ -1877,7 +1926,7 @@ describe("renderHostBlock for a step's options", () => {
     await hostSession.host.read("cat >/dev/null", { input: "secret input" })
     await hostSession.host.inspect("cat >/dev/null", { input: "secret input" })
 
-    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n")).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n")).toStrictEqual([
       "a",
       "  · observed: (read) cat >/dev/null",
       "      options:",
@@ -1896,7 +1945,7 @@ describe("renderHostBlock for a step's options", () => {
     const hostSession = await createSession()
     await attempt(async () => hostSession.host.read("cat", { input: "a".repeat(CONTENT_LIMIT_BYTES + 1) }))
 
-    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(1)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n").slice(1)).toStrictEqual([
       "  ! failed: (read) cat",
       "      failed to read 'cat' -> the input is 10 MB, above the 10 MB limit",
       "        options:",
@@ -1909,7 +1958,7 @@ describe("renderHostBlock for a step's options", () => {
     const { hostSession } = await createFakeSudoSession("plan")
     await hostSession.host.file(newPath, "a\n", { sudo: true })
 
-    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(0, 6)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "plan", 3)?.split("\n").slice(0, 6)).toStrictEqual([
       "a",
       `  ~ change: (file) ${newPath}`,
       "      options:",
@@ -1924,7 +1973,7 @@ describe("renderHostBlock for a step's options", () => {
     const options = { env: { URL: "u", PORT: "1" }, secretEnv: { LONG_TOKEN: "t" } }
     await hostSession.host.read("true", options)
 
-    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n")).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n")).toStrictEqual([
       "a",
       "  · observed: (read) true",
       "      options:",
@@ -1942,7 +1991,7 @@ describe("renderHostBlock for a step's options", () => {
     const hostSession = await createSession()
     await hostSession.host.read("true", { env: { KEY: "first\nsecond" } })
 
-    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(2, 6)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n").slice(2, 6)).toStrictEqual([
       "      options:",
       "        env:",
       "          KEY: first",
@@ -1954,7 +2003,7 @@ describe("renderHostBlock for a step's options", () => {
     const hostSession = await createSession()
     await hostSession.host.read("true", { env: { EMPTY: "", PADDED: " a", PLAIN: "a" } })
 
-    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(2, 7)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n").slice(2, 7)).toStrictEqual([
       "      options:",
       "        env:",
       "          EMPTY:  (empty)",
@@ -1971,7 +2020,7 @@ describe("renderHostBlock for a step's options", () => {
 
     try {
       await attempt(async () => hostSession.host.file(newPath, "a\n", { sudo: true }))
-      const lines = renderRecord(hostSession.hostRecord, 3)?.split("\n")
+      const lines = renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n")
       expect(lines?.slice(3, 5)).toStrictEqual(["        options:", "          sudo: true"])
     } finally {
       await chmod(directory, 0o755)
@@ -1983,10 +2032,10 @@ describe("renderHostBlock for a step's options", () => {
     const hostSession = await createSession("plan")
     await hostSession.host.file(newPath, "a\n", { validate: (tmp) => `test -s ${tmp}`, secret: true, overwrite: false })
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n").slice(2, 3)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "plan", 2)?.split("\n").slice(2, 3)).toStrictEqual([
       "      options: validate, secret, overwrite",
     ])
-    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(2, 6)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "plan", 3)?.split("\n").slice(2, 6)).toStrictEqual([
       "      options:",
       `        validate:  test -s "$tmppath"`,
       "        secret:    true",
@@ -1999,7 +2048,7 @@ describe("renderHostBlock for a step's options", () => {
     const { hostSession } = await createFakeSudoSession("plan")
     await hostSession.host.file(newPath, "a\n", { sudo: true, overwrite: false })
 
-    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")[2]).toBe("      options: sudo, overwrite")
+    expect(renderRecord(hostSession.hostRecord, "plan", 2)?.split("\n")[2]).toBe("      options: sudo, overwrite")
   })
 
   it("should show link's force and ensure's verify when they're set", async () => {
@@ -2009,7 +2058,7 @@ describe("renderHostBlock for a step's options", () => {
     await hostSession.host.link(linkPath, directory, { force: true })
     await hostSession.host.ensure("Reboot", { want: true, check: "true", fix: "true", verify: false })
 
-    const lines = renderRecord(hostSession.hostRecord, 3)?.split("\n")
+    const lines = renderRecord(hostSession.hostRecord, "plan", 3)?.split("\n")
     const linkLines = lines?.slice(1, 5)
     const ensureStart = lines?.indexOf("  = unchanged: (ensure) Reboot")
     const ensureLines = lines?.slice(ensureStart).slice(0, 3)
@@ -2030,7 +2079,7 @@ describe("renderHostBlock for a step's options", () => {
     const hostSession = await createSession("apply")
     await attempt(async () => hostSession.host.file(newPath, "a\n", { validate: (tmp) => `false ${tmp}` }))
 
-    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(3, 5)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n").slice(3, 5)).toStrictEqual([
       "        options:",
       `          validate: false "$tmppath"`,
     ])
@@ -2042,6 +2091,6 @@ describe("renderHostBlock for a step's options", () => {
     await hostSession.host.read("true", { env: {}, secretEnv: {} })
     await hostSession.host.file(newPath, "a\n", { sudo: false })
 
-    expect(renderRecord(hostSession.hostRecord, 3)).not.toContain("options")
+    expect(renderRecord(hostSession.hostRecord, "plan", 3)).not.toContain("options")
   })
 })

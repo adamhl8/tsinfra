@@ -349,12 +349,12 @@ describe("step records", () => {
     ])
   })
 
-  it("should record a triggered run as ran, without running it in plan", async () => {
+  it("should record an always run as ranAlways, without running it in plan", async () => {
     const hostSession = await createSession("plan")
     await runOrMessage(hostSession.host, "true", { after: "always" })
 
     expect(toPlainRecords(hostSession.hostRecord)).toStrictEqual([
-      { name: "Make marker", kind: "run", status: "ran", commands: [] },
+      { name: "Make marker", kind: "run", status: "ranAlways", commands: [] },
     ])
   })
 

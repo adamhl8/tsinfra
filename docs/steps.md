@@ -1187,7 +1187,9 @@ A run is for work that something in this run triggers, not the host's state. The
   Restarting a service after its config changed is one. No state on the host says a restart is needed, because a
   process started before the change looks the same as one started after it.
 - **Unconditional upkeep** takes `after: "always"`, like `docker system prune -f`. A check for "anything to prune?"
-  would cost as much as pruning.
+  would cost as much as pruning. It reports `ranAlways`, and so does a run that follows only runs like it, because it
+  runs on every pass too. `plan` shows it only from `-v`, because a run that happens on every apply is never news
+  about the host.
 
 ```ts
 const unit = await h.file("/etc/systemd/system/sonarr.service", sonarrUnit, { sudo: true })
@@ -1205,15 +1207,16 @@ that didn't happen.
 before the run, the next `apply` finds the file already right, but still triggers the reload (see
 [When an apply doesn't finish](#when-an-apply-doesnt-finish)).
 
-|                                      | `apply`                            | `plan`                                                  |
-| ------------------------------------ | ---------------------------------- | ------------------------------------------------------- |
-| `after`, one changed                 | runs, reports `ran`                | does not run, reports `ran` (a `>` line)                |
-| `after`, an open change missing it   | runs, reports `ranFromOpenChanges` | does not run, reports `ranFromOpenChanges` (a `>` line) |
-| `after`, none changed or open for it | does not run, reports `unchanged`  | does not run, reports `unchanged`                       |
-| `after: "always"`                    | runs, reports `ran`                | does not run, reports `ran` (a `>` line)                |
+|                                              | `apply`                            | `plan`                                                   |
+| -------------------------------------------- | ---------------------------------- | -------------------------------------------------------- |
+| `after`, one changed                         | runs, reports `ran`                | does not run, reports `ran` (a `>` line)                 |
+| `after`, only `ranAlways` runs in it changed | runs, reports `ranAlways`          | does not run, reports `ranAlways` (a `>` line from `-v`) |
+| `after`, an open change missing it           | runs, reports `ranFromOpenChanges` | does not run, reports `ranFromOpenChanges` (a `>` line)  |
+| `after`, none changed or open for it         | does not run, reports `unchanged`  | does not run, reports `unchanged`                        |
+| `after: "always"`                            | runs, reports `ranAlways`          | does not run, reports `ranAlways` (a `>` line from `-v`) |
 
-A `ran` step returns `changed: true` in `plan` too, so one `run` can follow another (`after: [reload]`), and the plan
-shows the chain exactly as it would run for real.
+A `ran` or `ranAlways` step returns `changed: true` in `plan` too, so one `run` can follow another
+(`after: [reload]`), and the plan shows the chain exactly as it would run for real.
 
 A condition based on a fact, like the CPU architecture, is an `if` around the `run`, the same as for any other step.
 Prefer `after` over wrapping a run in `if (unit.changed)`. They decide the same thing, but with `after` tsinfra still
@@ -1225,7 +1228,8 @@ knows the run exists when nothing changed, so verbose output can list it.
   again and the step would fail.
 - **It counts as drift only when open changes alone trigger it** (see [CLI](./cli.md#exit-codes)). An `"always"`
   run's check would never pass, so `plan` would exit 2 on every run. A follow-up usually triggers because a step it
-  follows changed, and that step already counts.
+  follows changed, and that step already counts. `plan` also hides a `ranAlways` run at the default level, so it isn't
+  in the summary's count either, and a plan with nothing else reads `unchanged`.
 
 Two actions are usually two runs, each with its own name in the output. The function form is for one action that takes
 several commands under one trigger:

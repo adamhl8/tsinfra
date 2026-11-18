@@ -7,6 +7,7 @@ import type {
   StepRecord,
 } from "#core/session/recorder/records.ts"
 import type { StepKind, StepStatus } from "#core/session/step.ts"
+import type { Mode } from "#mode.ts"
 import type { Detail, EntryName, HostBlockEntry, NameKind } from "#report/host-block.ts"
 import {
   toHintDetails,
@@ -21,11 +22,13 @@ import type { Verbosity } from "#report/verbosity.ts"
 
 // Show a step that was already right, or only looked, from level 1, because it changed nothing on the host.
 // Show a `resume` step from level 0, because it's rare, and it explains the follow-ups it triggers.
+// Leave the mode out, because `getEntryLevel` moves a `ranAlways` run to level 1 in `plan`.
 const ENTRY_LEVELS: Record<StepStatus, Verbosity> = {
   unchanged: 1,
   observed: 1,
   changed: 0,
   ran: 0,
+  ranAlways: 0,
   ranFromOpenChanges: 0,
   waiting: 0,
   resume: 0,
@@ -43,17 +46,25 @@ const STEP_NAME_KINDS: Record<StepKind, NameKind> = {
   run: "step",
 }
 
+/**
+ * Returns the level a step's entry shows from. A `ranAlways` run shows from level 1 in `plan`, because it runs on every
+ * apply, so the plan has nothing new to say about it.
+ */
+const getEntryLevel = (status: StepStatus, mode: Mode): Verbosity =>
+  mode === "plan" && status === "ranAlways" ? 1 : ENTRY_LEVELS[status]
+
 /** Returns a step's name with the kind of name it is, which decides how it's styled. */
 export const toStepName = ({ name, kind }: StepRecord): EntryName => ({ text: name, kind: STEP_NAME_KINDS[kind] })
 
-const toStepEntry = (stepRecord: FinishedStepRecord): HostBlockEntry => {
+const toStepEntry = (stepRecord: FinishedStepRecord, mode: Mode): HostBlockEntry => {
   const { status, kind } = stepRecord
 
   const name = toStepName(stepRecord)
   const note = toStepNote(stepRecord, status)
   const details = toStepDetails(stepRecord)
+  const from = getEntryLevel(status, mode)
 
-  return { status, kind, name, note, details, from: ENTRY_LEVELS[status] }
+  return { status, kind, name, note, details, from }
 }
 
 /** Returns what a failure no step owns shows under its error, before any hints, for its kind. */
@@ -97,9 +108,9 @@ const toFailureEntry = (failure: RecordedFailure, hostRecord: HostRecord): HostB
 }
 
 /** Returns a host block's entries: one per finished step, at every level, then the host's failure, if it failed. */
-export const toHostBlockEntries = (hostRecord: HostRecord): HostBlockEntry[] => {
+export const toHostBlockEntries = (hostRecord: HostRecord, mode: Mode): HostBlockEntry[] => {
   const { stepRecords, failure } = hostRecord
-  const stepEntries = stepRecords.map((stepRecord) => toStepEntry(stepRecord))
+  const stepEntries = stepRecords.map((stepRecord) => toStepEntry(stepRecord, mode))
 
   // Show the failure after the steps, even a step's, because nothing runs once the host has failed.
   // That makes the step that failed the last one.

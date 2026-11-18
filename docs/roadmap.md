@@ -6,6 +6,7 @@ rest of the docs describe tsinfra as it is.
 <!-- toc -->
 
 - [Next](#next)
+  - [Target attributes on `link`](#target-attributes-on-link)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
   - [Live progress](#live-progress)
@@ -38,6 +39,138 @@ rest of the docs describe tsinfra as it is.
 ## Next
 
 In the order they'll be built.
+
+### Target attributes on `link`
+
+A link has no mode of its own. Linux ignores a symlink's mode, and `chmod` follows the link to its target. So when
+dotfiles are linked into a repo, the mode that matters is the target's, in the repo. Today a script that wants a linked
+`~/.ssh/config` to be `600` needs an `ensure` of its own: read the target's mode with `ls` or `stat`, convert between
+symbolic and octal itself, and `chmod`. tsinfra already reads, compares, and writes modes and owners for `file` and
+`dir`, so `link` can do it for its target.
+
+**A `targetAttributes` option on `link`,** taking `mode`, `user`, and `group` like `file`'s options (the exported
+`FileAttributes` type). It manages the file the link points to:
+
+```ts
+await h.link("~/.ssh/config", path.join(REPO, "files/ssh_config"), { targetAttributes: { mode: PRIVATE_FILE_MODE } })
+```
+
+- **`user` and `group` stay the link's own owner,** as they are today, set with `chown -h`. `targetAttributes` is its
+  own key, so an option never means the link in one place and the target in another.
+- **Only the attributes given are managed,** like `file`: the target keeps its own value of any left out.
+- **It follows the target to the file at the end.** A target that's itself a link gets the attributes on what it points
+  to, because `chmod` and `chown` without `-h` follow links. Reading the target follows too (`stat -L`), so the check
+  and the write look at the same file.
+- **A missing target is skipped.** The `nothing exists at target` warning already says so, and it's plain that its
+  attributes aren't set yet. The step decides when it runs, from what's on the host then. In `plan`, a target an
+  earlier step would create is still missing, so it's skipped. In `apply`, that step has run, so the attributes are set.
+- **A change to only the target's attributes is a change of the link step.** It reports `changed`, so a run with
+  `after: [theLink]` runs, and a step that `needs` it waits in `plan`.
+- **`sudo` covers the link and its target.** Under `sudo: true`, the link is made as root, so it's owned by root unless
+  the step sets the link's own `user` and `group`. That covers a link that shouldn't be root's, pointing at a target only
+  root can change, without a second `sudo` flag.
+- **The owner check runs for the target too.** `checkCanSetOwner` already fails in `plan` a link owner change that only
+  root could make. It runs for the target as well, so a target `user` that needs root fails in `plan`, and so does a
+  `chmod` on a target someone else owns.
+- **The output shows the target's rows next to the link's,** prefixed with `target`, so it's clear which file changes:
+  `target mode: rw-r--r-- (644) -> rw------- (600)`, `target user: root -> adam`.
+- **Two links that set different attributes on one target fail.** Without this, each apply undoes the other, and the
+  plan never comes out clean. tsinfra sees every step in the host's script, so the second link step that sets
+  `targetAttributes` on a target an earlier one set differently fails, naming the earlier step. Targets compare after
+  `~/` is resolved, and modes compare as mode bits, so `"600"` and `PRIVATE_FILE_MODE` are the same. A link without
+  `targetAttributes` never conflicts, so several links can share a target with one of them setting its attributes.
+
+**Implementation plan.** Each numbered piece is one commit. A piece can leave the feature unfinished, but it passes
+lint and has its own tests. The lettered steps inside a piece are small enough to review one at a time, in order.
+
+#### 1. Read the target's attributes
+
+After this piece, the link details carry the target's mode and owner. Nothing compares them yet, so no step behaves
+differently.
+
+- **1a.** Give `buildStatCommand` (`handlers/shared/filesystem/stat.ts`) a `follow` option that adds `-L` to both the
+  GNU and the BSD form. Update its JSDoc, which says neither form follows a symlink.
+- **1b.** In `buildLinkDetailsScript` (`handlers/link/host-link-details.ts`), print the target's mode and owner after
+  the `target=` line, with `buildStatCommand('"$t"', ["mode", "owner"], { follow: true })`, and an empty line when the
+  target is missing, so every line keeps its place. `readlink` stays last.
+- **1c.** Add `targetAttributes: HostFileAttributeDetails | undefined` to each `HostLinkDetails` kind, and parse the new
+  line in `parseLinkDetailsOutput` with a schema built like `file`'s from `statModeSchema` and `STAT_OWNER_COLUMNS`. It's
+  `undefined` exactly when the target is missing.
+- **1d.** Tests in `handlers/link/__tests__/host-link-details.test.ts`: a target's mode and owner parse, a missing
+  target gives `undefined`, and a line that isn't a mode and an owner is an error.
+- **1e.** A test in `handlers/__tests__/link.test.ts`: when the target is itself a link, the details carry the mode of
+  the file at the end, not the link's.
+
+#### 2. Compare and write the target's attributes
+
+After this piece, `targetAttributes` works in `plan` and `apply`. The report shows that the step changed, but not yet
+which attribute.
+
+- **2a.** Add `targetAttributes?: FileAttributeOptions` to `LinkOptions` in `handlers/link.ts`, with JSDoc, and
+  `"targetAttributes?": fileAttributeOptionsSchema` to `linkOptionsSchema`. Record it with `recordOptions`, next to
+  `force`.
+- **2b.** In `compareLink` (`handlers/link/comparison.ts`), find the target's changes with `findAttributeChanges`, from
+  `file/comparison/attributes.ts`, when the step sets `targetAttributes` and the target exists, and an empty list
+  otherwise. Add `targetAttributeChanges: AttributeChange[]` to `LinkComparisonValues`. The link is in sync only when
+  that list is empty too.
+- **2c.** Still in `compareLink`, run `checkCanSetOwner` for the target, with its path, its current owner, and
+  `targetAttributes`, when there are target changes, after the link's own check.
+- **2d.** Give `buildChownLines` (`handlers/shared/filesystem/write-script.ts`) a way to leave out `-h`, so a target's
+  `chown` follows the link. Then in `buildLinkWriteScript` (`handlers/link/write.ts`), after the line that moves the
+  link into place, add the target's `chmod`, with `toOctalMode(parseFileMode(mode))` as `file`'s write does, and its
+  `chown`. Work the changes out again from the details the fix gets, the same way `compareLink` does, so the write only
+  touches what differs, and nothing for a missing target.
+- **2e.** Tests in `handlers/__tests__/link.test.ts`:
+  - in `plan`, a target's mode that differs is reported and left alone, and a mode that matches is in sync
+  - in `apply`, the target gets its mode, and the next apply is unchanged and runs no write
+  - a change to only the target's mode reports `changed`, and a run with `after` the link runs
+  - a missing target with `targetAttributes` is in sync, with the warning
+  - a host script whose `file` step creates the target before the link: `plan` skips the target's attributes, and
+    `apply` sets them
+  - a target that's a link gets the mode on the file at the end
+  - a mode given as octal and one given as a constant behave the same
+- **2f.** Tests in `handlers/__tests__/link-sudo.docker.ts`:
+  - under `sudo`, the target gets its `user` and `group`, and the link stays root's unless the step sets its own `user`
+    and `group`
+  - without `sudo`, a target `user` that needs root fails in `plan`, and so does a `mode` on a target root owns
+
+#### 3. Show the target's rows
+
+- **3a.** Move the mode row that `file`'s details format into a shared `formatAttributeChange` in
+  `report/format/details/shared/attributes.ts`, next to `formatOwnerChange`, taking an optional prefix for the name.
+  `file` keeps its output.
+- **3b.** In `formatLinkValues` (`report/format/details/link.ts`), add a row for each target change after the link's
+  own rows, named `target mode`, `target user`, and `target group`.
+- **3c.** Add a host to `report-preview.ts` with a link whose target's mode changes, and one whose link and target both
+  change.
+- **3d.** Tests in `src/__tests__/report.test.ts`: the target rows show under the link with their prefix, in both
+  notations for a mode, after the `target:` row of a link that also changes.
+
+#### 4. Fail two links that set a target differently
+
+- **4a.** Add `linkTargetAttributes`, a `Map` from target to the step that set it and its attributes as mode bits and
+  owners, to `StepContext`, created next to `changedStepNames` in `createHostSession` (`src/core/session.ts`).
+- **4b.** In `handleLink`, after the options are valid and before `converge`, look the target up. When an earlier step
+  set different attributes, fail with an error naming that step, like `target '<target>' already gets different
+  attributes from link '<path>'`. Otherwise record this step's. A step without `targetAttributes` skips both. Doing it
+  before `converge` means it fails in `plan` too, even for a step that waits.
+- **4c.** Tests in `handlers/__tests__/link.test.ts`:
+  - two links with the same attributes on one target both pass
+  - two links with different attributes on one target fail the second, naming the first
+  - a link without `targetAttributes` next to one with them passes
+  - a target written with `~/` and the same target written out in full conflict
+  - `"600"` and `PRIVATE_FILE_MODE` count as the same
+
+#### 5. Docs
+
+- **5a.** In [Steps](./steps.md#link): add `targetAttributes` to the `LinkOptions` block, and move this design into the
+  bullets. Change the bullet that says there's no `mode` to point at `targetAttributes`, and say that `user` and `group`
+  are the link's own owner, which is how a link under `sudo` stays someone else's.
+- **5b.** In the README's `link` section: add `targetAttributes` to the options list, with the `~/.ssh/config`
+  example.
+- **5c.** In [Transport](./transport.md#link-writes): say the target's `chmod` and `chown` run after the link is in
+  place, and that the target's `chown` leaves out `-h` so it follows the link.
+- **5d.** Remove this section from the roadmap and its line from the table of contents.
 
 ## Planned
 
@@ -127,6 +260,8 @@ follow-up to a change, not state a check can read, so it works like a [`run`](./
 - **It follows the same [open change](./steps.md#when-an-apply-doesnt-finish) rules as a run.** It opens its change
   before it reboots, records itself on the open changes it follows, and triggers from one that doesn't list it, as
   `ranFromOpenChanges`. One that didn't trigger, but whose change is still open, is `resume`.
+- **It follows the same [`"always"`](./steps.md#run) rules as a run.** A reboot with `after: "always"`, or one that
+  follows only `ranAlways` steps, is `ranAlways`, and `plan` shows it only from `-v`.
 - **It returns a `ChangeStepResult<"reboot">`,** so a run can follow it. `"reboot"` joins `ChangeStepKind`, and a
   run's `after`. Like a run's, it can't be needed, because nothing about the host's state says a reboot happened.
 

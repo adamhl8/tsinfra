@@ -51,6 +51,8 @@ export interface StepContext<K extends StepKind = StepKind> {
    * script's value instead, which a change still open from an earlier apply also makes true.
    */
   changedStepNames: Set<string>
+  /** The names of the runs in `changedStepNames` that run on every pass, so a run that follows only them does too. */
+  ranAlwaysStepNames: Set<string>
   /** Given to a check function. */
   readTools: ReadTools
   /** Given to a fix or run function. */
@@ -72,13 +74,17 @@ export interface HandlerReturn<T> {
 
 /**
  * How a step turned out, which the session records for the output. A `changed` status means the host's state differed,
- * which is drift in `plan`. A `ran` status means a run was triggered. A `ranFromOpenChanges` status means only changes
- * still open from an earlier apply triggered a run, which is drift in `plan` too, because nothing in the pass explains
- * it. A `resume` status means a change step was in sync, but its change is still open from an earlier apply. A
+ * which is drift in `plan`. A `ran` status means a run was triggered. A `ranAlways` status means a run runs on every
+ * pass, because its `after` is `"always"`, or it follows only runs that do. A `ranFromOpenChanges` status means only
+ * changes still open from an earlier apply triggered a run, which is drift in `plan` too, because nothing in the pass
+ * explains it. A `resume` status means a change step was in sync, but its change is still open from an earlier apply. A
  * `waiting` status means a step it needs would change, so `plan` skipped reading the host's state. An `observed` status
  * is a read or an inspect, which only looks.
  */
-export type StepStatus = "unchanged" | "observed" | "changed" | "ran" | "ranFromOpenChanges" | "waiting" | "resume"
+export type StepStatus = "unchanged" | "observed" | "changed" | FollowUpStatus | "waiting" | "resume"
+
+/** The statuses only a follow-up gets, each for a reason it ran. */
+export type FollowUpStatus = "ran" | "ranAlways" | "ranFromOpenChanges"
 
 /** How the host's state compared with what a step wants. */
 export type ComparisonValues = EnsureComparisonValues | FileComparisonValues | LinkComparisonValues

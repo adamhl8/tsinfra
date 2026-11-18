@@ -35,6 +35,7 @@ const COUNTS_AS_CHANGED: Record<StepStatus, boolean> = {
   observed: false,
   changed: true,
   ran: true,
+  ranAlways: true,
   ranFromOpenChanges: true,
   waiting: true,
   resume: true,
@@ -48,15 +49,17 @@ export const withChangeStepResult = <K extends ChangeStepKind>(
   ctx: StepContext<K>,
   handlerStatus: Result<StepStatus>,
 ): Result<HandlerReturn<ChangeStepResult<K>>> => {
-  const { stepName, kind, savedStateManager, changedStepNames } = ctx
+  const { stepName, kind, savedStateManager, changedStepNames, ranAlwaysStepNames } = ctx
   if (isErr(handlerStatus)) return handlerStatus
 
-  // Add the step from the handler's own status, before it can become `resume`, because the set holds only the steps
+  // Add the step from the handler's own status, before it can become `resume`, because the sets hold only the steps
   // that changed in this pass.
   if (COUNTS_AS_CHANGED[handlerStatus]) changedStepNames.add(stepName)
+  if (handlerStatus === "ranAlways") ranAlwaysStepNames.add(stepName)
 
-  // Open a step's change in this apply only right before it changes something, which makes it `changed` or `ran`.
-  // `plan` never opens one. So an `unchanged` step's open change is one an earlier apply opened and never closed.
+  // Open a step's change in this apply only right before it changes something, which makes it `changed`, `ran`, or
+  // `ranAlways`. `plan` never opens one.
+  // So an `unchanged` step's open change is one an earlier apply opened and never closed.
   const isStillOpenFromEarlierApply = handlerStatus === "unchanged" && savedStateManager.isOpen(stepName)
   const status = isStillOpenFromEarlierApply ? "resume" : handlerStatus
 

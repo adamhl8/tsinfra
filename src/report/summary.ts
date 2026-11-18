@@ -2,10 +2,23 @@ import type { Mode } from "#mode.ts"
 import { planReminderElement } from "#report/format/elements/messages.ts"
 import { statusTextElement, warningCountElement } from "#report/format/elements/summary.ts"
 import { COLUMN_GAP } from "#report/format/layout.ts"
-import type { HostBlock, HostBlockEntry } from "#report/host-block.ts"
+import type { EntryStatus, HostBlock, HostBlockEntry } from "#report/host-block.ts"
 import { countOf, getMaxWidth, padToWidth } from "#utils.ts"
 
 const PLAN_REMINDER = "Steps after a change were checked without that change, so apply may differ."
+
+// Count triggered runs too, so the count matches the `~` and `>` lines in the block.
+const IN_CHANGE_COUNT: Record<EntryStatus, boolean> = {
+  unchanged: false,
+  observed: false,
+  changed: true,
+  ran: true,
+  ranAlways: true,
+  ranFromOpenChanges: true,
+  waiting: false,
+  failed: false,
+  resume: false,
+}
 
 const getEntries = (hostBlock: HostBlock): HostBlockEntry[] => (hostBlock.kind === "entries" ? hostBlock.entries : [])
 
@@ -27,10 +40,7 @@ const formatHostStatus = (hostBlock: HostBlock): string => {
   const entries = getEntries(hostBlock)
   const statuses = entries.map(({ status }) => status)
 
-  // Count triggered runs too, so the count matches the `~` and `>` lines in the block.
-  const changeCount = statuses.filter(
-    (status) => status === "changed" || status === "ran" || status === "ranFromOpenChanges",
-  ).length
+  const changeCount = statuses.filter((status) => IN_CHANGE_COUNT[status]).length
   const waitingCount = statuses.filter((status) => status === "waiting").length
   // Count warnings too, so one isn't lost when the blocks have scrolled away.
   const warningCount = entries.flatMap(({ details }) => details).filter(({ kind }) => kind === "warning").length
@@ -44,13 +54,17 @@ const formatHostStatus = (hostBlock: HostBlock): string => {
   return counts.join(", ")
 }
 
-/** Renders one line per host from its block, with the plan reminder first when anything would change. */
+/**
+ * Renders one line per host from its block from `toShownHostBlock`, with the plan reminder first when anything would
+ * change. Each count is of what the block shows, so it matches the lines above it.
+ */
 export const renderSummary = (hostBlocks: HostBlock[], mode: Mode): string => {
   const nameWidth = getMaxWidth(hostBlocks.map(({ name }) => name))
   const hostLines = hostBlocks.map(
     (hostBlock) => `${padToWidth(hostBlock.name, nameWidth)}${COLUMN_GAP}${formatHostStatus(hostBlock)}`,
   )
 
+  // Check the shown blocks for drift, because a step with drift shows at every level.
   const hasAnyDrift = mode === "plan" && hostBlocks.some((hostBlock) => hasDrift(hostBlock))
   return [...(hasAnyDrift ? [planReminderElement(PLAN_REMINDER), ""] : []), ...hostLines].join("\n")
 }

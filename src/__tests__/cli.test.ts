@@ -70,6 +70,15 @@ describe("tsinfra", () => {
     expect(stdout).toBe("a\n  · observed: (read) true\n  = unchanged: (ensure) Install git\n\na   unchanged")
   })
 
+  it("should show only the summary and exit 0 from plan when the only change is an always run", async () => {
+    const { run } = await createProject()
+
+    const { stdout, exitCode } = await run`tsinfra plan --hosts-dir hosts-always`.nothrow()
+
+    expect(exitCode).toBe(0)
+    expect(stdout).toBe("prune   unchanged")
+  })
+
   it.each([["-vv"], ["-v", "-v"]])("should count %s as level 2, and list commands", async (...flags) => {
     const { run } = await createProject()
 

@@ -13,7 +13,7 @@ import { finishHosts, initializeHosts } from "#core/hosts/prepare.ts"
 import { runHost } from "#core/hosts/run.ts"
 import { closeConnections } from "#core/transport.ts"
 import packageJson from "#package.json" with { type: "json" }
-import { renderHostBlock } from "#report.ts"
+import { renderHostBlock, toShownHostBlock } from "#report.ts"
 import { ERROR_THEME, printTsinfraError } from "#report/errors.ts"
 import { getExitCode } from "#report/exit-code.ts"
 import type { HostBlock } from "#report/host-block.ts"
@@ -42,23 +42,29 @@ const runTsinfra = async (): Promise<Result<number>> => {
 
   const reportOptions = { verbosity: config.verbosity }
   const hostBlocks: HostBlock[] = []
+  const shownHostBlocks: HostBlock[] = []
 
   for (const hostEntry of hostEntries) {
     const stopHostProgress = showHostProgress(hostEntry.hostRecord, config.mode)
     // oxlint-disable-next-line no-await-in-loop - hosts run one at a time until there's a parallel option
     const hostRecord = await runHost(hostEntry, config.mode)
     stopHostProgress()
-    const hostBlock = toHostBlock(hostRecord)
+
+    const hostBlock = toHostBlock(hostRecord, config.mode)
     hostBlocks.push(hostBlock)
 
-    const renderedHostBlock = renderHostBlock(hostBlock, reportOptions)
+    const shownHostBlock = toShownHostBlock(hostBlock, config.verbosity)
+    shownHostBlocks.push(shownHostBlock)
+
+    const renderedHostBlock = renderHostBlock(shownHostBlock, reportOptions)
     if (renderedHostBlock) console.log(`${renderedHostBlock}\n`)
   }
 
   await closeConnections(selectedHosts.map(({ target }) => target))
 
-  console.log(renderSummary(hostBlocks, config.mode))
+  console.log(renderSummary(shownHostBlocks, config.mode))
 
+  // Use every host's full block, because the exit code says whether the host drifted, whatever the report shows.
   return getExitCode(hostBlocks, config.mode)
 }
 

@@ -19,6 +19,7 @@ const STATUS_WORDS: Record<EntryStatus, string> = {
   observed: "observed",
   changed: "change",
   ran: "triggered",
+  ranAlways: "always",
   ranFromOpenChanges: "triggered",
   waiting: "waiting",
   failed: "failed",

@@ -11,6 +11,7 @@ export const STATUS_COLORS: Record<EntryStatus, Style> = {
   observed: pc.gray,
   changed: pc.yellow,
   ran: pc.yellow,
+  ranAlways: pc.yellow,
   ranFromOpenChanges: pc.yellow,
   waiting: pc.blue,
   failed: pc.redBright,
