@@ -35,7 +35,7 @@ interface FailedHostEntry {
 }
 
 /** How the part of preparation that runs for every host at once, before any password prompt, went for a host. */
-type HostInitialization = InitializedHost | FailedInitialization
+export type HostInitialization = InitializedHost | FailedInitialization
 
 /** A host that's initialized, so it only needs its password prompt, if any, and its session context. */
 interface InitializedHost {
@@ -93,13 +93,17 @@ const finishHost = async (initializedHost: InitializedHost): Promise<Result<Prep
 }
 
 /**
- * Prepares every host, and keeps them in order. Initializes every host at once, before any script runs, then finishes
- * them one at a time, so the sudo password prompts come in the hosts' order. A host that fails either part keeps its
- * record, with the failure on it.
+ * Starts preparing every host at once, before any script runs, and keeps them in order. `finishHosts` does the rest,
+ * one host at a time.
  */
-export const prepareHosts = async (loadedHosts: LoadedHost[]): Promise<HostEntry[]> => {
-  const hostInitializations = await Promise.all(loadedHosts.map(async (loadedHost) => initializeHost(loadedHost)))
+export const initializeHosts = async (loadedHosts: LoadedHost[]): Promise<HostInitialization[]> =>
+  Promise.all(loadedHosts.map(async (loadedHost) => initializeHost(loadedHost)))
 
+/**
+ * Finishes preparing each host one at a time, so the sudo password prompts come in the hosts' order. A host that failed
+ * either part keeps its record, with the failure on it.
+ */
+export const finishHosts = async (hostInitializations: HostInitialization[]): Promise<HostEntry[]> => {
   const hostEntries: HostEntry[] = []
   for (const hostInitialization of hostInitializations) {
     const { hostRecord, preparationRecorder } = hostInitialization

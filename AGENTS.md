@@ -60,6 +60,8 @@ Check new names, comments, docs, and error messages against these words.
   "module", or "provider". A function a script writes for itself, without that scope, can still be a helper.
 - **Preparation** is what runs before a host's script, never "preflight" or "host failure".
 - **"Outcome"** isn't a term in the code.
+- **Status line** is a report entry's line (`StatusLine`). The CLI's transient line on stderr, like `Planning host
+  'sonarr'...`, is the **progress line**.
 - **"Note"** is the report's word. **"Diff"** means the line output in the report, so it doesn't name a comparison.
 - **"Owner"** stays the plain word for the concept and for the chmod permission class. The option is `user`, to pair
   with `group` and match `stat` and `chown user:group`. `FileOwner` is the type both take.

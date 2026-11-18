@@ -4,13 +4,15 @@ import process from "node:process"
 
 import { $ } from "bun"
 
-import { answerPrompts } from "#core/__tests__/terminal.ts"
+import { answerPrompts } from "#__tests__/terminal.ts"
 
 // `setup.sh` gives this user this password.
 const PASSWORD = "it's tsinfra"
 const PROMPT_HEADER =
   "Ctrl-D to skip this host · Ctrl-C to cancel the entire run\r\nTo run host 'prompted', enter the sudo password for user 'sudopw'.\r\n"
 const PASSWORD_PROMPT = "Password: "
+// Match the CLI's progress line during preparation, and what `readline` writes to clear it before the prompt.
+const PREPARING_PROGRESS = "Preparing 1 host...\u001B[2K\u001B[1G"
 
 // Run the CLI from source, because this user can't write the `dist/` that packing would build.
 const CLI = path.resolve(import.meta.dir, "../../../../../cli.ts")
@@ -30,7 +32,7 @@ describe("a user whose sudo needs a password, typed at the prompt", () => {
   it("should write root-only files with the password typed at the prompt, through sudo and through h.meta", async () => {
     const { screen, exitCode } = await applyInTerminal([`${PASSWORD}\r`])
 
-    expect(screen).toStartWith(`${PROMPT_HEADER}${PASSWORD_PROMPT}\r\n`)
+    expect(screen).toStartWith(`${PREPARING_PROGRESS}${PROMPT_HEADER}${PASSWORD_PROMPT}\r\n`)
     expect(screen).not.toContain(PASSWORD)
     expect(exitCode).toBe(0)
     expect((await $`stat -c %U /etc/tsinfra-docker-prompt.conf`.text()).trim()).toBe("root")

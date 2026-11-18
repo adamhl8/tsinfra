@@ -10,7 +10,7 @@ import type { HostConfig, HostDefinition } from "#core/hosts/host.ts"
 import { host, hostDefinitionSchema } from "#core/hosts/host.ts"
 import type { LoadedHost } from "#core/hosts/load.ts"
 import { toLoadedHost } from "#core/hosts/load.ts"
-import { prepareHosts } from "#core/hosts/prepare.ts"
+import { finishHosts, initializeHosts } from "#core/hosts/prepare.ts"
 import type { HomeDirectory } from "#core/hosts/prepare/host-details.ts"
 import { buildHostDetails } from "#core/hosts/prepare/host-details.ts"
 import { toSavedStatePath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
@@ -69,8 +69,9 @@ export const loadTestHost = (target: string = LOCAL_TARGET, hostOptions?: TestHo
 
 /** Prepares one host the way a run does. */
 const prepareHostEntry = async (loadedHost: LoadedHost) => {
-  const [hostEntry] = await prepareHosts([loadedHost])
-  if (!hostEntry) throw new Error("prepareHosts returned no host")
+  const hostInitializations = await initializeHosts([loadedHost])
+  const [hostEntry] = await finishHosts(hostInitializations)
+  if (!hostEntry) throw new Error("finishHosts returned no host")
   return hostEntry
 }
 

@@ -43,7 +43,8 @@ const STEP_NAME_KINDS: Record<StepKind, NameKind> = {
   run: "step",
 }
 
-const toStepName = ({ name, kind }: StepRecord): EntryName => ({ text: name, kind: STEP_NAME_KINDS[kind] })
+/** Returns a step's name with the kind of name it is, which decides how it's styled. */
+export const toStepName = ({ name, kind }: StepRecord): EntryName => ({ text: name, kind: STEP_NAME_KINDS[kind] })
 
 const toStepEntry = (stepRecord: FinishedStepRecord): HostBlockEntry => {
   const { status, kind } = stepRecord

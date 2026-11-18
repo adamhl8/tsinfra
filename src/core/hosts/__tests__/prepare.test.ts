@@ -13,7 +13,7 @@ import {
 } from "#core/__tests__/session.ts"
 import { host } from "#core/hosts/host.ts"
 import type { LoadedHost } from "#core/hosts/load.ts"
-import { prepareHosts } from "#core/hosts/prepare.ts"
+import { finishHosts, initializeHosts } from "#core/hosts/prepare.ts"
 import { toSavedStatePath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
 import type { Host } from "#core/session.ts"
 
@@ -23,8 +23,9 @@ const doNothing = async () => {
 
 /** Prepares `loadedHost` alone, and returns its entry. */
 const prepareOne = async (loadedHost: LoadedHost) => {
-  const [hostEntry] = await prepareHosts([loadedHost])
-  if (!hostEntry) throw new Error("prepareHosts returned no host")
+  const hostInitializations = await initializeHosts([loadedHost])
+  const [hostEntry] = await finishHosts(hostInitializations)
+  if (!hostEntry) throw new Error("finishHosts returned no host")
   return hostEntry
 }
 
@@ -38,17 +39,18 @@ const preparePreparedHost = async (loadedHost: LoadedHost) => {
 
 const createLocalHost = () => loadHostDefinition(host({ name: "a", target: "@local" }, doNothing))
 
-describe("prepareHosts", () => {
+describe("initializeHosts and finishHosts", () => {
   it("should prepare every host in order without running a script", async () => {
     const marker = path.join(await makeTempDir(), "ran")
     const touchMarker = async (h: Host) => {
       await h.read(`touch '${marker}'`)
     }
-    const hostEntries = await prepareHosts([
+    const hostInitializations = await initializeHosts([
       loadHostDefinition(host({ name: "a", target: "@local" }, touchMarker)),
       loadHostDefinition(host({ name: "b", target: UNREACHABLE_TARGET }, touchMarker)),
       loadHostDefinition(host({ name: "c", target: "@local" }, touchMarker)),
     ])
+    const hostEntries = await finishHosts(hostInitializations)
 
     expect(hostEntries.map(({ preparation, hostRecord }) => [hostRecord.name, preparation])).toStrictEqual([
       ["a", "prepared"],
@@ -88,7 +90,7 @@ describe("prepareHosts", () => {
   })
 })
 
-describe("prepareHosts with saved state", () => {
+describe("initializeHosts and finishHosts with saved state", () => {
   it("should read no saved state for a host with none, and keep the read off preparation's record", async () => {
     const { sessionContext, hostRecord } = await preparePreparedHost(createLocalHost())
 

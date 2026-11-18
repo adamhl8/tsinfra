@@ -78,7 +78,8 @@ and it is much smaller than Ink. It does not fit this design:
 - **It does not capture a script's `console.log`,** which would write into the middle of its live lines.
 
 Live progress comes with `--parallel`, because that is when hosts run at once, so progress matters. Until then the
-blocks print directly as each host finishes. These details are still open:
+blocks print directly as each host finishes, and a [progress line](./cli.md#how-the-report-is-built) on stderr says
+which host is running. The live area replaces it. These details are still open:
 
 - **What tells Ink to redraw.** A spinner redraws on a timer anyway, so the live lines could read the records on each
   tick. The other option is a callback from the session recorder when a step starts or finishes.

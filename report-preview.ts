@@ -17,7 +17,7 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { HostFunction, HostSudo } from "#core/hosts/host.ts"
-import { prepareHosts } from "#core/hosts/prepare.ts"
+import { finishHosts, initializeHosts } from "#core/hosts/prepare.ts"
 import { runHost } from "#core/hosts/run.ts"
 import { GROUP_DIRECTORY_MODE, PUBLIC_FILE_MODE } from "#core/session/handlers/shared/filesystem/mode.ts"
 import type { HostRecord } from "#core/session/recorder/records.ts"
@@ -427,7 +427,8 @@ const previewPass = async (pass: PreviewPass, verbosity: Verbosity) => {
     const loadedHosts = scenarios.map((scenario) =>
       Object.assign(scenario, { options: { sudo: scenario.sudo ?? false } }),
     )
-    const hostEntries = await prepareHosts(loadedHosts)
+    const hostInitializations = await initializeHosts(loadedHosts)
+    const hostEntries = await finishHosts(hostInitializations)
     const hostBlocks: HostBlock[] = []
     for (const hostEntry of hostEntries) {
       // oxlint-disable-next-line no-await-in-loop - hosts run one at a time, the same as the CLI

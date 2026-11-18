@@ -6,9 +6,10 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import { program } from "#cli/program.ts"
+import { clearProgress, formatPreparingProgress, printProgress, showHostProgress } from "#cli/progress.ts"
 import { discoverHostScripts } from "#core/hosts/discover.ts"
 import { loadHosts, selectHosts } from "#core/hosts/load.ts"
-import { prepareHosts } from "#core/hosts/prepare.ts"
+import { finishHosts, initializeHosts } from "#core/hosts/prepare.ts"
 import { runHost } from "#core/hosts/run.ts"
 import { closeConnections } from "#core/transport.ts"
 import packageJson from "#package.json" with { type: "json" }
@@ -32,14 +33,21 @@ const runTsinfra = async (): Promise<Result<number>> => {
   const selectedHosts = selectHosts(loadedHosts, config.hosts)
   if (isErr(selectedHosts)) return err("failed to pick hosts", selectedHosts)
 
-  const hostEntries = await prepareHosts(selectedHosts)
+  printProgress(formatPreparingProgress(selectedHosts.length))
+  const hostInitializations = await initializeHosts(selectedHosts)
+  // Clear the progress line before finishing, because a sudo password prompt can start there.
+  clearProgress()
+
+  const hostEntries = await finishHosts(hostInitializations)
 
   const reportOptions = { verbosity: config.verbosity }
   const hostBlocks: HostBlock[] = []
 
   for (const hostEntry of hostEntries) {
+    const stopHostProgress = showHostProgress(hostEntry.hostRecord, config.mode)
     // oxlint-disable-next-line no-await-in-loop - hosts run one at a time until there's a parallel option
     const hostRecord = await runHost(hostEntry, config.mode)
+    stopHostProgress()
     const hostBlock = toHostBlock(hostRecord)
     hostBlocks.push(hostBlock)
 

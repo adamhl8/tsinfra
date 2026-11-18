@@ -5,8 +5,8 @@ import process from "node:process"
 import { makeTempDir } from "@adamhl8/configs/test"
 import { $ } from "bun"
 
+import { answerPrompts } from "#__tests__/terminal.ts"
 import { writeFakeTool } from "#core/__tests__/session.ts"
-import { answerPrompts } from "#core/__tests__/terminal.ts"
 
 const FIXTURE = path.join(import.meta.dir, "fixtures", "prompt-hosts.ts")
 const PASSWORD_PROMPT = "Password: "
@@ -57,7 +57,7 @@ const SKIPPING_HOST = "skipping host\r\n\r\n"
 // Expect the blank line a right password leaves before the next host's prompt.
 const ACCEPTED = "\r\n"
 
-describe("prepareHosts with a sudo: true host whose sudo needs a password", () => {
+describe("finishHosts with a sudo: true host whose sudo needs a password", () => {
   it("should prompt for the password, and prepare the host with the right one", async () => {
     expect(await prepareInTerminal(["a"], ["right\r"])).toBe(
       `${buildPromptHeader("a")}${PASSWORD_TRY}${ACCEPTED}${resultsLine([["a", "prepared"]])}`,

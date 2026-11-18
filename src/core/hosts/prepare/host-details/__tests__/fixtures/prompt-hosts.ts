@@ -4,7 +4,7 @@ import { messageChain } from "ts-explicit-errors"
 
 import { getPreparationFailure, loadHostDefinition } from "#core/__tests__/session.ts"
 import { host } from "#core/hosts/host.ts"
-import { prepareHosts } from "#core/hosts/prepare.ts"
+import { finishHosts, initializeHosts } from "#core/hosts/prepare.ts"
 
 const doNothing = async () => {
   /* empty */
@@ -16,9 +16,10 @@ const args = process.argv.slice(2)
 const isPrintingRecords = args[0] === "--records"
 const names = isPrintingRecords ? args.slice(1) : args
 
-const hostEntries = await prepareHosts(
+const hostInitializations = await initializeHosts(
   names.map((name) => loadHostDefinition(host({ name, target: "@local", sudo: true }, doNothing))),
 )
+const hostEntries = await finishHosts(hostInitializations)
 const results = hostEntries.map((hostEntry) => [
   hostEntry.hostRecord.name,
   hostEntry.preparation === "prepared" ? "prepared" : messageChain(getPreparationFailure(hostEntry.hostRecord)),

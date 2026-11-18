@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test"
 import path from "node:path"
 import process from "node:process"
 
-import { answerPrompts } from "#core/__tests__/terminal.ts"
+import { answerPrompts } from "#__tests__/terminal.ts"
 
 const FIXTURE = path.join(import.meta.dir, "fixtures", "read-hidden-line.ts")
 const PROMPT = "password: "

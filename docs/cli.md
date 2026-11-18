@@ -188,11 +188,26 @@ The output is a report, not a log. tsinfra renders it from each host's [record](
 formatting functions, because no library draws this layout. A logging library formats one event per line, with a level
 and a timestamp, and would not help with blocks, aligned columns, or diffs.
 
-- **Streams.** The whole report goes to stdout, failures included. stderr is only for tsinfra's own errors and the sudo
-  password prompt (see [Transport](./transport.md#sudo)). The errors are a usage error, or hosts that can't be
+- **Streams.** The whole report goes to stdout, failures included. stderr is only for tsinfra's own errors, the sudo
+  password prompt (see [Transport](./transport.md#sudo)), and the progress line. The errors are a usage error, or hosts that can't be
   discovered or loaded. Those print through Optique's `printError`, so they look like the
   parser's own errors. They happen before any host runs, so they never mix with a report. A theme passed to both
   `run()` and `printError` makes the `Error:` label red and bold. Optique colors stderr only when it is a terminal.
+- **The progress line** says what tsinfra is doing until the report replaces it. It shows `Preparing 3 hosts...` while
+  the hosts are prepared, then `Planning host 'sonarr'...` or `Applying host 'sonarr'...` while each one runs, dim,
+  with the host's name in the value color. Once a step starts, the line adds it the way the report shows it, like
+  `Applying host 'sonarr' · (ensure) Install caddy...`.
+  - **It reads the running step on a timer,** every 100 ms, from the host's record, where the session puts each step's
+    record when the step starts. It redraws only when a new step starts, and keeps the last one between steps. A step
+    that finishes between two reads never shows.
+  - **It always fits on one line.** It shows only the first line of a step's name, like a multi-line command, and cuts
+    the whole line to one column short of the terminal's width, with `…`. A line that wrapped would leave rows that
+    clearing can't reach.
+  - **It's erased** before the sudo password prompts and before each host's block prints, so the finished output is
+    only the report.
+  - **It prints only when stderr is a terminal,** so CI and a redirected stderr get none of it.
+  - **A host script's own `console.log` prints onto the end of it,** because the line has no newline.
+    [Live progress](./roadmap.md#live-progress) replaces it.
 - **Colors** come from [picocolors](https://github.com/alexeyraspopov/picocolors). It follows `NO_COLOR`,
   `FORCE_COLOR`, and `--no-color`, and prints plain text when stdout is not a terminal. `util.styleText` from `node:util`
   does the same, but its behavior depends on each runtime's `node:util`, and picocolors' rules are its own. Tests set

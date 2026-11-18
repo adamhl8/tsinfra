@@ -1,13 +1,31 @@
 import { describe, expect, it, setDefaultTimeout } from "bun:test"
 import path from "node:path"
+import process from "node:process"
 
+import { minimalEnv } from "@adamhl8/configs/test"
 import bun from "bun"
 
 import { createProject } from "#__tests__/cli-project.ts"
+import { answerPrompts } from "#__tests__/terminal.ts"
 
 setDefaultTimeout(30_000)
 
 const PLAN_REMINDER = "Steps after a change were checked without that change, so apply may differ."
+// Match what `readline.clearLine` and `readline.cursorTo` write: erase the line, then go to its first column.
+const CLEAR_PROGRESS = "\u001B[2K\u001B[1G"
+
+/** Returns the command that runs the installed `tsinfra plan` on the project's `hostsDir`. */
+const buildPlanCommand = (dir: string, hostsDir: string) => [
+  process.execPath,
+  path.join(dir, "node_modules/.bin/tsinfra"),
+  "plan",
+  "--hosts-dir",
+  path.join(dir, hostsDir),
+]
+
+/** Returns what the terminal showed after the last progress line was cleared, which is the report. */
+const getScreenAfterProgress = (screen: string) =>
+  screen.slice(screen.lastIndexOf(CLEAR_PROGRESS) + CLEAR_PROGRESS.length)
 
 describe("tsinfra", () => {
   it("should show what would change on stdout and exit 2 from plan, without running the fix", async () => {
@@ -107,5 +125,44 @@ describe("tsinfra", () => {
     expect(exitCode).toBe(1)
     expect(stdout).toBe("")
     expect(stderr).toStartWith("Error: failed to discover hosts -> failed to read hosts directory 'nowhere' -> ENOENT")
+  })
+
+  it("should show a progress line in a terminal while it prepares and runs each host, and clear it before the report", async () => {
+    const { dir } = await createProject()
+    const env = { ...minimalEnv(), MARKER: path.join(dir, "marker"), NO_COLOR: "1" }
+
+    const { screen } = await answerPrompts(buildPlanCommand(dir, "hosts"), "", [], env)
+
+    expect(screen).toStartWith(`Preparing 2 hosts...${CLEAR_PROGRESS}Planning host 'caddy'...${CLEAR_PROGRESS}`)
+    expect(screen).toContain(`Planning host 'sonarr'...${CLEAR_PROGRESS}`)
+    // Expect `\r\n` for every newline in the report, because the terminal turns each `\n` into `\r\n`.
+    expect(getScreenAfterProgress(screen)).toBe(
+      [
+        "sonarr",
+        "  ~ change: (ensure) Make marker",
+        "  > triggered: (run) Restart",
+        "",
+        PLAN_REMINDER,
+        "",
+        "caddy    unchanged",
+        "sonarr   2 changes",
+        "",
+      ].join("\r\n"),
+    )
+  })
+
+  it("should show the running step on the progress line, cut to one line that fits the terminal", async () => {
+    const { dir } = await createProject()
+
+    const { screen } = await answerPrompts(buildPlanCommand(dir, "hosts-progress"), "", [], {
+      ...minimalEnv(),
+      NO_COLOR: "1",
+    })
+
+    // Expect 79 columns, one short of the terminal's 80.
+    expect(screen).toContain(
+      `${CLEAR_PROGRESS}Planning host 'slow' · (read) sleep 0.5 # ${"x".repeat(36)}…${CLEAR_PROGRESS}`,
+    )
+    expect(getScreenAfterProgress(screen)).toBe("slow   unchanged\r\n")
   })
 })
