@@ -19,6 +19,7 @@ import type { Host, SessionContext } from "#core/session.ts"
 import { createHostSession } from "#core/session.ts"
 import type { EnsureOptions } from "#core/session/handlers/ensure.ts"
 import type { Want } from "#core/session/handlers/ensure/want.ts"
+import type { ReadOptions } from "#core/session/handlers/read.ts"
 import type { RunOptions } from "#core/session/handlers/run.ts"
 import type { ChangeStepResult } from "#core/session/handlers/shared/change-step-result.ts"
 import type { Change } from "#core/session/handlers/shared/change.ts"
@@ -237,8 +238,8 @@ export const prepareAndRunHost = async (loadedHost: LoadedHost, mode: Mode) =>
   runHost(await prepareHostEntry(loadedHost), mode)
 
 /** Reads `cmd` and returns its output, or the thrown error's message chain. */
-export const readOrMessage = async (h: Host, cmd: string) => {
-  const output = await attempt(async () => h.read(cmd))
+export const readOrMessage = async (h: Host, cmd: string, options?: ReadOptions) => {
+  const output = await attempt(async () => h.read(cmd, options))
   return isErr(output) ? messageChain(output) : output
 }
 

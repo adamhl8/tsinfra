@@ -169,8 +169,9 @@ Nothing changes in behavior.
 - **3b.** Add `ToolOptions`, extending `InputOptions` then `MaskOptions`, for `Exec` and `Inspect` in
   `handlers/tools.ts`, and validate it with both schemas merged, in that order. Export `InputOptions` and `ToolOptions`
   from `src/index.ts`.
-- **3c.** In `execCommand` and `inspectCommand`, read the input with `readContentBytes`, named as
-  `the input given to '<tool>'`, and pass the bytes to the shell.
+- **3c.** Pull the validation `execCommand` and `inspectCommand` share into `resolveToolCommand`, which also reads the
+  input with `readContentBytes`, named as `the input`. A failed read is wrapped like a failed run, as in
+  `failed to run 'cat' -> the input is 11 MB, above the 10 MB limit`. Export `Content` from `src/index.ts`.
 - **3d.** Have `ReadOptions` and `InspectOptions` extend `InputOptions`. Their handlers already pass their options to
   `execCommand` and `inspectCommand`.
 - **3e.** Tests on `@local`:
@@ -440,7 +441,7 @@ Fixes and finishing work for what's already built.
   record, and fail the host through `callOrFail` when that step is no longer the running one. Do not throw in
   `recordCommands`, because only `session.ts` throws, and a throw there would skip recording the failure in
   `callOrFail`.
-- **Run the Docker tests in CI.** `bask test-docker` stays out of `bask lint`, because it needs Docker and downloads
+- **Run the Docker tests in CI.** `bask test --all` stays out of `bask lint`, because it needs Docker and downloads
   images and packages, so nothing runs it automatically yet.
 - **Check SELinux labels on a VM.** `file`'s `chcon` and `restorecon` are untested on real labels, because containers
   run with SELinux off.

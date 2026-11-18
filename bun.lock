@@ -15,7 +15,7 @@
         "ts-explicit-errors": "^5.0.1",
       },
       "devDependencies": {
-        "@adamhl8/bask": "^0.6.1",
+        "@adamhl8/bask": "^0.7.1",
         "@adamhl8/configs": "^4.1.2",
         "@arethetypeswrong/core": "^0.18.5",
         "@commitlint/cli": "^21.2.4",
@@ -35,11 +35,11 @@
     },
   },
   "packages": {
-    "@adamhl8/bask": ["@adamhl8/bask@0.6.1", "", { "dependencies": { "ts-explicit-errors": "^5.0.1" }, "bin": { "bask": "dist/cli.js" } }, "sha512-1RbisayD4fdSGyS5uApdqoIvwNoueoOUkyIv6ficCscBXAu3ckwGHVv2h+YGhdX9dWftyTB7xVOSigI2GN4nqA=="],
+    "@adamhl8/bask": ["@adamhl8/bask@0.7.1", "", { "dependencies": { "@optique/core": "^1.3.7", "ts-explicit-errors": "^5.0.1" }, "bin": { "bask": "dist/cli.js" } }, "sha512-CYtitHOBB+W9aHFJ6SnYChZMXl5O8mRuMEFYBlF2i3kzqJoIow0mLOwuZ5S9+oijpCNElml30L8Tgy7x56Xqtw=="],
 
     "@adamhl8/configs": ["@adamhl8/configs@4.1.2", "", { "dependencies": { "@adamhl8/oxlint-plugin-clean-modules": "^0.3.0", "@adamhl8/oxlint-plugin-package-boundaries": "^0.2.0", "@commitlint/config-conventional": "^21.2.4", "@commitlint/types": "^21.2.3", "@e18e/eslint-plugin": "^0.8.1", "arkenv": "^0.12.3", "arktype": "^2.2.9", "es-toolkit": "^1.53.2", "eslint-plugin-bunisms": "^0.11.0", "eslint-plugin-hono": "^1.3.0", "eslint-plugin-react-web-api": "^5.30.4", "eslint-plugin-react-you-might-not-need-an-effect": "^1.2.0", "eslint-plugin-regexp": "^3.3.3", "oxlint-plugin-directive-comments": "^0.1.0", "oxlint-tailwindcss": "^1.17.2", "ts-explicit-errors": "^5.0.1", "type-fest": "^6.0.1", "verkit": "^0.5.0" }, "peerDependencies": { "@adamhl8/bask": ">=0.6", "@arethetypeswrong/core": ">=0.18", "@commitlint/cli": ">=21.2", "@tailwindcss/language-server": ">=0.16", "knip": ">=6.45", "markdown-toc": ">=1.2", "oxfmt": ">=0.79", "oxlint": ">=1.94", "oxlint-tsgolint": ">=7.0.2007", "publint": ">=0.3", "release-it": ">=21.1", "release-it-git-cliff": ">=0.2", "tailwint": ">=1.1", "tsdown": ">=0.23.7", "typescript": "^7.1.0-beta" }, "optionalPeers": ["@arethetypeswrong/core", "@tailwindcss/language-server", "publint", "release-it", "release-it-git-cliff", "tailwint", "tsdown"], "bin": { "adamhl8-bunfig": "dist/adamhl8-bunfig/index", "adamhl8-tsconfig": "dist/adamhl8-tsconfig/index", "adamhl8-gitignore": "dist/adamhl8-gitignore/index" } }, "sha512-szK08RrWkSQk8uj5K4zKzOpntRXtajdg7C5JXF+Cs4iU3ae476duBs8QLVLnUq2Lrym6FuM/1lagEsIlXz6Tfw=="],
 
-    "@adamhl8/oxlint-plugin-clean-modules": ["@adamhl8/oxlint-plugin-clean-modules@0.3.0", "", { "dependencies": { "@oxlint/plugins": "^1.94.0" }, "peerDependencies": { "oxlint": ">=1.91.0" } }, "sha512-7PulK27yCQ1tlaRMX/bMI5KYFlVIwfDtNXL0nSS71FJDFKBAUTHxtYCnj05iAkfKm2kpkvDQwjxnT0Bl1aabyQ=="],
+    "@adamhl8/oxlint-plugin-clean-modules": ["@adamhl8/oxlint-plugin-clean-modules@0.3.1", "", { "dependencies": { "@oxlint/plugins": "^1.94.0" }, "peerDependencies": { "oxlint": ">=1.91.0" } }, "sha512-7e7lLzqO/3sZUmIKzX6RLEcE5ZvJ6YXEYS6YF/+4I2LxqxIL3q5EqsDWigaAFl1oJVlkuEwFcRmaIs2Vj1s3Jg=="],
 
     "@adamhl8/oxlint-plugin-package-boundaries": ["@adamhl8/oxlint-plugin-package-boundaries@0.2.0", "", { "dependencies": { "@oxlint/plugins": "^1.94.0", "oxc-parser": "^0.159.0" }, "peerDependencies": { "oxlint": ">=1.91.0" } }, "sha512-MmI49cFceq5BcTJ7Cc1nhq0JmCacjJp5k7BAns9100UltP4P3eK6z+k6hj7hXQlUALv9JRfXVGyd9vtepsk0Ww=="],
 

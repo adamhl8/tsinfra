@@ -11,7 +11,7 @@ working on. This file holds only what the docs and the code don't make obvious.
 
 ## Checks
 
-- `bunx bask test-docker`, for changes to transports, sudo, or file and link writes. The `*.docker.ts` tests run on
+- `bunx bask test --all`, for changes to transports, sudo, or file and link writes. The `*.docker.ts` tests run on
   Alpine (busybox) and Debian (dash), with real root and real `sudo`. Neither `bun test` nor `bask lint` runs them.
 - A test that sends content near the 10 MB limit through the local `sh` needs `CONTENT_LIMIT_TIMEOUT_MS`. macOS
   `/bin/sh` is bash, which reads a script on a pipe one byte at a time, so 10 MB takes about 2.5 seconds of the default

@@ -1,13 +1,13 @@
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
-import type { MaskOptions } from "#core/session/handlers/options/handler.ts"
+import type { InputOptions, MaskOptions } from "#core/session/handlers/options/handler.ts"
 import type { EnvOptions } from "#core/session/handlers/options/shell.ts"
 import { execCommand } from "#core/session/handlers/tools.ts"
 import type { HandlerReturn, StepContext } from "#core/session/step.ts"
 
 /** The options `h.read` takes. */
-export interface ReadOptions extends EnvOptions, MaskOptions {}
+export interface ReadOptions extends EnvOptions, InputOptions, MaskOptions {}
 
 /** Runs the `read` step, which runs the same command as the `read` tool and gives the script its stdout. */
 export const handleRead = async (
@@ -17,7 +17,7 @@ export const handleRead = async (
 ): Promise<Result<HandlerReturn<string>>> => {
   const { shell } = ctx
 
-  // Leave `options` to `execCommand`, which validates `maskOutput` for the tool too.
+  // Leave `options` to `execCommand`, which validates `input` and `maskOutput` for the tool too.
   const stdout = await execCommand({ toolName: "read", shell }, cmd, options)
   if (isErr(stdout)) return stdout
 

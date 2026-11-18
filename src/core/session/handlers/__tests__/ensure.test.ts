@@ -768,6 +768,34 @@ describe("h.ensure with a fix function", () => {
   })
 })
 
+describe("h.ensure with input on the tools", () => {
+  it("should give a check's read the input", async () => {
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, {
+      want: true,
+      check: async ({ read }) => (await read("cat", { input: "yes" })) === "yes",
+      fix: "exit 1",
+    })
+
+    expect(result).toMatchObject({ changed: false })
+  })
+
+  it("should give a fix's exec the input", async () => {
+    const file = path.join(await makeTempDir(), "value")
+    const { host: h } = await createSession("apply")
+    const result = await ensureOrMessage(h, {
+      want: "from the input",
+      check: `cat '${file}' 2>/dev/null`,
+      fix: async ({ exec }) => {
+        await exec(`cat > '${file}'`, { input: "from the input" })
+      },
+    })
+
+    expect(result).toMatchObject({ changed: true })
+    expect(await bun.file(file).text()).toBe("from the input")
+  })
+})
+
 describe("h.ensure with invalid input", () => {
   it.each([
     {

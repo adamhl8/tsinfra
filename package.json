@@ -58,7 +58,7 @@
     "ts-explicit-errors": "^5.0.1"
   },
   "devDependencies": {
-    "@adamhl8/bask": "^0.6.1",
+    "@adamhl8/bask": "^0.7.1",
     "@adamhl8/configs": "^4.1.2",
     "@arethetypeswrong/core": "^0.18.5",
     "@commitlint/cli": "^21.2.4",

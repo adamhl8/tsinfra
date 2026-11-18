@@ -1,11 +1,12 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { MaskOptions } from "#core/session/handlers/options/handler.ts"
-import { maskOptionsSchema } from "#core/session/handlers/options/handler.ts"
+import type { InputOptions, MaskOptions } from "#core/session/handlers/options/handler.ts"
+import { inputOptionsSchema, maskOptionsSchema } from "#core/session/handlers/options/handler.ts"
+import { readContentBytes } from "#core/session/handlers/shared/content.ts"
 import { validateInput } from "#core/session/handlers/shared/validate-input.ts"
 import { nonEmptyStringSchema } from "#core/session/step.ts"
-import type { Shell } from "#core/transport/shell.ts"
+import type { CommandOptions, Shell } from "#core/transport/shell.ts"
 
 /** Tools that only read the host. A check function gets these, because it also runs during `plan`. */
 export interface ReadTools {
@@ -21,11 +22,16 @@ export interface ChangeTools {
   inspect: Inspect
 }
 
+/** The options every tool takes. */
+export interface ToolOptions extends InputOptions, MaskOptions {}
+
+const toolOptionsSchema = inputOptionsSchema.merge(maskOptionsSchema)
+
 /** Runs one command on the host and returns its stdout, trimmed. A non-zero exit throws. */
-export type Exec = (cmd: string, options?: MaskOptions) => Promise<string>
+export type Exec = (cmd: string, options?: ToolOptions) => Promise<string>
 
 /** Runs one command on the host and returns its output and exit code. A non-zero exit is an answer, not a failure. */
-export type Inspect = (cmd: string, options?: MaskOptions) => Promise<InspectResult>
+export type Inspect = (cmd: string, options?: ToolOptions) => Promise<InspectResult>
 
 /** What `inspect` gives a script: a command's stdout and stderr, both trimmed, and its exit code. */
 export interface InspectResult {
@@ -49,18 +55,45 @@ const TOOL_VERBS: Record<ToolName, string> = {
   exec: "run",
 }
 
+/** Returns what a tool's failure says, naming the command. */
+const toToolFailureMessage = (toolName: ToolName, cmd: string) => `failed to ${TOOL_VERBS[toolName]} '${cmd}'`
+
+/** A tool's command and the options the shell runs it with, once its input is read. */
+interface ResolvedToolCommand {
+  cmd: string
+  commandOptions: CommandOptions
+}
+
+/** Validates the command and options the script gave a tool, and reads its input into bytes. */
+const resolveToolCommand = async (
+  toolName: ToolName,
+  cmd: unknown,
+  options: unknown,
+): Promise<Result<ResolvedToolCommand>> => {
+  const validCmd = validateInput(cmd, nonEmptyStringSchema, { inputLabel: "command", givenTo: toolName })
+  if (isErr(validCmd)) return validCmd
+
+  const validOptions = validateInput(options, toolOptionsSchema, { inputLabel: "options", givenTo: toolName })
+  if (isErr(validOptions)) return validOptions
+
+  const { input, ...otherOptions } = validOptions
+  if (input === undefined) return { cmd: validCmd, commandOptions: otherOptions }
+
+  const inputBytes = await readContentBytes(input, "the input")
+  if (isErr(inputBytes)) return err(toToolFailureMessage(toolName, validCmd), inputBytes)
+
+  return { cmd: validCmd, commandOptions: { input: inputBytes, ...otherOptions } }
+}
+
 /** Runs one command for `read` or `exec` and returns its stdout, trimmed. A non-zero exit is an error. */
 export const execCommand = async (ctx: ToolContext, cmd: unknown, options: unknown = {}): Promise<Result<string>> => {
   const { toolName, shell } = ctx
 
-  const validCmd = validateInput(cmd, nonEmptyStringSchema, { inputLabel: "command", givenTo: toolName })
-  if (isErr(validCmd)) return validCmd
+  const toolCommand = await resolveToolCommand(toolName, cmd, options)
+  if (isErr(toolCommand)) return toolCommand
 
-  const validOptions = validateInput(options, maskOptionsSchema, { inputLabel: "options", givenTo: toolName })
-  if (isErr(validOptions)) return validOptions
-
-  const stdout = await shell.exec(validCmd, validOptions)
-  if (isErr(stdout)) return err(`failed to ${TOOL_VERBS[toolName]} '${validCmd}'`, stdout)
+  const stdout = await shell.exec(toolCommand.cmd, toolCommand.commandOptions)
+  if (isErr(stdout)) return err(toToolFailureMessage(toolName, toolCommand.cmd), stdout)
 
   return stdout.trim()
 }
@@ -73,14 +106,11 @@ export const inspectCommand = async (
 ): Promise<Result<InspectResult>> => {
   const { toolName, shell } = ctx
 
-  const validCmd = validateInput(cmd, nonEmptyStringSchema, { inputLabel: "command", givenTo: toolName })
-  if (isErr(validCmd)) return validCmd
+  const toolCommand = await resolveToolCommand(toolName, cmd, options)
+  if (isErr(toolCommand)) return toolCommand
 
-  const validOptions = validateInput(options, maskOptionsSchema, { inputLabel: "options", givenTo: toolName })
-  if (isErr(validOptions)) return validOptions
-
-  const commandOutput = await shell.inspect(validCmd, validOptions)
-  if (isErr(commandOutput)) return err(`failed to ${TOOL_VERBS[toolName]} '${validCmd}'`, commandOutput)
+  const commandOutput = await shell.inspect(toolCommand.cmd, toolCommand.commandOptions)
+  if (isErr(commandOutput)) return err(toToolFailureMessage(toolName, toolCommand.cmd), commandOutput)
 
   const { stdout, stderr, exitCode } = commandOutput
   return { stdout: stdout.trim(), stderr: stderr.trim(), exitCode }

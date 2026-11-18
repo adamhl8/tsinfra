@@ -24,3 +24,11 @@ describe("h.inspect", () => {
     })
   })
 })
+
+describe("h.inspect with input", () => {
+  it("should give the command the input, and return its non-zero exit", async () => {
+    const { host: h } = await createSession()
+
+    expect(await h.inspect("cat; exit 3", { input: "a" })).toStrictEqual({ stdout: "a", stderr: "", exitCode: 3 })
+  })
+})
