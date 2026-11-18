@@ -21,9 +21,6 @@ const toStepOption = (name: string, value: OptionsRecordValue): StepOption => {
 
 /** Returns the options the step set that the report shows, as one detail, or none when it set none. */
 export const toOptionsDetails = (stepRecord: StepRecord): Detail[] => {
-  const recordedOptions = Object.entries(stepRecord.options).filter(
-    (entry): entry is [string, OptionsRecordValue] => entry[1] !== undefined,
-  )
-  const options = recordedOptions.map(([name, value]) => toStepOption(name, value))
+  const options = Object.entries(stepRecord.options).map(([name, value]) => toStepOption(name, value))
   return options.length > 0 ? [{ kind: "options", options, from: OPTIONS_LEVEL }] : []
 }

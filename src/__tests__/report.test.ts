@@ -7,6 +7,7 @@ import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
 import { attempt, err } from "ts-explicit-errors"
 
+import { CONTENT_LIMIT_BYTES } from "#core/__tests__/content.ts"
 import {
   UNREACHABLE_TARGET,
   createFakeSudoSession,
@@ -1854,6 +1855,52 @@ describe("renderHostBlock for a step's options", () => {
       "a",
       "  · observed: (read) true",
       "      options: env { URL, PORT }, secretEnv { TOKEN }",
+    ])
+  })
+
+  it("should name input on read and inspect with -vv", async () => {
+    const hostSession = await createSession()
+    await hostSession.host.read("cat >/dev/null", { input: "secret input" })
+    await hostSession.host.inspect("cat >/dev/null", { input: "secret input" })
+
+    expect(renderRecord(hostSession.hostRecord, 2)?.split("\n")).toStrictEqual([
+      "a",
+      "  · observed: (read) cat >/dev/null",
+      "      options: input",
+      "  · observed: (inspect) cat >/dev/null",
+      "      options: input",
+    ])
+  })
+
+  it("should show input as a stand-in on read and inspect with -vvv, never the input itself", async () => {
+    const hostSession = await createSession()
+    await hostSession.host.read("cat >/dev/null", { input: "secret input" })
+    await hostSession.host.inspect("cat >/dev/null", { input: "secret input" })
+
+    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n")).toStrictEqual([
+      "a",
+      "  · observed: (read) cat >/dev/null",
+      "      options:",
+      "        input: <content>",
+      "      output:",
+      "        exit: 0",
+      "  · observed: (inspect) cat >/dev/null",
+      "      options:",
+      "        input: <content>",
+      "      output:",
+      "        exit: 0",
+    ])
+  })
+
+  it("should show input under the error when it's over the limit", async () => {
+    const hostSession = await createSession()
+    await attempt(async () => hostSession.host.read("cat", { input: "a".repeat(CONTENT_LIMIT_BYTES + 1) }))
+
+    expect(renderRecord(hostSession.hostRecord, 3)?.split("\n").slice(1)).toStrictEqual([
+      "  ! failed: (read) cat",
+      "      failed to read 'cat' -> the input is 10 MB, above the 10 MB limit",
+      "        options:",
+      "          input: <content>",
     ])
   })
 

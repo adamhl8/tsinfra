@@ -3,7 +3,7 @@ import { isErr } from "ts-explicit-errors"
 
 import type { InputOptions, MaskOptions } from "#core/session/handlers/options/handler.ts"
 import type { EnvOptions } from "#core/session/handlers/options/shell.ts"
-import { execCommand } from "#core/session/handlers/tools.ts"
+import { runExecCommand, validateToolCall } from "#core/session/handlers/tools.ts"
 import type { HandlerReturn, StepContext } from "#core/session/step.ts"
 
 /** The options `h.read` takes. */
@@ -15,10 +15,14 @@ export const handleRead = async (
   cmd: unknown,
   options: unknown = {},
 ): Promise<Result<HandlerReturn<string>>> => {
-  const { shell } = ctx
+  const { shell, recordOptions } = ctx
 
-  // Leave `options` to `execCommand`, which validates `input` and `maskOutput` for the tool too.
-  const stdout = await execCommand({ toolName: "read", shell }, cmd, options)
+  const toolCall = validateToolCall("read", cmd, options)
+  if (isErr(toolCall)) return toolCall
+  // Record `input` before running, because reading it can fail.
+  recordOptions({ input: toolCall.options.input })
+
+  const stdout = await runExecCommand({ toolName: "read", shell }, toolCall)
   if (isErr(stdout)) return stdout
 
   return { status: "observed", value: stdout }

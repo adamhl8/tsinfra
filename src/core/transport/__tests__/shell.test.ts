@@ -4,7 +4,6 @@ import type { Result } from "ts-explicit-errors"
 import { isErr, messageChain } from "ts-explicit-errors"
 
 import { createRandomBytes } from "#core/__tests__/content.ts"
-import { toBytes } from "#core/session/handlers/shared/filesystem/bytes.ts"
 import { createRecordingTransport } from "#core/session/recorder/commands.ts"
 import type { CommandRecord } from "#core/session/recorder/records.ts"
 import { getLocalTransport } from "#core/transport.ts"
@@ -78,13 +77,11 @@ describe("createShell with input", () => {
     expect(await shell.exec(`printf '%s|' "$V"\ncat`, { input: toInput("a") })).toBe("v|a")
   })
 
-  it("should record the command as written and the input's size, never the input", async () => {
+  it("should record the command as written, never the input", async () => {
     const { shell, commandRecords } = createLocalShell()
 
     await shell.exec("cat", { input: toInput("secret") })
 
-    expect(commandRecords).toStrictEqual([
-      { cmd: "cat", inputSize: toBytes(6), output: { stdout: "secret", stderr: "", exitCode: 0 } },
-    ])
+    expect(commandRecords).toStrictEqual([{ cmd: "cat", output: { stdout: "secret", stderr: "", exitCode: 0 } }])
   })
 })

@@ -62,27 +62,28 @@ levels only change what's printed:
 - **`-vv`** also shows how each step ran. A diff or a comparison that took longer than 200 ms gets up to 10 seconds and
   shows in full. A step given options that change how its commands run gets an `options:` line under it, naming the
   ones it set, like `options: sudo` or `options: env { URL, PORT }, secretEnv { TOKEN }`. It names each variable but
-  shows no value, because the values come at `-vvv`. A `sudo` the script writes inside a command doesn't count, because
-  it shows in the command. It lists each command a step ran, dimmed, under a `commands:` heading after the step's other
-  details, like `$ systemctl is-active sonarr`, in the order they ran. A read or inspect lists none, because its name
-  is its command. A command tsinfra writes itself shows as its label in angle brackets, like
-  `$ <file details script>`, because its text is tsinfra's code, not the script's. Angle brackets mark text that isn't
-  shown, as the record's `<content as base64>` does. A command's later lines line up under its first line's text. On a
-  failed step, the commands come after what it found and before any hint. A `file` step's `validate` command shows in
-  its options, not after the write script's label, so it shows in `plan` too. A step's commands never show the
-  `sudo sh -s` that
+  shows no value, because the values come at `-vvv`. A read or inspect given `input` names it there too. A `sudo` the
+  script writes inside a command doesn't count, because it shows in the command. It lists each command a step ran,
+  dimmed, under a `commands:` heading after the step's other details, like `$ systemctl is-active sonarr`, in the order
+  they ran. A read or inspect lists none, because its name is its command. A command tsinfra writes itself shows as its
+  label in angle brackets, like `$ <file details script>`, because its text is tsinfra's code, not the script's. Angle
+  brackets mark text that isn't shown, as the record's `<content as base64>` does. A command's later lines line up under
+  its first line's text. On a failed step, the commands come after what it found and before any hint. A `file` step's
+  `validate` command shows in its options, not after the write script's label, so it shows in `plan` too. A step's
+  commands never show the `sudo sh -s` that
   `sudo: true` wraps them in. A preparation failure lists the commands preparation ran, by their labels, like
   `$ <home directory>`, so it shows how far preparation got. A host that was prepared lists none, because the same
   commands would repeat in every block.
 - **`-vvv`** also turns the `options:` line into a block, with each variable on its own row and its value, and each
-  `secretEnv` value as `[MASKED]`. The values line up within each of `env` and `secretEnv`, not across them, because
-  each is its own object. It also shows what each command printed, as `exit:`, `stdout:`, and `stderr:` rows under a dim italic
-  `output:` heading, one level past the command's text, with their values lined up. The heading keeps the rows from
-  reading like more of a multi-line command. A read or inspect, which lists no command, shows its `output:` heading and
-  rows right under its line, after any options. Every command shows its exit code, even 0, and a command that couldn't
-  run at all shows its error in place of the three rows. stdout and stderr show in full, because this level is for
-  seeing everything, and only when the command printed something. Each has its trailing whitespace trimmed, and keeps
-  its leading whitespace. In a step that compares the host's state, each command starts with its phase in parentheses,
+  `secretEnv` value as `[MASKED]`. A read's or inspect's `input` shows as `<content>`, because the record never holds
+  the input. The values line up within each of `env` and `secretEnv`, not across them, because each is its own object.
+  It also shows what each command printed, as `exit:`, `stdout:`, and `stderr:` rows under a dim italic `output:`
+  heading, one level past the command's text, with their values lined up. The heading keeps the rows from reading like
+  more of a multi-line command. A read or inspect, which lists no command, shows its `output:` heading and rows right
+  under its line, after any options. Every command shows its exit code, even 0, and a command that couldn't run at all
+  shows its error in place of the three rows. stdout and stderr show in full, because this level is for seeing
+  everything, and only when the command printed something. Each has its trailing whitespace trimmed, and keeps its
+  leading whitespace. In a step that compares the host's state, each command starts with its phase in parentheses,
   styled like a step's kind, as `(before)`, `(fix)`, or `(after)`, padded so the prompts line up, because the same check
   runs before and after the fix, and its output can differ. tsinfra's own commands keep their label, so their text never
   shows. It's in the source, and will be in the [diagnostic logs](./roadmap.md#diagnostic-logs).
@@ -289,12 +290,12 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   it didn't complete in an earlier unfinished apply". Both show at the default level, with their lines, because the
   case is rare and should always be explained. A failure no step owns never gets a note.
 - **Options.** The `options:` heading is dim and italic, its keys are dim like other labels, and its values are styled
-  like other values, with the same markers and quotes. `[MASKED]` is dim, because it's tsinfra's marker, not a
-  value the script gave. On the line, an object's variable names go in braces after its name, like `env { URL, PORT }`,
-  with the braces dim. A colon there would nest under `options:`, and the braces keep one object's names apart from the
-  next. It's the first of a step's details, and on a failed step it comes after the error, like its other details.
-  Only options the step set show, so `sudo: false` and an empty `env` never do. Only options whose effect shows
-  nowhere else in the report show: `sudo`, `env`, and `secretEnv`, `file`'s `validate`, as the command it built,
+  like other values, with the same markers and quotes. `[MASKED]` and `<content>` are dim, because they're tsinfra's
+  markers, not values the script gave. On the line, an object's variable names go in braces after its name, like
+  `env { URL, PORT }`, with the braces dim. A colon there would nest under `options:`, and the braces keep one object's
+  names apart from the next. It's the first of a step's details, and on a failed step it comes after the error, like its
+  other details. Only options the step set show, so `sudo: false` and an empty `env` never do. Only options whose effect
+  shows nowhere else in the report show: `sudo`, `env`, and `secretEnv`, `file`'s `validate`, as the command it built,
   `secret`, and `overwrite: false`, `link`'s `force`, and `ensure`'s `verify: false`. A step that used one of those can
   look the same as one that didn't. `want`, `content`, `mode`, `user`, `group`, `needs`, and `after` already show as
   values, diffs, attribute rows, notes, or a status, and `check` and `fix` show as commands. The shell options come
@@ -383,8 +384,9 @@ in the order the script called them, and the host's failure, if it failed.
   `secretEnv`), then its own, like `file`'s `validate` command or `overwrite: false`. An option at its default isn't
   recorded, and each secret value is `[MASKED]`. Its commands are recorded as the script wrote them, without the
   `sudo sh -s` around them or the prelude that sets the variables, so the options are what say those were there. The
-  record holds plain values only: `validate` as the command it built, because the script passed a function. A step's
-  handler records its own options right after validating them, through a function the recorder gives it, like
+  record holds plain values only: `validate` as the command it built, because the script passed a function, and a
+  read's or inspect's `input` as `<content>`, because the input can be a secret, and it can be large. A step's handler
+  records its own options right after validating them, through a function the recorder gives it, like
   `converge`'s, so a failure can't lose them. The step that's running is kept apart on the host's
   record until it ends, so the record always says which step is running. A step that finishes joins the host's steps,
   in the order the script called them, with its status.
@@ -392,6 +394,8 @@ in the order the script called them, and the host's failure, if it failed.
   functions. A read or inspect has exactly one.
 - **A command** records the command, its stdout and stderr, and its exit code. A command that could not run at all
   records the error instead. A command tsinfra wrote itself also records a short label, like `file details script`.
+  A command given `input` records only the command as the script wrote it. A tool call records none of its options, so
+  only its command's text says it read stdin.
   A command in a step that compares the host's state records its phase: `before`, `fix`, or `after`.
 - **A step's comparisons** are what it found each time it compared the host with what it wants: a `before` comparison,
   and an `after` comparison when it compared again after the fix. Each holds the values it compared and whether they

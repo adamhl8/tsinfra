@@ -5,7 +5,7 @@ import type { EnsureComparisonValues } from "#core/session/handlers/ensure/compa
 import type { FileComparisonValues } from "#core/session/handlers/file/comparison.ts"
 import type { LinkComparisonValues } from "#core/session/handlers/link/comparison.ts"
 import type { ChangeTools, ReadTools } from "#core/session/handlers/tools.ts"
-import type { StepOptionsRecord } from "#core/session/recorder/records.ts"
+import type { StepOptionsToRecord } from "#core/session/recorder/records.ts"
 import type { ConvergeRecorder } from "#core/session/recorder/session-recorder.ts"
 import type { SavedStateManager } from "#core/session/saved-state.ts"
 import type { Shell } from "#core/transport/shell.ts"
@@ -58,9 +58,10 @@ export interface StepContext<K extends StepKind = StepKind> {
   convergeRecorder: ConvergeRecorder
   /**
    * Records the options the step was given that the report shows, like `validate`'s command. The recorder leaves out
-   * each one at its default. Call it right after validating them, so a failure can't lose them.
+   * each one at its default, and records `input` as a stand-in. Call it right after validating them, so a failure can't
+   * lose them.
    */
-  recordOptions: (options: StepOptionsRecord) => void
+  recordOptions: (options: StepOptionsToRecord) => void
 }
 
 /** What a step's handler gives: the status to record, and the value to give the script. */

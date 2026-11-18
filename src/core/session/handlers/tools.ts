@@ -58,44 +58,67 @@ const TOOL_VERBS: Record<ToolName, string> = {
 /** Returns what a tool's failure says, naming the command. */
 const toToolFailureMessage = (toolName: ToolName, cmd: string) => `failed to ${TOOL_VERBS[toolName]} '${cmd}'`
 
-/** A tool's command and the options the shell runs it with, once its input is read. */
-interface ResolvedToolCommand {
+/** A tool's command and options, once validated. */
+export interface ToolCall {
   cmd: string
-  commandOptions: CommandOptions
+  options: ToolOptions
 }
 
-/** Validates the command and options the script gave a tool, and reads its input into bytes. */
-const resolveToolCommand = async (
-  toolName: ToolName,
-  cmd: unknown,
-  options: unknown,
-): Promise<Result<ResolvedToolCommand>> => {
+/** Validates the command and options the script gave a tool. */
+export const validateToolCall = (toolName: ToolName, cmd: unknown, options: unknown): Result<ToolCall> => {
   const validCmd = validateInput(cmd, nonEmptyStringSchema, { inputLabel: "command", givenTo: toolName })
   if (isErr(validCmd)) return validCmd
 
   const validOptions = validateInput(options, toolOptionsSchema, { inputLabel: "options", givenTo: toolName })
   if (isErr(validOptions)) return validOptions
 
-  const { input, ...otherOptions } = validOptions
-  if (input === undefined) return { cmd: validCmd, commandOptions: otherOptions }
+  return { cmd: validCmd, options: validOptions }
+}
+
+/** Returns the options the shell runs a tool call's command with, which reads its input into bytes. */
+const toCommandOptions = async (toolName: ToolName, toolCall: ToolCall): Promise<Result<CommandOptions>> => {
+  const { input, ...otherOptions } = toolCall.options
+  if (input === undefined) return otherOptions
 
   const inputBytes = await readContentBytes(input, "the input")
-  if (isErr(inputBytes)) return err(toToolFailureMessage(toolName, validCmd), inputBytes)
+  if (isErr(inputBytes)) return err(toToolFailureMessage(toolName, toolCall.cmd), inputBytes)
 
-  return { cmd: validCmd, commandOptions: { input: inputBytes, ...otherOptions } }
+  return { input: inputBytes, ...otherOptions }
+}
+
+/** Runs a validated command for `read` or `exec` and returns its stdout, trimmed. A non-zero exit is an error. */
+export const runExecCommand = async (ctx: ToolContext, toolCall: ToolCall): Promise<Result<string>> => {
+  const { toolName, shell } = ctx
+
+  const commandOptions = await toCommandOptions(toolName, toolCall)
+  if (isErr(commandOptions)) return commandOptions
+
+  const stdout = await shell.exec(toolCall.cmd, commandOptions)
+  if (isErr(stdout)) return err(toToolFailureMessage(toolName, toolCall.cmd), stdout)
+
+  return stdout.trim()
+}
+
+/** Runs a validated command for `inspect` and returns its output and exit code. A non-zero exit is an answer. */
+export const runInspectCommand = async (ctx: ToolContext, toolCall: ToolCall): Promise<Result<InspectResult>> => {
+  const { toolName, shell } = ctx
+
+  const commandOptions = await toCommandOptions(toolName, toolCall)
+  if (isErr(commandOptions)) return commandOptions
+
+  const commandOutput = await shell.inspect(toolCall.cmd, commandOptions)
+  if (isErr(commandOutput)) return err(toToolFailureMessage(toolName, toolCall.cmd), commandOutput)
+
+  const { stdout, stderr, exitCode } = commandOutput
+  return { stdout: stdout.trim(), stderr: stderr.trim(), exitCode }
 }
 
 /** Runs one command for `read` or `exec` and returns its stdout, trimmed. A non-zero exit is an error. */
 export const execCommand = async (ctx: ToolContext, cmd: unknown, options: unknown = {}): Promise<Result<string>> => {
-  const { toolName, shell } = ctx
+  const toolCall = validateToolCall(ctx.toolName, cmd, options)
+  if (isErr(toolCall)) return toolCall
 
-  const toolCommand = await resolveToolCommand(toolName, cmd, options)
-  if (isErr(toolCommand)) return toolCommand
-
-  const stdout = await shell.exec(toolCommand.cmd, toolCommand.commandOptions)
-  if (isErr(stdout)) return err(toToolFailureMessage(toolName, toolCommand.cmd), stdout)
-
-  return stdout.trim()
+  return runExecCommand(ctx, toolCall)
 }
 
 /** Runs one command for `inspect` and returns its output and exit code. A non-zero exit is an answer, not an error. */
@@ -104,14 +127,8 @@ export const inspectCommand = async (
   cmd: unknown,
   options: unknown = {},
 ): Promise<Result<InspectResult>> => {
-  const { toolName, shell } = ctx
+  const toolCall = validateToolCall(ctx.toolName, cmd, options)
+  if (isErr(toolCall)) return toolCall
 
-  const toolCommand = await resolveToolCommand(toolName, cmd, options)
-  if (isErr(toolCommand)) return toolCommand
-
-  const commandOutput = await shell.inspect(toolCommand.cmd, toolCommand.commandOptions)
-  if (isErr(commandOutput)) return err(toToolFailureMessage(toolName, toolCommand.cmd), commandOutput)
-
-  const { stdout, stderr, exitCode } = commandOutput
-  return { stdout: stdout.trim(), stderr: stderr.trim(), exitCode }
+  return runInspectCommand(ctx, toolCall)
 }

@@ -147,9 +147,9 @@ tsinfra records every command's output under its step, and the report shows none
 command only hides it from `-vvv` and from a failure's error, which is when you'd want it. Keep a quiet flag only where
 it changes the output a script uses, like `docker compose ps -q` printing only container IDs.
 
-`read`, `inspect`, and `exec` are the tools. Each runs one command and takes `MaskOptions`. `read` and `exec` return
-stdout and fail on a non-zero exit. `inspect` never fails on a non-zero exit, for a command whose exit code or stderr is
-the answer.
+`read`, `inspect`, and `exec` are the tools. Each runs one command and takes `ToolOptions`: `input` and `maskOutput`.
+`read` and `exec` return stdout and fail on a non-zero exit. `inspect` never fails on a non-zero exit, for a command
+whose exit code or stderr is the answer.
 
 **Values go into a command as environment variables,** not into its text. A step takes `env` and `secretEnv`, and its
 commands reference them the way shell scripts do, as `"$NAME"`:
@@ -212,6 +212,44 @@ each value as it records it, so the record never holds a secret. Your script sti
 **`maskOutput: true` masks a command's output,** for a secret read from the host, like `cat /etc/app/token`. It's an
 option on the tools and on `h.read` and `h.inspect`. The output joins the host's secrets, so later commands mask it too,
 including in a command's text, if a function puts it there.
+
+**`input` sends data to a command's stdin,** for data from the control machine, like a rendered config or a list of
+packages. It's an option on the tools and on `h.read` and `h.inspect`. It takes the same content as `file`: a string,
+bytes, or a `Blob` like `Bun.file(...)`, up to the same 10 MB (see [`file`](#file)). A check needs it as much as a fix,
+like `inspect("diff - /etc/app.conf", { input: rendered })`:
+
+```ts
+await h.ensure("Install brew packages", {
+  want: brewEntries,
+  check: async ({ read }) => parseEntries(await read("brew bundle dump --file=-")),
+  fix: async ({ exec }, { missing, extra }) => {
+    if (missing.length > 0) await exec("brew bundle install --file=-", { input: brewfile })
+    if (extra.length > 0) await exec("brew bundle cleanup --force --file=-", { input: brewfile })
+  },
+})
+```
+
+`h.run` and an `ensure`'s command strings don't take it, because a command string has no options of its own. An
+`ensure`'s `check` and `fix` share one options object, so one `input` couldn't say which command it's for. A check or
+fix function reaches `input` through its tools. A `sudo` in the command passes the input on to the program it runs (see
+[Transport](./transport.md#input)).
+
+The record never holds the input, because it can be a secret, and it can be large. A read or inspect shows it in its
+options as `<content>` (see [CLI](./cli.md#output)). A tool call shows none of its options, so its command's text is
+what says it reads stdin, like `--file=-` or `diff -`. There's no `secret` flag, because nothing records the input, and
+`maskOutput` covers output that repeats it.
+
+The command reads a pipe, not a file. Many commands take `-` or `/dev/stdin` in place of a path. One that only takes a
+path, or that seeks in its input, gets the data written to a temp file first:
+
+```ts
+const tmp = await exec("mktemp")
+await exec(`cat > '${tmp}'`, { input: dump })
+await exec(`restore-tool --file '${tmp}'`)
+```
+
+Data that's useful as a file on its own still belongs in a `file` step, like a `~/.Brewfile` you also run
+`brew bundle --global` against by hand.
 
 Every output a script gets back is trimmed of leading and trailing whitespace, because that is what a script usually
 compares to. That covers `read`, `exec`, and both streams from `inspect`, on `h` and as tools. tsinfra's own comparison
@@ -296,8 +334,9 @@ A non-zero exit fails the host, with the command's stderr. When the exit code or
 [`inspect`](#inspect). A `read` must not change what the script manages, because it also runs during `plan` (see
 [what a check may change](#what-a-check-may-change)). Nothing can enforce that.
 
-A read that needs a secret takes it through `secretEnv`, and a read whose output is a secret takes `maskOutput: true`
-(see [Commands](#commands)). The script always gets the real output.
+A read that needs a secret takes it through `secretEnv`, a read whose output is a secret takes `maskOutput: true`, and
+a read whose command needs data on its stdin takes `input` (see [Commands](#commands)). The script always gets the real
+output.
 
 ## `inspect`
 
@@ -310,7 +349,7 @@ const container = await h.inspect("systemd-detect-virt --container")
 if (container.exitCode !== 0) await tuneKernel(h)
 ```
 
-It takes the same options as `read`: `env`, `secretEnv`, and `maskOutput`, which masks its stdout.
+It takes the same options as `read`: `env`, `secretEnv`, `input`, and `maskOutput`, which masks its stdout.
 
 Check, fix, and run functions get an `inspect` tool too. A command that could not run at all, like one on an unreachable
 host, still fails the host.

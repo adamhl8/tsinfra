@@ -6,6 +6,7 @@ the remote shell.
 <!-- toc -->
 
 - [Commands travel on stdin](#commands-travel-on-stdin)
+  - [Input](#input)
 - [Login shells](#login-shells)
 - [File writes](#file-writes)
   - [How other tools write files](#how-other-tools-write-files)
@@ -70,6 +71,38 @@ export URL='https://example.com'
 Output comes back as stdout, stderr, and an exit code. `ssh` itself exits 255 when the connection fails, so a 255
 always gets the connection error from ssh's stderr rather than being treated as the command's exit code (see
 [SSH and ControlMaster](#ssh-and-controlmaster)).
+
+### Input
+
+A command given `input` (see [Steps](./steps.md#commands)) reads it on its stdin. The input travels the way `file`
+sends content, as base64 in a quoted heredoc inside the script (see [File writes](#file-writes)), decoded into a pipe
+to the command:
+
+```sh
+base64 -d <<'__TSINFRA_EOF__' |
+<input as base64>
+__TSINFRA_EOF__
+{ brew bundle install --file=-
+}
+```
+
+- **The heredoc's body comes before the command,** because a heredoc's body starts at the next newline, and a command
+  can span lines. The shell never searches the command's text for the delimiter, so the command can hold any line.
+- **The delimiter is fixed,** because base64 has no `_`, so the encoded input can't hold it.
+- **Only the script's command is wrapped,** before the step's transport. The env prelude, the `sudo` function, and the
+  outer `{ ... } </dev/null` then wrap it the way they wrap any command, so none of them change.
+- **The pipeline's exit code is the command's,** so `exec` fails and `inspect` answers on the command's own exit code.
+  A command that stops reading early ends `base64` with SIGPIPE, which nothing reports.
+- **The command reads a pipe,** not a file, so a command that seeks in its stdin can't use it.
+- **sudo never takes the input.** A `sudo foo` in the command calls the `sudo` function, which uses `-n` or the askpass
+  helper, never `-S`. So sudo never reads stdin, and the input reaches `foo`.
+- **The recorder sees the command before it's wrapped,** so the record holds the command as the script wrote it, never
+  the input.
+
+The tests check that binary input arrives intact, with the command's own exit code, under dash, busybox sh, and macOS
+`/bin/sh`, and that 10 MB arrives intact over SSH. They also check that a command run with `sudo` gets the input, with
+passwordless sudo and with a password. Like `file`'s content, 10 MB of input takes a host whose `sh` is bash about 2.5
+seconds to read (see [File writes](#file-writes)).
 
 ## Login shells
 

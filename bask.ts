@@ -1,5 +1,5 @@
 import { task } from "@adamhl8/bask"
-import { lint, test as baseTest } from "@adamhl8/configs/bask"
+import { lint, test } from "@adamhl8/configs/bask"
 import bun, { Glob } from "bun"
 
 export * from "@adamhl8/configs/bask"
@@ -21,16 +21,10 @@ export const reportPreview = task(
 // Use one distro per shell: Alpine for busybox, and Debian for dash.
 const DOCKER_DISTROS = ["alpine", "debian"]
 
-// Shadow the base `test` to add `--all`, because the base task declares no args.
-// `lint` still calls the base task, so it leaves out the Docker tests, which need Docker running and download images
-// and packages.
-export const test = task(
-  {
-    desc: "Run the tests",
-    args: { all: { desc: "Also run the tests that need Linux, real root, and real sudo, in Docker" } },
-  },
-  async ({ sh, args }) => {
-    await baseTest()
+test.wrap(
+  { args: { all: { desc: "Also run the tests that need Linux, real root, and real sudo, in Docker" } } },
+  async ({ sh, args, original }) => {
+    await original()
     if (!args.all) return
     for (const distro of DOCKER_DISTROS) {
       const image = `oven/bun:${bun.version}-${distro}`

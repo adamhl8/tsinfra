@@ -1,4 +1,5 @@
 import { MASKED_VALUE } from "#core/session/recorder/masking.ts"
+import { RECORDED_STAND_INS } from "#core/session/recorder/records.ts"
 import type { Style } from "#styles.ts"
 import { styleCurrent, styleItalic, styleMuted, styleValue, styleWanted } from "#styles.ts"
 
@@ -65,10 +66,13 @@ export const changeElement = (got: Value | undefined, want: Value | undefined): 
   return `${gotText} -> ${wantText}`
 }
 
-/** Formats an option's value as its lines, and a masked one as a muted marker, because it's tsinfra's, not the script's. */
+// Mute these, because each is tsinfra's marker, not a value the script gave.
+const OPTION_MARKERS = new Set<string>([MASKED_VALUE, ...Object.values(RECORDED_STAND_INS)])
+
+/** Formats an option's value as its lines, and a masked value or a stand-in as a muted marker. */
 export const optionValueLineElements = (value: string | boolean): string[] => {
   if (typeof value === "boolean") return [applyValueRules(value, styleValue)]
-  if (value === MASKED_VALUE) return [styleMuted(value)]
+  if (OPTION_MARKERS.has(value)) return [styleMuted(value)]
   return value.split("\n").map((line) => applyValueRules(line, styleValue))
 }
 

@@ -80,6 +80,14 @@ describe("h.read with input", () => {
     )
   })
 
+  it("should record a stand-in in the step's options, never the input", async () => {
+    const hostSession = await createSession()
+    await hostSession.host.read("cat >/dev/null", { input: "secret input" })
+
+    expect(getStepRecords(hostSession.hostRecord)[0]?.options).toStrictEqual({ input: "<content>" })
+    expect(JSON.stringify(hostSession.hostRecord)).not.toContain("secret input")
+  })
+
   it("should fail the host when the input isn't a string, bytes, or a Blob", async () => {
     const { host: h } = await createSession()
 

@@ -6,7 +6,6 @@ rest of the docs describe tsinfra as it is.
 <!-- toc -->
 
 - [Next](#next)
-  - [Sending data to a command](#sending-data-to-a-command)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
   - [Live progress](#live-progress)
@@ -39,174 +38,6 @@ rest of the docs describe tsinfra as it is.
 ## Next
 
 In the order they'll be built.
-
-### Sending data to a command
-
-A command's stdin is `/dev/null`, because the script itself travels on stdin (see
-[Transport](./transport.md#commands-travel-on-stdin)). A script has no clean way to hand a command data from the control
-machine. `exec` can carry the data inside a hand-written base64 heredoc, but that is the multi-line shell this design
-avoids. The same gap stops a fix from writing a file, because `h.file` inside a fix is a step inside a step.
-
-The answer is an `input` option, sent to the command's stdin. The [Homebrew](#homebrew) integration needs it first:
-
-```ts
-await h.ensure("Install brew packages", {
-  want: brewEntries,
-  check: async ({ read }) => parseEntries(await read("brew bundle dump --file=-")),
-  fix: async ({ exec }, { missing, extra }) => {
-    if (missing.length > 0) await exec("brew bundle install --file=-", { input: brewfile })
-    if (extra.length > 0) await exec("brew bundle cleanup --force --file=-", { input: brewfile })
-  },
-})
-```
-
-**Where it's taken.**
-
-- **The `exec`, `read`, and `inspect` tools, and `h.read` and `h.inspect`,** next to `maskOutput`. A check needs it as
-  much as a fix, like `inspect("diff - /etc/app.conf", { input: rendered })`.
-- **Not `h.run`, or an `ensure`'s command strings.** A command string has no options of its own. `run` could take
-  `input` as a step option, the way it takes `env`. An `ensure`'s `check` and `fix` share one options object, so one
-  `input` couldn't say which command it's for. A check or fix function already reaches `input` through its tools.
-
-**What it takes.** The same content as `file`: a string, bytes, or a `Blob` like `Bun.file(...)`, up to the same 10 MB,
-for the same reason. A larger input, like an image for `docker load`, waits on [Files over 10 MB](#files-over-10-mb).
-
-**How it travels.** The input travels the way `file` sends content, base64 in a quoted heredoc inside the script (see
-[Transport](./transport.md#file-writes)). The tests already prove that under dash, busybox sh, macOS `/bin/sh`, and over
-SSH. The heredoc decodes into a pipe to the script's command:
-
-```sh
-base64 -d <<'__TSINFRA_EOF__' |
-<input as base64>
-__TSINFRA_EOF__
-{ brew bundle install --file=-
-}
-```
-
-- **The heredoc's body comes before the command,** because a heredoc's body starts at the next newline, and a command
-  can span lines. The shell never searches the command's text for the delimiter, so the command can hold any line.
-- **The delimiter is fixed,** because base64 has no `_`, so the encoded input can't hold it.
-- **Only the script's command is wrapped,** before the step's transport. The env prelude, the `sudo` function, and the
-  outer `{ ... } </dev/null` then wrap it the way they wrap any command, so none of them change.
-- **The pipeline's exit code is the command's,** so `exec` fails and `inspect` answers on the command's own exit code.
-  A command that stops reading early ends `base64` with SIGPIPE, which nothing reports. A check by hand under macOS
-  `/bin/sh`, started through Bun's spawn, found the bytes intact, the exit code passed through, and nothing on stderr.
-- **The command reads a pipe,** not a file, so a command that seeks in its stdin can't use it (see the temp file below).
-- **sudo never takes the input.** The tools and the read steps never run as root. A `sudo foo` the script writes in the
-  command calls the `sudo` function, which uses `-n` or the askpass helper, never `-S`. So sudo never reads stdin, and
-  the input reaches `foo`.
-
-**What's recorded.** The record never holds the input, because it may be a secret, and it can be large. A command's
-record keeps its text as the script wrote it, and the input's size. The report formats the size:
-
-- **A step's commands** show it after the command at `-vv`, in angle brackets like `<content as base64>`:
-
-  ```
-  commands:
-    $ brew bundle install --file=- <input: 1.2 kB>
-  ```
-
-- **A read or inspect** lists no commands, because its name is its command. So `input` joins its `options:` line at
-  `-vv`, with its size at `-vvv`.
-
-There's no `secret` flag. The size is all the record shows, and `maskOutput` already covers output that repeats the
-input.
-
-**Commands that only take a path.** Many take `-` or `/dev/stdin`. One that doesn't gets the data written to a temp file
-first:
-
-```ts
-const tmp = await exec("mktemp")
-await exec(`cat > '${tmp}'`, { input: dump })
-await exec(`restore-tool --file '${tmp}'`)
-```
-
-A `tempFile` tool that removes its file when the step ends would be cleaner. But the tools have no hook for the end of a
-step, and a temp file a check writes would be a write during `plan`. Add one, to the change tools only, when a port
-needs a command that can't read stdin.
-
-**A managed file is a separate choice.** Writing `~/.Brewfile` with `file` is still right when the file is useful on its
-own, like for running `brew bundle --global` by hand. That's how to model the integration, not a workaround for missing
-stdin.
-
-**Implementation plan.** Each numbered piece is one commit. A piece can leave the feature unfinished, but it passes
-lint and has its own tests. The lettered steps inside a piece are small enough to review one at a time, in order. They
-don't need to pass lint on their own.
-
-#### 1. Share `file`'s content reading
-
-Nothing changes in behavior.
-
-- **1a.** Move the 10 MB limit and `getContentBytes` from `handlers/file/resolved-content.ts` into
-  `handlers/shared/content.ts`, exported as `readContentBytes`. It takes the text that names content that isn't a
-  local file, like `the content given to 'file'`, in place of the fixed one. A `Blob` with a name still names its local
-  file.
-- **1b.** Move `FileContent`'s type, its schema, and `INVALID_CONTENT_REASON` from `handlers/file.ts` into the same
-  module, as `Content` and `contentSchema`. `file.ts` keeps exporting `FileContent` as the same type, so the public
-  name doesn't change.
-- **1c.** Have `resolveContent` call `readContentBytes` and hash what it returns. The existing `file` tests cover it.
-
-#### 2. Send input through the shell
-
-- **2a.** Add `wrapCommandWithInput` to `core/transport/utils.ts`, next to `wrapCommand`, building the shape above.
-  Move the `__TSINFRA_EOF__` delimiter there too, and have `file/write.ts` import it.
-- **2b.** Add `input` (bytes) to `CommandOptions`, above `maskOutput`. With an input, `createShell` sends the wrapped
-  command, and passes the command as the script wrote it as `recordedCmd`.
-- **2c.** Add `inputSize` to `CommandRecord`, and have `createRecordingTransport` set it from the input's length. The
-  options carry the input, not its size, because `core/transport/` imports nothing from `core/session/`, where `Bytes`
-  lives.
-- **2d.** Tests on the local transport, in a new `src/core/transport/__tests__/shell.test.ts`:
-  - binary input arrives intact
-  - the command's exit code comes back, through `exec` and `inspect`
-  - a command that never reads its stdin, given 10 MB, succeeds with an empty stderr
-  - a multi-line command, and one holding a line equal to the delimiter
-  - a step transport's `env` reaches the command
-  - the record holds the command as written and the size, never the input
-
-#### 3. `input` on the tools and the read steps
-
-- **3a.** Add `InputOptions` and `inputOptionsSchema` to `handlers/options/handler.ts`, above `MaskOptions`.
-- **3b.** Add `ToolOptions`, extending `InputOptions` then `MaskOptions`, for `Exec` and `Inspect` in
-  `handlers/tools.ts`, and validate it with both schemas merged, in that order. Export `InputOptions` and `ToolOptions`
-  from `src/index.ts`.
-- **3c.** Pull the validation `execCommand` and `inspectCommand` share into `resolveToolCommand`, which also reads the
-  input with `readContentBytes`, named as `the input`. A failed read is wrapped like a failed run, as in
-  `failed to run 'cat' -> the input is 11 MB, above the 10 MB limit`. Export `Content` from `src/index.ts`.
-- **3d.** Have `ReadOptions` and `InspectOptions` extend `InputOptions`. Their handlers already pass their options to
-  `execCommand` and `inspectCommand`.
-- **3e.** Tests on `@local`:
-  - `h.read` and `h.inspect` with input, in `read.test.ts` and `inspect.test.ts`, and `inspect`'s non-zero exit with
-    input
-  - a check whose `read` takes input, and a fix whose `exec` does, in `ensure.test.ts`
-  - a `Blob` from `Bun.file`
-  - input over 10 MB, and a value of the wrong type, each failing the host with its message
-
-#### 4. Report the input's size
-
-- **4a.** Carry `inputSize` onto `StepCommand` in `toStepCommand` (`src/report/host-block/details/commands.ts`), and
-  show it after the command in `formatCommands` as `<input: 1.2 kB>`, with the word in a constant.
-- **4b.** For a read or inspect, build an `input` option from its one command's `inputSize` in `toOptionsDetails`, with
-  the formatted size as its value.
-- **4c.** Add a step command with input, and an `h.read` with input, to `report-preview.ts`.
-- **4d.** Test in `src/__tests__/report.test.ts`: the size at `-vv` and not at `-v`, the read's `input` option at `-vv`
-  and its size at `-vvv`, and the input's text nowhere in the output.
-
-#### 5. Docker tests
-
-- **5a.** `input-ssh.docker.ts` in `handlers/__tests__/`, on Alpine and Debian over SSH: 10 MB of binary input through
-  `exec` and through `h.read` arrives intact, and a command that never reads its stdin succeeds with an empty stderr.
-- **5b.** `input-sudo.docker.ts`: `sudo cat` with input gives back the input, for a host with passwordless sudo and for
-  one with a password.
-
-#### 6. Docs
-
-- **6a.** Move this design into the docs:
-  - `input` on the tools into [Steps](./steps.md#commands), with the brew example and commands that only take a path,
-    and into [`read`](./steps.md#read) and [`inspect`](./steps.md#inspect)
-  - how it travels into [Transport](./transport.md#commands-travel-on-stdin), after the `</dev/null` wrapper
-  - the `<input: ...>` and the read's `input` option into the `-vv` and `-vvv` levels in [CLI](./cli.md)
-- **6b.** Remove this section from the roadmap. Add the `tempFile` tool to [Maybe later](#maybe-later), mention `input`
-  in [Files over 10 MB](#files-over-10-mb), and note in [Homebrew](#homebrew) that `brew bundle` takes `--file=-`.
 
 ## Planned
 
@@ -441,8 +272,8 @@ Fixes and finishing work for what's already built.
   record, and fail the host through `callOrFail` when that step is no longer the running one. Do not throw in
   `recordCommands`, because only `session.ts` throws, and a throw there would skip recording the failure in
   `callOrFail`.
-- **Run the Docker tests in CI.** `bask test --all` stays out of `bask lint`, because it needs Docker and downloads
-  images and packages, so nothing runs it automatically yet.
+- **Run the Docker tests in CI.** Only `bask test --all` runs the Docker tests, never `bask lint`, because they need
+  Docker and download images and packages, so nothing runs them automatically yet.
 - **Check SELinux labels on a VM.** `file`'s `chcon` and `restorecon` are untested on real labels, because containers
   run with SELinux off.
 - **The user docs.** When the full docs get written, start from [Recipes](./recipes.md), and add the comparison with
@@ -554,7 +385,8 @@ is reached through a symlink.
 ### Files over 10 MB
 
 `file` sends content in a base64 heredoc inside the write script, which the shell holds in memory before it runs, and
-base64 adds a third. That is fine for config files, so content over 10 MB is refused (see [Steps](./steps.md#file)).
+base64 adds a third. `input` travels the same way. That is fine for config files, so content or input over 10 MB is
+refused (see [Steps](./steps.md#file)). A larger input, like an image for `docker load`, waits on this too.
 A `Blob` from `Bun.file` already offers `stream()`, so a streaming path could read the local file in chunks too.
 Every agentless tool uses SFTP or scp instead, which streams. A streaming path for large files would upload with `scp`
 to a temp file in the destination's directory as the SSH user, which works without `sudo`. With `sudo`, it needs a
@@ -695,9 +527,10 @@ What's known so far about the ideas in [Integration ideas](#integration-ideas).
 
 #### Homebrew
 
-`tsinfra/brew`: a Brewfile written with `file`, an `ensure` on `brew bundle check --no-upgrade` with
-`HOMEBREW_NO_AUTO_UPDATE` set, and nix-darwin's cleanup modes. `plan` computes the extras itself, because
-`brew bundle cleanup` prompts.
+`tsinfra/brew`: a Brewfile, an `ensure` on `brew bundle check --no-upgrade` with `HOMEBREW_NO_AUTO_UPDATE` set, and
+nix-darwin's cleanup modes. `plan` computes the extras itself, because `brew bundle cleanup` prompts. The Brewfile goes
+to `brew bundle --file=-` through `input`, or is written with `file` when it's useful on its own, like for running
+`brew bundle --global` by hand.
 
 #### Portable integrations
 
@@ -770,6 +603,11 @@ Opt-in features with no real case yet:
   with an extension is the lightest model (see [Backups](#backups-of-replaced-files)).
 - **`env` on a tool call,** for a value that only exists inside a step's function, like a container ID from one
   `exec`, which goes into the next command's string today. Add it if a port needs one.
+- **A `tempFile` tool,** for a command that only takes a path, not `input` on its stdin (see
+  [Steps](./steps.md#commands)). It would write the data to a temp file and remove the file when the step ends. It
+  would be a change tool only, because a temp file a check writes is a write during `plan`. The tools have no hook for
+  the end of a step yet, so a fix writes the temp file with `mktemp` and `cat` today. Add it when a port needs a
+  command that can't read stdin.
 - **An argument list as a command,** like `exec(["tar", "-xzf", name])`, rendered by quoting each element with
   `quoteShellArg`. It's safe for any value, with no variable to name, like Ansible's `command` module and Chef's array
   form of `execute`. Pipes, redirects, and `$VAR` don't fit it, so it would sit beside command strings, not replace

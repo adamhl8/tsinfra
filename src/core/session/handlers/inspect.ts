@@ -4,7 +4,7 @@ import { isErr } from "ts-explicit-errors"
 import type { InputOptions, MaskOptions } from "#core/session/handlers/options/handler.ts"
 import type { EnvOptions } from "#core/session/handlers/options/shell.ts"
 import type { InspectResult } from "#core/session/handlers/tools.ts"
-import { inspectCommand } from "#core/session/handlers/tools.ts"
+import { runInspectCommand, validateToolCall } from "#core/session/handlers/tools.ts"
 import type { HandlerReturn, StepContext } from "#core/session/step.ts"
 
 /** The options `h.inspect` takes. */
@@ -16,10 +16,14 @@ export const handleInspect = async (
   cmd: unknown,
   options: unknown = {},
 ): Promise<Result<HandlerReturn<InspectResult>>> => {
-  const { shell } = ctx
+  const { shell, recordOptions } = ctx
 
-  // Leave `options` to `inspectCommand`, which validates `input` and `maskOutput` for the tool too.
-  const inspectResult = await inspectCommand({ toolName: "inspect", shell }, cmd, options)
+  const toolCall = validateToolCall("inspect", cmd, options)
+  if (isErr(toolCall)) return toolCall
+  // Record `input` before running, because reading it can fail.
+  recordOptions({ input: toolCall.options.input })
+
+  const inspectResult = await runInspectCommand({ toolName: "inspect", shell }, toolCall)
   if (isErr(inspectResult)) return inspectResult
 
   return { status: "observed", value: inspectResult }

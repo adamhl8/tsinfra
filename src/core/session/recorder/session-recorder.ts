@@ -14,9 +14,10 @@ import type {
   HostRecord,
   SessionFailureKind,
   StepOptionsRecord,
+  StepOptionsToRecord,
   StepRecord,
 } from "#core/session/recorder/records.ts"
-import { RECORDED_OPTION_DEFAULTS } from "#core/session/recorder/records.ts"
+import { RECORDED_OPTION_DEFAULTS, RECORDED_STAND_INS } from "#core/session/recorder/records.ts"
 import type { StepKind, StepStatus } from "#core/session/step.ts"
 import type { Transport } from "#core/transport.ts"
 import type { Shell } from "#core/transport/shell.ts"
@@ -44,14 +45,24 @@ interface StepShells {
   toolShell: Shell
 }
 
-// Look each default up by an option's name, because an option without one, like `validate`, has none to compare to.
+// Look each default and stand-in up by an option's name, because most options have neither.
 const OPTION_DEFAULTS = new Map<string, unknown>(Object.entries(RECORDED_OPTION_DEFAULTS))
+const OPTION_STAND_INS = new Map<string, string>(Object.entries(RECORDED_STAND_INS))
 
-/** Returns `options` without the ones at their defaults or unset, because the record holds only what a step set. */
-const toSetOptions = (options: StepOptionsRecord): StepOptionsRecord => {
+/**
+ * Returns the options the record holds: each one that's set and not at its default, as given or as its stand-in. The
+ * record holds only what a step set.
+ */
+const toRecordedOptions = (options: StepOptionsToRecord): StepOptionsRecord => {
   const setEntries = Object.entries(options).filter(([name, value]) => !deepEquals(value, OPTION_DEFAULTS.get(name)))
-  // Cast back, because `Object.fromEntries` loses the keys' types, and filtering only removes entries.
-  return Object.fromEntries(setEntries)
+  const recordedEntries = setEntries.map(([name, value]): [string, unknown] => [
+    name,
+    OPTION_STAND_INS.get(name) ?? value,
+  ])
+  // Return the result unchecked, because `Object.fromEntries` loses the keys' types.
+  // TypeScript accepts it as `StepOptionsRecord` only because every option is optional.
+  // Each entry is still an option the record holds, as given or as its stand-in.
+  return Object.fromEntries(recordedEntries)
 }
 
 /** Records the session's part of a host's run, once preparation has finished: each step, and the host's failure. */
@@ -62,10 +73,11 @@ export interface SessionRecorder {
    */
   getStepShells: (options: ValidStepShellOptions) => StepShells
   /**
-   * Records `options` on the running step, after any it already has, masked, and leaves out each one at its default. A
-   * step's handler calls it right after validating its options, so a failure can't lose them.
+   * Records `options` on the running step, after any it already has, masked, and leaves out each one at its default.
+   * Records an option like `input` as its stand-in. A step's handler calls it right after validating its options, so a
+   * failure can't lose them.
    */
-  recordOptions: (options: StepOptionsRecord) => void
+  recordOptions: (options: StepOptionsToRecord) => void
   /** Returns the error the host failed with, or nothing while it hasn't failed. */
   getFailure: () => Error | undefined
   /**
@@ -119,8 +131,8 @@ export const createSessionRecorder = (
   const createRecordingShell = (shellTransport: Transport): Shell =>
     createShell(createRecordingTransport(shellTransport, commandRecorder))
 
-  const recordOptions = (_options: StepOptionsRecord) => {
-    const options = mask(toSetOptions(_options))
+  const recordOptions = (_options: StepOptionsToRecord) => {
+    const options = mask(toRecordedOptions(_options))
     if (hostRecord.runningStep) hostRecord.runningStep.options = { ...hostRecord.runningStep.options, ...options }
   }
 

@@ -134,6 +134,7 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
       // row against `(none)`, an existing one whose mode changes, and one that was already right. A triggered multi-line
       // run and one that didn't trigger.
       // A read with `env` and `secretEnv`, with a multi-line, an empty, a padded, and a masked value.
+      // A read with `input`, whose value at `-vvv` is a muted stand-in.
       // Commands at `-vv`, and their phases, output, and labels at `-vvv`.
       name: "elements",
       target: "@local",
@@ -243,6 +244,7 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
           env: { URL: "https://example.com", NOTES: "first line\nsecond line", EMPTY: "", PADDED: " padded" },
           secretEnv: { TOKEN: "s3cret-token" },
         })
+        await h.read("wc -l", { input: "first line\nsecond line\n" })
       },
     },
     {
