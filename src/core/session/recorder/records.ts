@@ -4,9 +4,10 @@ import type { EnsureOptions } from "#core/session/handlers/ensure.ts"
 import type { Want } from "#core/session/handlers/ensure/want.ts"
 import type { FileOptions } from "#core/session/handlers/file.ts"
 import type { LinkOptions } from "#core/session/handlers/link.ts"
-import type { InputOptions } from "#core/session/handlers/options/handler.ts"
+import type { InputOptions, MaskOptions } from "#core/session/handlers/options/handler.ts"
 import type { StepShellOptions } from "#core/session/handlers/options/shell.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
+import type { ToolName, ToolOptions } from "#core/session/handlers/tools.ts"
 import type { StepKind, StepStatus } from "#core/session/step.ts"
 import type { CommandOutput } from "#core/transport.ts"
 
@@ -99,10 +100,10 @@ export interface StepRecord {
 const NO_VARIABLES: Record<string, string> = {}
 
 /**
- * The defaults of the options a step's record holds, so the recorder leaves out any option still at its default. Each
- * schema declares its own defaults, and the tests that record a step with no options catch any default that differs.
- * Check it against `RecordableOptions`, so an option added, removed, or retyped there fails to compile here. Leave out
- * `validate` and `input`, because they have no default.
+ * The defaults of the options a step's or a tool call's record holds, so the recorder leaves out any option still at
+ * its default. Each schema declares its own defaults, and the tests that record a step with no options catch any
+ * default that differs. Check it against `RecordableOptions`, so an option added, removed, or retyped there fails to
+ * compile here. Leave out `validate` and `input`, because they have no default.
  */
 export const RECORDED_OPTION_DEFAULTS = {
   sudo: false,
@@ -112,11 +113,12 @@ export const RECORDED_OPTION_DEFAULTS = {
   overwrite: true,
   force: false,
   verify: true,
+  maskOutput: false,
 } satisfies Required<Omit<RecordableOptions, "validate" | "input">>
 
 /**
- * Every option a step's record can hold, as the handler gives it: the shell options, then the step's own options that
- * the report shows.
+ * Every option a step's or a tool call's record can hold, as the handler or the tool gives it: the shell options, then
+ * the step's own options that the report shows. A tool call's are the ones `ToolOptions` names.
  */
 interface RecordableOptions
   extends
@@ -124,7 +126,8 @@ interface RecordableOptions
     Pick<FileOptions, "secret" | "overwrite">,
     Pick<LinkOptions, "force">,
     Pick<EnsureOptions<Want>, "verify">,
-    InputOptions {
+    InputOptions,
+    MaskOptions {
   /** `validate`'s command, which the handler builds from the function the script passed. */
   validate?: string
 }
@@ -151,11 +154,23 @@ export interface CommandRecord {
   cmd: string
   /** A short name for a command tsinfra wrote itself. Unset for a script's command. */
   label?: string
+  /** The tool call that ran the command. Unset for a step's own command and for tsinfra's. */
+  toolCall?: ToolCallRecord
   /** The part of `converge` that ran the command. Unset for a step that doesn't converge. */
   phase?: ConvergePhase
   /** Unset until the command finishes. */
   output?: Result<CommandOutput>
 }
+
+/** A tool call a step's function made: the tool the script called, and the options it set. */
+export interface ToolCallRecord {
+  toolName: ToolName
+  /** The options the call set that the report shows, recorded like a step's. */
+  options: ToolOptionsRecord
+}
+
+/** The options a tool call's record holds: each one as given, or its stand-in. */
+export type ToolOptionsRecord = Pick<StepOptionsRecord, keyof ToolOptions>
 
 /** The parts of `converge` that run commands, in order. */
 export type ConvergePhase = "before" | "fix" | "after"

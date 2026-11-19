@@ -26,14 +26,20 @@ import type { Change } from "#core/session/handlers/shared/change.ts"
 import type { PathAttributeClaim } from "#core/session/handlers/shared/filesystem/attributes/claims.ts"
 import { resolvePath } from "#core/session/handlers/shared/filesystem/path.ts"
 import { validateInput } from "#core/session/handlers/shared/validate-input.ts"
-import type { ChangeTools, Exec, Inspect, InspectResult, ReadTools } from "#core/session/handlers/tools.ts"
+import type {
+  ChangeTools,
+  Exec,
+  GetToolShell,
+  Inspect,
+  InspectResult,
+  ReadTools,
+} from "#core/session/handlers/tools.ts"
 import { execCommand, inspectCommand } from "#core/session/handlers/tools.ts"
 import type { HostMeta } from "#core/session/host-meta.ts"
 import type { SessionRecorder } from "#core/session/recorder/session-recorder.ts"
 import type { SavedStateManager } from "#core/session/saved-state.ts"
 import type { ChangeStepKind, HandlerReturn, StepContext, StepKind } from "#core/session/step.ts"
 import { isChangeStepKind, isPathStepKind, nonEmptyStringSchema } from "#core/session/step.ts"
-import type { Shell } from "#core/transport/shell.ts"
 import type { Mode } from "#mode.ts"
 
 /** What a host's session needs, set up before any script runs. */
@@ -153,14 +159,14 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
     return value
   }
 
-  /** Returns the tools a step's functions are given, running their commands on the step's `toolShell`. */
-  const createTools = (toolShell: Shell) => {
+  /** Returns the tools a step's functions are given, running each call's command on its own shell from `getToolShell`. */
+  const createTools = (getToolShell: GetToolShell) => {
     const readTool: Exec = async (cmd, options) =>
-      callOrFail(async () => execCommand({ toolName: "read", shell: toolShell }, cmd, options))
+      callOrFail(async () => execCommand({ toolName: "read", getToolShell }, cmd, options))
     const inspectTool: Inspect = async (cmd, options) =>
-      callOrFail(async () => inspectCommand({ toolName: "inspect", shell: toolShell }, cmd, options))
+      callOrFail(async () => inspectCommand({ toolName: "inspect", getToolShell }, cmd, options))
     const execTool: Exec = async (cmd, options) =>
-      callOrFail(async () => execCommand({ toolName: "exec", shell: toolShell }, cmd, options))
+      callOrFail(async () => execCommand({ toolName: "exec", getToolShell }, cmd, options))
     const readTools: ReadTools = { read: readTool, inspect: inspectTool }
     const changeTools: ChangeTools = { exec: execTool, inspect: inspectTool }
     return { readTools, changeTools }
@@ -230,8 +236,8 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
         return validOptions
       }
 
-      const { stepShell, toolShell } = getStepShells(validOptions)
-      const { readTools, changeTools } = createTools(toolShell)
+      const { stepShell, getToolShell } = getStepShells(validOptions)
+      const { readTools, changeTools } = createTools(getToolShell)
 
       const ctx: StepContext<K> = {
         stepName: validName,

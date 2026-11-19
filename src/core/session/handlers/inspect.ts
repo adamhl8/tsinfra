@@ -20,8 +20,9 @@ export const handleInspect = async (
 
   const toolCall = validateToolCall("inspect", cmd, options)
   if (isErr(toolCall)) return toolCall
-  // Record `input` before running, because reading it can fail.
-  recordOptions({ input: toolCall.options.input })
+  // Record the options before running, because reading `input` can fail.
+  const { input, maskOutput } = toolCall.options
+  recordOptions({ input, maskOutput })
 
   const inspectResult = await runInspectCommand({ toolName: "inspect", shell }, toolCall)
   if (isErr(inspectResult)) return inspectResult

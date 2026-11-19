@@ -5,6 +5,7 @@ import { err, isErr } from "ts-explicit-errors"
 import type { ValidHostOptions } from "#core/hosts/host.ts"
 import type { ValidStepShellOptions } from "#core/session/handlers/options/shell.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
+import type { GetToolShell, ToolName, ToolOptions } from "#core/session/handlers/tools.ts"
 import type { HostMeta } from "#core/session/host-meta.ts"
 import type { CommandRecorder } from "#core/session/recorder/commands.ts"
 import { createRecordingTransport } from "#core/session/recorder/commands.ts"
@@ -17,6 +18,7 @@ import type {
   StepOptionsRecord,
   StepOptionsToRecord,
   StepRecord,
+  ToolCallRecord,
 } from "#core/session/recorder/records.ts"
 import { RECORDED_OPTION_DEFAULTS, RECORDED_STAND_INS } from "#core/session/recorder/records.ts"
 import type { StepKind, StepStatus } from "#core/session/step.ts"
@@ -42,8 +44,11 @@ export interface ConvergeRecorder {
 interface StepShells {
   /** Runs the step's own commands with its options. */
   stepShell: Shell
-  /** Runs the tools' commands with the step's variables, and never as root, because no tool takes `sudo`. */
-  toolShell: Shell
+  /**
+   * Returns a shell for one tool call, which records the call on its command. It runs with the step's variables, and
+   * never as root, because no tool takes `sudo`.
+   */
+  getToolShell: GetToolShell
 }
 
 // Look each default and stand-in up by an option's name, because most options have neither.
@@ -52,10 +57,12 @@ const OPTION_STAND_INS = new Map<string, string>(Object.entries(RECORDED_STAND_I
 
 /**
  * Returns the options the record holds: each one that's set and not at its default, as given or as its stand-in. The
- * record holds only what a step set.
+ * record holds only what a step or a tool call set.
  */
 const toRecordedOptions = (options: StepOptionsToRecord): StepOptionsRecord => {
-  const setEntries = Object.entries(options).filter(([name, value]) => !deepEquals(value, OPTION_DEFAULTS.get(name)))
+  const setEntries = Object.entries(options).filter(
+    ([name, value]) => value !== undefined && !deepEquals(value, OPTION_DEFAULTS.get(name)),
+  )
   const recordedEntries = setEntries.map(([name, value]): [string, unknown] => [
     name,
     OPTION_STAND_INS.get(name) ?? value,
@@ -117,11 +124,13 @@ export const createSessionRecorder = (
 
   const mask = <T>(value: T): T => maskSecrets(value, secrets)
 
-  const commandRecorder: CommandRecorder = {
+  /** Returns a command recorder that records `toolCallRecord` on each command, when it's given one. */
+  const createCommandRecorder = (toolCallRecord?: ToolCallRecord): CommandRecorder => ({
     recordCommand: (commandRecord) => {
       // Assign the masked `cmd` onto this record, because the recording transport passes this same record to
       // `recordOutput`.
       commandRecord.cmd = mask(commandRecord.cmd)
+      if (toolCallRecord) commandRecord.toolCall = toolCallRecord
       // Stamp the phase before the command runs, because a reader wants to know when a command started.
       if (currentPhase) commandRecord.phase = currentPhase
       hostRecord.runningStep?.commands.push(commandRecord)
@@ -131,11 +140,14 @@ export const createSessionRecorder = (
       if (maskOutput && !isErr(output)) addSecret(secrets, output.stdout.trim())
       commandRecord.output = mask(output)
     },
-  }
+  })
 
-  /** Returns a shell on `shellTransport` that records each command under the running step. */
-  const createRecordingShell = (shellTransport: Transport): Shell =>
-    createShell(createRecordingTransport(shellTransport, commandRecorder))
+  /**
+   * Returns a shell on `shellTransport` that records each command under the running step, with `toolCallRecord` when
+   * it's given one.
+   */
+  const createRecordingShell = (shellTransport: Transport, toolCallRecord?: ToolCallRecord): Shell =>
+    createShell(createRecordingTransport(shellTransport, createCommandRecorder(toolCallRecord)))
 
   const recordOptions = (_options: StepOptionsToRecord) => {
     const options = mask(toRecordedOptions(_options))
@@ -149,11 +161,16 @@ export const createSessionRecorder = (
     // Record each command before the step transport adds the prelude and wraps it in `sudo sh -s`.
     // The record then holds the step's own script.
     const stepShell = createRecordingShell(createStepTransport(transport, { sudo: _shellOptions.sudo, variables }))
-    const toolShell = createRecordingShell(createStepTransport(transport, { sudo: false, variables }))
+
+    const getToolShell = (toolName: ToolName, _toolOptions: ToolOptions): Shell => {
+      const options = mask(toRecordedOptions(_toolOptions))
+      const toolCallRecord: ToolCallRecord = { toolName, options }
+      return createRecordingShell(createStepTransport(transport, { sudo: false, variables }), toolCallRecord)
+    }
 
     recordOptions(_shellOptions)
 
-    return { stepShell, toolShell }
+    return { stepShell, getToolShell }
   }
 
   // Keep the first failure's error, because calls made at once with `Promise.all` can each fail.

@@ -63,8 +63,8 @@ export URL='https://example.com'
 - **The recorder sees each command before the step's transport changes it,** so the record holds the command as the
   script wrote it, without the prelude or `sudo sh -s`. The step's record keeps the options it set, with each secret as
   `[MASKED]` (see [What a host records](./cli.md#what-a-host-records)).
-- **A tool call inside the step's functions gets the same prelude.** The tools get a shell built for each step from
-  the same options, with `sudo` off, because no tool runs as root.
+- **A tool call inside the step's functions gets the same prelude.** Each tool call gets a shell of its own, built
+  from the step's options, with `sudo` off, because no tool runs as root.
 - **Preparation's commands get no prelude,** because only steps take `env`.
 
 Output comes back as stdout, stderr, and an exit code. `ssh` itself exits 255 when the connection fails, so a 255

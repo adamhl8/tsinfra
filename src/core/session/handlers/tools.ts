@@ -42,8 +42,17 @@ export interface InspectResult {
 
 export type ToolName = keyof ReadTools | keyof ChangeTools
 
-/** What a tool is given: the name the script called it by, and the session's shell. */
+/** Returns a shell for one tool call, which records the call on its command. */
+export type GetToolShell = (toolName: ToolName, toolOptions: ToolOptions) => Shell
+
+/** What a tool is given: the name the script called it by, and where to get a shell for each call. */
 export interface ToolContext {
+  toolName: ToolName
+  getToolShell: GetToolShell
+}
+
+/** What runs one validated command: the name the script called the tool or step by, and the shell to run it on. */
+interface CommandContext {
   toolName: ToolName
   shell: Shell
 }
@@ -87,7 +96,7 @@ const toCommandOptions = async (toolName: ToolName, toolCall: ToolCall): Promise
 }
 
 /** Runs a validated command for `read` or `exec` and returns its stdout, trimmed. A non-zero exit is an error. */
-export const runExecCommand = async (ctx: ToolContext, toolCall: ToolCall): Promise<Result<string>> => {
+export const runExecCommand = async (ctx: CommandContext, toolCall: ToolCall): Promise<Result<string>> => {
   const { toolName, shell } = ctx
 
   const commandOptions = await toCommandOptions(toolName, toolCall)
@@ -100,7 +109,7 @@ export const runExecCommand = async (ctx: ToolContext, toolCall: ToolCall): Prom
 }
 
 /** Runs a validated command for `inspect` and returns its output and exit code. A non-zero exit is an answer. */
-export const runInspectCommand = async (ctx: ToolContext, toolCall: ToolCall): Promise<Result<InspectResult>> => {
+export const runInspectCommand = async (ctx: CommandContext, toolCall: ToolCall): Promise<Result<InspectResult>> => {
   const { toolName, shell } = ctx
 
   const commandOptions = await toCommandOptions(toolName, toolCall)
@@ -115,10 +124,13 @@ export const runInspectCommand = async (ctx: ToolContext, toolCall: ToolCall): P
 
 /** Runs one command for `read` or `exec` and returns its stdout, trimmed. A non-zero exit is an error. */
 export const execCommand = async (ctx: ToolContext, cmd: unknown, options: unknown = {}): Promise<Result<string>> => {
-  const toolCall = validateToolCall(ctx.toolName, cmd, options)
+  const { toolName, getToolShell } = ctx
+
+  const toolCall = validateToolCall(toolName, cmd, options)
   if (isErr(toolCall)) return toolCall
 
-  return runExecCommand(ctx, toolCall)
+  const shell = getToolShell(toolName, toolCall.options)
+  return runExecCommand({ toolName, shell }, toolCall)
 }
 
 /** Runs one command for `inspect` and returns its output and exit code. A non-zero exit is an answer, not an error. */
@@ -127,8 +139,11 @@ export const inspectCommand = async (
   cmd: unknown,
   options: unknown = {},
 ): Promise<Result<InspectResult>> => {
-  const toolCall = validateToolCall(ctx.toolName, cmd, options)
+  const { toolName, getToolShell } = ctx
+
+  const toolCall = validateToolCall(toolName, cmd, options)
   if (isErr(toolCall)) return toolCall
 
-  return runInspectCommand(ctx, toolCall)
+  const shell = getToolShell(toolName, toolCall.options)
+  return runInspectCommand({ toolName, shell }, toolCall)
 }

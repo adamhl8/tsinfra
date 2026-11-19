@@ -60,9 +60,8 @@ fix: async ({ exec }) => {
 - **A call's `secretEnv` masks like a step's.** Its values join the host's secrets, so they're masked in that command's
   output and in every later command's.
 - **A name can't be in both of one call's `env` and `secretEnv`,** the same rule as a step's.
-- **Tool calls record their options.** Today a tool call records none of its options, and only a step records its
-  variables. Part of this work is recording each call's options with its command, the way a read's are: `env`, and
-  `secretEnv` with its values masked, `input` as `<content>`, and `maskOutput`.
+- **A call records its variables** with its other options, on its command (see
+  [What a host records](./cli.md#what-a-host-records)): `env`, and `secretEnv` with its values masked.
 
 When it's built, [Commands](./steps.md#commands) drops "The tools don't take them" and "A tool call shows none of its
 options", and its note that `input` isn't masked points to a call's `secretEnv`. The Maybe later entry for an argument
@@ -399,6 +398,13 @@ Fixes and finishing work for what's already built.
   record, and fail the host through `callOrFail` when that step is no longer the running one. Do not throw in
   `recordCommands`, because only `session.ts` throws, and a throw there would skip recording the failure in
   `callOrFail`.
+- **Keep forced color out of commands.** `runProcess` starts the local shell with tsinfra's whole environment, so a
+  `FORCE_COLOR` or `CLICOLOR_FORCE` that a task runner sets reaches every command on `@local`. bask sets `FORCE_COLOR=1`
+  whenever its output is a terminal. A command then colors output a check parses, like `bun pm ls -g`, whose names stop
+  matching the wanted ones and show as both missing and extra. Remove both variables from the environment
+  `runProcess` passes, and leave `NO_COLOR`, because it only turns color off. The report keeps its own color, because
+  it reads `process.env` in tsinfra's process. SSH hosts don't get them, because ssh only forwards the names in
+  `SendEnv`.
 - **Run the Docker tests in CI.** Only `bask test --all` runs the Docker tests, never `bask lint`, because they need
   Docker and download images and packages, so nothing runs them automatically yet.
 - **Check SELinux labels on a VM.** `file`'s `chcon` and `restorecon` are untested on real labels, because containers

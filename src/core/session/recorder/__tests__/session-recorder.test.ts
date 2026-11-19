@@ -73,15 +73,25 @@ describe("SessionRecorder.getStepShells", () => {
     })
   })
 
-  it("should give the tools' shell the step's variables, without running it as root", async () => {
-    const { hostRecord, toolShell } = startStepWithShells({ ...NO_SHELL_OPTIONS, sudo: true, env: { V: "v" } })
-    const stdout = await toolShell.exec('printf %s "$V"')
+  it("should give a tool call's shell the step's variables, without running it as root", async () => {
+    const { hostRecord, getToolShell } = startStepWithShells({ ...NO_SHELL_OPTIONS, sudo: true, env: { V: "v" } })
+    const stdout = await getToolShell("read", {}).exec('printf %s "$V"')
 
     expect({ stdout, ...getRunningStep(hostRecord) }).toStrictEqual({
       stdout: "v",
       options: { sudo: true, env: { V: "v" } },
       recordedCmds: ['printf %s "$V"'],
     })
+  })
+  it("should record a tool call on its command, and no tool call on a step's own command", async () => {
+    const { hostRecord, stepShell, getToolShell } = startStepWithShells(NO_SHELL_OPTIONS)
+    await getToolShell("exec", { input: "x", maskOutput: true }).exec("true")
+    await stepShell.exec("true")
+
+    expect(hostRecord.runningStep?.commands.map(({ toolCall }) => toolCall)).toStrictEqual([
+      { toolName: "exec", options: { input: "<content>", maskOutput: true } },
+      undefined,
+    ])
   })
 })
 
@@ -176,10 +186,10 @@ describe("SessionRecorder masking", () => {
   })
 
   it("should mask a maskOutput command's own output, and the value in later commands", async () => {
-    const { hostRecord, toolShell } = startStepWithShells(NO_SHELL_OPTIONS)
+    const { hostRecord, stepShell } = startStepWithShells(NO_SHELL_OPTIONS)
     // Build the secret from two parts, so the command's own text doesn't hold it.
-    const stdout = await toolShell.exec(String.raw`printf '%s-%s\n' s3cret value`, { maskOutput: true })
-    await toolShell.exec(`test ${SECRET} = ${SECRET}`)
+    const stdout = await stepShell.exec(String.raw`printf '%s-%s\n' s3cret value`, { maskOutput: true })
+    await stepShell.exec(`test ${SECRET} = ${SECRET}`)
 
     expect({ stdout, commands: getRunningCommands(hostRecord) }).toStrictEqual({
       stdout: `${SECRET}\n`,

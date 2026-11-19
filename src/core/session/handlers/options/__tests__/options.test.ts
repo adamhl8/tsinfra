@@ -27,6 +27,12 @@ const getRecordedSteps = (hostSession: Awaited<ReturnType<typeof createSession>>
     stdouts: commands.map(({ output }) => (output === undefined || isErr(output) ? undefined : output.stdout)),
   }))
 
+/** Returns the tool call each finished step's commands recorded, keyed by each command. */
+const getRecordedToolCalls = (hostSession: Awaited<ReturnType<typeof createSession>>) =>
+  hostSession.hostRecord.stepRecords.map(({ commands }) =>
+    Object.fromEntries(commands.map(({ cmd, toolCall }) => [cmd, toolCall])),
+  )
+
 describe("env and secretEnv", () => {
   it("should give h.read's command its variables, each value as it is", async () => {
     const { host: h } = await createSession()
@@ -138,7 +144,7 @@ describe("maskOutput", () => {
     expect({ stdout, steps: getRecordedSteps(hostSession) }).toStrictEqual({
       stdout: SECRET,
       steps: [
-        { name: PRINT_SECRET, options: {}, stdouts: ["[MASKED]"] },
+        { name: PRINT_SECRET, options: { maskOutput: true }, stdouts: ["[MASKED]"] },
         { name: "echo [MASKED]", options: {}, stdouts: ["[MASKED]\n"] },
       ],
     })
@@ -186,5 +192,68 @@ describe("maskOutput", () => {
     expect(getFailureMessage(hostSession)).toBe(
       `failed to compare the host with what the step wants -> failed to validate the options given to 'read' -> maskOutput must be boolean (was "yes")`,
     )
+  })
+})
+
+describe("tool calls", () => {
+  it("should record a tool call on its command, with input as <content>", async () => {
+    const hostSession = await createSession("apply")
+    await hostSession.host.run(
+      "Call the tools",
+      async ({ exec, inspect }) => {
+        await exec("cat >/dev/null", { input: "x", maskOutput: true })
+        await inspect("true")
+      },
+      { after: "always" },
+    )
+
+    expect(getRecordedToolCalls(hostSession)).toStrictEqual([
+      {
+        "cat >/dev/null": { toolName: "exec", options: { input: "<content>", maskOutput: true } },
+        true: { toolName: "inspect", options: {} },
+      },
+    ])
+  })
+
+  it("should record no options for a call given only defaults", async () => {
+    const hostSession = await createSession("plan")
+    await hostSession.host.ensure("Check it", {
+      want: "",
+      check: async ({ read }) => read("true", { maskOutput: false }),
+      fix: "false",
+    })
+
+    expect(getRecordedToolCalls(hostSession)).toStrictEqual([{ true: { toolName: "read", options: {} } }])
+  })
+
+  it("should record each of two calls run at once with its own options", async () => {
+    const hostSession = await createSession("apply")
+    await hostSession.host.run(
+      "Call at once",
+      async ({ exec }) => {
+        await Promise.all([exec("cat >/dev/null", { input: "x" }), exec("true", { maskOutput: true })])
+      },
+      { after: "always" },
+    )
+
+    expect(getRecordedToolCalls(hostSession)).toStrictEqual([
+      {
+        "cat >/dev/null": { toolName: "exec", options: { input: "<content>" } },
+        true: { toolName: "exec", options: { maskOutput: true } },
+      },
+    ])
+  })
+
+  it("should record a read step's options on the step, and no tool call on its command", async () => {
+    const hostSession = await createSession()
+    await hostSession.host.read("cat >/dev/null", { input: "x", maskOutput: true })
+
+    expect({
+      options: hostSession.hostRecord.stepRecords.map(({ options }) => options),
+      toolCalls: getRecordedToolCalls(hostSession),
+    }).toStrictEqual({
+      options: [{ input: "<content>", maskOutput: true }],
+      toolCalls: [{ "cat >/dev/null": undefined }],
+    })
   })
 })
