@@ -2,8 +2,9 @@ import { describe, expect, it } from "bun:test"
 
 import { err, messageChain } from "ts-explicit-errors"
 
-import type { ValidStepShellOptions } from "#core/session/handlers/options/shell.ts"
+import type { ValidStepShellOptions } from "#core/session/handlers/options/step.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
+import type { ValidToolOptions } from "#core/session/handlers/tools.ts"
 import { createHostMeta } from "#core/session/host-meta.ts"
 import type { HostRecord, StepRecord } from "#core/session/recorder/records.ts"
 import { createHostRecord } from "#core/session/recorder/records.ts"
@@ -15,6 +16,7 @@ import { runLocal } from "#core/transport/local.ts"
 const transport: Transport = async (cmd) => runLocal(`sudo() { echo "sudo $*"; "$@"; }\n${cmd}`)
 
 const NO_SHELL_OPTIONS: ValidStepShellOptions = { sudo: false, env: {}, secretEnv: {} }
+const NO_TOOL_OPTIONS: ValidToolOptions = { env: {}, secretEnv: {}, input: undefined, maskOutput: false }
 
 /** Starts a step on a new recorder, and returns the host record and the step's shells, built from `shellOptions`. */
 const startStepWithShells = (shellOptions: ValidStepShellOptions) => {
@@ -75,7 +77,7 @@ describe("SessionRecorder.getStepShells", () => {
 
   it("should give a tool call's shell the step's variables, without running it as root", async () => {
     const { hostRecord, getToolShell } = startStepWithShells({ ...NO_SHELL_OPTIONS, sudo: true, env: { V: "v" } })
-    const stdout = await getToolShell("read", {}).exec('printf %s "$V"')
+    const stdout = await getToolShell("read", NO_TOOL_OPTIONS).exec('printf %s "$V"')
 
     expect({ stdout, ...getRunningStep(hostRecord) }).toStrictEqual({
       stdout: "v",
@@ -85,7 +87,7 @@ describe("SessionRecorder.getStepShells", () => {
   })
   it("should record a tool call on its command, and no tool call on a step's own command", async () => {
     const { hostRecord, stepShell, getToolShell } = startStepWithShells(NO_SHELL_OPTIONS)
-    await getToolShell("exec", { input: "x", maskOutput: true }).exec("true")
+    await getToolShell("exec", { ...NO_TOOL_OPTIONS, input: "x", maskOutput: true }).exec("true")
     await stepShell.exec("true")
 
     expect(hostRecord.runningStep?.commands.map(({ toolCall }) => toolCall)).toStrictEqual([

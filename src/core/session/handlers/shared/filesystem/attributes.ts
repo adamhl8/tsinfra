@@ -1,4 +1,4 @@
-import type { FileAttributeOptions, FileOwner, OwnerOptions } from "#core/session/handlers/options/handler.ts"
+import type { FileAttributeOptions, FileOwner, OwnerOptions } from "#core/session/handlers/options/attributes.ts"
 import type { ModeBits } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 import { parseFileMode } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 import { findOwnerChanges } from "#core/session/handlers/shared/filesystem/attributes/owner.ts"

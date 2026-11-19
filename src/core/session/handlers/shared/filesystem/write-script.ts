@@ -1,6 +1,6 @@
 import nodePath from "node:path"
 
-import type { OwnerOptions } from "#core/session/handlers/options/handler.ts"
+import type { OwnerOptions } from "#core/session/handlers/options/attributes.ts"
 import type { HostOwner } from "#core/session/handlers/shared/filesystem/attributes.ts"
 import type { ModeBits } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 import { toOctalMode } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"

@@ -100,7 +100,7 @@ run_tests() {
 
 run_tests "the test suite as a non-root user" tester
 run_tests "the test suite as root" root
-run_tests "real sudo and real root" tester ./src/core/transport/__tests__/step.docker.ts ./src/core/session/handlers/__tests__/file-sudo.docker.ts ./src/core/session/handlers/__tests__/link-sudo.docker.ts ./src/core/session/handlers/__tests__/dir-sudo.docker.ts ./src/core/session/handlers/__tests__/input-sudo.docker.ts ./src/core/hosts/prepare/host-details/__tests__/sudo-passwordless.docker.ts
+run_tests "real sudo and real root" tester ./src/core/transport/__tests__/shell.docker.ts ./src/core/session/handlers/__tests__/file-sudo.docker.ts ./src/core/session/handlers/__tests__/link-sudo.docker.ts ./src/core/session/handlers/__tests__/dir-sudo.docker.ts ./src/core/session/handlers/__tests__/input-sudo.docker.ts ./src/core/hosts/prepare/host-details/__tests__/sudo-passwordless.docker.ts
 run_tests "a user whose sudo needs a password" sudopw ./src/core/hosts/prepare/host-details/__tests__/sudo-password.docker.ts ./src/core/hosts/prepare/host-details/__tests__/sudo-prompt.docker.ts ./src/core/__tests__/open-changes-sudo-password.docker.ts ./src/core/session/handlers/__tests__/input-sudo-password.docker.ts
 run_tests "a user with no sudo rule" nopass ./src/core/session/handlers/__tests__/file-no-sudo.docker.ts
 run_tests "ssh to a real sshd" tester ./src/core/transport/__tests__/ssh.docker.ts ./src/core/session/handlers/__tests__/file-ssh.docker.ts ./src/core/session/handlers/__tests__/dir-ssh.docker.ts ./src/core/session/handlers/__tests__/input-ssh.docker.ts ./src/core/__tests__/open-changes-ssh.docker.ts

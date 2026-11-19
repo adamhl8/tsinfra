@@ -2,8 +2,7 @@
 
 An agentless infrastructure as code tool for TypeScript.
 
-Write one script per machine. A script reads top to bottom and is made of idempotent steps. `tsinfra plan` shows what
-has drifted on each machine, and `tsinfra apply` fixes only what needs fixing.
+Write one script per machine. A script reads top to bottom and is made of idempotent steps. `tsinfra plan` shows what has drifted on each machine, and `tsinfra apply` fixes only what needs fixing.
 
 - Nothing to install on your machines besides `sh` and `sshd`
 - Plain TypeScript: loops, conditionals, template literals, `fetch`, and your own helper functions
@@ -125,17 +124,14 @@ interface HostConfig {
 
 Each file in `hosts/` default exports a `host()`.
 
-- `name`: the host's name, which the report shows and the command line picks it by. It must be unique across host
-  scripts, and has letters, digits, `.`, `_`, and `-`, starting with a letter or a digit.
+- `name`: the host's name, which the report shows and the command line picks it by. It must be unique across host scripts, and has letters, digits, `.`, `_`, and `-`, starting with a letter or a digit.
 - `target`: where the commands run
   - `"@local"`: the machine tsinfra runs on
   - Anything else goes to `ssh` as written, like `"sonarr.lan"` or `"alice@incus.lan"`
 - `sudo`: declares that the script uses sudo (see [sudo](#sudo))
 - `fn`: the host function. It's given `h`, which has every [step](#steps).
 
-tsinfra loads every host script on each run before it picks the hosts to run, so a script's top level runs even when
-its host isn't picked. Keep it to quick definitions. Something that prompts or takes a while, like reading a secret from
-a password manager, goes in the host function or a step.
+tsinfra loads every host script on each run before it picks the hosts to run, so a script's top level runs even when its host isn't picked. Keep it to quick definitions. Something that prompts or takes a while, like reading a secret from a password manager, goes in the host function or a step.
 
 Shared setup is an ordinary function that takes `h`, imported from anywhere outside `hosts/`:
 
@@ -163,16 +159,14 @@ export default host({ name: "sonarr", target: "sonarr.lan" }, async (h) => {
 tsinfra runs your own `ssh`, so your `~/.ssh/config` applies: users, ports, keys, jump hosts, and so on.
 
 - ssh must log in without a prompt, with a key or an agent. tsinfra runs it with `BatchMode=yes`.
-- A new host's key is accepted the first time (`accept-new`), unless your config sets `StrictHostKeyChecking`. A changed
-  key always fails.
+- A new host's key is accepted the first time (`accept-new`), unless your config sets `StrictHostKeyChecking`. A changed key always fails.
 - Each host gets one connection for the whole run, which is closed when the run ends.
 
 ---
 
 ### sudo
 
-Commands say `sudo` themselves, only where they need it, like `fix: "sudo systemctl enable --now sonarr"`. `file` and
-`link` take `sudo: true` instead, because tsinfra writes their commands.
+Commands say `sudo` themselves, only where they need it, like `fix: "sudo systemctl enable --now sonarr"`. `file` and `link` take `sudo: true` instead, because tsinfra writes their commands.
 
 A host whose script uses sudo declares it on `host()`:
 
@@ -181,13 +175,11 @@ export default host({ name: "macbook", target: "@local", sudo: true }, fn)
 export default host({ name: "incus", target: "incus.lan", sudo: { password: incusSudoPassword } }, fn)
 ```
 
-- `sudo: true`: before any script runs, tsinfra checks that sudo works. If it needs a password, tsinfra asks for it once,
-  and every command on that host uses it.
+- `sudo: true`: before any script runs, tsinfra checks that sudo works. If it needs a password, tsinfra asks for it once, and every command on that host uses it.
 - `sudo: { password }`: uses the given password and never prompts. Use it only when the run can't prompt, like in CI.
 
 > [!TIP]
-> Declare `sudo: true` even when sudo is passwordless. A broken sudo then fails before any host changes anything, instead
-> of partway through a script.
+> Declare `sudo: true` even when sudo is passwordless. A broken sudo then fails before any host changes anything, instead of partway through a script.
 
 At the prompt, Ctrl-D skips that host, and Ctrl-C cancels the run. With no terminal, a host that needs a password fails.
 
@@ -201,8 +193,7 @@ Every step is a method on `h`. Steps run one at a time, in the order you call th
 | follows up on a change, or always runs | [`run`](#run) with `after`                                            |
 | picks which steps apply                | [`read` or `inspect`](#read-and-inspect), and an `if`                 |
 
-Plain control flow is fine, except for deciding whether a change is needed. That belongs in a step's `check`, where
-`plan` can see it:
+Plain control flow is fine, except for deciding whether a change is needed. That belongs in a step's `check`, where `plan` can see it:
 
 ```ts
 // don't: plan can't verify this, and it never counts as drift
@@ -213,8 +204,7 @@ if (docker.exitCode !== 0) await h.run("Install docker", installDocker, { after:
 await h.ensure("Install docker", { want: true, check: "command -v docker", fix: installDocker })
 ```
 
-`ensure`, `file`, `link`, `dir`, and `run` return a `ChangeStepResult`, which you pass to a later step's `after` or
-`needs`:
+`ensure`, `file`, `link`, `dir`, and `run` return a `ChangeStepResult`, which you pass to a later step's `after` or `needs`:
 
 ```ts
 interface ChangeStepResult {
@@ -225,8 +215,7 @@ interface ChangeStepResult {
 ```
 
 > [!TIP]
-> Name a step like a function, starting with a verb ("Install Caddy"), or as the state it ensures ("Caddy is
-> installed"). Each change step needs its own name in a host script, so a step in a loop puts the item in its name.
+> Name a step like a function, starting with a verb ("Install Caddy"), or as the state it ensures ("Caddy is installed"). Each change step needs its own name in a host script, so a step in a loop puts the item in its name.
 
 ---
 
@@ -236,23 +225,17 @@ interface ChangeStepResult {
 h.ensure(name: string, options: EnsureOptions): Promise<ChangeStepResult>
 ```
 
-Compares `want` with what `check` answers. When they differ, `apply` runs `fix`, then runs `check` again to make sure
-it worked. `plan` only runs `check`.
+Compares `want` with what `check` answers. When they differ, `apply` runs `fix`, then runs `check` again to make sure it worked. `plan` only runs `check`.
 
 - `want`: the answer when the state is already right
   - `true`: `check` exits 0 (or the function returns `true`)
   - `false`: `check` exits non-zero (or the function returns `false`)
   - A string: compared with `check`'s stdout (or the function's return value). Trailing newlines are ignored.
-  - A list of strings: compared in order with `check`'s lines, blank ones left out (or the function's array), so a
-    reorder or a duplicate counts. `[]` means nothing is left to do.
-  - A `Set` of strings: compared the same way, but as a set, so order and duplicates don't count. A check function
-    returns a `Set`.
-  - A record of string keys and string, number, or boolean values: compared with the function's object by key, each
-    value exactly, so `8080` never matches `"8080"`. It needs a check function.
+  - A list of strings: compared in order with `check`'s lines, blank ones left out (or the function's array), so a reorder or a duplicate counts. `[]` means nothing is left to do.
+  - A `Set` of strings: compared the same way, but as a set, so order and duplicates don't count. A check function returns a `Set`.
+  - A record of string keys and string, number, or boolean values: compared with the function's object by key, each value exactly, so `8080` never matches `"8080"`. It needs a check function.
 - `check`: a command, or an async function given `{ read, inspect }` that returns the answer
-- `fix`: a command, or an async function given `{ exec, inspect }`. The function also gets what `check` found:
-  `{ got }` for a string or a list `want`, `{ missing, extra }` for a set, and `{ missing, changed, unmet, extra }` for
-  a record, where `unmet` maps each key that's missing or changed to its wanted value. It only runs in `apply`.
+- `fix`: a command, or an async function given `{ exec, inspect }`. The function also gets what `check` found: `{ got }` for a string or a list `want`, `{ missing, extra }` for a set, and `{ missing, changed, unmet, extra }` for a record, where `unmet` maps each key that's missing or changed to its wanted value. It only runs in `apply`.
 - `verify` (default: `true`): run `check` again after `fix`, and fail if the state still differs
 - `env`, `secretEnv`: see [Values and secrets](#values-and-secrets)
 - `needs`: see [Needs](#needs)
@@ -325,11 +308,9 @@ await h.ensure("Upgrade brew packages", { want: [], check: "brew outdated --quie
 
 - A reorder shows as the item leaving one place and arriving in another.
 - The fix gets `{ got }`, the host's list, because `missing` and `extra` can't describe a reorder.
-- `want: []` is for a check that lists what's left to do, like outdated packages, so everything it lists shows as a
-  `-` line.
+- `want: []` is for a check that lists what's left to do, like outdated packages, so everything it lists shows as a `-` line.
 
-**A record** of string keys and string, number, or boolean values is for names with a value each, like packages on
-a version each:
+**A record** of string keys and string, number, or boolean values is for names with a value each, like packages on a version each:
 
 ```ts
 // The newest version each package's range allows, read from the registry.
@@ -356,13 +337,10 @@ await h.ensure("Sync bun global packages", {
 - It needs a check function, because a command's output has no keys.
 - Each key's value is compared exactly, and key order doesn't count.
 - A row goes from the host's value to the wanted one. `(none)` marks a side that doesn't have the key.
-- `missing` maps a key to its wanted value, `extra` maps a key to its current value, and `changed` maps a key to
-  `{ got, want }`.
+- `missing` maps a key to its wanted value, `extra` maps a key to its current value, and `changed` maps a key to `{ got, want }`.
 
 > [!TIP]
-> Make `want` the state you want, and have the check report the host's state in the same shape, without comparing.
-> Keep a spec like `"latest"` as your helper's input, and resolve it to a version for `want` before the step. See
-> [the state you want, or what's left to do](./docs/recipes.md#the-state-you-want-or-whats-left-to-do).
+> Make `want` the state you want, and have the check report the host's state in the same shape, without comparing. Keep a spec like `"latest"` as your helper's input, and resolve it to a version for `want` before the step. See [the state you want, or what's left to do](./docs/recipes.md#the-state-you-want-or-whats-left-to-do).
 
 Use a check function to work out the answer in TypeScript:
 
@@ -380,15 +358,12 @@ await h.ensure("Update Caddy", {
 ```
 
 - `check` also runs in `plan`, so it must not change anything your script manages.
-- A command `check` never fails on a non-zero exit, because that's an answer. A `read` inside a check function does
-  fail on one, so use `inspect` when a non-zero exit is an answer.
+- A command `check` never fails on a non-zero exit, because that's an answer. A `read` inside a check function does fail on one, so use `inspect` when a non-zero exit is an answer.
 - A command check that exits non-zero but still matches `want` fails the step, so a broken check can't look converged.
-- `fix` re-runs every command each time `check` fails. If one command's effect can be in place while `check` still
-  fails, give that effect its own step.
+- `fix` re-runs every command each time `check` fails. If one command's effect can be in place while `check` still fails, give that effect its own step.
 
 > [!TIP]
-> Set `verify: false` only for a fix whose effect nothing in the run can show, like one that needs a reboot. The next
-> run's `check` confirms it.
+> Set `verify: false` only for a fix whose effect nothing in the run can show, like one that needs a reboot. The next run's `check` confirms it.
 
 ---
 
@@ -410,8 +385,7 @@ Options:
 - `sudo` (default: `false`): read, diff, and write the file as root
 - `secret` (default: `false`): never fetch or show the old content. New files get mode `600`.
 - `overwrite` (default: `true`): `false` writes the file only when it's missing, and leaves an existing one alone
-- `validate`: a function given the temp file's path, which returns a command that checks the new content before it
-  replaces the file
+- `validate`: a function given the temp file's path, which returns a command that checks the new content before it replaces the file
 - `needs`: see [Needs](#needs)
 
 ```ts
@@ -422,23 +396,17 @@ await h.file("~/.config/app/token", token, { secret: true, mode: "600" })
 await h.file("/etc/ssh/sshd_config", sshdConfig, { sudo: true, validate: (tempPath) => `sshd -t -f ${tempPath}` })
 ```
 
-- `mode`, `user`, and `group` are only managed when given. Otherwise an existing file keeps its own, and a new file gets
-  `644` and the user that wrote it.
+- `mode`, `user`, and `group` are only managed when given. Otherwise an existing file keeps its own, and a new file gets `644` and the user that wrote it.
 - The write is atomic: the content goes to a temp file next to `path`, which is renamed into place.
 - Missing parent directories are created.
 - `path` must be a regular file or missing. A symlink, a directory, or anything else fails the step.
 - Content over 10 MB fails the step.
-- A `mode`, `user`, or `group` that an earlier step set differently on the same path fails the step, including a link's
-  `targetAttributes`, because each apply would undo the other.
+- A `mode`, `user`, or `group` that an earlier step set differently on the same path fails the step, including a link's `targetAttributes`, because each apply would undo the other.
 
 > [!TIP]
-> `Bun.file("files/x")` resolves against the directory tsinfra runs from. Build paths from your script's own location
-> instead:
+> `Bun.file("files/x")` resolves against the directory tsinfra runs from. Build paths from your script's own location instead:
 >
-> ```ts
-> // lib/paths.ts
-> export const FILES = path.resolve(import.meta.dir, "../files")
-> ```
+> `ts // lib/paths.ts export const FILES = path.resolve(import.meta.dir, "../files") `
 
 #### Modes
 
@@ -466,8 +434,7 @@ Makes `path` a symlink to `target`. Both are absolute, starting with `/` or `~/`
 
 - `user`, `group`: a name or an id, for the link itself
 - `force` (default: `false`): replace a regular file or an empty directory at `path`
-- `targetAttributes`: the `mode`, `user`, and `group` of the file the link points to, like `file`'s. Left out, the
-  target keeps its own.
+- `targetAttributes`: the `mode`, `user`, and `group` of the file the link points to, like `file`'s. Left out, the target keeps its own.
 - `sudo` (default: `false`): read and make the link, and set its target's attributes, as root
 - `needs`: see [Needs](#needs)
 
@@ -480,12 +447,9 @@ await h.link("~/.ssh/config", path.join(DOTFILES, "ssh/config"), { targetAttribu
 ```
 
 - An existing symlink is always pointed at `target`.
-- A symlink has no mode of its own, so `targetAttributes` is how a linked dotfile gets one. It follows a target that's
-  itself a link to the file at the end, and `plan` shows its rows like `target mode: rw-r--r-- (644) -> rw------- (600)`.
-- A regular file at `path` fails the step unless `force` is set, and there's no backup. A directory with anything in it
-  always fails.
-- A missing `target` is allowed, with a warning in the output, because a later step might create it. Its
-  `targetAttributes` are set once it exists.
+- A symlink has no mode of its own, so `targetAttributes` is how a linked dotfile gets one. It follows a target that's itself a link to the file at the end, and `plan` shows its rows like `target mode: rw-r--r-- (644) -> rw------- (600)`.
+- A regular file at `path` fails the step unless `force` is set, and there's no backup. A directory with anything in it always fails.
+- A missing `target` is allowed, with a warning in the output, because a later step might create it. Its `targetAttributes` are set once it exists.
 
 ---
 
@@ -523,8 +487,7 @@ h.run(name: string, cmd: string | ((tools: ChangeTools) => Promise<void>), optio
 Runs a command with no check, for work that something in the run triggers.
 
 - `after`: when to run
-  - An array of change step results: run when any of them changed, or when an apply that didn't finish left the run to
-    do
+  - An array of change step results: run when any of them changed, or when an apply that didn't finish left the run to do
   - `"always"`: run on every `apply`
 - `env`, `secretEnv`: see [Values and secrets](#values-and-secrets)
 
@@ -545,18 +508,14 @@ await h.run(
 ```
 
 - `plan` never runs it, and shows it as `> triggered` when it would run.
-- A run with `after: "always"`, or one that follows only those, shows as `> always`. `plan` shows it only with `-v`,
-  because it runs on every `apply`.
+- A run with `after: "always"`, or one that follows only those, shows as `> always`. `plan` shows it only with `-v`, because it runs on every `apply`.
 - A run counts as drift only when an apply that didn't finish left it to do.
 - A run can follow another run, like `after: [reload]`.
 
 > [!NOTE]
-> If a run fails, or the host fails between a change and its run, the next `apply` still triggers the run. tsinfra
-> keeps the changes an apply made on the host until the host finishes an `apply` cleanly, and shows a step whose change
-> is still open as `^ resume`.
+> If a run fails, or the host fails between a change and its run, the next `apply` still triggers the run. tsinfra keeps the changes an apply made on the host until the host finishes an `apply` cleanly, and shows a step whose change is still open as `^ resume`.
 
-Anything that can be checked should be an `ensure`. A run function that tests the host before acting works, but `plan`
-can't see what it decides.
+Anything that can be checked should be an `ensure`. A run function that tests the host before acting works, but `plan` can't see what it decides.
 
 ---
 
@@ -588,8 +547,7 @@ if (container.exitCode !== 0) await tuneKernel(h)
 
 Every command string is run by `sh` on the host. Use one command per string, and do the logic in TypeScript.
 
-For more than one command, pass a function. A check function gets `read` and `inspect`. A fix or run function gets
-`exec` and `inspect`.
+For more than one command, pass a function. A check function gets `read` and `inspect`. A fix or run function gets `exec` and `inspect`.
 
 - `read(cmd)` / `exec(cmd)`: returns stdout, and fails on a non-zero exit, which stops the function there
 - `inspect(cmd)`: returns `{ stdout, stderr, exitCode }`, and never fails on a non-zero exit
@@ -608,15 +566,13 @@ fix: async ({ exec }) => {
 - Commands inside one function can run at once, with `Promise.all`. Steps can't.
 
 > [!TIP]
-> Let commands print. Don't add `-q` or `>/dev/null` just because nothing reads the output. The output is hidden by
-> default, and you'll want it in `-vvv` and when something fails.
+> Let commands print. Don't add `-q` or `>/dev/null` just because nothing reads the output. The output is hidden by default, and you'll want it in `-vvv` and when something fails.
 
 ---
 
 ### Values and secrets
 
-Pass a value that could hold shell syntax as an environment variable, not in the command's text. `env` and
-`secretEnv` take an object of variables, and the command uses them as `"$NAME"`:
+Pass a value that could hold shell syntax as an environment variable, not in the command's text. `env` and `secretEnv` take an object of variables, and the command uses them as `"$NAME"`:
 
 ```ts
 await h.read('curl -fsSL -H "Authorization: Bearer $TOKEN" "$URL"', {
@@ -628,22 +584,16 @@ await h.read('curl -fsSL -H "Authorization: Bearer $TOKEN" "$URL"', {
 - Any value works as-is, with spaces, quotes, or `$` in it, because the shell reads it as a value, never as code.
 - Values must be strings, like `String(port)`. They're literal, so `"$PATH"` in a value isn't expanded.
 - The variables reach every command in the step, including each tool call in its functions.
-- They're exported, so a tool that reads its credentials from the environment gets them, like
-  `h.read("gh api user", { secretEnv: { GH_TOKEN: token } })`.
-- A program run under `sudo` doesn't see exported variables, because sudo resets the environment. `sudo tee "$FILE"`
-  still works, because the shell expands `"$FILE"` first.
+- A tool call can take its own `env` and `secretEnv`, for a value only its function has, like a secret a fix fetches. They're added to the step's for that one command, and win for a name both set.
+- They're exported, so a tool that reads its credentials from the environment gets them, like `h.read("gh api user", { secretEnv: { GH_TOKEN: token } })`.
+- A program run under `sudo` doesn't see exported variables, because sudo resets the environment. `sudo tee "$FILE"` still works, because the shell expands `"$FILE"` first.
 
 > [!IMPORTANT]
-> A value put into a command's text is read as shell code. That's fine for a value with a known, safe shape, like a
-> package name or a version. Pass anything else through `env`, like a path with spaces, a message, a file's contents,
-> or user input, so the shell reads it as a value. In the text, a space would break the command, and a `;` or `$(...)`
-> would run part of it. Pass a secret through `secretEnv`, so it's masked.
+> A value put into a command's text is read as shell code. That's fine for a value with a known, safe shape, like a package name or a version. Pass anything else through `env`, like a path with spaces, a message, a file's contents, or user input, so the shell reads it as a value. In the text, a space would break the command, and a `;` or `$(...)` would run part of it. Pass a secret through `secretEnv`, so it's masked.
 
-`secretEnv` values show as `[MASKED]` everywhere tsinfra prints or records them, from that step on: in the options,
-and in the output and errors of every later command on the host. Your script still gets the real values.
+`secretEnv` values show as `[MASKED]` everywhere tsinfra prints or records them, from that step or tool call on: in the options, and in the output and errors of every later command on the host. Your script still gets the real values.
 
-`maskOutput: true` masks a command's output the same way, for a secret read from the host. `read`, `inspect`, and the
-tools all take it:
+`maskOutput: true` masks a command's output the same way, for a secret read from the host. `read`, `inspect`, and the tools all take it:
 
 ```ts
 const token = await h.read("cat /etc/app/token", { maskOutput: true })
@@ -662,8 +612,7 @@ await h.ensure("Set the API token", {
 
 ## Needs
 
-`plan` reads each step's state from the host as it is now. A step after a change reads the old state, which can give
-the wrong answer, or fail. `needs` names the earlier steps a step's state depends on:
+`plan` reads each step's state from the host as it is now. A step after a change reads the old state, which can give the wrong answer, or fail. `needs` names the earlier steps a step's state depends on:
 
 ```ts
 const brew = await h.ensure("Install brew packages", { want: true, check: "brew bundle check", fix: "brew bundle" })
@@ -687,13 +636,11 @@ macbook
 - `ensure`, `file`, `link`, and `dir` take `needs`, and accept results from `ensure`, `file`, `link`, and `dir`.
 - In `plan`, a step waits when any step it needs would change or is waiting.
 - In `apply`, `needs` does nothing, because the needed steps already ran.
-- Only add `needs` when a step's state really depends on the earlier change. When any step would change, `plan` already
-  reminds you that later steps were checked without it.
+- Only add `needs` when a step's state really depends on the earlier change. When any step would change, `plan` already reminds you that later steps were checked without it.
 
 ## Failures
 
-You never check a step's result for errors. When a step fails, the host is marked failed and the call throws, which
-stops the script there. The other hosts still run.
+You never check a step's result for errors. When a step fails, the host is marked failed and the call throws, which stops the script there. The other hosts still run.
 
 - Don't catch around calls on `h`. A failed host stays failed, and every later call on `h` throws straight away.
 - When a non-zero exit is an answer, use `inspect`:
@@ -758,8 +705,7 @@ Exit codes:
 
 ## Design
 
-The [design docs](./docs/README.md) cover how tsinfra works in depth. [Recipes](./docs/recipes.md) has patterns for
-common jobs, and the [roadmap](./docs/roadmap.md) has what's planned.
+The [design docs](./docs/README.md) cover how tsinfra works in depth. [Recipes](./docs/recipes.md) has patterns for common jobs, and the [roadmap](./docs/roadmap.md) has what's planned.
 
 ## License
 

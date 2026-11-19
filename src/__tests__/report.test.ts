@@ -2037,6 +2037,35 @@ describe("renderHostBlock for a tool call's options", () => {
     ])
   })
 
+  it("should name a tool call's variables with -vv, and show their values, each secret masked, with -vvv", async () => {
+    const hostSession = await createSession("apply")
+    await hostSession.host.run(
+      "Check it",
+      async ({ exec }) => {
+        await exec('test -n "$URL$TOKEN"', { env: { URL: "u" }, secretEnv: { TOKEN: "t0ken" } })
+      },
+      { after: "always" },
+    )
+
+    expect(
+      ([2, 3] as const).map((verbosity) =>
+        renderRecord(hostSession.hostRecord, "apply", verbosity)?.split("\n").slice(3),
+      ),
+    ).toStrictEqual([
+      ['        (exec) $ test -n "$URL$TOKEN"', "                   options: env { URL }, secretEnv { TOKEN }"],
+      [
+        '        (exec) $ test -n "$URL$TOKEN"',
+        "                   options:",
+        "                     env:",
+        "                       URL: u",
+        "                     secretEnv:",
+        "                       TOKEN: [MASKED]",
+        "                   output:",
+        "                     exit: 0",
+      ],
+    ])
+  })
+
   it("should show no options for a tool call given only defaults", async () => {
     const hostSession = await createSession("apply")
     await hostSession.host.run(

@@ -7,10 +7,10 @@ import type { Result } from "ts-explicit-errors"
 import { isErr, messageChain } from "ts-explicit-errors"
 
 import { writeFakeTool } from "#core/__tests__/session.ts"
+import { toBytes } from "#core/content/bytes.ts"
 import type { HostFileDetails } from "#core/session/handlers/file/host-file-details.ts"
 import { getHostFileDetails, parseFileDetailsOutput } from "#core/session/handlers/file/host-file-details.ts"
 import { toModeBits } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
-import { toBytes } from "#core/session/handlers/shared/filesystem/bytes.ts"
 import { runLocal } from "#core/transport/local.ts"
 import { createShell } from "#core/transport/shell.ts"
 

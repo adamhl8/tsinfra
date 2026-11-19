@@ -1,14 +1,10 @@
 # tsinfra design
 
-Working design notes. They describe tsinfra as it is. What's planned, undecided, or ruled out is in the
-[roadmap](./roadmap.md).
+Working design notes. They describe tsinfra as it is. What's planned, undecided, or ruled out is in the [roadmap](./roadmap.md).
 
-tsinfra is a small TypeScript library and CLI for keeping machines configured. You write one script per host. It reads
-top to bottom and is made of idempotent steps. tsinfra reads each step's state on the host, shows what has drifted, and runs a fix
-only where one is needed.
+tsinfra is a small TypeScript library and CLI for keeping machines configured. You write one script per host. It reads top to bottom and is made of idempotent steps. tsinfra reads each step's state on the host, shows what has drifted, and runs a fix only where one is needed.
 
-An earlier design aimed at a full configuration management tool, with a typed inventory and a planning engine. This
-design replaces it with something one person can build and maintain.
+An earlier design aimed at a full configuration management tool, with a typed inventory and a planning engine. This design replaces it with something one person can build and maintain.
 
 <!-- toc -->
 
@@ -29,12 +25,9 @@ design replaces it with something one person can build and maintain.
 
 Two earlier approaches each missed something.
 
-**Idempotent bash, then Bun shell scripts.** These mostly worked. But nothing enforced idempotence, every run applied
-everything, and there was no way to see what had drifted before touching a machine. Ordering lived in your head: knowing
-what had to run first meant reading through everything.
+**Idempotent bash, then Bun shell scripts.** These mostly worked. But nothing enforced idempotence, every run applied everything, and there was no way to see what had drifted before touching a machine. Ordering lived in your head: knowing what had to run first meant reading through everything.
 
-**pyinfra.** It gave a plan mode and diffs, but it is Python. Most of the real work ended up in a hand-rolled `converge`
-helper anyway, which is a check, a fix, and an optional diff.
+**pyinfra.** It gave a plan mode and diffs, but it is Python. Most of the real work ended up in a hand-rolled `converge` helper anyway, which is a check, a fix, and an optional diff.
 
 tsinfra keeps the script shape and adds what scripts lacked:
 
@@ -47,13 +40,11 @@ tsinfra keeps the script shape and adds what scripts lacked:
 ## Goals
 
 - **Scripts read like scripts.** Ordinary TypeScript, top to bottom, with ordinary control flow.
-- **Your code runs on the control machine.** `fs`, `fetch`, decryption, and string building all happen locally. Only
-  shell commands and file bytes reach a host.
+- **Your code runs on the control machine.** `fs`, `fetch`, decryption, and string building all happen locally. Only shell commands and file bytes reach a host.
 - **Nothing on hosts** beyond `sh` and `sshd`.
 - **`plan` is honest.** It shows what each step sees on the host right now, and marks the places where an earlier change matters.
 - **Small.** Buildable in a few weeks and maintainable alone.
-- **Integrations for common tools.** tsinfra ships integrations for tools like apt, brew, and systemd, as functions that
-  call steps, so a script doesn't have to write its own (see [the roadmap](./roadmap.md#integrations-worth-shipping)).
+- **Integrations for common tools.** tsinfra ships integrations for tools like apt, brew, and systemd, as functions that call steps, so a script doesn't have to write its own (see [the roadmap](./roadmap.md#integrations-worth-shipping)).
 
 ## Non-goals
 
@@ -69,40 +60,27 @@ tsinfra keeps the script shape and adds what scripts lacked:
 
 These would make it a failure even if it works:
 
-- **Growing back into the earlier design.** A feature that adds a concept the user has to learn needs a real case
-  first.
+- **Growing back into the earlier design.** A feature that adds a concept the user has to learn needs a real case first.
 - **A plan that looks complete but is not.** Where `plan` cannot know, it says so.
 - **Ceremony in scripts.** An `isErr` after every step, or registering steps before running them.
 
 ## No record of resources
 
-tsinfra keeps no record of what it manages. Every `plan` reads the machine as it is now, and any checkout on any control
-machine gives the same plan. Ansible and pyinfra work the same way. Terraform needs state because it creates resources
-and has to know which ones are its own. tsinfra configures machines that already exist.
+tsinfra keeps no record of what it manages. Every `plan` reads the machine as it is now, and any checkout on any control machine gives the same plan. Ansible and pyinfra work the same way. Terraform needs state because it creates resources and has to know which ones are its own. tsinfra configures machines that already exist.
 
-The one thing it keeps is a small saved state on each host, which holds the changes an apply that didn't finish made,
-so the runs after them still trigger next time (see [Steps](./steps.md#when-an-apply-doesnt-finish)). A trigger is the
-only thing that exists in one apply alone, because every other step reads the host's state. A host that finishes cleanly
-deletes it, so it never needs locking or syncing between control machines, and it's never a source of truth about what
-the host should look like.
+The one thing it keeps is a small saved state on each host, which holds the changes an apply that didn't finish made, so the runs after them still trigger next time (see [Steps](./steps.md#when-an-apply-doesnt-finish)). A trigger is the only thing that exists in one apply alone, because every other step reads the host's state. A host that finishes cleanly deletes it, so it never needs locking or syncing between control machines, and it's never a source of truth about what the host should look like.
 
 What that costs:
 
-- **Removing a step does not undo it.** A file or package the script stops managing stays on the machine. Removing it
-  takes a step that removes it, like `want: false` and `check: "test -e /etc/sonarr.conf"`, with
-  `fix: "sudo rm /etc/sonarr.conf"`.
-- **`plan` cannot say why something differs.** A hand edit on the machine and an edit to the script look the same,
-  because there is no record of the last apply.
-- **Run-once work needs a marker.** A one-time migration has no natural check, so it leaves a marker on the host, like
-  `test -f /var/lib/myapp/migrated`, and checks for that.
+- **Removing a step does not undo it.** A file or package the script stops managing stays on the machine. Removing it takes a step that removes it, like `want: false` and `check: "test -e /etc/sonarr.conf"`, with `fix: "sudo rm /etc/sonarr.conf"`.
+- **`plan` cannot say why something differs.** A hand edit on the machine and an edit to the script look the same, because there is no record of the last apply.
+- **Run-once work needs a marker.** A one-time migration has no natural check, so it leaves a marker on the host, like `test -f /var/lib/myapp/migrated`, and checks for that.
 
-If forgotten files become a real problem, a manifest of managed paths in the host's saved state is a lighter fix than a
-record of resources (see [Removed resources](./roadmap.md#removed-resources)).
+If forgotten files become a real problem, a manifest of managed paths in the host's saved state is a lighter fix than a record of resources (see [Removed resources](./roadmap.md#removed-resources)).
 
 ## Compared with other tools
 
-Where tsinfra differs from the tools in the survey behind the [roadmap's ideas](./roadmap.md#ideas), led by its
-strengths:
+Where tsinfra differs from the tools in the survey behind the [roadmap's ideas](./roadmap.md#ideas), led by its strengths:
 
 |                      | tsinfra                                                                     | Others                                                                                                                                                                                                                             |
 | -------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -172,8 +150,7 @@ tsinfra plan            # every host
 
 ## Contents
 
-- **[Steps](./steps.md)**: choosing a method, `ensure`, `file`, `run`, `read`, `inspect`, verification, and what
-  happens on failure
+- **[Steps](./steps.md)**: choosing a method, `ensure`, `file`, `run`, `read`, `inspect`, verification, and what happens on failure
 - **[Waiting on earlier steps](./needs.md)**: `needs`, and how `plan` waits on an earlier change
 - **[Transport](./transport.md)**: local and SSH, ControlMaster, sudo, and how commands and files cross
 - **[CLI](./cli.md)**: the `hosts/` folder, `plan` and `apply`, output, and exit codes
@@ -182,9 +159,6 @@ tsinfra plan            # every host
 
 ## Runtime
 
-tsinfra runs on Bun and requires it. The library uses Bun APIs, including Bun Shell, and may ship Bun Shell helpers
-for host scripts. Host scripts can use Bun APIs too.
+tsinfra runs on Bun and requires it. The library uses Bun APIs, including Bun Shell, and may ship Bun Shell helpers for host scripts. Host scripts can use Bun APIs too.
 
-The CLI loads `hosts/*.ts` with a dynamic import, which Bun runs as TypeScript directly. Host files import `"tsinfra"`,
-so tsinfra has to be installed in the repo that uses it (a dev dependency run with `bunx`). A global install would not
-resolve that import.
+The CLI loads `hosts/*.ts` with a dynamic import, which Bun runs as TypeScript directly. Host files import `"tsinfra"`, so tsinfra has to be installed in the repo that uses it (a dev dependency run with `bunx`). A global install would not resolve that import.

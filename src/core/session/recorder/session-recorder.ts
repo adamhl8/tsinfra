@@ -3,15 +3,14 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { ValidHostOptions } from "#core/hosts/host.ts"
-import type { ValidStepShellOptions } from "#core/session/handlers/options/shell.ts"
+import type { ValidStepShellOptions } from "#core/session/handlers/options/step.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
-import type { GetToolShell, ToolName, ToolOptions } from "#core/session/handlers/tools.ts"
+import type { GetToolShell, ToolName, ValidToolOptions } from "#core/session/handlers/tools.ts"
 import type { HostMeta } from "#core/session/host-meta.ts"
-import type { CommandRecorder } from "#core/session/recorder/commands.ts"
-import { createRecordingTransport } from "#core/session/recorder/commands.ts"
 import { getFailureHints } from "#core/session/recorder/failure-hints.ts"
 import { addSecret, maskSecrets } from "#core/session/recorder/masking.ts"
 import type {
+  CommandRecord,
   ConvergePhase,
   HostRecord,
   SessionFailureKind,
@@ -23,9 +22,8 @@ import type {
 import { RECORDED_OPTION_DEFAULTS, RECORDED_STAND_INS } from "#core/session/recorder/records.ts"
 import type { StepKind, StepStatus } from "#core/session/step.ts"
 import type { Transport } from "#core/transport.ts"
-import type { Shell } from "#core/transport/shell.ts"
+import type { CommandRecorder, RecordOutput, Shell } from "#core/transport/shell.ts"
 import { createShell } from "#core/transport/shell.ts"
-import { createStepTransport } from "#core/transport/step.ts"
 
 /** The phases of `converge` that compare the host with what the step wants. */
 export type ComparePhase = Exclude<ConvergePhase, "fix">
@@ -45,8 +43,8 @@ interface StepShells {
   /** Runs the step's own commands with its options. */
   stepShell: Shell
   /**
-   * Returns a shell for one tool call, which records the call on its command. It runs with the step's variables, and
-   * never as root, because no tool takes `sudo`.
+   * Returns a shell for one tool call, which records the call on its command. It runs with the step's variables, then
+   * the call's, so the call's value wins for a name both set. It never runs as root, because no tool takes `sudo`.
    */
   getToolShell: GetToolShell
 }
@@ -124,51 +122,55 @@ export const createSessionRecorder = (
 
   const mask = <T>(value: T): T => maskSecrets(value, secrets)
 
-  /** Returns a command recorder that records `toolCallRecord` on each command, when it's given one. */
+  /** Returns a command recorder that records each command under the running step, with `toolCallRecord` when given. */
   const createCommandRecorder = (toolCallRecord?: ToolCallRecord): CommandRecorder => ({
-    recordCommand: (commandRecord) => {
-      // Assign the masked `cmd` onto this record, because the recording transport passes this same record to
-      // `recordOutput`.
-      commandRecord.cmd = mask(commandRecord.cmd)
+    recordCommand: (shellCommand) => {
+      const cmd = mask(shellCommand.cmd)
+      const commandRecord: CommandRecord = { ...shellCommand, cmd }
       if (toolCallRecord) commandRecord.toolCall = toolCallRecord
       // Stamp the phase before the command runs, because a reader wants to know when a command started.
       if (currentPhase) commandRecord.phase = currentPhase
       hostRecord.runningStep?.commands.push(commandRecord)
-    },
-    recordOutput: (commandRecord, output, { maskOutput }) => {
-      // Add the trimmed stdout, because that's what the `read` tool returns to the script.
-      if (maskOutput && !isErr(output)) addSecret(secrets, output.stdout.trim())
-      commandRecord.output = mask(output)
+
+      const recordOutput: RecordOutput = (output, maskOutput) => {
+        // Add the trimmed stdout, because that's what the `read` tool returns to the script.
+        if (maskOutput && !isErr(output)) addSecret(secrets, output.stdout.trim())
+        commandRecord.output = mask(output)
+      }
+      return recordOutput
     },
   })
-
-  /**
-   * Returns a shell on `shellTransport` that records each command under the running step, with `toolCallRecord` when
-   * it's given one.
-   */
-  const createRecordingShell = (shellTransport: Transport, toolCallRecord?: ToolCallRecord): Shell =>
-    createShell(createRecordingTransport(shellTransport, createCommandRecorder(toolCallRecord)))
 
   const recordOptions = (_options: StepOptionsToRecord) => {
     const options = mask(toRecordedOptions(_options))
     if (hostRecord.runningStep) hostRecord.runningStep.options = { ...hostRecord.runningStep.options, ...options }
   }
 
-  const getStepShells = (_shellOptions: ValidStepShellOptions): StepShells => {
-    const secretValues = Object.values(_shellOptions.secretEnv)
+  const getStepShells = (shellOptions: ValidStepShellOptions): StepShells => {
+    const { sudo, env, secretEnv } = shellOptions
+    const secretValues = Object.values(secretEnv)
     for (const value of secretValues) addSecret(secrets, value)
-    const variables = { ..._shellOptions.env, ..._shellOptions.secretEnv }
-    // Record each command before the step transport adds the prelude and wraps it in `sudo sh -s`.
-    // The record then holds the step's own script.
-    const stepShell = createRecordingShell(createStepTransport(transport, { sudo: _shellOptions.sudo, variables }))
 
-    const getToolShell = (toolName: ToolName, _toolOptions: ToolOptions): Shell => {
+    const variables = { ...env, ...secretEnv }
+    const stepShell = createShell(transport, { sudo, variables, commandRecorder: createCommandRecorder() })
+
+    recordOptions(shellOptions)
+
+    const getToolShell = (toolName: ToolName, _toolOptions: ValidToolOptions): Shell => {
+      const { env: toolEnv, secretEnv: toolSecretEnv } = _toolOptions
+      const toolSecretValues = Object.values(toolSecretEnv)
+      for (const value of toolSecretValues) addSecret(secrets, value)
+
       const options = mask(toRecordedOptions(_toolOptions))
       const toolCallRecord: ToolCallRecord = { toolName, options }
-      return createRecordingShell(createStepTransport(transport, { sudo: false, variables }), toolCallRecord)
-    }
 
-    recordOptions(_shellOptions)
+      const toolVariables = { ...variables, ...toolEnv, ...toolSecretEnv }
+      return createShell(transport, {
+        sudo: false,
+        variables: toolVariables,
+        commandRecorder: createCommandRecorder(toolCallRecord),
+      })
+    }
 
     return { stepShell, getToolShell }
   }

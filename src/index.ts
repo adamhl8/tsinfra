@@ -12,7 +12,7 @@ export type { ReadOptions } from "#core/session/handlers/read.ts"
 export type { RunOptions, RunTrigger } from "#core/session/handlers/run.ts"
 export type { ChangeStepResult } from "#core/session/handlers/shared/change-step-result.ts"
 export type { Change } from "#core/session/handlers/shared/change.ts"
-export type { Content } from "#core/session/handlers/shared/content.ts"
+export type { Content } from "#core/content.ts"
 export type { FileMode, OctalMode, SymbolicMode } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 export {
   GROUP_DIRECTORY_MODE,
@@ -25,14 +25,9 @@ export {
   PUBLIC_EXECUTABLE_MODE,
   PUBLIC_FILE_MODE,
 } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
-export type {
-  FileAttributeOptions as FileAttributes,
-  FileOwner,
-  InputOptions,
-  MaskOptions,
-  StepNeeds,
-} from "#core/session/handlers/options/handler.ts"
-export type { EnvOptions } from "#core/session/handlers/options/shell.ts"
+export type { FileAttributeOptions as FileAttributes, FileOwner } from "#core/session/handlers/options/attributes.ts"
+export type { EnvOptions, InputOptions, MaskOptions } from "#core/session/handlers/options/command.ts"
+export type { StepNeeds } from "#core/session/handlers/options/step.ts"
 export type { ChangeTools, Exec, Inspect, InspectResult, ReadTools, ToolOptions } from "#core/session/handlers/tools.ts"
 export type { Host } from "#core/session.ts"
 export type { HostMeta } from "#core/session/host-meta.ts"

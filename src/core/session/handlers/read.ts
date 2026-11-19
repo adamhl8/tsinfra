@@ -1,8 +1,7 @@
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
-import type { InputOptions, MaskOptions } from "#core/session/handlers/options/handler.ts"
-import type { EnvOptions } from "#core/session/handlers/options/shell.ts"
+import type { EnvOptions, InputOptions, MaskOptions } from "#core/session/handlers/options/command.ts"
 import { runExecCommand, validateToolCall } from "#core/session/handlers/tools.ts"
 import type { HandlerReturn, StepContext } from "#core/session/step.ts"
 

@@ -103,6 +103,49 @@ describe("env and secretEnv", () => {
     expect(await Bun.file(filePath).text()).toBe("vv")
   })
 
+  it("should give a tool call's env over the step's secretEnv for that call only, and keep the step's secret masked", async () => {
+    const hostSession = await createSession("apply")
+    const outputs: string[] = []
+    await hostSession.host.run(
+      "Print the token",
+      async ({ exec }) => {
+        outputs.push(await exec('printf %s "$TOKEN"', { env: { TOKEN: "plain" } }), await exec('printf "%s" "$TOKEN"'))
+      },
+      { after: "always", secretEnv: { TOKEN: SECRET } },
+    )
+
+    expect({
+      outputs,
+      stdouts: getRecordedSteps(hostSession).map(({ stdouts }) => stdouts),
+      hasSecret: JSON.stringify(hostSession.hostRecord).includes(SECRET),
+    }).toStrictEqual({ outputs: ["plain", SECRET], stdouts: [["plain", "[MASKED]"]], hasSecret: false })
+  })
+
+  it("should mask a tool call's secret in its record, and in a later step", async () => {
+    const hostSession = await createSession("apply")
+    await hostSession.host.run(
+      "Print the token",
+      async ({ exec }) => {
+        await exec('printf %s "$TOKEN"', { secretEnv: { TOKEN: SECRET } })
+      },
+      { after: "always" },
+    )
+    await hostSession.host.read(PRINT_SECRET)
+
+    expect({
+      stdouts: getRecordedSteps(hostSession).map(({ stdouts }) => stdouts),
+      toolCalls: getRecordedToolCalls(hostSession),
+      hasSecret: JSON.stringify(hostSession.hostRecord).includes(SECRET),
+    }).toStrictEqual({
+      stdouts: [["[MASKED]"], ["[MASKED]"]],
+      toolCalls: [
+        { 'printf %s "$TOKEN"': { toolName: "exec", options: { secretEnv: { TOKEN: "[MASKED]" } } } },
+        { [PRINT_SECRET]: undefined },
+      ],
+      hasSecret: false,
+    })
+  })
+
   it("should set PATH to exactly the text given, without expanding it", async () => {
     const { host: h } = await createSession()
 
@@ -131,6 +174,21 @@ describe("env and secretEnv", () => {
 
     expect(await readOrMessage(h, "true", { env: { TOKEN: "a" }, secretEnv: { TOKEN: "b" } })).toBe(
       "failed to validate the options given to 'read' -> must be names in only one of env and secretEnv (was 'TOKEN')",
+    )
+  })
+
+  it("should fail a tool for a name in both env and secretEnv", async () => {
+    const hostSession = await createSession("plan")
+    await attempt(async () =>
+      hostSession.host.ensure("Have a token", {
+        want: "",
+        check: async ({ read }) => read("true", { env: { TOKEN: "a" }, secretEnv: { TOKEN: "b" } }),
+        fix: "false",
+      }),
+    )
+
+    expect(getFailureMessage(hostSession)).toBe(
+      "failed to compare the host with what the step wants -> failed to validate the options given to 'read' -> must be names in only one of env and secretEnv (was 'TOKEN')",
     )
   })
 })
@@ -242,6 +300,31 @@ describe("tool calls", () => {
         true: { toolName: "exec", options: { maskOutput: true } },
       },
     ])
+  })
+
+  it("should give each of two calls run at once only its own variables", async () => {
+    const hostSession = await createSession("apply")
+    let outputs: string[] = []
+    await hostSession.host.run(
+      "Call at once",
+      async ({ exec }) => {
+        outputs = await Promise.all([
+          exec('printf %s "$V"', { env: { V: "a" } }),
+          exec('printf "%s" "$V"', { env: { V: "b" } }),
+        ])
+      },
+      { after: "always" },
+    )
+
+    expect({ outputs, toolCalls: getRecordedToolCalls(hostSession) }).toStrictEqual({
+      outputs: ["a", "b"],
+      toolCalls: [
+        {
+          'printf %s "$V"': { toolName: "exec", options: { env: { V: "a" } } },
+          'printf "%s" "$V"': { toolName: "exec", options: { env: { V: "b" } } },
+        },
+      ],
+    })
   })
 
   it("should record a read step's options on the step, and no tool call on its command", async () => {

@@ -5,14 +5,11 @@ import { isErr } from "ts-explicit-errors"
 import { compareLink } from "#core/session/handlers/link/comparison.ts"
 import { getHostLinkDetails } from "#core/session/handlers/link/host-link-details.ts"
 import { writeLink } from "#core/session/handlers/link/write.ts"
-import type { FileAttributeOptions, OwnerOptions, NeedsOptions } from "#core/session/handlers/options/handler.ts"
-import {
-  fileAttributeOptionsSchema,
-  ownerOptionsSchema,
-  NO_NEEDS,
-  needsOptionsSchema,
-} from "#core/session/handlers/options/handler.ts"
-import type { HandlerOptions, SudoOptions } from "#core/session/handlers/options/shell.ts"
+import type { FileAttributeOptions, OwnerOptions } from "#core/session/handlers/options/attributes.ts"
+import { fileAttributeOptionsSchema, ownerOptionsSchema } from "#core/session/handlers/options/attributes.ts"
+import type { SudoOptions } from "#core/session/handlers/options/command.ts"
+import type { HandlerOptions, NeedsOptions } from "#core/session/handlers/options/step.ts"
+import { needsOptionsSchema, NO_NEEDS } from "#core/session/handlers/options/step.ts"
 import type { ChangeStepResult } from "#core/session/handlers/shared/change-step-result.ts"
 import { withChangeStepResult } from "#core/session/handlers/shared/change-step-result.ts"
 import { converge } from "#core/session/handlers/shared/converge.ts"

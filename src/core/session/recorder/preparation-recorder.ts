@@ -1,10 +1,8 @@
 import type { ValidHostOptions } from "#core/hosts/host.ts"
-import type { CommandRecorder } from "#core/session/recorder/commands.ts"
-import { createRecordingTransport } from "#core/session/recorder/commands.ts"
 import { getFailureHints } from "#core/session/recorder/failure-hints.ts"
-import type { HostRecord } from "#core/session/recorder/records.ts"
+import type { CommandRecord, HostRecord } from "#core/session/recorder/records.ts"
 import type { Transport } from "#core/transport.ts"
-import type { Shell } from "#core/transport/shell.ts"
+import type { CommandRecorder, RecordOutput, Shell } from "#core/transport/shell.ts"
 import { createShell } from "#core/transport/shell.ts"
 
 /** Records a host's preparation, before its script runs: the commands preparation runs, and its failure. */
@@ -22,15 +20,18 @@ export const createPreparationRecorder = (
 ): PreparationRecorder => {
   // Record the output as it is, because preparation never sees a secret.
   const commandRecorder: CommandRecorder = {
-    recordCommand: (commandRecord) => {
+    recordCommand: (shellCommand) => {
+      const commandRecord: CommandRecord = { ...shellCommand }
       hostRecord.preparationCommands.push(commandRecord)
-    },
-    recordOutput: (commandRecord, output) => {
-      commandRecord.output = output
+
+      const recordOutput: RecordOutput = (output) => {
+        commandRecord.output = output
+      }
+      return recordOutput
     },
   }
 
-  const getShell = (transport: Transport) => createShell(createRecordingTransport(transport, commandRecorder))
+  const getShell = (transport: Transport) => createShell(transport, { commandRecorder })
 
   // Record it as the host's first failure, because nothing else runs on the host before preparation finishes.
   const recordFailure = (error: Error) => {

@@ -1,8 +1,8 @@
 import prettyBytes from "pretty-bytes"
 
+import type { Bytes } from "#core/content/bytes.ts"
 import type { FileComparisonValues } from "#core/session/handlers/file/comparison.ts"
 import type { ContentComparison, SizeComparison } from "#core/session/handlers/file/comparison/content.ts"
-import type { Bytes } from "#core/session/handlers/shared/filesystem/bytes.ts"
 import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { formatAlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { formatAttributeChange } from "#report/format/details/shared/attributes.ts"

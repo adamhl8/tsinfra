@@ -1,7 +1,7 @@
 import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
-import type { FileAttributeOptions, FileOwner } from "#core/session/handlers/options/handler.ts"
+import type { FileAttributeOptions, FileOwner } from "#core/session/handlers/options/attributes.ts"
 import { parseFileMode, toOctalMode } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 import type { StepContext, StepKind } from "#core/session/step.ts"
 

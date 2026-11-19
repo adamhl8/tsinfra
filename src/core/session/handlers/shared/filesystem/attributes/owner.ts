@@ -2,7 +2,7 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { OwnerOptions } from "#core/session/handlers/options/handler.ts"
+import type { OwnerOptions } from "#core/session/handlers/options/attributes.ts"
 import type { HostOwner, OwnerChange } from "#core/session/handlers/shared/filesystem/attributes.ts"
 import type { Shell } from "#core/transport/shell.ts"
 

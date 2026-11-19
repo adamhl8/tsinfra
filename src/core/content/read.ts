@@ -1,23 +1,9 @@
-import { type } from "arktype"
 import prettyBytes from "pretty-bytes"
 import type { Result } from "ts-explicit-errors"
 import { attempt, err, isErr } from "ts-explicit-errors"
 
-import { toBytes } from "#core/session/handlers/shared/filesystem/bytes.ts"
-
-/** Data from the control machine: a string or bytes computed there, or a `Blob` like `bun.file(...)` for a file there. */
-export type Content = string | Uint8Array | Blob
-
-// Widen `Uint8Array` with `as`, because ArkType infers `Uint8Array<ArrayBuffer>` and `Content` takes any buffer.
-export const contentSchema = type
-  .declare<Content>()
-  .type(type("string").or(type.instanceOf(Uint8Array).as<Uint8Array>()).or(type.instanceOf(Blob)))
-
-/** What content can be, as an error message names it. */
-export const CONTENT_DESCRIPTION = "a string, bytes, or a Blob"
-
-// Write the reason here, because ArkType's summary names different types depending on the value.
-export const INVALID_CONTENT_REASON = `must be ${CONTENT_DESCRIPTION}`
+import type { Content } from "#core/content.ts"
+import { toBytes } from "#core/content/bytes.ts"
 
 // Limit the content, because the shell holds the whole script in memory, and base64 adds a third.
 const MAX_CONTENT_BYTES = toBytes(10_000_000) // 10 MB

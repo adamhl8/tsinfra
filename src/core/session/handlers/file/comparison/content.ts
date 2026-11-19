@@ -1,11 +1,11 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
+import type { Bytes } from "#core/content/bytes.ts"
+import { toBytes } from "#core/content/bytes.ts"
 import type { ValidFileOptions } from "#core/session/handlers/file.ts"
 import type { HostFileDetails } from "#core/session/handlers/file/host-file-details.ts"
 import type { ResolvedFileContent } from "#core/session/handlers/file/resolved-content.ts"
-import type { Bytes } from "#core/session/handlers/shared/filesystem/bytes.ts"
-import { toBytes } from "#core/session/handlers/shared/filesystem/bytes.ts"
 import type { Shell } from "#core/transport/shell.ts"
 import { quoteShellArg } from "#utils.ts"
 

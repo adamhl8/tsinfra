@@ -1,7 +1,7 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { StepNeeds } from "#core/session/handlers/options/handler.ts"
+import type { StepNeeds } from "#core/session/handlers/options/step.ts"
 import type { ComparePhase } from "#core/session/recorder/session-recorder.ts"
 import type { ChangeStepKind, ComparisonValues, StepContext, StepStatus } from "#core/session/step.ts"
 

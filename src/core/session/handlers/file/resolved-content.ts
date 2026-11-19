@@ -2,10 +2,10 @@ import { CryptoHasher } from "bun"
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
+import type { Bytes } from "#core/content/bytes.ts"
+import { toBytes } from "#core/content/bytes.ts"
+import { readContentBytes } from "#core/content/read.ts"
 import type { FileContent } from "#core/session/handlers/file.ts"
-import { readContentBytes } from "#core/session/handlers/shared/content.ts"
-import type { Bytes } from "#core/session/handlers/shared/filesystem/bytes.ts"
-import { toBytes } from "#core/session/handlers/shared/filesystem/bytes.ts"
 
 /** What the script's content is, worked out once before reading the host's state. */
 export interface ResolvedFileContent {

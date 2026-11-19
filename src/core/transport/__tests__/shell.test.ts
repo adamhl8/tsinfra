@@ -4,29 +4,49 @@ import type { Result } from "ts-explicit-errors"
 import { isErr, messageChain } from "ts-explicit-errors"
 
 import { createRandomBytes } from "#core/__tests__/content.ts"
-import { createRecordingTransport } from "#core/session/recorder/commands.ts"
 import type { CommandRecord } from "#core/session/recorder/records.ts"
 import { getLocalTransport } from "#core/transport.ts"
+import { runLocal } from "#core/transport/local.ts"
+import type { RecordOutput, ShellOptions } from "#core/transport/shell.ts"
 import { createShell } from "#core/transport/shell.ts"
-import { createStepTransport } from "#core/transport/step.ts"
 import { HEREDOC_DELIMITER } from "#core/transport/utils.ts"
 
-/** Returns a recording shell on the local transport, through a step transport with `variables`, and its records. */
+/** Returns a recording shell on the local transport with `variables`, and its records. */
 const createLocalShell = (variables: Record<string, string> = {}) => {
   const commandRecords: CommandRecord[] = []
-  const stepTransport = createStepTransport(getLocalTransport(), { sudo: false, variables })
-  const shell = createShell(
-    createRecordingTransport(stepTransport, {
-      recordCommand: (commandRecord) => {
+  const shell = createShell(getLocalTransport(), {
+    variables,
+    commandRecorder: {
+      recordCommand: (shellCommand) => {
+        const commandRecord: CommandRecord = { ...shellCommand }
         commandRecords.push(commandRecord)
+
+        const recordOutput: RecordOutput = (output) => {
+          commandRecord.output = output
+        }
+        return recordOutput
       },
-      recordOutput: (commandRecord, output) => {
-        commandRecord.output = output
-      },
-    }),
-  )
+    },
+  })
 
   return { shell, commandRecords }
+}
+
+// Hold every character a value could break on in a script: a variable, both quotes, a space, and a newline.
+const AWKWARD_VALUE = `a $HOME "b" 'c'\nd`
+
+/**
+ * Runs `cmd` on a shell bound to `shellOptions`, and returns its output and every script it sent. Stand in for `sudo`
+ * with a function that prints its arguments, then runs them with an empty environment, as sudo resets it.
+ */
+const runInShell = async (shellOptions: ShellOptions, cmd: string) => {
+  const scripts: string[] = []
+  const shell = createShell(async (script) => {
+    scripts.push(script)
+    return runLocal(`sudo() { echo "sudo $*"; env -i PATH="$PATH" "$@"; }\n${script}`)
+  }, shellOptions)
+
+  return { output: await shell.inspect(cmd), scripts }
 }
 
 const toInput = (text: string) => new TextEncoder().encode(text)
@@ -71,7 +91,7 @@ describe("createShell with input", () => {
     expect(await shell.exec(cmd, { input: toInput("a") })).toBe(`\n${HEREDOC_DELIMITER}\n|a`)
   })
 
-  it("should give the command the step's variables", async () => {
+  it("should give the command the shell's variables", async () => {
     const { shell } = createLocalShell({ V: "v" })
 
     expect(await shell.exec(`printf '%s|' "$V"\ncat`, { input: toInput("a") })).toBe("v|a")
@@ -83,5 +103,41 @@ describe("createShell with input", () => {
     await shell.exec("cat", { input: toInput("secret") })
 
     expect(commandRecords).toStrictEqual([{ cmd: "cat", output: { stdout: "secret", stderr: "", exitCode: 0 } }])
+  })
+})
+
+describe("createShell with sudo and variables", () => {
+  it("should send a command with no options unchanged", async () => {
+    expect(await runInShell({}, "echo hi")).toStrictEqual({
+      output: { stdout: "hi\n", stderr: "", exitCode: 0 },
+      scripts: ["echo hi"],
+    })
+  })
+
+  it("should export the shell's variables, with any value unchanged", async () => {
+    const { output } = await runInShell(
+      { variables: { V: AWKWARD_VALUE, TOKEN: "t" } },
+      `sh -c 'printf "%s|%s" "$V" "$TOKEN"'`,
+    )
+
+    expect(output).toStrictEqual({ stdout: `${AWKWARD_VALUE}|t`, stderr: "", exitCode: 0 })
+  })
+
+  it("should set the variables inside the root shell for sudo: true", async () => {
+    const { output } = await runInShell({ sudo: true, variables: { V: AWKWARD_VALUE } }, 'printf %s "$V"')
+
+    expect(output).toStrictEqual({ stdout: `sudo sh -s\n${AWKWARD_VALUE}`, stderr: "", exitCode: 0 })
+  })
+
+  it("should keep a sudo: true command from reading the rest of the script as its stdin", async () => {
+    const { output } = await runInShell({ sudo: true }, "cat\necho after")
+
+    expect(output).toStrictEqual({ stdout: "sudo sh -s\nafter\n", stderr: "", exitCode: 0 })
+  })
+
+  it("should give the exit code of a sudo: true script", async () => {
+    const { output } = await runInShell({ sudo: true }, "set -eu\nfalse\necho not-reached")
+
+    expect(output).toStrictEqual({ stdout: "sudo sh -s\n", stderr: "", exitCode: 1 })
   })
 })
