@@ -3,6 +3,7 @@ import { isErr } from "ts-explicit-errors"
 import type { CommandRecord, StepRecord } from "#core/session/recorder/records.ts"
 import type { StepKind } from "#core/session/step.ts"
 import type { CommandGroup, CommandOutputDetail, Detail, StepCommand } from "#report/host-block.ts"
+import { toStepOptions } from "#report/host-block/details/options.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 
 // List the commands from level 2, because they say how the work was done, which matters only when looking closely.
@@ -31,15 +32,19 @@ const toCommandOutputDetail = (output: NonNullable<CommandRecord["output"]>): Co
 }
 
 /**
- * Returns a command with the tool whose call ran it, and what it printed as a piece of its own, from level 3, when each
- * was recorded.
+ * Returns a command with the tool whose call ran it and the options that call set, and what it printed as a piece of
+ * its own, from level 3, when each was recorded.
  */
-const toStepCommand = ({ cmd, label, toolCall, output }: CommandRecord): StepCommand => ({
-  cmd,
-  ...(label !== undefined && { label }),
-  ...(toolCall !== undefined && { toolName: toolCall.toolName }),
-  ...(output !== undefined && { output: { ...toCommandOutputDetail(output), from: OUTPUT_LEVEL } }),
-})
+const toStepCommand = ({ cmd, label, toolCall, output }: CommandRecord): StepCommand => {
+  const options = toolCall === undefined ? [] : toStepOptions(toolCall.options)
+  return {
+    cmd,
+    ...(label !== undefined && { label }),
+    ...(toolCall !== undefined && { toolName: toolCall.toolName }),
+    ...(options.length > 0 && { options }),
+    ...(output !== undefined && { output: { ...toCommandOutputDetail(output), from: OUTPUT_LEVEL } }),
+  }
+}
 
 /**
  * Groups `commandRecords` by the phase that ran them, keeping the order they ran in, so a group starts wherever the

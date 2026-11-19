@@ -4,12 +4,15 @@ import process from "node:process"
 
 import { minimalEnv } from "@adamhl8/configs/test"
 import bun from "bun"
+import pc from "picocolors"
 
 import { createProject } from "#__tests__/cli-project.ts"
 import { answerPrompts } from "#__tests__/terminal.ts"
 
 setDefaultTimeout(30_000)
 
+// Build the colors the subprocess prints with `FORCE_COLOR`, because the test preload turns them off in this process.
+const COLORS = pc.createColors(true)
 const PLAN_REMINDER = "Steps after a change were checked without that change, so apply may differ."
 // Match what `readline.clearLine` and `readline.cursorTo` write: erase the line, then go to its first column.
 const CLEAR_PROGRESS = "\u001B[2K\u001B[1G"
@@ -99,6 +102,16 @@ describe("tsinfra", () => {
     expect(stdout).toBe(
       "a\n  · observed: (read) true\n      output:\n        exit: 0\n  = unchanged: (ensure) Install git\n      commands:\n        before:\n          $ true\n              output:\n                exit: 0\n\na   unchanged",
     )
+  })
+
+  it("should dim every [MASKED], with the text around it in its own color", async () => {
+    const { run } = await createProject()
+
+    const { stdout } = await run`tsinfra apply --hosts-dir hosts-masked -vvv`.env({ FORCE_COLOR: "1" }).nothrow()
+
+    const masked = COLORS.dim("[MASKED]")
+    expect(stdout.split(masked).length).toBe(stdout.split("[MASKED]").length)
+    expect(stdout).toContain(`${COLORS.cyan("token=")}${masked}`)
   })
 
   it("should print a failed host's error on stdout and exit 1, even with drift on another host", async () => {

@@ -19,8 +19,12 @@ const toStepOption = (name: string, value: OptionsRecordValue): StepOption => {
   return { name, entries }
 }
 
+/** Returns the recorded options of a step or a tool call as nodes, in the order they were recorded. */
+export const toStepOptions = (optionsRecord: StepOptionsRecord): StepOption[] =>
+  Object.entries(optionsRecord).map(([name, value]) => toStepOption(name, value))
+
 /** Returns the options the step set that the report shows, as one detail, or none when it set none. */
 export const toOptionsDetails = (stepRecord: StepRecord): Detail[] => {
-  const options = Object.entries(stepRecord.options).map(([name, value]) => toStepOption(name, value))
+  const options = toStepOptions(stepRecord.options)
   return options.length > 0 ? [{ kind: "options", options, from: OPTIONS_LEVEL }] : []
 }

@@ -7,6 +7,7 @@ rest of the docs describe tsinfra as it is.
 
 - [Next](#next)
   - [`env` and `secretEnv` on tool calls](#env-and-secretenv-on-tool-calls)
+  - [A global `tsinfra` that starts the project's copy](#a-global-tsinfra-that-starts-the-projects-copy)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
   - [Live progress](#live-progress)
@@ -18,6 +19,7 @@ rest of the docs describe tsinfra as it is.
   - [Interactive commands](#interactive-commands)
   - [Waiting for a fix to take effect](#waiting-for-a-fix-to-take-effect)
   - [Manual steps](#manual-steps)
+  - [Update warnings](#update-warnings)
 - [Follow-ups](#follow-ups)
 - [Open questions](#open-questions)
   - [Integrations worth shipping](#integrations-worth-shipping)
@@ -66,6 +68,40 @@ fix: async ({ exec }) => {
 When it's built, [Commands](./steps.md#commands) drops "The tools don't take them" and "A tool call shows none of its
 options", and its note that `input` isn't masked points to a call's `secretEnv`. The Maybe later entry for an argument
 list as a command loses its case where `env` feels heavy for one value.
+
+### A global `tsinfra` that starts the project's copy
+
+A global install gives a plain `tsinfra` on the PATH, in place of `bunx tsinfra`. The global copy is only a launcher.
+It starts the project's copy, and never runs host scripts itself:
+
+```sh
+bun add --dev tsinfra     # the version your host scripts run on
+bun add --global tsinfra  # optional, for a plain `tsinfra`
+```
+
+- **The global copy hands off to the project's.** It resolves `tsinfra/cli` from the working directory and imports it.
+  The project's copy resolves to its own path, so it skips the hand-off and runs normally.
+- **There's no fallback.** Host scripts import `"tsinfra"`, so the global copy can't run them anyway. Without a project
+  copy, a command that runs hosts fails with "tsinfra isn't installed in this project", and how to add it. Host scripts
+  only ever run on the version in the project's lockfile, whatever the global version is.
+- **The error also covers Bun's auto-install.** In a directory with no `node_modules`, Bun installs imports when it runs
+  them, so `import "tsinfra"` would quietly fetch the newest version.
+- **`tsinfra --version` shows both,** like `0.9.0 (project)` and `0.8.2 (global)`. The launcher answers it itself, so
+  the project's copy never needs to know it was started by one. Outside a project, `--version` and `--help` answer from
+  the global copy.
+- **The hand-off contract never changes.** An old global copy has to start any newer project copy, so the
+  `tsinfra/cli` export stays where it is for good. It's the only thing the launcher relies on.
+- **A failed hand-off says to update both copies.** When `"tsinfra"` resolves from the working directory but
+  `tsinfra/cli` doesn't, or importing it fails, the launcher says it couldn't start the project's copy and to update
+  both copies. The launcher can't tell a contract change from any other failure, so the message covers the one cause
+  updating fixes, if the contract ever has to change.
+
+Without a global install, direnv's `layout node` or mise's `_.path` put the project's `node_modules/.bin` on the PATH
+inside the repo, for the same plain `tsinfra`.
+
+When it's built, the README's Installation drops "not globally" and shows both installs, its examples use a plain
+`tsinfra`, and [Runtime](./README.md#runtime) says what the global copy does in place of "A global install would not
+resolve that import". The direnv and mise note goes in the README as a tip.
 
 ## Planned
 
@@ -384,6 +420,31 @@ instructions in place of a fix, like `h.manual(name, { want, check, instructions
   [Interactive commands](#interactive-commands), and the live progress area pauses while it's open.
 - **Today** an `ensure` whose fix fails with the instructions does the same job with a rerun, because every earlier
   step is already right (see [Recipes](./recipes.md#a-reboot)).
+
+### Update warnings
+
+Each copy of tsinfra warns when a newer version is out. The global launcher (see
+[A global `tsinfra` that starts the project's copy](#a-global-tsinfra-that-starts-the-projects-copy)) checks its own
+version, and the project's copy checks its own. Neither knows about the other, so a run can show both warnings, one, or
+neither.
+
+- **Neither copy updates anything.** A global install could come from any package manager, so tsinfra doesn't guess
+  how to update it, and changing a global install for someone oversteps.
+- **The check never slows a run.** The newest version is fetched from the npm registry at most once a day and cached on
+  the machine running tsinfra, at `~/.tsinfra/latest-version.json`. A warning comes from the cache. A fetch still
+  running when the run ends shows its result on a later run.
+- **The two copies share the cache.** It holds only the newest version and when it was checked, and each copy compares
+  its own version to it. Its format is a contract that never changes, like `tsinfra/cli`, because an old global copy
+  reads what a newer project copy wrote.
+- **A cache a copy can't read says to update both copies,** the same as a failed hand-off. The copy can't tell a format
+  change from a corrupt file, so the message covers the one cause updating fixes.
+- **The launcher warns before it hands off.** The project's copy may exit the process itself, so the launcher has no
+  later point to print from. It reads the cache and never waits for a fetch.
+- **Each warning names its own copy.** The project's says how to update with the package manager its lockfile shows
+  (`bun.lock`, `package-lock.json`, `pnpm-lock.yaml`). The global's says to update it the way it was installed, with a
+  `bun add --global` example.
+- **The warnings stay out of the way.** They go to stderr, after the report for the project's copy, and never change the
+  exit code. They're skipped when stderr isn't a TTY, in CI, or when an opt-out environment variable is set.
 
 ## Follow-ups
 

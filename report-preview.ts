@@ -148,7 +148,7 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
     },
     {
       // Every element on steps that succeed. `ensure` strings: `got:` and `want:` rows, multi-line rows with a lone side,
-      // `(empty)` for a value and a line, a quoted trailing space, and the notes for too many lines and a slow compare.
+      // `''` for a value and a line, a quoted trailing space, and the notes for too many lines and a slow compare.
       // `ensure` sets: `missing:` and `extra:` rows. `ensure` lists: a diff for a reorder, and `want: []` with only `-`
       // lines.
       // `ensure` records: a row per key that differs, with `(none)` for a key only one side has.
@@ -160,7 +160,8 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
       // run and one that didn't trigger.
       // A read with `env` and `secretEnv`, with a multi-line, an empty, a padded, and a masked value.
       // A read with `input`, whose value at `-vvv` is a muted stand-in.
-      // Commands at `-vv`, with the tools that ran them, and their phases, output, and labels at `-vvv`.
+      // Commands at `-vv`, with the tools that ran them and a tool call's options, and their phases, output, labels,
+      // and the tool call's option values at `-vvv`.
       name: "elements",
       target: "@local",
       pass: "apply",
@@ -196,8 +197,8 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
           want: new Set(["fd", "jq", "ripgrep"]),
           check: String.raw`cat '${marker("package-list")}' 2>/dev/null || printf 'zsh\nfd\nbat\n'`,
           fix: async ({ exec }, { missing, extra }) => {
-            await exec(`echo 'installing ${missing.join(" ")}, removing ${extra.join(" ")}'`)
-            await exec(String.raw`printf 'fd\njq\nripgrep\n' > '${marker("package-list")}'`)
+            await exec(`echo 'installing ${missing.join(" ")}, removing ${extra.join(" ")}'`, { maskOutput: true })
+            await exec(`cat > '${marker("package-list")}'`, { input: "fd\njq\nripgrep\n" })
           },
         })
         await h.ensure("Set the search domains", {

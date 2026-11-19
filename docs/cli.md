@@ -63,22 +63,25 @@ levels only change what's printed:
 - **`-vv`** also shows how each step ran. A diff or a comparison that took longer than 200 ms gets up to 10 seconds and
   shows in full. A step given options that change how its commands run gets an `options:` line under it, naming the ones
   it set, like `options: sudo` or `options: env { URL, PORT }, secretEnv { TOKEN }`. It names each variable but shows no
-  value, because the values come at `-vvv`. A read or inspect given `input` or `maskOutput` names it there too. A `sudo`
-  the script writes inside a command doesn't count, because it shows in the command. It lists each command a step ran,
+  value, because the values come at `-vvv`. A read or inspect given `input` or `maskOutput` names it there too. A tool
+  call's options get the same line under its command, one level past its text, like `options: input`. A `sudo` the
+  script writes inside a command doesn't count, because it shows in the command. It lists each command a step ran,
   dimmed, under a `commands:` heading after the step's other details, like `$ systemctl is-active sonarr`, in the order
   they ran. A read or inspect lists none, because its name is its command. A command tsinfra writes itself shows as its
   label in angle brackets, like `$ <file details script>`, because its text is tsinfra's code, not the script's. Angle
   brackets mark text that isn't shown, as the record's `<content as base64>` does. A command a tool call ran starts with
   the tool in parentheses, styled like a step's kind, like `(exec) $ curl -fsS "$URL"`, so it's clear which commands a
   check or fix function ran. The tools are padded so the prompts line up, and the step's other commands line up past
-  them. A command's later lines line up under its first line's text. On a failed step, the commands come after what it
-  found and before any hint. A `file` step's `validate` command shows in its options, not after the write script's
-  label, so it shows in `plan` too. A step's commands never show the `sudo sh -s` that `sudo: true` wraps them in. A
-  preparation failure lists the commands preparation ran, by their labels, like `$ <home directory>`, so it shows how
-  far preparation got. A host that was prepared lists none, because the same commands would repeat in every block.
+  them. A command's later lines start with `> `, like a shell's continuation prompt, so what shows under a command can't
+  read as more of it. On a failed step, the commands come after what it found and before any hint. A `file` step's
+  `validate` command shows in its options, not after the write script's label, so it shows in `plan` too. A step's
+  commands never show the `sudo sh -s` that `sudo: true` wraps them in. A preparation failure lists the commands
+  preparation ran, by their labels, like `$ <home directory>`, so it shows how far preparation got. A host that was
+  prepared lists none, because the same commands would repeat in every block.
 - **`-vvv`** also turns the `options:` line into a block, with each variable on its own row and its value, and each
-  `secretEnv` value as `[MASKED]`. A read's or inspect's `input` shows as `<content>`, because the record never holds
-  the input. The values line up within each of `env` and `secretEnv`, not across them, because each is its own object.
+  `secretEnv` value as `[MASKED]`. A read's, inspect's, or tool call's `input` shows as `<content>`, because the record
+  never holds the input. A tool call's block goes under its command, before its `output:`. The values line up
+  within each of `env` and `secretEnv`, not across them, because each is its own object.
   It also shows what each command printed, as `exit:`, `stdout:`, and `stderr:` rows under a dim italic `output:`
   heading, one level past the command's text, with their values lined up. The heading keeps the rows from reading like
   more of a multi-line command. A read or inspect, which lists no command, shows its `output:` heading and rows right
@@ -93,9 +96,11 @@ levels only change what's printed:
 - **Secrets never show.** A secret reaches a command through the step's `secretEnv`, so the command's text never holds
   it, and `-vv` shows `"$TOKEN"` where it's used. The step's record keeps its variables, with each secret as
   `[MASKED]`, and the output and errors of that command and of every later command on the host are masked the same
-  way. `maskOutput` masks a command's own output, for a secret read from the host (see [Steps](./steps.md#commands)).
-  Every command is recorded, so the record is the one place to enforce that. The sudo preamble and the variables wrap
-  each command after the recorder has seen it, so neither is recorded as part of the command.
+  way. The report dims each `[MASKED]` wherever it shows, in an option, a value, output, or an error, and keeps the text
+  around it in its own color. `maskOutput` masks a command's own output, for a secret read from the host (see
+  [Steps](./steps.md#commands)). Every command is recorded, so the record is the one place to enforce that. The sudo
+  preamble and the variables wrap each command after the recorder has seen it, so neither is recorded as part of the
+  command.
 - **A failure doesn't need them.** A failed step's error already names the command that failed and its stderr.
 
 The same host at each level, in `apply`, with a `sudo: true` file that changes, and the run it triggers:
@@ -221,14 +226,15 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
     shows from.
   - **Palette** (`styles.ts`) holds the looks several elements share on purpose, like red for what's on the host and
     green for what the script wants, so a `got:` value and a diff's `-` line always match. It's the only place
-    picocolors is used.
+    picocolors is used. Its styles mute each `[MASKED]` in the text they color, so every element shows it the same way,
+    and recorded text in the terminal's own color goes through its `stylePlain`.
   - **Elements** (`report/format/elements/`) each format one element of the output from its data, like a status, a
     kind, a label, or a value. An element decides how something looks, and structure decides what it says. So an
-    element adds its own markup, like the parentheses around a kind, the quotes at a value's edges, or the `(empty)`
+    element adds its own markup, like the parentheses around a kind, the quotes at a value's edges, or the `(none)`
     marker, and picks its own look from the palette, so it never takes a style. It holds none of tsinfra's words. It
     doesn't know where it ends up. An element function is named after its element, like `labelElement`, and every
     function that starts with `format` is structure. Elements look alike only by choice,
-    like a kind and the `(empty)` marker, which are both muted, so either can change alone. The files are named after
+    like a kind and the `<content>` marker, which are both muted, so either can change alone. The files are named after
     what their elements are about, never after a layout shape like a row. A formatter for one kind of data, like a
     file's size, stays private next to its caller, and its text can go through an element after it.
   - **Structure** (`report/format/details/`, the rest of `report/format/`, and `report/summary.ts`) puts elements
@@ -284,15 +290,16 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
 
   | Value or line                               | Shows as    |
   | ------------------------------------------- | ----------- |
-  | Empty, a whole value or one of its lines    | `(empty)`   |
+  | Empty, a whole value or one of its lines    | `''`        |
   | Only whitespace, like `"  "`                | `'  '`      |
   | Leading or trailing whitespace, `" active"` | `' active'` |
   | A side of a change that has no value        | `(none)`    |
 
-  The markers are dim, like `[MASKED]`, because they're tsinfra's words, not the value. `(none)` is for a key only one
-  side of an object has. `(empty)` says "empty", not "blank", because a
-  value of only whitespace shows quoted, so `""` and `"  "` never look the same. The quotes stay uncolored, so they
-  don't read as part of the value.
+  The markers are dim, like `[MASKED]`, because they're tsinfra's, not the value. An empty value's quotes are the same
+  quotes that show whitespace, so it reads as a string with nothing in it, and `""` and `"  "` never look the same.
+  The quotes around whitespace stay uncolored, so they don't read as part of the value. `(none)` is for a key only one
+  side of an object has. It's also italic, like a note, because it's tsinfra saying nothing is there. It keeps its
+  parentheses, so a value of `none` can't pass for it when the report has no color.
 
   Italics mark a value that isn't a string but could pass for one. A boolean or a number prints as text a string could
   hold too, like `true` or `501`, so it's italic. An owner row is where this matters most: a user given as the name
@@ -315,21 +322,22 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   markers, not values the script gave. On the line, an object's variable names go in braces after its name, like
   `env { URL, PORT }`, with the braces dim. A colon there would nest under `options:`, and the braces keep one object's
   names apart from the next. It's the first of a step's details, and on a failed step it comes after the error, like its
-  other details. Only options the step set show, so `sudo: false` and an empty `env` never do. Only options whose effect
-  shows nowhere else in the report show: `sudo`, `env`, and `secretEnv`, a read's or inspect's `input` and `maskOutput`,
+  other details. A tool call's options go under its command instead, before what it printed. Only options the step or
+  call set show, so `sudo: false` and an empty `env` never do. Only options whose effect shows nowhere else in the
+  report show: `sudo`, `env`, and `secretEnv`, `input` and `maskOutput` on a read, an inspect, or a tool call,
   `file`'s `validate`, as the command it built, `secret`, and `overwrite: false`, `link`'s `force`, and `ensure`'s
   `verify: false`. A step that used one of those can look the same as one that didn't. `want`, `content`, `mode`,
   `user`, `group`, `needs`, and `after` already show as values, diffs, attribute rows, notes, or a status, and `check`
   and `fix` show as commands. The shell options come first, then the step's own, in the order they were recorded.
 - **Commands.** From 2, a step's commands show under a dim italic `commands:` heading, each on its own dim line as
   `$ cmd`, in the order they ran, so they read as background next to the details. A command tsinfra wrote itself shows
-  as its label in angle brackets, like `$ <file details script>`, and its later lines line up under its first line's
-  text. A command a tool call ran starts with its tool, muted in parentheses like a step's kind, in a column of its own
-  that a step with no tool calls leaves out. From 3, a step that compares the host's state groups its commands under a
-  heading for each phase, and what each command printed goes under it, under an `output:` heading one level past its
-  text. They come after a step's other details, warnings included, and before any hint. A read or inspect lists none,
-  because its name is its command. A preparation failure lists the commands preparation ran, under its error and
-  before any hint, and a host that was prepared lists none.
+  as its label in angle brackets, like `$ <file details script>`. A command's later lines start with `> ` in the
+  prompt's color, and line up under its first line's text. A command a tool call ran starts with its tool, muted in
+  parentheses like a step's kind, in a column of its own that a step with no tool calls leaves out. From 3, a step that
+  compares the host's state groups its commands under a heading for each phase, and what each command printed goes under
+  it, under an `output:` heading one level past its text. They come after a step's other details, warnings included, and
+  before any hint. A read or inspect lists none, because its name is its command. A preparation failure lists the
+  commands preparation ran, under its error and before any hint, and a host that was prepared lists none.
 - **Warnings.** A step that worked but needs a look, like a link to a missing path, gets a `warning:` line under its
   details, with the label in bright yellow, so it stands apart from the plain yellow of a change. A warning makes its
   step show even when it was already right, without `--verbose`. The report decides what's a warning from the facts
@@ -368,7 +376,7 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
 - **A string `ensure` value** shows as `got:` and `want:` rows under its step, not as a diff, because a check's output
   has no lines for numbers to point to. A multi-line value shows only the lines that differ, which jsdiff picks, so a
   long list with one change stays short. Each line follows the rules in Values, so an empty line or a trailing space
-  still shows. An empty value shows as `(empty)`, and a side whose lines are all in the other side has no row, like a lone `want:` row
+  still shows. An empty value shows as `''`, and a side whose lines are all in the other side has no row, like a lone `want:` row
   for a missing package. The rows don't say where in the value a line sits, so a pure reorder shows the same lines
   under both. More than 15 differing lines show "N lines differ", which suggests `--verbose`, and lines that take
   longer than 200 ms to compare show "values took too long to compare", which suggests `-vv`. A boolean or an
@@ -378,7 +386,7 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
   ruled between hunks, and limited like a `file` diff, with the same notes for a long diff and a slow one, because it's
   as unlabeled as one, so the rules set it apart from the rows around it. It has no line numbers, because a check's
   output has no lines for them to point to. Each item follows the rules in Values, in the current color after a `-`,
-  the wanted color after a `+`, and the terminal's own color when unchanged, so an empty item shows as `(empty)` and a
+  the wanted color after a `+`, and the terminal's own color when unchanged, so an empty item shows as `''` and a
   trailing space shows quoted.
 - **A set `ensure` value** shows as a `missing:` row, with what `want` has that the check didn't find, in `want`'s
   order, then an `extra:` row, with what the check found that `want` doesn't have, in the check's order. A side with

@@ -245,8 +245,8 @@ fix function reaches `input` through its tools. A `sudo` in the command passes t
 [Transport](./transport.md#input)).
 
 The record never holds the input, because it can be a secret, and it can be large. A read or inspect shows it in its
-options as `<content>` (see [CLI](./cli.md#output)). A tool call shows none of its options, so its command's text is
-what says it reads stdin, like `--file=-` or `diff -`.
+options as `<content>` (see [CLI](./cli.md#output)). A tool call shows its options under its command, with `input` as
+`<content>`.
 
 The input itself is never recorded, but it isn't masked either, so a command that prints it, in its output or in an
 error, shows it in the record. A secret belongs in `secretEnv` (see [the roadmap](./roadmap.md#env-and-secretenv-on-tool-calls)
@@ -906,7 +906,7 @@ The report shows a diff from the host's list to the wanted one, framed like a fi
 `-`, an item only `want` has gets `+`, and one unchanged item on each side of a change shows plain. A reorder reads as
 an item leaving one place and arriving in another, which `missing:` and `extra:` rows can't show, because they'd list
 the moved item under both without saying where it sits. Each item follows the value rules, so an empty one shows as
-`(empty)` and one with a trailing space shows quoted (see [CLI](./cli.md#how-the-report-is-built)).
+`''` and one with a trailing space shows quoted (see [CLI](./cli.md#how-the-report-is-built)).
 
 ```
   ~ change: (ensure) Set the search domains
@@ -1177,7 +1177,7 @@ that needs a sudo password, tsinfra supplies it (see [Transport](./transport.md#
 
 **Verification.** After a fix runs, the check runs again. If it still does not pass, the step fails with "the host's
 state still differs after the fix", followed by a `got:` and a `want:` row, which hold only the lines that differ for
-a multi-line string. A string shows as it is, and an empty one as `(empty)` (see
+a multi-line string. A string shows as it is, and an empty one as `''` (see
 [CLI](./cli.md#how-the-report-is-built)). A boolean shows as `true` or `false`. An exit status shows as `exit code 1`,
 against `exit code 0` or `a non-zero exit code`. A `stderr:` row follows for the fix and the check when each ran one
 command that printed some, and names that command (see [CLI](./cli.md#output)). A step that reports a change on every

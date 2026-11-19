@@ -126,6 +126,9 @@ whether a reader could mistake it for the wanted value or the host's value.
   Otherwise each host that fails there leaves its saved state in the real `~/.tsinfra/state/`.
 - **Recorders follow the stages of a run** (preparation, then the session), not the host, step, and converge
   hierarchy.
+- **All recorded text goes through a palette style,** even text left in the terminal's own color (`stylePlain`),
+  because the palette's styles are what mute `[MASKED]`. Text that skips one shows `[MASKED]` in the color around it.
+  The `hosts-masked` CLI test checks that every `[MASKED]` it prints is dim.
 
 ### `src/core/session/handlers/`
 

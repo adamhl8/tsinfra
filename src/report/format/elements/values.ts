@@ -1,20 +1,20 @@
-import { MASKED_VALUE } from "#core/session/recorder/masking.ts"
 import { RECORDED_STAND_INS } from "#core/session/recorder/records.ts"
 import type { Style } from "#styles.ts"
-import { styleCurrent, styleItalic, styleMuted, styleValue, styleWanted } from "#styles.ts"
+import { styleCurrent, styleItalic, styleMuted, stylePlain, styleValue, styleWanted } from "#styles.ts"
 
 /** A value the report shows: a string, or a boolean or a number, which shows differently so it can't pass for one. */
 type Value = string | boolean | number
 
-// Say "empty", not "blank", because a string of only whitespace shows quoted, not as a marker.
-const EMPTY_MARKER = "(empty)"
+// Show an empty string in the same quotes that show edge whitespace, so it reads as a string with nothing in it.
+const EMPTY_MARKER = "''"
 // Mark a side of a change that has no value, like a key only one side of a record has, without saying what the fix does.
+// Keep the parentheses, so a value of `none` can't pass for it when the report has no color.
 const NONE_MARKER = "(none)"
 const EDGE_WHITESPACE = /^\s|\s$/v
 
 /**
  * Applies the rules every value follows, in the color the element picks. A string shows as it is, except that an empty
- * one shows as a muted marker, and one that starts or ends with whitespace is quoted, with the quotes unstyled, so the
+ * one shows as muted quotes, and one that starts or ends with whitespace is quoted, with the quotes unstyled, so the
  * whitespace shows. Anything else is italic, because its text could otherwise pass for a string's, like `true` or
  * `501`, and `describe` can put words around one that's hard to read alone, like `exit code 1`.
  */
@@ -43,7 +43,7 @@ export const wantValueElement: FormatSideValue = (value: Value, describe?: (valu
   applyValueRules(value, styleWanted, describe)
 
 /** Formats a value neither side changes, like a list diff's unchanged item, in the terminal's own text color. */
-const unchangedValueElement = (value: Value): string => applyValueRules(value, (text) => text)
+const unchangedValueElement = (value: Value): string => applyValueRules(value, stylePlain)
 
 /** Whether a list diff's item is only on the host, only in `want`, or on both. */
 export type ListItemChange = "removed" | "added" | "unchanged"
@@ -59,20 +59,23 @@ export const listDiffItemElement = (itemChange: ListItemChange, item: string): s
   return ` ${unchangedValueElement(item)}`
 }
 
-/** Formats a value that changes, like `alice -> bob`, with a muted `(none)` for a side that has no value. */
+/**
+ * Formats a value that changes, like `alice -> bob`, with `(none)` for a side that has no value. Styles `(none)` muted
+ * and italic, like a note, because it's tsinfra saying nothing is there.
+ */
 export const changeElement = (got: Value | undefined, want: Value | undefined): string => {
-  const gotText = got === undefined ? styleMuted(NONE_MARKER) : gotValueElement(got)
-  const wantText = want === undefined ? styleMuted(NONE_MARKER) : wantValueElement(want)
+  const gotText = got === undefined ? styleItalic(styleMuted(NONE_MARKER)) : gotValueElement(got)
+  const wantText = want === undefined ? styleItalic(styleMuted(NONE_MARKER)) : wantValueElement(want)
   return `${gotText} -> ${wantText}`
 }
 
-// Mute these, because each is tsinfra's marker, not a value the script gave.
-const OPTION_MARKERS = new Set<string>([MASKED_VALUE, ...Object.values(RECORDED_STAND_INS)])
+// Mute these, because each stands in for a value the record never holds.
+const OPTION_STAND_INS = new Set<string>(Object.values(RECORDED_STAND_INS))
 
-/** Formats an option's value as its lines, and a masked value or a stand-in as a muted marker. */
+/** Formats an option's value as its lines, and a stand-in as a muted marker. */
 export const optionValueLineElements = (value: string | boolean): string[] => {
   if (typeof value === "boolean") return [applyValueRules(value, styleValue)]
-  if (OPTION_MARKERS.has(value)) return [styleMuted(value)]
+  if (OPTION_STAND_INS.has(value)) return [styleMuted(value)]
   return value.split("\n").map((line) => applyValueRules(line, styleValue))
 }
 

@@ -1,5 +1,5 @@
 import type { EntryKind, EntryStatus, NameKind, UnownedFailureKind } from "#report/host-block.ts"
-import { STATUS_COLORS, styleItalic, styleMuted, styleValue } from "#styles.ts"
+import { STATUS_COLORS, styleItalic, styleMuted, stylePlain, styleValue } from "#styles.ts"
 
 // Give each status a symbol, so a status reads at a glance and lines up in one column.
 const STATUS_SYMBOLS: Record<EntryStatus, string> = {
@@ -36,7 +36,7 @@ export const kindElement = (kind: EntryKind): string => {
 
 /** Formats an entry's name: a step's name as it is, and a value's name, like a command or a path, in the value color. */
 export const entryNameElement = (name: { kind: NameKind; text: string }): string =>
-  name.kind === "value" ? styleValue(name.text) : name.text
+  name.kind === "value" ? styleValue(name.text) : stylePlain(name.text)
 
 /** Formats the note after an entry's name, like `needs 'A', 'B'`, muted so the name stays the focus. */
 export const entryNoteElement = (text: string): string => styleMuted(text)

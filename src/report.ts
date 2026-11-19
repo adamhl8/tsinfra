@@ -27,13 +27,14 @@ const keepShownOptionValues = (option: StepOption, verbosity: Verbosity): StepOp
   return { name, ...(value && isShownAt(value, verbosity) && { value }), entries }
 }
 
-/** Returns `command` with what it printed only when that shows at `verbosity`. */
+/** Returns `command` with its options' values and what it printed only when each shows at `verbosity`. */
 const keepShownCommandPieces = (command: StepCommand, verbosity: Verbosity): StepCommand => {
-  const { cmd, label, toolName, output } = command
+  const { cmd, label, toolName, options, output } = command
   return {
     cmd,
     ...(label !== undefined && { label }),
     ...(toolName !== undefined && { toolName }),
+    ...(options && { options: options.map((option) => keepShownOptionValues(option, verbosity)) }),
     ...(output && isShownAt(output, verbosity) && { output }),
   }
 }

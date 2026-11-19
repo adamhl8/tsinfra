@@ -2,9 +2,17 @@ import type { ToolName } from "#core/session/handlers/tools.ts"
 import { styleAccent, styleError, styleMuted, styleValue } from "#styles.ts"
 
 const COMMAND_PROMPT = "$ "
+// Match a shell's default continuation prompt, which marks a command's later lines the same way.
+const CONTINUATION_PROMPT = "> "
 
 /** Formats the `$ ` before a command in the accent color, so it only ever means that a command starts there. */
 export const commandPromptElement = (): string => styleAccent(COMMAND_PROMPT)
+
+/**
+ * Formats the `> ` before a command's later lines in the prompt's color, so every line of a command is marked, and
+ * nothing under it reads as part of it.
+ */
+export const continuationPromptElement = (): string => styleAccent(CONTINUATION_PROMPT)
 
 /**
  * Formats the tool whose call ran a command in parentheses, like `(exec)`, muted the way a step's kind is, because it

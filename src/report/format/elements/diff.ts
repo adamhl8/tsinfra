@@ -1,4 +1,4 @@
-import { styleCurrent, styleMuted, styleWanted } from "#styles.ts"
+import { styleCurrent, styleMuted, stylePlain, styleWanted } from "#styles.ts"
 
 // Draw a rule with a box-drawing line, so it reads as a divider, not as text.
 const RULE_CHAR = "─"
@@ -10,7 +10,7 @@ const RULE_CHAR = "─"
 export const diffLineElement = (line: string): string => {
   if (line.startsWith("-")) return styleCurrent(line)
   if (line.startsWith("+")) return styleWanted(line)
-  return line
+  return stylePlain(line)
 }
 
 /** Formats a diff's line number, padded to `width`, muted so the lines of the diff stand out. */

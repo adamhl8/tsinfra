@@ -417,11 +417,7 @@ describe("renderHostBlock for a step that would change a string", () => {
       await h.ensure("Upgrade packages", { want: "", check: String.raw`printf 'fd\nripgrep\n'`, fix: "true" })
     }, "plan")
 
-    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
-      "      got:  fd",
-      "            ripgrep",
-      "      want: (empty)",
-    ])
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      got:  fd", "            ripgrep", "      want: ''"])
   })
 
   it("should leave out the row of a side whose lines are all in the other", async () => {
@@ -437,7 +433,7 @@ describe("renderHostBlock for a step that would change a string", () => {
       await h.ensure("Write the config", { want: "a\nb", check: String.raw`printf 'a\n\nb\n'`, fix: "true" })
     }, "plan")
 
-    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      got: (empty)"])
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      got: ''"])
   })
 
   it("should quote a value with whitespace at either end, and only that value", async () => {
@@ -466,7 +462,7 @@ describe("renderHostBlock for a step that would change a string", () => {
     const verboseLines = (await formatVerboseBlock(upgrade))?.split("\n").slice(2)
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      16 lines differ, run with --verbose to see them"])
-    expect([verboseLines?.length, verboseLines?.at(-1)]).toStrictEqual([17, "      want: (empty)"])
+    expect([verboseLines?.length, verboseLines?.at(-1)]).toStrictEqual([17, "      want: ''"])
   })
 
   it("should show a note when the lines take too long to compare", async () => {
@@ -557,12 +553,12 @@ describe("renderHostBlock for a step that would change a list", () => {
     }, "plan")
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
-      "      ────────",
+      "      ─────",
       "       a",
       "      -'b '",
-      "      +(empty)",
+      "      +''",
       "      +b",
-      "      ────────",
+      "      ─────",
     ])
   })
 
@@ -1017,7 +1013,7 @@ describe("renderHostBlock for a host state that still differs after the fix", ()
 
   it("should show an empty value as a marker", async () => {
     expect(await formatFailedCheck({ want: "v2", check: "true", fix: "true" })).toStrictEqual([
-      "        got:  (empty)",
+      "        got:  ''",
       "        want: v2",
     ])
   })
@@ -1741,7 +1737,7 @@ describe("renderHostBlock for what a command printed", () => {
     ])
   })
 
-  it("should line up a multi-line command's later lines under its first, inside a phase", async () => {
+  it("should start a multi-line command's later lines with a continuation prompt, inside a phase", async () => {
     const hostSession = await createSession("apply")
     await hostSession.host.ensure("Check it", { want: true, check: "echo hi\ntrue", fix: "true" })
 
@@ -1749,7 +1745,7 @@ describe("renderHostBlock for what a command printed", () => {
       "      commands:",
       "        before:",
       "          $ echo hi",
-      "            true",
+      "          > true",
       "              output:",
     ])
   })
@@ -1811,7 +1807,7 @@ describe("renderHostBlock for a step's commands", () => {
     expect(renderRecord(hostSession.hostRecord, "apply", 2)?.split("\n")).toStrictEqual([
       "a",
       "  ~ change: (ensure) Set the hostname",
-      "      got:  (empty)",
+      "      got:  ''",
       "      want: web1",
       "      commands:",
       `        $ cat '${filePath}' 2>/dev/null || true`,
@@ -1852,14 +1848,14 @@ describe("renderHostBlock for a step's commands", () => {
     ])
   })
 
-  it("should line up a multi-line command's later lines under its first", async () => {
+  it("should start a multi-line command's later lines with a continuation prompt", async () => {
     const hostSession = await createSession("apply")
     await hostSession.host.run("Say hi twice", "echo hi\necho hi", { after: "always" })
 
     expect(renderRecord(hostSession.hostRecord, "apply", 2)?.split("\n").slice(2)).toStrictEqual([
       "      commands:",
       "        $ echo hi",
-      "          echo hi",
+      "        > echo hi",
     ])
   })
 
@@ -1960,7 +1956,7 @@ describe("renderHostBlock for a tool call's tool", () => {
     ])
   })
 
-  it("should line up a tool call's multi-line command, and its output, past its tool", async () => {
+  it("should start a tool call's later command lines with a continuation prompt past its tool", async () => {
     const hostSession = await createSession("apply")
     await hostSession.host.run(
       "Say hi",
@@ -1973,10 +1969,87 @@ describe("renderHostBlock for a tool call's tool", () => {
     expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n").slice(2)).toStrictEqual([
       "      commands:",
       "        (exec) $ echo hi",
-      "                 true",
+      "               > true",
       "                   output:",
       "                     exit:   0",
       "                     stdout: hi",
+    ])
+  })
+})
+
+const runCatWithInput = async () => {
+  const hostSession = await createSession("apply")
+  await hostSession.host.run(
+    "Check it",
+    async ({ exec }) => {
+      await exec("cat >/dev/null", { input: "x", maskOutput: true })
+    },
+    { after: "always" },
+  )
+  return hostSession.hostRecord
+}
+
+describe("renderHostBlock for a tool call's options", () => {
+  it("should name a tool call's options under its command with -vv", async () => {
+    const hostRecord = await runCatWithInput()
+
+    expect(renderRecord(hostRecord, "apply", 2)?.split("\n")).toStrictEqual([
+      "a",
+      "  > always: (run) Check it",
+      "      commands:",
+      "        (exec) $ cat >/dev/null",
+      "                   options: input, maskOutput",
+    ])
+  })
+
+  it("should show a tool call's options as a block before its output with -vvv", async () => {
+    const hostRecord = await runCatWithInput()
+
+    expect(renderRecord(hostRecord, "apply", 3)?.split("\n").slice(2)).toStrictEqual([
+      "      commands:",
+      "        (exec) $ cat >/dev/null",
+      "                   options:",
+      "                     input:      <content>",
+      "                     maskOutput: true",
+      "                   output:",
+      "                     exit: 0",
+    ])
+  })
+
+  it("should show a tool call's options inside its phase, at its output's indent", async () => {
+    const filePath = path.join(await makeTempDir(), "hostname")
+    const hostSession = await createSession("apply")
+    await hostSession.host.ensure("Set the hostname", {
+      want: "web1",
+      check: `cat '${filePath}' 2>/dev/null || true`,
+      fix: async ({ exec }) => {
+        await exec(`cat > '${filePath}'`, { input: "web1" })
+      },
+    })
+
+    expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n").slice(9, 15)).toStrictEqual([
+      "        fix:",
+      `          (exec) $ cat > '${filePath}'`,
+      "                     options:",
+      "                       input: <content>",
+      "                     output:",
+      "                       exit: 0",
+    ])
+  })
+
+  it("should show no options for a tool call given only defaults", async () => {
+    const hostSession = await createSession("apply")
+    await hostSession.host.run(
+      "Check it",
+      async ({ exec }) => {
+        await exec("true", { maskOutput: false })
+      },
+      { after: "always" },
+    )
+
+    expect(renderRecord(hostSession.hostRecord, "apply", 2)?.split("\n").slice(2)).toStrictEqual([
+      "      commands:",
+      "        (exec) $ true",
     ])
   })
 })
@@ -2161,7 +2234,7 @@ describe("renderHostBlock for a step's options", () => {
     expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n").slice(2, 7)).toStrictEqual([
       "      options:",
       "        env:",
-      "          EMPTY:  (empty)",
+      "          EMPTY:  ''",
       "          PADDED: ' a'",
       "          PLAIN:  a",
     ])

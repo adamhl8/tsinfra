@@ -119,14 +119,16 @@ export interface CommandGroup {
 }
 
 /**
- * A command a step ran, and its label when tsinfra wrote it, with any secret in its text masked. What it printed is a
- * piece of its own, which the filter leaves out below its level.
+ * A command a step ran, and its label when tsinfra wrote it, with any secret in its text masked. Its options' values
+ * and what it printed are pieces of their own, which the filter leaves out below their level.
  */
 export interface StepCommand {
   cmd: string
   label?: string
   /** The tool whose call ran the command. Unset for a step's own command and for tsinfra's. */
   toolName?: ToolName
+  /** The options the tool call set. Unset when it set none, and for a command no tool call ran. */
+  options?: StepOption[]
   output?: PieceLevels & CommandOutputDetail
 }
 
