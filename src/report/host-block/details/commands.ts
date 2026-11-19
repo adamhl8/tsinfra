@@ -2,7 +2,7 @@ import { isErr } from "ts-explicit-errors"
 
 import type { CommandRecord, StepRecord } from "#core/session/recorder/records.ts"
 import type { StepKind } from "#core/session/step.ts"
-import type { CommandOutputDetail, Detail, StepCommand } from "#report/host-block.ts"
+import type { CommandGroup, CommandOutputDetail, Detail, StepCommand } from "#report/host-block.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 
 // List the commands from level 2, because they say how the work was done, which matters only when looking closely.
@@ -30,18 +30,34 @@ const toCommandOutputDetail = (output: NonNullable<CommandRecord["output"]>): Co
   return { kind: "exited", exitCode, stdout, stderr }
 }
 
-/** Returns a command with its phase and what it printed as pieces of their own, from level 3, when each was recorded. */
-const toStepCommand = ({ cmd, label, phase, output }: CommandRecord): StepCommand => ({
+/** Returns a command with what it printed as a piece of its own, from level 3, when it was recorded. */
+const toStepCommand = ({ cmd, label, output }: CommandRecord): StepCommand => ({
   cmd,
   ...(label !== undefined && { label }),
-  ...(phase !== undefined && { phase: { phase, from: OUTPUT_LEVEL } }),
   ...(output !== undefined && { output: { ...toCommandOutputDetail(output), from: OUTPUT_LEVEL } }),
 })
 
+/**
+ * Groups `commandRecords` by the phase that ran them, keeping the order they ran in, so a group starts wherever the
+ * phase changes. Commands with no phase make one group with none. Each group's phase shows from level 3.
+ */
+const toCommandGroups = (commandRecords: CommandRecord[]): CommandGroup[] => {
+  const groups: CommandGroup[] = []
+  for (const commandRecord of commandRecords) {
+    const { phase } = commandRecord
+    const command = toStepCommand(commandRecord)
+    const lastGroup = groups.at(-1)
+    const isSamePhase = lastGroup !== undefined && lastGroup.phase?.phase === phase
+    if (isSamePhase) lastGroup.commands.push(command)
+    else groups.push({ ...(phase !== undefined && { phase: { phase, from: OUTPUT_LEVEL } }), commands: [command] })
+  }
+  return groups
+}
+
 /** Returns `commandRecords` as one commands detail, in the order they ran, or none when there are none. */
 export const toCommandsDetail = (commandRecords: CommandRecord[]): Detail[] => {
-  const commands = commandRecords.map((commandRecord) => toStepCommand(commandRecord))
-  return commands.length > 0 ? [{ kind: "commands", commands, from: COMMANDS_LEVEL }] : []
+  const groups = toCommandGroups(commandRecords)
+  return groups.length > 0 ? [{ kind: "commands", groups, from: COMMANDS_LEVEL }] : []
 }
 
 /**

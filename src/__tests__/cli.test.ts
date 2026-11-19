@@ -97,7 +97,7 @@ describe("tsinfra", () => {
 
     expect(exitCode).toBe(0)
     expect(stdout).toBe(
-      "a\n  · observed: (read) true\n      output:\n        exit: 0\n  = unchanged: (ensure) Install git\n      commands:\n        (before) $ true\n                     output:\n                       exit: 0\n\na   unchanged",
+      "a\n  · observed: (read) true\n      output:\n        exit: 0\n  = unchanged: (ensure) Install git\n      commands:\n        before:\n          $ true\n              output:\n                exit: 0\n\na   unchanged",
     )
   })
 

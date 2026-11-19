@@ -32,7 +32,7 @@ export const formatDetail = (detail: Detail, diffLimits: DiffLimits): DetailRows
   if (detail.kind === "stderr") return { kind: "aligned", rows: formatStderr(detail.command, detail.stderr) }
   if (detail.kind === "note") return { kind: "unaligned", rows: [formatDetailNote(detail.note)] }
   if (detail.kind === "warning") return { kind: "unaligned", rows: [formatWarning(detail.warning)] }
-  if (detail.kind === "commands") return { kind: "unaligned", rows: formatCommands(detail.commands) }
+  if (detail.kind === "commands") return { kind: "unaligned", rows: formatCommands(detail.groups) }
   if (detail.kind === "commandOutput") return { kind: "unaligned", rows: formatCommandOutputLines(detail.output, "") }
 
   return { kind: "unaligned", rows: [formatFailureHint(detail.hint)] }

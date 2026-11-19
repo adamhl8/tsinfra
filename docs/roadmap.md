@@ -409,9 +409,16 @@ Fixes and finishing work for what's already built.
   Docker and download images and packages, so nothing runs them automatically yet.
 - **Check SELinux labels on a VM.** `file`'s `chcon` and `restorecon` are untested on real labels, because containers
   run with SELinux off.
-- **The user docs.** These docs will be published as a full documentation site. When it gets written, start from [Recipes](./recipes.md), and add the comparison with
-  other config tools from the [design notes](./README.md#compared-with-other-tools), led by tsinfra's strengths. Warn
-  about a login shell's pitfalls once [the `shell` option](#the-shell-host-option) exists.
+- **The user docs.** These docs will be published as a documentation site built with
+  [Starlight](https://starlight.astro.build). When it gets written, start from [Recipes](./recipes.md), and add the
+  comparison with other config tools from the [design notes](./README.md#compared-with-other-tools), led by tsinfra's
+  strengths. Warn about a login shell's pitfalls once [the `shell` option](#the-shell-host-option) exists.
+  - **The AI features come from `starlight-llm-actions`:** a copy-as-Markdown and open-in-ChatGPT/Claude menu, a `.md`
+    copy of each page, `llms.txt`, and a `rel="alternate"` link to the Markdown. Serving Markdown at a page's own URL
+    when an agent sends `Accept: text/markdown` is a rewrite rule on the host, because a static site can't see headers.
+  - **Each page needs a `title` in its frontmatter,** because Starlight doesn't read the H1. Links like
+    `./steps.md#commands` need rewriting to routes, because Starlight doesn't resolve `.md` links.
+    `starlight-links-validator` checks links and anchors across pages.
 
 ## Open questions
 

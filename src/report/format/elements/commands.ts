@@ -1,16 +1,9 @@
-import type { ConvergePhase } from "#core/session/recorder/records.ts"
 import { styleAccent, styleError, styleMuted, styleValue } from "#styles.ts"
 
 const COMMAND_PROMPT = "$ "
 
 /** Formats the `$ ` before a command in the accent color, so it only ever means that a command starts there. */
 export const commandPromptElement = (): string => styleAccent(COMMAND_PROMPT)
-
-/**
- * Formats the part of a step that ran a command in parentheses, like `(before)`, muted the way a step's kind is,
- * because it sorts the step's commands the way a kind sorts steps.
- */
-export const phaseElement = (phase: ConvergePhase): string => styleMuted(`(${phase})`)
 
 /**
  * Formats a command a step ran as its lines, muted so the commands read as background next to the details. Shows a

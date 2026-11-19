@@ -84,8 +84,8 @@ export type Detail = PieceLevels
     | { kind: "note"; note: DetailNote }
     // Something that worked, but needs a look, like a link to a path where nothing exists.
     | { kind: "warning"; warning: StepWarning }
-    // The commands the step ran, in the order they ran.
-    | { kind: "commands"; commands: StepCommand[] }
+    // The commands the step ran, in the order they ran, grouped by the phase that ran them.
+    | { kind: "commands"; groups: CommandGroup[] }
     // What a read or inspect step's one command printed, because the step lists no commands to show it under.
     | { kind: "commandOutput"; output: CommandOutputDetail }
     // How to fix a failure, like setting the host's `sudo` option.
@@ -108,14 +108,22 @@ export interface OptionValue extends PieceLevels {
 }
 
 /**
- * A command a step ran, and its label when tsinfra wrote it, with any secret in its text masked. Its phase and what it
- * printed are pieces of their own, which the filter leaves out below their level.
+ * Commands that ran one after another in the same phase. Its phase is a piece of its own, which the filter leaves out
+ * below its level, so the groups then show as one list.
+ */
+export interface CommandGroup {
+  /** The part of a step that compares the host's state that ran the commands. Unset for a step that doesn't compare. */
+  phase?: PieceLevels & { phase: ConvergePhase }
+  commands: StepCommand[]
+}
+
+/**
+ * A command a step ran, and its label when tsinfra wrote it, with any secret in its text masked. What it printed is a
+ * piece of its own, which the filter leaves out below its level.
  */
 export interface StepCommand {
   cmd: string
   label?: string
-  /** The part of a step that compares the host's state that ran the command. Unset for a step that doesn't compare. */
-  phase?: PieceLevels & { phase: ConvergePhase }
   output?: PieceLevels & CommandOutputDetail
 }
 

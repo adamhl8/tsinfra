@@ -83,9 +83,10 @@ levels only change what's printed:
   under its line, after any options. Every command shows its exit code, even 0, and a command that couldn't run at all
   shows its error in place of the three rows. stdout and stderr show in full, because this level is for seeing
   everything, and only when the command printed something. Each has its trailing whitespace trimmed, and keeps its
-  leading whitespace. In a step that compares the host's state, each command starts with its phase in parentheses,
-  styled like a step's kind, as `(before)`, `(fix)`, or `(after)`, padded so the prompts line up, because the same check
-  runs before and after the fix, and its output can differ. tsinfra's own commands keep their label, so their text never
+  leading whitespace. In a step that compares the host's state, the commands go under a dim italic heading for the
+  phase that ran them, `before:`, `fix:`, or `after:`, one level under `commands:`, with the commands one level past
+  it, because the same check runs before and after the fix, and its output can differ. A phase that didn't run, like
+  `after` on a step whose fix failed, gets no heading. tsinfra's own commands keep their label, so their text never
   shows. It's in the source, and will be in the [diagnostic logs](./roadmap.md#diagnostic-logs).
 - **Secrets never show.** A secret reaches a command through the step's `secretEnv`, so the command's text never holds
   it, and `-vv` shows `"$TOKEN"` where it's used. The step's record keeps its variables, with each secret as
@@ -134,19 +135,21 @@ sonarr                                                    # -vvv
         stdout: x86_64
   = unchanged: (ensure) Install sonarr
       commands:
-        (before) $ command -v sonarr
-                     output:
-                       exit:   0
-                       stdout: /usr/bin/sonarr
+        before:
+          $ command -v sonarr
+              output:
+                exit:   0
+                stdout: /usr/bin/sonarr
   ~ change: (file) /etc/systemd/system/sonarr.service
       options:
         sudo: true
       <diff>
       commands:
-        (before) $ <file details script>
-                     output:
-                       exit:   0
-                       stdout: <the file's details>
+        before:
+          $ <file details script>
+              output:
+                exit:   0
+                stdout: <the file's details>
         ...
   > triggered: (run) Reload systemd
       commands:
@@ -319,7 +322,8 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
 - **Commands.** From 2, a step's commands show under a dim italic `commands:` heading, each on its own dim line as
   `$ cmd`, in the order they ran, so they read as background next to the details. A command tsinfra wrote itself shows
   as its label in angle brackets, like `$ <file details script>`, and its later lines line up under its first line's
-  text. From 3, what each command printed goes under it, under an `output:` heading one level past its text. They
+  text. From 3, a step that compares the host's state groups its commands under a heading for each phase, and what
+  each command printed goes under it, under an `output:` heading one level past its text. They
   come after a step's other details, warnings included, and before any hint. A read or inspect lists none,
   because its name is its command. A preparation failure lists the commands preparation ran, under its error and
   before any hint, and a host that was prepared lists none.

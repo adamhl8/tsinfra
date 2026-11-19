@@ -1687,7 +1687,7 @@ describe("renderHostBlock for what a command printed", () => {
     ])
   })
 
-  it("should start each command of a step that compares with its phase, with the prompts lined up", async () => {
+  it("should group a step's commands under a heading for each phase with -vvv", async () => {
     const filePath = path.join(await makeTempDir(), "hostname")
     const hostSession = await createSession("apply")
     await hostSession.host.ensure("Set the hostname", {
@@ -1698,16 +1698,36 @@ describe("renderHostBlock for what a command printed", () => {
 
     expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n").slice(4)).toStrictEqual([
       "      commands:",
-      `        (before) $ cat '${filePath}' 2>/dev/null || true`,
-      "                     output:",
-      "                       exit: 0",
-      `        (fix)    $ printf web1 > '${filePath}'`,
-      "                     output:",
-      "                       exit: 0",
-      `        (after)  $ cat '${filePath}' 2>/dev/null || true`,
-      "                     output:",
-      "                       exit:   0",
-      "                       stdout: web1",
+      "        before:",
+      `          $ cat '${filePath}' 2>/dev/null || true`,
+      "              output:",
+      "                exit: 0",
+      "        fix:",
+      `          $ printf web1 > '${filePath}'`,
+      "              output:",
+      "                exit: 0",
+      "        after:",
+      `          $ cat '${filePath}' 2>/dev/null || true`,
+      "              output:",
+      "                exit:   0",
+      "                stdout: web1",
+    ])
+  })
+
+  it("should show only the phases that ran", async () => {
+    const hostSession = await createSession("apply")
+    await attempt(async () => hostSession.host.ensure("Set it", { want: true, check: "false", fix: "exit 1" }))
+
+    expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n").slice(-9)).toStrictEqual([
+      "        commands:",
+      "          before:",
+      "            $ false",
+      "                output:",
+      "                  exit: 1",
+      "          fix:",
+      "            $ exit 1",
+      "                output:",
+      "                  exit: 1",
     ])
   })
 
@@ -1721,15 +1741,16 @@ describe("renderHostBlock for what a command printed", () => {
     ])
   })
 
-  it("should line up a multi-line command's later lines past its phase", async () => {
+  it("should line up a multi-line command's later lines under its first, inside a phase", async () => {
     const hostSession = await createSession("apply")
     await hostSession.host.ensure("Check it", { want: true, check: "echo hi\ntrue", fix: "true" })
 
-    expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n").slice(2, 6)).toStrictEqual([
+    expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n").slice(2, 7)).toStrictEqual([
       "      commands:",
-      "        (before) $ echo hi",
-      "                   true",
-      "                     output:",
+      "        before:",
+      "          $ echo hi",
+      "            true",
+      "              output:",
     ])
   })
 

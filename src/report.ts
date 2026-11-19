@@ -1,6 +1,14 @@
 import { formatHostBlock } from "#report/format.ts"
 import { toDiffLimits } from "#report/format/details/diff/limits.ts"
-import type { Detail, HostBlock, HostBlockEntry, PieceLevels, StepCommand, StepOption } from "#report/host-block.ts"
+import type {
+  CommandGroup,
+  Detail,
+  HostBlock,
+  HostBlockEntry,
+  PieceLevels,
+  StepCommand,
+  StepOption,
+} from "#report/host-block.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 
 export interface ReportOptions {
@@ -19,20 +27,26 @@ const keepShownOptionValues = (option: StepOption, verbosity: Verbosity): StepOp
   return { name, ...(value && isShownAt(value, verbosity) && { value }), entries }
 }
 
-/** Returns `command` with its phase and what it printed only when each shows at `verbosity`. */
+/** Returns `command` with what it printed only when that shows at `verbosity`. */
 const keepShownCommandPieces = (command: StepCommand, verbosity: Verbosity): StepCommand => {
-  const { cmd, label, phase, output } = command
+  const { cmd, label, output } = command
   return {
     cmd,
     ...(label !== undefined && { label }),
-    ...(phase && isShownAt(phase, verbosity) && { phase }),
     ...(output && isShownAt(output, verbosity) && { output }),
   }
 }
 
+/** Returns `group` with its phase only when it shows at `verbosity`, and each command with only what shows. */
+const keepShownGroupPieces = (group: CommandGroup, verbosity: Verbosity): CommandGroup => {
+  const { phase } = group
+  const commands = group.commands.map((command) => keepShownCommandPieces(command, verbosity))
+  return { ...(phase && isShownAt(phase, verbosity) && { phase }), commands }
+}
+
 /**
- * Returns `detail` with only the pieces inside it that show at `verbosity`: an option's values, and a command's phase
- * and what it printed.
+ * Returns `detail` with only the pieces inside it that show at `verbosity`: an option's values, a command group's
+ * phase, and what a command printed.
  */
 const keepShownInDetail = (detail: Detail, verbosity: Verbosity): Detail => {
   if (detail.kind === "options") {
@@ -41,8 +55,8 @@ const keepShownInDetail = (detail: Detail, verbosity: Verbosity): Detail => {
   }
 
   if (detail.kind === "commands") {
-    const commands = detail.commands.map((command) => keepShownCommandPieces(command, verbosity))
-    return { ...detail, commands }
+    const groups = detail.groups.map((group) => keepShownGroupPieces(group, verbosity))
+    return { ...detail, groups }
   }
 
   return detail
