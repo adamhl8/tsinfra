@@ -68,12 +68,14 @@ levels only change what's printed:
   dimmed, under a `commands:` heading after the step's other details, like `$ systemctl is-active sonarr`, in the order
   they ran. A read or inspect lists none, because its name is its command. A command tsinfra writes itself shows as its
   label in angle brackets, like `$ <file details script>`, because its text is tsinfra's code, not the script's. Angle
-  brackets mark text that isn't shown, as the record's `<content as base64>` does. A command's later lines line up under
-  its first line's text. On a failed step, the commands come after what it found and before any hint. A `file` step's
-  `validate` command shows in its options, not after the write script's label, so it shows in `plan` too. A step's
-  commands never show the `sudo sh -s` that `sudo: true` wraps them in. A preparation failure lists the commands
-  preparation ran, by their labels, like `$ <home directory>`, so it shows how far preparation got. A host that was
-  prepared lists none, because the same commands would repeat in every block.
+  brackets mark text that isn't shown, as the record's `<content as base64>` does. A command a tool call ran starts with
+  the tool in parentheses, styled like a step's kind, like `(exec) $ curl -fsS "$URL"`, so it's clear which commands a
+  check or fix function ran. The tools are padded so the prompts line up, and the step's other commands line up past
+  them. A command's later lines line up under its first line's text. On a failed step, the commands come after what it
+  found and before any hint. A `file` step's `validate` command shows in its options, not after the write script's
+  label, so it shows in `plan` too. A step's commands never show the `sudo sh -s` that `sudo: true` wraps them in. A
+  preparation failure lists the commands preparation ran, by their labels, like `$ <home directory>`, so it shows how
+  far preparation got. A host that was prepared lists none, because the same commands would repeat in every block.
 - **`-vvv`** also turns the `options:` line into a block, with each variable on its own row and its value, and each
   `secretEnv` value as `[MASKED]`. A read's or inspect's `input` shows as `<content>`, because the record never holds
   the input. The values line up within each of `env` and `secretEnv`, not across them, because each is its own object.
@@ -322,9 +324,10 @@ and a timestamp, and would not help with blocks, aligned columns, or diffs.
 - **Commands.** From 2, a step's commands show under a dim italic `commands:` heading, each on its own dim line as
   `$ cmd`, in the order they ran, so they read as background next to the details. A command tsinfra wrote itself shows
   as its label in angle brackets, like `$ <file details script>`, and its later lines line up under its first line's
-  text. From 3, a step that compares the host's state groups its commands under a heading for each phase, and what
-  each command printed goes under it, under an `output:` heading one level past its text. They
-  come after a step's other details, warnings included, and before any hint. A read or inspect lists none,
+  text. A command a tool call ran starts with its tool, muted in parentheses like a step's kind, in a column of its own
+  that a step with no tool calls leaves out. From 3, a step that compares the host's state groups its commands under a
+  heading for each phase, and what each command printed goes under it, under an `output:` heading one level past its
+  text. They come after a step's other details, warnings included, and before any hint. A read or inspect lists none,
   because its name is its command. A preparation failure lists the commands preparation ran, under its error and
   before any hint, and a host that was prepared lists none.
 - **Warnings.** A step that worked but needs a look, like a link to a missing path, gets a `warning:` line under its

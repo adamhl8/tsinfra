@@ -2,6 +2,7 @@ import type { EnsureComparisonValues } from "#core/session/handlers/ensure/compa
 import type { RecordComparisonValues } from "#core/session/handlers/ensure/comparison/record.ts"
 import type { FileComparisonValues } from "#core/session/handlers/file/comparison.ts"
 import type { LinkComparisonValues } from "#core/session/handlers/link/comparison.ts"
+import type { ToolName } from "#core/session/handlers/tools.ts"
 import type { ConvergePhase, FailureHint, HostRecord, RecordedUnownedFailure } from "#core/session/recorder/records.ts"
 import type { StepKind, StepStatus } from "#core/session/step.ts"
 import type { Mode } from "#mode.ts"
@@ -124,6 +125,8 @@ export interface CommandGroup {
 export interface StepCommand {
   cmd: string
   label?: string
+  /** The tool whose call ran the command. Unset for a step's own command and for tsinfra's. */
+  toolName?: ToolName
   output?: PieceLevels & CommandOutputDetail
 }
 

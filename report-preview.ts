@@ -160,7 +160,7 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
       // run and one that didn't trigger.
       // A read with `env` and `secretEnv`, with a multi-line, an empty, a padded, and a masked value.
       // A read with `input`, whose value at `-vvv` is a muted stand-in.
-      // Commands at `-vv`, and their phases, output, and labels at `-vvv`.
+      // Commands at `-vv`, with the tools that ran them, and their phases, output, and labels at `-vvv`.
       name: "elements",
       target: "@local",
       pass: "apply",

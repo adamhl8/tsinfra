@@ -30,10 +30,14 @@ const toCommandOutputDetail = (output: NonNullable<CommandRecord["output"]>): Co
   return { kind: "exited", exitCode, stdout, stderr }
 }
 
-/** Returns a command with what it printed as a piece of its own, from level 3, when it was recorded. */
-const toStepCommand = ({ cmd, label, output }: CommandRecord): StepCommand => ({
+/**
+ * Returns a command with the tool whose call ran it, and what it printed as a piece of its own, from level 3, when each
+ * was recorded.
+ */
+const toStepCommand = ({ cmd, label, toolCall, output }: CommandRecord): StepCommand => ({
   cmd,
   ...(label !== undefined && { label }),
+  ...(toolCall !== undefined && { toolName: toolCall.toolName }),
   ...(output !== undefined && { output: { ...toCommandOutputDetail(output), from: OUTPUT_LEVEL } }),
 })
 

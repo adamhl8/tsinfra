@@ -1,9 +1,16 @@
+import type { ToolName } from "#core/session/handlers/tools.ts"
 import { styleAccent, styleError, styleMuted, styleValue } from "#styles.ts"
 
 const COMMAND_PROMPT = "$ "
 
 /** Formats the `$ ` before a command in the accent color, so it only ever means that a command starts there. */
 export const commandPromptElement = (): string => styleAccent(COMMAND_PROMPT)
+
+/**
+ * Formats the tool whose call ran a command in parentheses, like `(exec)`, muted the way a step's kind is, because it
+ * says where a command came from the way a kind says what a step is.
+ */
+export const toolElement = (toolName: ToolName): string => styleMuted(`(${toolName})`)
 
 /**
  * Formats a command a step ran as its lines, muted so the commands read as background next to the details. Shows a

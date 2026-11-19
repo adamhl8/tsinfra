@@ -1646,12 +1646,12 @@ describe("renderHostBlock for what a command printed", () => {
       "a",
       "  > always: (run) Check it",
       "      commands:",
-      "        $ true",
-      "            output:",
-      "              exit: 0",
-      "        $ exit 3",
-      "            output:",
-      "              exit: 3",
+      "        (exec)    $ true",
+      "                      output:",
+      "                        exit: 0",
+      "        (inspect) $ exit 3",
+      "                      output:",
+      "                        exit: 3",
     ])
   })
 
@@ -1890,6 +1890,93 @@ describe("renderHostBlock for a step's commands", () => {
     expect(renderRecord(hostSession.hostRecord, "apply", 2)?.split("\n").slice(-2)).toStrictEqual([
       "      commands:",
       '        $ test "$TOKEN" = [MASKED]',
+    ])
+  })
+})
+
+const setHostnameWithExec = async () => {
+  const filePath = path.join(await makeTempDir(), "hostname")
+  const hostSession = await createSession("apply")
+  await hostSession.host.ensure("Set the hostname", {
+    want: "web1",
+    check: `cat '${filePath}' 2>/dev/null || true`,
+    fix: async ({ exec }) => {
+      await exec(`printf web1 > '${filePath}'`)
+    },
+  })
+  return { filePath, hostRecord: hostSession.hostRecord }
+}
+
+describe("renderHostBlock for a tool call's tool", () => {
+  it("should start a tool call's command with its tool, padded so the prompts line up", async () => {
+    const hostSession = await createSession("apply")
+    await hostSession.host.run(
+      "Check it",
+      async ({ exec, inspect }) => {
+        await exec("true")
+        await inspect("true")
+      },
+      { after: "always" },
+    )
+
+    expect(renderRecord(hostSession.hostRecord, "apply", 2)?.split("\n")).toStrictEqual([
+      "a",
+      "  > always: (run) Check it",
+      "      commands:",
+      "        (exec)    $ true",
+      "        (inspect) $ true",
+    ])
+  })
+
+  it("should line up a command with no tool past the column", async () => {
+    const { filePath, hostRecord } = await setHostnameWithExec()
+
+    expect(renderRecord(hostRecord, "apply", 2)?.split("\n").slice(4)).toStrictEqual([
+      "      commands:",
+      `               $ cat '${filePath}' 2>/dev/null || true`,
+      `        (exec) $ printf web1 > '${filePath}'`,
+      `               $ cat '${filePath}' 2>/dev/null || true`,
+    ])
+  })
+
+  it("should line up the tool column across a step's phases with -vvv", async () => {
+    const { filePath, hostRecord } = await setHostnameWithExec()
+
+    expect(renderRecord(hostRecord, "apply", 3)?.split("\n").slice(4)).toStrictEqual([
+      "      commands:",
+      "        before:",
+      `                 $ cat '${filePath}' 2>/dev/null || true`,
+      "                     output:",
+      "                       exit: 0",
+      "        fix:",
+      `          (exec) $ printf web1 > '${filePath}'`,
+      "                     output:",
+      "                       exit: 0",
+      "        after:",
+      `                 $ cat '${filePath}' 2>/dev/null || true`,
+      "                     output:",
+      "                       exit:   0",
+      "                       stdout: web1",
+    ])
+  })
+
+  it("should line up a tool call's multi-line command, and its output, past its tool", async () => {
+    const hostSession = await createSession("apply")
+    await hostSession.host.run(
+      "Say hi",
+      async ({ exec }) => {
+        await exec("echo hi\ntrue")
+      },
+      { after: "always" },
+    )
+
+    expect(renderRecord(hostSession.hostRecord, "apply", 3)?.split("\n").slice(2)).toStrictEqual([
+      "      commands:",
+      "        (exec) $ echo hi",
+      "                 true",
+      "                   output:",
+      "                     exit:   0",
+      "                     stdout: hi",
     ])
   })
 })
