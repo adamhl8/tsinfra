@@ -52,7 +52,7 @@ const main = async (): Promise<void> => {
     return
   }
 
-  // Leave `process.exitCode` alone after a hand-off, because the project's copy sets its own.
+  // Leave `process.exitCode` alone after a hand-off, because the project's copy already set it while it loaded.
   if (exitCode !== undefined) process.exitCode = exitCode
 }
 

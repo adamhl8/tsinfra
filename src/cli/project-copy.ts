@@ -16,8 +16,8 @@ export interface ProjectCopy {
 
 const packageVersionSchema = type({ version: "string" })
 
-const NO_CLI_EXPORT_MESSAGE =
-  "the project's copy of tsinfra has no 'tsinfra/cli' export\nUpdate both your global and local copies of tsinfra."
+const NO_CLI_MESSAGE =
+  "the project's copy of tsinfra has no 'tsinfra/cli' to start\nTry reinstalling it, or try updating both your global and local copies of tsinfra."
 
 // Treat a copy as installed only when a `node_modules` is up the tree.
 // Without one, Bun resolves a package by installing it from the registry.
@@ -29,7 +29,7 @@ const hasNodeModules = (dir: string): boolean => {
 
 /**
  * Finds the copy of tsinfra installed in the project at `cwd`, or `undefined` when there isn't one. Fails when the
- * project's copy has no `tsinfra/cli` export, like a copy from before it.
+ * project's copy has no `tsinfra/cli` to start, like a broken install or a copy from before the export.
  */
 export const findProjectCopy = (cwd: string): Result<ProjectCopy | undefined> => {
   if (!hasNodeModules(cwd)) return undefined
@@ -40,7 +40,7 @@ export const findProjectCopy = (cwd: string): Result<ProjectCopy | undefined> =>
 
   // Replace Bun's error, because it says `Cannot find package 'tsinfra'` for a package it found.
   const cliPath = attempt(() => bun.resolveSync("tsinfra/cli", cwd))
-  if (isErr(cliPath)) return err(NO_CLI_EXPORT_MESSAGE, undefined)
+  if (isErr(cliPath)) return err(NO_CLI_MESSAGE, undefined)
 
   // Resolve the running copy through its self-reference, so both paths come from the same resolver.
   const runningPackageJsonPath = attempt(() => bun.resolveSync("tsinfra/package.json", import.meta.dir))

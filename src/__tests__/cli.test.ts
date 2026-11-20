@@ -7,7 +7,7 @@ import { makeTempDir, minimalEnv } from "@adamhl8/configs/test"
 import bun from "bun"
 import pc from "picocolors"
 
-import { createProject, getInstalledBin, replaceInstalledFile } from "#__tests__/cli-project.ts"
+import { createProject, getInstalledBin, removeInstalledFile, replaceInstalledFile } from "#__tests__/cli-project.ts"
 import { answerPrompts } from "#__tests__/terminal.ts"
 import packageJson from "#package.json" with { type: "json" }
 
@@ -20,6 +20,8 @@ const PLAN_REMINDER = "Steps after a change were checked without that change, so
 const CLEAR_PROGRESS = "\u001B[2K\u001B[1G"
 // Stand in for the project's CLI with one that shows the arguments it got and sets its own exit code.
 const ARGUMENTS_CLI = "console.log(JSON.stringify(process.argv.slice(2)))\nprocess.exitCode = 3\n"
+const NO_CLI_ERROR =
+  "Error: the project's copy of tsinfra has no 'tsinfra/cli' to start\nTry reinstalling it, or try updating both your global and local copies of tsinfra."
 const NOT_INSTALLED_ERROR =
   'Error: tsinfra isn\'t installed in this project\nAdd it with `bun add --dev tsinfra`, because host scripts import "tsinfra".'
 
@@ -244,7 +246,7 @@ describe("the global copy", () => {
     expect(stdout).toBe('["plan"]')
   })
 
-  it("should say to update both copies when the project's copy has no 'tsinfra/cli' export", async () => {
+  it("should say to reinstall or update when the project's copy has no 'tsinfra/cli' export", async () => {
     const { dir } = await createProject()
     const { dir: globalDir, run } = await createProject()
     // Match the exports of a copy from before the hand-off.
@@ -254,9 +256,18 @@ describe("the global copy", () => {
     const { stderr, exitCode } = await run`${getInstalledBin(globalDir)} plan`.cwd(dir).nothrow()
 
     expect(exitCode).toBe(1)
-    expect(stderr).toBe(
-      "Error: the project's copy of tsinfra has no 'tsinfra/cli' export\nUpdate both your global and local copies of tsinfra.",
-    )
+    expect(stderr).toBe(NO_CLI_ERROR)
+  })
+
+  it("should say to reinstall or update when the project's copy is missing its CLI file", async () => {
+    const { dir } = await createProject()
+    const { dir: globalDir, run } = await createProject()
+    await removeInstalledFile(dir, "dist/cli.js")
+
+    const { stderr, exitCode } = await run`${getInstalledBin(globalDir)} plan`.cwd(dir).nothrow()
+
+    expect(exitCode).toBe(1)
+    expect(stderr).toBe(NO_CLI_ERROR)
   })
 
   it("should let a crash in the project's copy through as Bun prints it", async () => {
@@ -268,7 +279,7 @@ describe("the global copy", () => {
 
     expect(exitCode).toBe(1)
     expect(stderr).toContain("error: broken project copy")
-    expect(stderr).not.toContain("Update both")
+    expect(stderr).not.toContain("Try reinstalling it")
   })
 
   it("should fail without asking the registry when no node_modules is up the tree", async () => {
