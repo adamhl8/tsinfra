@@ -6,6 +6,8 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 
 - [Next](#next)
   - [One note for an apply that didn't finish](#one-note-for-an-apply-that-didnt-finish)
+  - [A neutral view of an empty `want`](#a-neutral-view-of-an-empty-want)
+  - [Nested values in a record `want`](#nested-values-in-a-record-want)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
   - [Live progress](#live-progress)
@@ -49,6 +51,14 @@ After an apply fails, the next pass shows every step that changed in it, and is 
 - **It shows at the default level,** like the `resume` lines it explains, and only when the block has a `resume` or `ranFromOpenChanges` line.
 
 When it's built, [CLI](./cli.md#how-the-report-is-built) describes the host's note in place of the two per-step notes, and [Steps](./steps.md#when-an-apply-doesnt-finish) drops the quoted notes.
+
+### A neutral view of an empty `want`
+
+An empty `want` means the check should come back empty, but what its items mean depends on the check. For a check that lists what's left to do, like outdated packages, the list diff's `-` lines read as removals. An empty `want` shows what the check reported under a neutral label, with no diff markers. Empty lists, sets, and records all show it the same way.
+
+### Nested values in a record `want`
+
+A record `want` holds only strings, numbers, and booleans, so anything more about a key goes in the key itself, like `cask "signal"`. A record's values can also be records and other data types, compared and shown key by key.
 
 ## Planned
 
@@ -269,7 +279,7 @@ Fixes and finishing work for what's already built.
 
 - **Stop remote commands on Ctrl-C.** Without a terminal, Ctrl-C ends the local `ssh`, but the command on the host keeps running. nixos-rebuild runs a remote `pkill -SIGINT` when it's interrupted. tsinfra needs the same, with the process to stop known, and the run's connections still closed.
 - **Fail a tool saved for later.** A script can keep the `read` or `exec` a step function was given and call it after that step finished. At the top level its command goes unrecorded, and during a later step it is recorded under the wrong step. `callStep` already builds a fresh set of tools for each step. What's left is to bind them to the step's record, and fail the host through `callOrFail` when that step is no longer the running one. Do not throw in `recordCommands`, because only `session.ts` throws, and a throw there would skip recording the failure in `callOrFail`.
-- **Keep forced color out of commands.** `runProcess` starts the local shell with tsinfra's whole environment, so a `FORCE_COLOR` or `CLICOLOR_FORCE` that a task runner sets reaches every command on `@local`. bask sets `FORCE_COLOR=1` whenever its output is a terminal. A command then colors output a check parses, like `bun pm ls -g`, whose names stop matching the wanted ones and show as both missing and extra. Remove both variables from the environment `runProcess` passes, and leave `NO_COLOR`, because it only turns color off. The report keeps its own color, because it reads `process.env` in tsinfra's process. SSH hosts don't get them, because ssh only forwards the names in `SendEnv`.
+- **Keep forced color out of commands.** `runProcess` starts the local shell with tsinfra's whole environment, so a `FORCE_COLOR` or `CLICOLOR_FORCE` that a task runner sets reaches every command on `@local`. A command then colors output a check parses, like `bun pm ls -g`, whose names stop matching the wanted ones and show as both missing and extra. Remove both variables from the environment `runProcess` passes, and leave `NO_COLOR`, because it only turns color off. The report keeps its own color, because it reads `process.env` in tsinfra's process. SSH hosts don't get them, because ssh only forwards the names in `SendEnv`.
 - **Run the Docker tests in CI.** Only `bask test --all` runs the Docker tests, never `bask lint`, because they need Docker and download images and packages, so nothing runs them automatically yet.
 - **Check SELinux labels on a VM.** `file`'s `chcon` and `restorecon` are untested on real labels, because containers run with SELinux off.
 - **The user docs.** These docs will be published as a documentation site built with [Starlight](https://starlight.astro.build). When it gets written, start from [Recipes](./recipes.md), and add the comparison with other config tools from the [design notes](./README.md#compared-with-other-tools), led by tsinfra's strengths. Warn about a login shell's pitfalls once [the `shell` option](#the-shell-host-option) exists.

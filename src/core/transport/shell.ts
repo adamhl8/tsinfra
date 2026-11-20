@@ -8,7 +8,7 @@ import { addEnvPrelude, wrapCommandWithInput, wrapInRootShell } from "#core/tran
 import { createCommandExitError } from "#utils.ts"
 
 /** A command a shell is about to run, as its record shows it, with a label when tsinfra wrote the command itself. */
-export interface ShellCommand {
+interface ShellCommand {
   cmd: string
   label?: string
 }
@@ -33,7 +33,7 @@ export interface ShellOptions {
 }
 
 /** What one call of `exec` or `inspect` takes, for that command only. */
-export interface ShellCallOptions {
+interface ShellCallOptions {
   /** A short name for a command tsinfra wrote itself. */
   label?: string
   /** The text to record in place of the command, for one that holds content. */

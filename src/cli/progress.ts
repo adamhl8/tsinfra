@@ -21,7 +21,7 @@ export const formatPreparingProgress = (hostCount: number): string =>
  * Formats the progress line shown while the host `name` runs, with its name in the value color like the sudo prompt.
  * Adds the running step's kind and name the way the report shows them, with only the name's first line.
  */
-export const formatHostProgress = (name: string, mode: Mode, runningStep: StepRecord | undefined): string => {
+const formatHostProgress = (name: string, mode: Mode, runningStep: StepRecord | undefined): string => {
   const hostProgress = `${styleMuted(`${MODE_VERBS[mode]} host '`)}${styleValue(name)}${styleMuted("'")}`
   if (!runningStep) return `${hostProgress}${styleMuted("...")}`
 

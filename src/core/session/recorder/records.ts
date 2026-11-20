@@ -170,7 +170,7 @@ export interface ToolCallRecord {
 }
 
 /** The options a tool call's record holds: each one as given, or its stand-in. */
-export type ToolOptionsRecord = Pick<StepOptionsRecord, keyof ToolOptions>
+type ToolOptionsRecord = Pick<StepOptionsRecord, keyof ToolOptions>
 
 /** The parts of `converge` that run commands, in order. */
 export type ConvergePhase = "before" | "fix" | "after"
