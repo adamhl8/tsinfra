@@ -1,11 +1,13 @@
 import type { Message } from "@optique/core"
 import { argument, command, constant, merge, message, object, option, or, string, text } from "@optique/core"
+import type { InferValue } from "@optique/core/parser"
 import { defineProgram } from "@optique/core/program"
-import { path } from "@optique/run"
+import { path, run } from "@optique/run"
 
 import type { Mode } from "#mode.ts"
 import { MODES } from "#mode.ts"
 import packageJson from "#package.json" with { type: "json" }
+import { ERROR_THEME } from "#report/errors.ts"
 import { toVerbosity } from "#report/verbosity.ts"
 
 const DEFAULT_HOSTS_DIR = "hosts"
@@ -36,10 +38,16 @@ const buildCommand = (mode: Mode) => command(mode, buildCommandOptions(mode), { 
 
 const parser = or(...MODES.map(buildCommand))
 
-export const program = defineProgram({
+export type CommandLine = InferValue<typeof parser>
+
+const program = defineProgram({
   parser,
   metadata: {
     name: "tsinfra",
     brief: message`${text(packageJson.description)}`,
   },
 })
+
+/** Parses the command line, or prints help, the version, or a usage error and exits. */
+export const parseCommandLine = (): CommandLine =>
+  run(program, { help: "option", version: packageJson.version, showDefault: true, theme: ERROR_THEME })

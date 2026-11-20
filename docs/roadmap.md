@@ -61,6 +61,68 @@ Without a global install, direnv's `layout node` or mise's `_.path` put the proj
 
 When it's built, the README's Installation drops "not globally" and shows both installs, its examples use a plain `tsinfra`, and [Runtime](./README.md#runtime) says what the global copy does in place of "A global install would not resolve that import". The direnv and mise note goes in the README as a tip.
 
+#### Implementation plan
+
+Three pieces, in the order that builds each part once: move the code, build the launcher, then write the docs. A piece's checks are `bunx bask lint` and `bunx bask test` (the Docker tests don't touch this, so `--all` isn't needed). The CLI tests use real installs from `createProject()`. A second project's `node_modules/.bin/tsinfra`, run with `.cwd()` set to the first project, stands in for the global copy.
+
+Every piece holds to these:
+
+- **Resolve from `process.cwd()`, never from `--hosts-dir`.**
+- **Never resolve without a `node_modules` up the tree.** `bun.resolveSync` installs from the registry when no `node_modules` exists in the working directory or any parent, and makes no request when one does (checked on Bun 1.4.4 against a local registry stand-in).
+- **The launcher loads none of its own core before it hands off.** `src/cli.ts` statically imports only what finding and starting the project's copy needs, and loads the run with one `import("#cli/run.ts")`.
+- **Tests replace an installed file, never write it in place.** Bun's isolated linker hardlinks installs from its cache on Linux, so an in-place write would change every later install.
+- **Tests never reach the real registry.** A registry stand-in is a local `Bun.serve` passed as `BUN_CONFIG_REGISTRY`.
+- **Errors print through `printTsinfraError`,** like every other error the CLI returns.
+
+##### 1. Split the CLI into parsing and running
+
+A move-only refactor, so the launcher isn't buried in a move. No test changes.
+
+- **1a. Parsing.** `src/cli/program.ts` exports `type CommandLine = InferValue<typeof parser>` and `parseCommandLine(): CommandLine`, which is today's `run(program, { ... })` call from `runTsinfra`.
+- **1b. Running.** `runTsinfra` moves to a new `src/cli/run.ts` as `runTsinfra(commandLine: CommandLine): Promise<Result<number>>`, without its parse line. `src/cli.ts` keeps the shebang and `main`, which parses, then loads `runTsinfra` with `await import("#cli/run.ts")`. Its static imports are only `node:process`, `ts-explicit-errors`, `#cli/program.ts`, and `#report/errors.ts`. After `bun tsdown`, `dist/cli/run.js` exists and `dist/cli.js` imports it dynamically.
+
+##### 2. The launcher
+
+- **2a. Exports.** `package.json` adds `"./cli": { "types": "./dist/cli.d.ts", "import": "./dist/cli.js" }` and `"./package.json": "./package.json"`. These two are the contract that never changes.
+- **2b. Finding the project's copy.** A new `src/cli/project-copy.ts` has `findProjectCopy(cwd): Result<ProjectCopy | undefined>`, with `ProjectCopy` as `{ cliPath, packageJsonPath, isOwnCopy }`. Its three outcomes:
+  - **No copy** (`undefined`) when no `node_modules` is at `cwd` or a parent (walking up with `path.dirname` until it stops changing), or when nothing named `"tsinfra"` resolves from `cwd`.
+  - **A copy that can't be started** (the error below, with the resolve error as its cause) when `"tsinfra"` resolves but `tsinfra/cli` or `tsinfra/package.json` doesn't, like a copy from before the contract.
+  - **A copy** otherwise. `isOwnCopy` compares `packageJsonPath` with `bun.resolveSync("tsinfra/package.json", import.meta.dir)`, the package's own `package.json` through its self-reference. Both paths come from the same resolver, so they agree on symlinks, and the check works from any file in the package.
+
+  The error is built like `failed to load hosts` in `src/core/hosts/load.ts`, the chain and then a line of its own:
+
+  ```
+  couldn't start the project's copy of tsinfra -> <cause>
+  Update both copies of tsinfra, the project's and the global one.
+  ```
+
+- **2c. Handing off.** When there's a project copy that isn't `isOwnCopy`, `main` runs `import(cliPath)` inside `attempt` and returns `undefined`, so the top level leaves `process.exitCode` to the project's copy. A throwing import returns the same error as 2b, with the thrown error as its cause. `src/__tests__/cli-project.ts` gets `replaceInstalledFile(dir, relativePath, content)`, which writes a temp file next to the real `node_modules/tsinfra/<relativePath>` (through the symlink) and renames it over. New tests under `describe("the global copy")`:
+  - It hands off with the same arguments and keeps the exit code, with a stub `dist/cli.js` that prints `process.argv.slice(2)` and sets `process.exitCode = 3`.
+  - It prints the project's report once: the first `plan` test's stdout, exit 2, and empty stderr.
+  - It hands off from the project's `hosts/` folder.
+  - A project copy from before the contract, with an installed `package.json` whose `exports` has only `"."`, like 0.10.0's, exits 1 with the error.
+  - A project copy whose `dist/cli.js` throws `broken project copy` exits 1, and stderr is exactly the error with that cause.
+
+  The existing tests cover `isOwnCopy`, because they run the project's copy through `.bin`.
+
+- **2d. No project copy.** When `findProjectCopy` gives `undefined`, `main` still parses, so Optique answers `--help`, `plan --help`, `--version`, and usage errors from the global copy. When parsing gives a command, `main` returns this error without importing `#cli/run.ts`:
+
+  ```
+  tsinfra isn't installed in this project
+  Add it with `bun add --dev tsinfra`, because host scripts import "tsinfra".
+  ```
+
+  Tests run from a `makeTempDir()`. With no `node_modules` up the tree, it exits 1 with the error, and a registry stand-in that answers 404 gets no requests. Without the check, Bun asks the stand-in for `tsinfra` and fails into the same error, so only the request count proves the check. A `node_modules` with no tsinfra in it gives the same error. `--help` and `plan --help` print help and exit 0.
+
+- **2e. `--version` labels each copy.** `project-copy.ts` adds `readPackageVersion(packageJsonPath)`. `parseCommandLine(copyLabel: "project" | "global")` passes `` `${packageJson.version} (${copyLabel})` `` to Optique, with `project` when the copy runs itself and `global` when there's no project copy. When handing off and the arguments are exactly `["--version"]` (Optique accepts no other spelling, and `plan --version` is a usage error), `main` prints `<project version> (project)` and `<own version> (global)` on two lines and returns 0 without importing the project's copy. Tests: both lines, after replacing the project's installed `package.json` with one whose version is `0.0.0-project`, because both installs come from one pack. One `(project)` line from the project's own `tsinfra --version`. One `(global)` line outside a project, in 2d's help test.
+- **2f. `AGENTS.md`.** Under Layout, that `src/cli.ts` is the launcher and why it imports so little. Under Checks, that a CLI test changing an installed copy uses `replaceInstalledFile`, and why.
+
+##### 3. Docs
+
+- **3a. Runtime.** [Runtime](./README.md#runtime) replaces "A global install would not resolve that import" with this entry's bullets. The contract is now two exports, and the launcher tells its own copy apart by where `tsinfra/package.json` resolves from the working directory and from its own folder. Runtime also says the launcher checks for a `node_modules` before resolving, and why, and that it loads none of its own core before it hands off.
+- **3b. README.** The changes the paragraph above this plan lists.
+- **3c. Roadmap.** This entry and its plan are deleted. The Update warnings entry's link points at `./README.md#runtime`, and `grep -rn "a-global-tsinfra" docs README.md` finds nothing.
+
 ### One note for an apply that didn't finish
 
 After an apply fails, the next pass shows every step that changed in it, and is right now, as `^ resume`, each with the same note: "an earlier apply didn't finish, so its follow-ups that didn't complete still trigger". tsinfra can't tell which of them still have follow-ups to come, because a run names its steps only when the script reaches it, so they all show (see [Steps](./steps.md#when-an-apply-doesnt-finish)). A late failure in an apply that changed a lot, like a host's first, leaves a block of identical notes, and open changes from more than one failed apply pile up until a clean one.

@@ -5,7 +5,10 @@ tsinfra's design lives in the docs: `docs/README.md` (the design notes), `docs/s
 ## Working with the user
 
 - Give the user a rundown of the next piece and get their go-ahead before building it.
-- Larger work is split into pieces, each reviewed before the next.
+- Larger work is split into pieces, each reviewed before the next. When the user asks for work in pieces, split it like this:
+  - **A piece is one commit,** numbered 1, 2, 3, and so on. It passes lint and tests, and makes sense as a commit.
+  - **A sub-piece is one review,** numbered 1a, 1b, then 2a, 2b, etc. It's a smaller diff that's easy to review, and it doesn't have to pass lint until its piece is done.
+  - **The feature as a whole comes first.** Order the pieces so nothing one builds is undone or reworked by a later one. Never build something a worse way just so a piece stands on its own. When a split would force that, change the split.
 
 ## Checks
 
