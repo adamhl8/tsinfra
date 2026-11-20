@@ -52,10 +52,10 @@ bun add --global tsinfra  # optional, for a plain `tsinfra`
 
 - **The global copy hands off to the project's.** It resolves `tsinfra/cli` from the working directory and imports it. The project's copy resolves to its own path, so it skips the hand-off and runs normally.
 - **There's no fallback.** Host scripts import `"tsinfra"`, so the global copy can't run them anyway. Without a project copy, a command that runs hosts fails with "tsinfra isn't installed in this project", and how to add it. Host scripts only ever run on the version in the project's lockfile, whatever the global version is.
-- **The error also covers Bun's auto-install.** In a directory with no `node_modules`, Bun installs imports when it runs them, so `import "tsinfra"` would quietly fetch the newest version.
+- **Only a `node_modules` makes a copy local.** In a folder with no `node_modules` up the tree, Bun resolves a package by installing it from the registry into its cache. The launcher checks for one before resolving, so outside a project it says tsinfra isn't installed, answers `--help` and `--version` without the network, and never labels a cached copy as the project's.
 - **`tsinfra --version` shows both,** like `0.9.0 (project)` and `0.8.2 (global)`. The launcher answers it itself, so the project's copy never needs to know it was started by one. Outside a project, `--version` and `--help` answer from the global copy.
 - **The hand-off contract never changes.** An old global copy has to start any newer project copy, so the `tsinfra/cli` export stays where it is for good. It's the only thing the launcher relies on.
-- **A failed hand-off says to update both copies.** When `"tsinfra"` resolves from the working directory but `tsinfra/cli` doesn't, or importing it fails, the launcher says it couldn't start the project's copy and to update both copies. The launcher can't tell a contract change from any other failure, so the message covers the one cause updating fixes, if the contract ever has to change.
+- **A copy without the hand-off says to update both copies.** When tsinfra is installed in the project but `tsinfra/cli` doesn't resolve, the launcher says so and to update both copies. It's the one failure about the copies' versions, and updating fixes it, if the contract ever has to change. Anything the project's copy throws once it's imported comes through as if it had been started directly, so a crash keeps Bun's own error and stack.
 
 Without a global install, direnv's `layout node` or mise's `_.path` put the project's `node_modules/.bin` on the PATH inside the repo, for the same plain `tsinfra`.
 
@@ -84,28 +84,26 @@ A move-only refactor, so the launcher isn't buried in a move. No test changes.
 ##### 2. The launcher
 
 - **2a. Exports.** `package.json` adds `"./cli": { "types": "./dist/cli.d.ts", "import": "./dist/cli.js" }` and `"./package.json": "./package.json"`. These two are the contract that never changes.
-- **2b. Finding the project's copy.** A new `src/cli/project-copy.ts` has `findProjectCopy(cwd): Result<ProjectCopy | undefined>`, with `ProjectCopy` as `{ cliPath, packageJsonPath, isOwnCopy }`. Its three outcomes:
-  - **No copy** (`undefined`) when no `node_modules` is at `cwd` or a parent (walking up with `path.dirname` until it stops changing), or when nothing named `"tsinfra"` resolves from `cwd`.
-  - **A copy that can't be started** (the error below, with the resolve error as its cause) when `"tsinfra"` resolves but `tsinfra/cli` or `tsinfra/package.json` doesn't, like a copy from before the contract.
-  - **A copy** otherwise. `isOwnCopy` compares `packageJsonPath` with `bun.resolveSync("tsinfra/package.json", import.meta.dir)`, the package's own `package.json` through its self-reference. Both paths come from the same resolver, so they agree on symlinks, and the check works from any file in the package.
-
-  The error is built like `failed to load hosts` in `src/core/hosts/load.ts`, the chain and then a line of its own:
+- **2b. Finding the project's copy.** A new `src/cli/project-copy.ts` has `findProjectCopy(cwd): Result<ProjectCopy | undefined>`. `ProjectCopy` describes only the project's copy: `{ cliPath, packageJsonPath, isRunning }`. Any running copy that isn't the project's counts as global, however it got on the `PATH`. Its outcomes, in the order it checks them:
+  - **No copy** (`undefined`) when no `node_modules` is at `cwd` or a parent, or when `tsinfra/package.json` doesn't resolve from `cwd`. Bun resolves `tsinfra/package.json` whether or not a copy's `exports` lists it, so it's the check for whether a copy is installed.
+  - **A copy that can't be started** (the error below) when `tsinfra/cli` doesn't resolve, like a copy from before the contract. The error is our own, because Bun's says `Cannot find package 'tsinfra'` for a package it found.
+  - **A copy** otherwise. `isRunning` is whether its `package.json` is the one `bun.resolveSync("tsinfra/package.json", import.meta.dir)` finds through the running copy's self-reference. Both paths come from the same resolver, so they agree on symlinks. The running copy can't hand off to itself, because importing the module that's still loading waits on itself forever.
 
   ```
-  couldn't start the project's copy of tsinfra -> <cause>
-  Update both copies of tsinfra, the project's and the global one.
+  the project's copy of tsinfra has no 'tsinfra/cli' export
+  Update both your global and local copies of tsinfra.
   ```
 
-- **2c. Handing off.** When there's a project copy that isn't `isOwnCopy`, `main` runs `import(cliPath)` inside `attempt` and returns `undefined`, so the top level leaves `process.exitCode` to the project's copy. A throwing import returns the same error as 2b, with the thrown error as its cause. `src/__tests__/cli-project.ts` gets `replaceInstalledFile(dir, relativePath, content)`, which writes a temp file next to the real `node_modules/tsinfra/<relativePath>` (through the symlink) and renames it over. New tests under `describe("the global copy")`:
+- **2c. Handing off.** When the project's copy isn't `isRunning`, a new `runCli` runs `await import(cliPath)` and returns `undefined`, so `main` leaves `process.exitCode` to the project's copy. The import isn't wrapped in `attempt`, because the whole run of the project's copy happens inside it, and a crash there should look the same as when that copy is started directly. `src/__tests__/cli-project.ts` gets `replaceInstalledFile(dir, relativePath, content)`, which writes a temp file next to the real `node_modules/tsinfra/<relativePath>` (through the symlink) and renames it over. New tests under `describe("the global copy")`:
   - It hands off with the same arguments and keeps the exit code, with a stub `dist/cli.js` that prints `process.argv.slice(2)` and sets `process.exitCode = 3`.
-  - It prints the project's report once: the first `plan` test's stdout, exit 2, and empty stderr.
+  - It prints the same stdout, stderr, and exit code as the project's own copy, for a real `plan`.
   - It hands off from the project's `hosts/` folder.
   - A project copy from before the contract, with an installed `package.json` whose `exports` has only `"."`, like 0.10.0's, exits 1 with the error.
-  - A project copy whose `dist/cli.js` throws `broken project copy` exits 1, and stderr is exactly the error with that cause.
+  - A project copy whose `dist/cli.js` throws `broken project copy` exits 1 with Bun's own uncaught error, not the launcher's.
 
-  The existing tests cover `isOwnCopy`, because they run the project's copy through `.bin`.
+  The existing tests cover `isRunning`, because they run the project's copy through `.bin`.
 
-- **2d. No project copy.** When `findProjectCopy` gives `undefined`, `main` still parses, so Optique answers `--help`, `plan --help`, `--version`, and usage errors from the global copy. When parsing gives a command, `main` returns this error without importing `#cli/run.ts`:
+- **2d. No project copy.** When `findProjectCopy` gives `undefined`, `runCli` still parses, so Optique answers `--help`, `plan --help`, `--version`, and usage errors from the global copy. When parsing gives a command, `runCli` returns this error without importing `#cli/run.ts`:
 
   ```
   tsinfra isn't installed in this project
@@ -114,8 +112,8 @@ A move-only refactor, so the launcher isn't buried in a move. No test changes.
 
   Tests run from a `makeTempDir()`. With no `node_modules` up the tree, it exits 1 with the error, and a registry stand-in that answers 404 gets no requests. Without the check, Bun asks the stand-in for `tsinfra` and fails into the same error, so only the request count proves the check. A `node_modules` with no tsinfra in it gives the same error. `--help` and `plan --help` print help and exit 0.
 
-- **2e. `--version` labels each copy.** `project-copy.ts` adds `readPackageVersion(packageJsonPath)`. `parseCommandLine(copyLabel: "project" | "global")` passes `` `${packageJson.version} (${copyLabel})` `` to Optique, with `project` when the copy runs itself and `global` when there's no project copy. When handing off and the arguments are exactly `["--version"]` (Optique accepts no other spelling, and `plan --version` is a usage error), `main` prints `<project version> (project)` and `<own version> (global)` on two lines and returns 0 without importing the project's copy. Tests: both lines, after replacing the project's installed `package.json` with one whose version is `0.0.0-project`, because both installs come from one pack. One `(project)` line from the project's own `tsinfra --version`. One `(global)` line outside a project, in 2d's help test.
-- **2f. `AGENTS.md`.** Under Layout, that `src/cli.ts` is the launcher and why it imports so little. Under Checks, that a CLI test changing an installed copy uses `replaceInstalledFile`, and why.
+- **2e. `--version` labels each copy.** `project-copy.ts` adds `readPackageVersion(packageJsonPath)`. `parseCommandLine(runningCopy: "project" | "global")` passes `` `${packageJson.version} (${runningCopy})` `` to Optique. `runCli` sets `runningCopy` to `"project"` when `projectCopy?.isRunning`, and `"global"` otherwise, and hands off when it's `"global"` and there is a project copy. When handing off, `runCli` asks its own Optique whether the arguments are a version request, with `isVersionRequest()` in `program.ts`, which reads `process.argv` itself like `parseCommandLine`. It runs Optique's `runParser` with callbacks that only record whether the version would show, so nothing prints and nothing exits. Optique shows the version wherever `--version` appears, like `plan --version`, so an exact match on `["--version"]` would miss those. For a version request, `runCli` prints `<project version> (project)` and `<own version> (global)` on two lines and returns 0 without importing the project's copy. Everything else, help and usage errors included, goes to the project's copy, so a stale global copy never rejects syntax the project's copy accepts. Tests: both lines, for `--version` and `plan --verbose --version`, after replacing the project's installed `package.json` with one whose version is `0.0.0-project`, because both installs come from one pack. One `(project)` line from the project's own `tsinfra --version`. One `(global)` line outside a project.
+- **2f. `AGENTS.md`.** Under Architecture, that `src/cli.ts` is the launcher and why it imports so little, and that the `./cli` and `./package.json` exports never change. Under Checks, that a CLI test changing an installed copy uses `replaceInstalledFile`, and why.
 
 ##### 3. Docs
 
@@ -341,7 +339,7 @@ Each copy of tsinfra warns when a newer version is out. The global launcher (see
 - **Neither copy updates anything.** A global install could come from any package manager, so tsinfra doesn't guess how to update it, and changing a global install for someone oversteps.
 - **The check never slows a run.** The newest version is fetched from the npm registry at most once a day and cached on the machine running tsinfra, at `~/.tsinfra/latest-version.json`. A warning comes from the cache. A fetch still running when the run ends shows its result on a later run.
 - **The two copies share the cache.** It holds only the newest version and when it was checked, and each copy compares its own version to it. Its format is a contract that never changes, like `tsinfra/cli`, because an old global copy reads what a newer project copy wrote.
-- **A cache a copy can't read says to update both copies,** the same as a failed hand-off. The copy can't tell a format change from a corrupt file, so the message covers the one cause updating fixes.
+- **A cache a copy can't read says to update both copies,** the same as a project copy without the hand-off. The copy can't tell a format change from a corrupt file, so the message covers the one cause updating fixes.
 - **The launcher warns before it hands off.** The project's copy may exit the process itself, so the launcher has no later point to print from. It reads the cache and never waits for a fetch.
 - **Each warning names its own copy.** The project's says how to update with the package manager its lockfile shows (`bun.lock`, `package-lock.json`, `pnpm-lock.yaml`). The global's says to update it the way it was installed, with a `bun add --global` example.
 - **The warnings stay out of the way.** They go to stderr, after the report for the project's copy, and never change the exit code. They're skipped when stderr isn't a TTY, in CI, or when an opt-out environment variable is set.

@@ -13,6 +13,7 @@ tsinfra's design lives in the docs: `docs/README.md` (the design notes), `docs/s
 ## Checks
 
 - `bunx bask test --all`, for changes to transports, sudo, or file and link writes. The `*.docker.ts` tests run on Alpine (busybox) and Debian (dash), with real root and real `sudo`. Neither `bun test` nor `bask lint` runs them.
+- A CLI test that changes a project's installed tsinfra uses `replaceInstalledFile`, which renames a new file over the old one. Bun hardlinks installs from its cache on Linux, so writing the file in place would change the cache for every later install. Another project's `node_modules/.bin/tsinfra` (`getInstalledBin`) stands in for a global copy.
 - A test that sends content near the 10 MB limit through the local `sh` needs `CONTENT_LIMIT_TIMEOUT_MS`. macOS `/bin/sh` is bash, which reads a script on a pipe one byte at a time, so 10 MB takes about 2.5 seconds of the default 5 second timeout.
 
 ## Docs
@@ -75,6 +76,8 @@ Each name should say which side of a comparison it is. When naming anything in a
 - **`runProcess` doesn't pass `env` to `spawn`,** so a host script's changes to `process.env` never reach the commands tsinfra runs. Bun's `spawn` gives children the environment the process started with, so a test can't move `HOME` either. Instead, the test preload mocks `buildHostDetails` to give each host a temp `home`, ssh ones included, because the only sshds the tests reach run on the same machine as the same user.
 - **Paths tsinfra keeps under a host's home come from `core/hosts/prepare/host-details/tsinfra-directory.ts`,** built from the checked `HomeDirectory`, never as `"$HOME"` in a script. The test preload's mock swaps `home` on what `buildHostDetails` returns, so it reaches paths built after preparation, like saved state. It doesn't reach the askpass helper, which `buildHostDetails` writes itself, so tests find the helper in the real home.
 - **`report-preview.ts` has no test preload,** so it runs its hosts in a child process started with a temp `HOME`. Otherwise each host that fails there leaves its saved state in the real `~/.tsinfra/state/`.
+- **`src/cli.ts` is the launcher, so it statically imports only what finding the project's copy, handing off, and parsing need.** It loads the run with `import("#cli/run.ts")`, so a global copy never loads its own core next to the project's. A new import the run needs goes in `cli/run.ts`, not `cli.ts`.
+- **The `./cli` and `./package.json` exports never move or change shape,** because an old global copy has to start any newer project copy through them.
 - **Recorders follow the stages of a run** (preparation, then the session), not the host, step, and converge hierarchy.
 - **All recorded text goes through a palette style,** even text left in the terminal's own color (`stylePlain`), because the palette's styles are what mute `[MASKED]`. Text that skips one shows `[MASKED]` in the color around it. The `hosts-masked` CLI test checks that every `[MASKED]` it prints is dim.
 

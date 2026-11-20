@@ -1,5 +1,7 @@
+import process from "node:process"
+
 import type { Message } from "@optique/core"
-import { argument, command, constant, merge, message, object, option, or, string, text } from "@optique/core"
+import { argument, command, constant, merge, message, object, option, or, runParser, string, text } from "@optique/core"
 import type { InferValue } from "@optique/core/parser"
 import { defineProgram } from "@optique/core/program"
 import { path, run } from "@optique/run"
@@ -48,6 +50,41 @@ const program = defineProgram({
   },
 })
 
-/** Parses the command line, or prints help, the version, or a usage error and exits. */
-export const parseCommandLine = (): CommandLine =>
-  run(program, { help: "option", version: packageJson.version, showDefault: true, theme: ERROR_THEME })
+/**
+ * Parses the command line, or prints help, the version, or a usage error and exits. The version is labeled with
+ * `runningCopy`, which is "global" for any copy that isn't the project's.
+ */
+export const parseCommandLine = (runningCopy: "project" | "global"): CommandLine =>
+  run(program, {
+    help: "option",
+    version: `${packageJson.version} (${runningCopy})`,
+    showDefault: true,
+    theme: ERROR_THEME,
+  })
+
+/** Returns whether Optique would answer the command line with the version, without printing anything or exiting. */
+export const isVersionRequest = (): boolean => {
+  let isVersion = false
+  runParser(program, process.argv.slice(2), {
+    help: { option: true },
+    version: {
+      option: true,
+      value: packageJson.version,
+      onShow: () => {
+        isVersion = true
+      },
+    },
+    // Ignore Optique's output and errors, because only whether it would show the version matters here.
+    onError: () => {
+      /* ignored */
+    },
+    stdout: () => {
+      /* ignored */
+    },
+    stderr: () => {
+      /* ignored */
+    },
+  })
+
+  return isVersion
+}
