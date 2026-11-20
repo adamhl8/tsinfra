@@ -1,3 +1,17 @@
+## [0.12.0](https://github.com/adamhl8/tsinfra/compare/v0.11.0..v0.12.0) - 2026-11-20
+
+### 🚀 Features
+
+- _(cli)_ hand off from a global tsinfra to the project's copy ([4e0a59e](https://github.com/adamhl8/tsinfra/commit/4e0a59e9baae8406b7ea0152c01e758886b086cd) by @adamhl8)
+
+### 🚜 Refactor
+
+- _(cli)_ split parsing the command line from running the hosts ([86a3853](https://github.com/adamhl8/tsinfra/commit/86a3853271c9e4c380e17f58d62fedff3d4aaaa9) by @adamhl8)
+
+### 📚 Documentation
+
+- describe the global tsinfra launcher ([dacf468](https://github.com/adamhl8/tsinfra/commit/dacf468c89c179eb29d226119df364f08a88b3bb) by @adamhl8)
+
 ## [0.11.0](https://github.com/adamhl8/tsinfra/compare/v0.10.0..v0.11.0) - 2026-11-20
 
 ### 🚀 Features
