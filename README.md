@@ -45,10 +45,15 @@ Write one script per machine. A script reads top to bottom and is made of idempo
 tsinfra requires [Bun](https://bun.sh). Bun runs your host scripts as TypeScript directly, with no build step.
 
 ```sh
-bun add --dev tsinfra
+bun add --dev tsinfra     # the version your host scripts run on
+bun add --global tsinfra  # optional, for a plain `tsinfra`
 ```
 
-- Install it in the repo that holds your host scripts, not globally, because the scripts import `"tsinfra"`.
+- Install it in the repo that holds your host scripts, because the scripts import `"tsinfra"`.
+- The global copy only starts the project's copy, so host scripts run on the version in your lockfile. Without it, run `bunx tsinfra`.
+
+> [!TIP]
+> Without a global install, direnv's `layout node` or mise's `_.path` put the project's `node_modules/.bin` on the `PATH` inside the repo, for the same plain `tsinfra`.
 
 ## Usage
 
@@ -81,8 +86,8 @@ export default host({ name: "sonarr", target: "sonarr.lan", sudo: true }, async 
 See what would change:
 
 ```sh
-bunx tsinfra plan          # every host in ./hosts
-bunx tsinfra plan sonarr   # just this one
+tsinfra plan          # every host in ./hosts
+tsinfra plan sonarr   # just this one
 ```
 
 ```
@@ -104,7 +109,7 @@ sonarr   2 changes
 Then make the changes:
 
 ```sh
-bunx tsinfra apply sonarr
+tsinfra apply sonarr
 ```
 
 - `plan` exits 2 when anything drifted, so a drift check in CI or a cron job is one line.
@@ -680,6 +685,8 @@ Each `-v` shows more:
 ```
 tsinfra plan [options] [HOST]...
 tsinfra apply [options] [HOST]...
+tsinfra --help
+tsinfra --version
 ```
 
 - `plan`: show what would change on each host
@@ -690,6 +697,8 @@ Options:
 
 - `--hosts-dir DIR`: the directory of host scripts (default: `hosts`)
 - `-v`, `--verbose`: show more of each host's output. Use `-vv` and `-vvv` to show even more.
+- `--help`: show help, for tsinfra or for a command (`tsinfra plan --help`)
+- `--version`: show the version
 
 Hosts run one at a time, in order of their names.
 
