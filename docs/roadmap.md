@@ -6,6 +6,7 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 
 - [Next](#next)
   - [A global `tsinfra` that starts the project's copy](#a-global-tsinfra-that-starts-the-projects-copy)
+  - [One note for an apply that didn't finish](#one-note-for-an-apply-that-didnt-finish)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
   - [Live progress](#live-progress)
@@ -59,6 +60,16 @@ bun add --global tsinfra  # optional, for a plain `tsinfra`
 Without a global install, direnv's `layout node` or mise's `_.path` put the project's `node_modules/.bin` on the PATH inside the repo, for the same plain `tsinfra`.
 
 When it's built, the README's Installation drops "not globally" and shows both installs, its examples use a plain `tsinfra`, and [Runtime](./README.md#runtime) says what the global copy does in place of "A global install would not resolve that import". The direnv and mise note goes in the README as a tip.
+
+### One note for an apply that didn't finish
+
+After an apply fails, the next pass shows every step that changed in it, and is right now, as `^ resume`, each with the same note: "an earlier apply didn't finish, so its follow-ups that didn't complete still trigger". tsinfra can't tell which of them still have follow-ups to come, because a run names its steps only when the script reaches it, so they all show (see [Steps](./steps.md#when-an-apply-doesnt-finish)). A late failure in an apply that changed a lot, like a host's first, leaves a block of identical notes, and open changes from more than one failed apply pile up until a clean one.
+
+- **The note moves to the host.** Open changes belong to a host, so its block says once, before its entries, that an earlier apply didn't finish, and that its follow-ups that didn't complete still trigger. Each `^ resume` line is left bare.
+- **`ranFromOpenChanges` runs share it.** Their note, "triggered because it didn't complete in an earlier unfinished apply", has the same cause, so the host's note covers them too, and their `> triggered` lines are left bare.
+- **It shows at the default level,** like the `resume` lines it explains, and only when the block has a `resume` or `ranFromOpenChanges` line.
+
+When it's built, [CLI](./cli.md#how-the-report-is-built) describes the host's note in place of the two per-step notes, and [Steps](./steps.md#when-an-apply-doesnt-finish) drops the quoted notes.
 
 ## Planned
 
@@ -518,6 +529,8 @@ Opt-in features with no real case yet:
 - **A prompt step that returns a value,** a `read` answered by the user, like `h.prompt(name, { secret: true })`, for values that only exist at run time, like a Plex claim token or a 2FA code. The script decides when to ask, like only when a `read` shows the server isn't claimed yet. It prompts in `plan` too, so later steps can show a real diff. Ansible's `pause` saves its answer the same way.
 
   It reuses the sudo prompt's pieces and the terminal lock, the same way a [manual step](#manual-steps) does.
+
+- **Ordering between integrations,** not just between steps. To be expanded.
 
 ### Removed resources
 
