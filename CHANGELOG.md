@@ -1,3 +1,23 @@
+## [0.11.0](https://github.com/adamhl8/tsinfra/compare/v0.10.0..v0.11.0) - 2026-11-20
+
+### 🚀 Features
+
+- give tool calls env and secretEnv ([fd877ce](https://github.com/adamhl8/tsinfra/commit/fd877ce8246bf612f729501a9172fbbee3a8a10e) by @adamhl8)
+
+- show tool options in the report ([2a27c7b](https://github.com/adamhl8/tsinfra/commit/2a27c7ba48ed05c1a10b3730df25f9d2370ea044) by @adamhl8)
+
+- record tool calls on their commands ([115138c](https://github.com/adamhl8/tsinfra/commit/115138c1726c00fdb706f16befc14245446d9361) by @adamhl8)
+
+### ✨ Improvements
+
+- _(report)_ show the tool's name next to the command ([0dc044a](https://github.com/adamhl8/tsinfra/commit/0dc044ae46aba9ed3d167605006fa43d0bd8cf63) by @adamhl8)
+
+- _(report)_ mark phases with a heading element ([52e72c0](https://github.com/adamhl8/tsinfra/commit/52e72c04ac8efa1be1a61f82a6a7056dc0ce1ea0) by @adamhl8)
+
+### 📚 Documentation
+
+- update docs ([a62e9cf](https://github.com/adamhl8/tsinfra/commit/a62e9cf72b6a0f33a57c2624dd4cf48e56a05c83) by @adamhl8)
+
 ## [0.10.0](https://github.com/adamhl8/tsinfra/compare/v0.9.0..v0.10.0) - 2026-11-18
 
 ### 🚀 Features
