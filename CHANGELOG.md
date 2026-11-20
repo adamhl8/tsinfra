@@ -1,3 +1,11 @@
+## [0.12.1](https://github.com/adamhl8/tsinfra/compare/v0.12.0..v0.12.1) - 2026-11-20
+
+### ⚙️ Miscellaneous Tasks
+
+- _(deps)_ update dependencies ([0f34204](https://github.com/adamhl8/tsinfra/commit/0f34204fcfc5c810c288fd80332648573c6ce8ee) by @adamhl8)
+
+- update NO_CLI_MESSAGE ([7b347c9](https://github.com/adamhl8/tsinfra/commit/7b347c952b78c6603eee38575b26abd1fee43031) by @adamhl8)
+
 ## [0.12.0](https://github.com/adamhl8/tsinfra/compare/v0.11.0..v0.12.0) - 2026-11-20
 
 ### 🚀 Features
