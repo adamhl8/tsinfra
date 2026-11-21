@@ -19,15 +19,31 @@ const layoutStatusLine = (statusLine: StatusLine): string => {
   return note === undefined ? line : `${line}${COLUMN_GAP}${note}`
 }
 
-/** Lays out aligned rows as `label: value` lines, with each value starting at `valueColumn`. */
+/** Returns the column the values of `alignedRows` line up in, from the labels of the rows that have a value. */
+const getValueColumn = (alignedRows: AlignedRow[]): number =>
+  getMaxWidth(alignedRows.filter(({ nestedRows }) => !nestedRows).map(({ label }) => label))
+
+/**
+ * Lays out aligned rows as `label: value` lines, with each value starting at `valueColumn`. A row with nested rows gets
+ * its label on a line of its own, then its nested rows indented one level, lined up in a column of their own.
+ */
 const layoutAlignedRows = (alignedRows: AlignedRow[], valueColumn: number): string[] => {
   const continuationIndent = " ".repeat(valueColumn)
 
-  return alignedRows.flatMap(({ label, valueLines }) => {
+  return alignedRows.flatMap(({ label, valueLines, nestedRows }) => {
+    if (nestedRows) {
+      const nestedLines = layoutAlignedRows(nestedRows, getValueColumn(nestedRows))
+      return [label, ...nestedLines.map((nestedLine) => `${INDENT}${nestedLine}`)]
+    }
+
     const labelText = padToWidth(label, valueColumn)
     return valueLines.map((valueLine, index) => `${index === 0 ? labelText : continuationIndent}${valueLine}`)
   })
 }
+
+/** Lays out aligned rows in a column of their own, apart from the entry's, like an options block under a command. */
+export const layoutRowsInOwnColumn = (alignedRows: AlignedRow[]): string[] =>
+  layoutAlignedRows(alignedRows, getValueColumn(alignedRows))
 
 /**
  * Lays out the lines under a status line: its error, if any, then its details. Lines up the values of every aligned row
@@ -37,8 +53,7 @@ const layoutAlignedRows = (alignedRows: AlignedRow[], valueColumn: number): stri
 const layoutBody = (body: Body): string[] => {
   const { errorLines, detailRows } = body
 
-  const labels = detailRows.flatMap(({ kind, rows }) => (kind === "aligned" ? rows.map(({ label }) => label) : []))
-  const valueColumn = getMaxWidth(labels)
+  const valueColumn = getValueColumn(detailRows.flatMap(({ kind, rows }) => (kind === "aligned" ? rows : [])))
 
   const detailLines = detailRows.flatMap(({ kind, rows }) =>
     kind === "aligned" ? layoutAlignedRows(rows, valueColumn) : rows,

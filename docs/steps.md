@@ -537,20 +537,19 @@ Makes sure `path` is a directory, with the mode and owner the script gives, and 
 ## `ensure`
 
 ```ts
+// A record's values can be strings, numbers, booleans, `null`, or nested records of the same.
+type RecordValue = string | number | boolean | null | RecordWant
+interface RecordWant {
+  readonly [key: string]: RecordValue
+}
+
 // `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string.
-type EnsureOptions<
-  T extends
-    | boolean
-    | string
-    | readonly string[]
-    | ReadonlySet<string>
-    | Readonly<Record<string, string | number | boolean>>,
-> = {
+type EnsureOptions<T extends boolean | string | readonly string[] | ReadonlySet<string> | RecordWant> = {
   // `true` means exit 0, or a function returning true, is already right. `false` means the opposite.
   // A string is compared to the command's stdout, or the function's value.
   // A list is compared to the command's lines, or the function's array, in order.
   // A set is compared to the command's lines, or the function's `Set`, as a set.
-  // A record is compared to the function's object, by key.
+  // A record is compared to the function's object, by key, and a nested record the same way.
   want: T
   // A record `want` takes only a function, because a command's output has no keys.
   check: string | ((tools: ReadTools) => Promise<T>)
@@ -636,7 +635,7 @@ The report shows a diff from the host's list to the wanted one, framed like a fi
 
 **The type picks the comparison, not an option.** An array has an order and can hold an item twice, and a `Set` has neither, so the value's type already says which comparison the script means. An `ordered: true` option would say it again, and would leave an array meant as ordered compared as a set by default.
 
-**A record `want`**, an object of string keys and string, number, or boolean values, compares values by key, like a package name to its version, or a config's settings. Key order doesn't count, and each value is compared exactly, so a number never matches a string that reads the same: `8080` and `"8080"` differ, and the report shows the number in italics. A value can't be a nested object or array. Only a check function can return one, because a command's output has no keys, so `check: "..."` with a record `want` is a type error, and refused before it runs for a script that gets past the types. It must be a plain object, so a `Map`, a class instance, or a `Promise` from a missing `await` is refused, because it would otherwise be compared by its own keys, which it usually has none of. A fix function's `missing`, `changed`, `unmet`, and `extra` hold `want`'s own value type, so a `want` of strings gives it strings.
+**A record `want`**, an object of string keys, compares values by key, like a package name to its version, or a config's settings. A value is a string, a number, a boolean, `null`, or a nested record of the same, like a container's `env` or `labels`. A nested record compares by key too, so key order doesn't count at any depth. Each value is compared exactly, so a number never matches a string that reads the same: `8080` and `"8080"` differ, and the report shows the number in italics. `-0` matches `0`, as it does with `===`, because the report shows both as `0`. `null` is a value, so `{ port: null }` and `{}` differ. A key only one side has is a difference at any depth. Only a check function can return a record, because a command's output has no keys, so `check: "..."` with a record `want` is a type error, and refused before it runs for a script that gets past the types. A record must be a plain object at every depth, so a `Map`, a class instance, or a `Promise` from a missing `await` is refused, because it would otherwise be compared by its own keys, which it usually has none of. A record that holds itself is refused too, because showing it would never end. The error names the path to the value, like `want.env.PUID`. A fix function's `missing`, `changed`, `unmet`, and `extra` hold `want`'s own value type, so a `want` of strings gives it strings.
 
 ```ts
 const wanted: Record<string, string> = {}
@@ -662,6 +661,19 @@ The report shows a row per key that differs, from the host's value to the wanted
       zx:         (none) -> 8.8.1
       pnpm:       11.1.0 -> 11.2.0
       typescript: 5.9.2 -> (none)
+```
+
+A nested record shows its keys that differ under its own key, indented, with each level lined up on its own. A key whose record one side doesn't have at all shows that record's keys against `(none)`. Two kinds of value at one key, like a string and a record, show on one row, with the record as one line of JSON:
+
+```
+  ~ change: (ensure) Configure the container
+      image:   sonarr:4.0.14 -> sonarr:4.0.15
+      env:
+        TZ:   UTC -> America/New_York
+        PUID: (none) -> 1000
+      labels:
+        traefik.enable: (none) -> true
+      restart: {"policy":"always"} -> unless-stopped
 ```
 
 **A check reports the host's state, and never compares.** Its job is to return the same shape as `want`, filled with what's on the host. A check that returns a spec like `"latest"` when a package is current, and a version otherwise, does the comparison itself, and its row hides the installed version. Keep specs like `"latest"` or `"11"` as a helper's input, resolve them to versions for `want` before the step, as above, and have the check read the installed versions.
@@ -764,7 +776,7 @@ fix: async ({ exec }) => {
 
 The fix function only runs in `apply`, so it can change things and do work on the control machine.
 
-**What the check found.** A fix function gets a second argument after its tools, with what the check found: `{ got }` for a string or a list `want`, what the check answered, `{ missing, extra }` for a set, and `{ missing, changed, unmet, extra }` for a record, the same items and keys the report shows. A record's `missing` maps a key to its wanted value, and `changed` maps a key to `{ got, want }`. Its `unmet` maps every key that's `missing` or `changed` to its wanted value, in `want`'s key order, for a fix that sets each one, like the bun packages example above. Its `extra` maps a key to its current value. A fix can act on it without reading the host again:
+**What the check found.** A fix function gets a second argument after its tools, with what the check found: `{ got }` for a string or a list `want`, what the check answered, `{ missing, extra }` for a set, and `{ missing, changed, unmet, extra }` for a record, the same items and keys the report shows. A record's `missing` maps a key to its wanted value, and `changed` maps a key to `{ got, want }`. Its `unmet` maps every key that's `missing` or `changed` to its wanted value, in `want`'s key order, for a fix that sets each one, like the bun packages example above. Its `extra` maps a key to its current value. Each holds a top-level key's whole value, so a nested record's `changed.env` holds both `env` records, because a fix acts on a whole container or package, not on one nested value. A fix can act on it without reading the host again:
 
 ```ts
 await h.ensure("Update Caddy", {

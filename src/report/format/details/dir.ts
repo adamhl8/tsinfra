@@ -1,4 +1,8 @@
-import type { RecordComparisonValues, RecordValue } from "#core/session/handlers/ensure/comparison/record.ts"
+import type {
+  RecordComparisonValues,
+  RecordValue,
+  RecordWant,
+} from "#core/session/handlers/ensure/comparison/record.ts"
 import { toModeBits } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 import type { DetailRows } from "#report/format/details.ts"
 import type { DiffLimits } from "#report/format/details/diff/limits.ts"
@@ -10,7 +14,7 @@ const toShownDirValue = (key: string, value: RecordValue): RecordValue =>
   key === "mode" && typeof value === "number" ? formatMode(toModeBits(value)) : value
 
 /** Returns `record` with each of its values as the report shows it. */
-const toShownDirRecord = (record: Record<string, RecordValue>): Record<string, RecordValue> =>
+const toShownDirRecord = (record: RecordWant): Record<string, RecordValue> =>
   Object.fromEntries(
     Object.entries(record).map(([key, value]): [string, RecordValue] => [key, toShownDirValue(key, value)]),
   )
@@ -20,23 +24,8 @@ const toShownDirRecord = (record: Record<string, RecordValue>): Record<string, R
  * The values compare as data, so the mode is recorded as its bits.
  */
 const toShownDirValues = (values: RecordComparisonValues): RecordComparisonValues => {
-  const { got, want, missing, changed, extra } = values
-
-  const shownChanged = Object.fromEntries(
-    Object.entries(changed).map(([key, change]): [string, { got: RecordValue; want: RecordValue }] => [
-      key,
-      { got: toShownDirValue(key, change.got), want: toShownDirValue(key, change.want) },
-    ]),
-  )
-
-  return {
-    ...values,
-    got: toShownDirRecord(got),
-    want: toShownDirRecord(want),
-    missing: toShownDirRecord(missing),
-    changed: shownChanged,
-    extra: toShownDirRecord(extra),
-  }
+  const { got, want } = values
+  return { ...values, got: toShownDirRecord(got), want: toShownDirRecord(want) }
 }
 
 /** Formats a directory's rows, one per key that differs, like a record `want`'s, with its mode like a file's. */

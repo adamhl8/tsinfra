@@ -1,9 +1,13 @@
+import type { RecordWant } from "#core/session/handlers/ensure/comparison/record.ts"
 import { RECORDED_STAND_INS } from "#core/session/recorder/records.ts"
 import type { Style } from "#styles.ts"
 import { styleCurrent, styleItalic, styleMuted, stylePlain, styleValue, styleWanted } from "#styles.ts"
 
-/** A value the report shows: a string, or a boolean or a number, which shows differently so it can't pass for one. */
-type Value = string | boolean | number
+/**
+ * A value the report shows: a string, or a boolean, a number, `null`, or a record, which show differently so they can't
+ * pass for one.
+ */
+type Value = string | boolean | number | null | RecordWant
 
 // Show an empty string in the same quotes that show edge whitespace, so it reads as a string with nothing in it.
 const EMPTY_MARKER = "''"
@@ -16,13 +20,15 @@ const EDGE_WHITESPACE = /^\s|\s$/v
  * Applies the rules every value follows, in the color the element picks. A string shows as it is, except that an empty
  * one shows as muted quotes, and one that starts or ends with whitespace is quoted, with the quotes unstyled, so the
  * whitespace shows. Anything else is italic, because its text could otherwise pass for a string's, like `true` or
- * `501`, and `describe` can put words around one that's hard to read alone, like `exit code 1`.
+ * `501`, and `describe` can put words around one that's hard to read alone, like `exit code 1`. `null` and a record
+ * show as JSON, a record on one line, in its own key order.
  */
 const applyValueRules = (
   value: Value,
   color: Style,
   describe: (value: boolean | number) => string = String,
 ): string => {
+  if (typeof value === "object") return styleItalic(color(JSON.stringify(value)))
   if (typeof value !== "string") return styleItalic(color(describe(value)))
   if (value === "") return styleMuted(EMPTY_MARKER)
   return EDGE_WHITESPACE.test(value) ? `'${color(value)}'` : color(value)

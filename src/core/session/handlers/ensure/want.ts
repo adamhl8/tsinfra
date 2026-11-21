@@ -14,7 +14,7 @@ import { stringWantSchema } from "#core/session/handlers/ensure/comparison/strin
 
 /**
  * What a step wants: an exit status as a boolean, a string to match, a list or a set of strings to match as a set, or a
- * record of string keys and string, number, or boolean values to match by key.
+ * record of string keys and strings, numbers, booleans, `null`, or nested records, to match by key.
  */
 export type Want = BooleanWant | StringWant | ListWant | SetWant | RecordWant
 
@@ -31,7 +31,7 @@ export type WantKind = TaggedWant["kind"]
 
 // Name the JS types, because ArkType's own problem calls the array and the object both "an object".
 const WANT_TYPES =
-  "a boolean, a string, an array of strings, a Set of strings, or an object of strings, numbers, or booleans"
+  "a boolean, a string, an array of strings, a Set of strings, or an object of strings, numbers, booleans, null, or nested objects"
 
 const WANT_SCHEMAS = {
   boolean: booleanWantSchema,

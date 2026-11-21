@@ -7,7 +7,8 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 - [Next](#next)
   - [One note for an apply that didn't finish](#one-note-for-an-apply-that-didnt-finish)
   - [A neutral view of an empty `want`](#a-neutral-view-of-an-empty-want)
-  - [Nested values in a record `want`](#nested-values-in-a-record-want)
+  - [Lists and sets in a record `want`](#lists-and-sets-in-a-record-want)
+  - [Commands with no terminal](#commands-with-no-terminal)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
   - [Live progress](#live-progress)
@@ -56,9 +57,21 @@ When it's built, [CLI](./cli.md#how-the-report-is-built) describes the host's no
 
 An empty `want` means the check should come back empty, but what its items mean depends on the check. For a check that lists what's left to do, like outdated packages, the list diff's `-` lines read as removals. An empty `want` shows what the check reported under a neutral label, with no diff markers. Empty lists, sets, and records all show it the same way.
 
-### Nested values in a record `want`
+### Lists and sets in a record `want`
 
-A record `want` holds only strings, numbers, and booleans, so anything more about a key goes in the key itself, like `cask "signal"`. A record's values can also be records and other data types, compared and shown key by key.
+A record's values can be strings, numbers, booleans, `null`, and nested records, so a list of ports or a set of packages has to go in a string or in keys. A value can also be an array or a `Set`, by the same rule as the top level: an array compares in order, and a `Set` doesn't. An array holds any record value, and a `Set` holds strings, numbers, booleans, or `null`, because an object in a `Set` would only match itself. A nested list shows a list diff under its key, without the rules above and below, with an object or array item as one line of JSON. A nested set shows `missing:` and `extra:` rows under its key. One-line JSON shows a `Set` as `Set ["fd","jq"]`.
+
+### Commands with no terminal
+
+A local command can open the terminal tsinfra runs in, because `runProcess` starts it in tsinfra's own session. A program that runs `/usr/bin/sudo` itself without `-A` gets a sudo that prompts `Password:` on `/dev/tty`, in the middle of the report and on the same line as the progress line. tsinfra never sees the prompt, so typing the password works, but nothing says where the prompt came from. `mas install` does this, which `brew bundle install` runs for a missing App Store app. Homebrew adds `-A` to its own sudo calls when `SUDO_ASKPASS` is set, but not to the programs it runs. An ssh host already has no terminal, so there the same sudo fails.
+
+- **Local commands start with no terminal.** `runProcess` passes `detached: true` to `spawn`, which calls `setsid()`, so the child starts a new session with no controlling terminal and can't open `/dev/tty`. A sudo that would have prompted fails instead, with `sudo: a terminal is required to read the password; either use the -S option to read from standard input or configure an askpass helper`, under its step in the report. ssh loses nothing, because `BatchMode=yes` already keeps it from prompting.
+- **Ctrl-C still stops the commands that are running.** A detached child isn't in the terminal's foreground process group, so Ctrl-C reaches only tsinfra, and a long `brew upgrade` would keep running after the run ends. tsinfra keeps track of the children it started, and on `SIGINT` sends it to each one's process group (`process.kill(-pid, "SIGINT")`) before the run ends as it does today.
+- **A program's own sudo can still use askpass.** When sudo can't open `/dev/tty`, it runs the `SUDO_ASKPASS` helper even without `-A`, but only when `DISPLAY` (or a Wayland variable) is set too, to any value. sudo expects a graphical helper, so it takes `DISPLAY` as a sign there's a screen to draw on, and never checks the value. So a step that gives a program's own sudo the password sets `DISPLAY` next to `SUDO_ASKPASS`, and mas gets it through the same helper as Homebrew. That covers every mas call `brew bundle` makes, including `mas uninstall` in `brew bundle cleanup`. This is from upstream sudo's `src/tgetpass.c`. Confirm it on macOS's sudo (1.9.17p2) as part of the build. If macOS's sudo doesn't fall back, the recipe runs mas as root in a step of its own instead (`sudo mas install`), with its entries left out of the Brewfile. tsinfra's own `sudo` function passes `-A`, so it never needs `DISPLAY`.
+- **It fits [Interactive commands](#interactive-commands).** A command that needs a person gets a PTY of its own there, so it never relied on tsinfra's terminal.
+- **Tests.** A local command run under a PTY can't open `/dev/tty`, and Ctrl-C during a long local command stops it.
+
+When it's built, [Transport](./transport.md#sudo) says local commands run with no terminal. [Recipes](./recipes.md#a-program-that-runs-sudo-itself) sets `DISPLAY` in its example, names mas as a program Homebrew runs that calls sudo without `-A`, and uses `/Users/alice` in its helper path.
 
 ## Planned
 

@@ -1,14 +1,13 @@
 import { messageChain } from "ts-explicit-errors"
 
 import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
-import { formatAlignedRow } from "#report/format/details/shared/aligned-row.ts"
+import { formatAlignedRow, formatHeadingRow } from "#report/format/details/shared/aligned-row.ts"
 import { stderrLineElement, stdoutLineElement } from "#report/format/elements/commands.ts"
-import { headingElement } from "#report/format/elements/labels.ts"
 import { errorLineElement } from "#report/format/elements/messages.ts"
 import { exitCodeElement } from "#report/format/elements/values.ts"
-import { INDENT } from "#report/format/layout.ts"
+import { layoutRowsInOwnColumn } from "#report/format/layout.ts"
 import type { CommandOutputDetail } from "#report/host-block.ts"
-import { getMaxWidth, padToWidth, splitNonEmptyLines } from "#utils.ts"
+import { splitNonEmptyLines } from "#utils.ts"
 
 /**
  * Formats a stream as a row, each line styled, or none when it printed nothing. Trims its trailing whitespace, because
@@ -46,16 +45,5 @@ const formatCommandOutputRows = (output: CommandOutputDetail): AlignedRow[] => {
  * values lined up among themselves. Use a heading, because the rows would otherwise read like more of the command's
  * text.
  */
-export const formatCommandOutputLines = (output: CommandOutputDetail, indent: string): string[] => {
-  const outputRows = formatCommandOutputRows(output)
-  const labelWidth = getMaxWidth(outputRows.map(({ label }) => label))
-  const continuationIndent = " ".repeat(labelWidth)
-
-  const rowLines = outputRows.flatMap(({ label, valueLines }) =>
-    valueLines.map((valueLine, index) => {
-      const lineStart = index === 0 ? padToWidth(label, labelWidth) : continuationIndent
-      return `${indent}${INDENT}${lineStart}${valueLine}`
-    }),
-  )
-  return [`${indent}${headingElement("output")}`, ...rowLines]
-}
+export const formatCommandOutputLines = (output: CommandOutputDetail, indent: string): string[] =>
+  layoutRowsInOwnColumn([formatHeadingRow("output", formatCommandOutputRows(output))]).map((line) => `${indent}${line}`)

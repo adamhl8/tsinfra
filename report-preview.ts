@@ -151,7 +151,8 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
       // `''` for a value and a line, a quoted trailing space, and the notes for too many lines and a slow compare.
       // `ensure` sets: `missing:` and `extra:` rows. `ensure` lists: a diff for a reorder, and `want: []` with only `-`
       // lines.
-      // `ensure` records: a row per key that differs, with `(none)` for a key only one side has.
+      // `ensure` records: a row per key that differs, with `(none)` for a key only one side has, a nested record's
+      // rows under its key, and a string against a record on one row.
       // `file`: a diff with two hunks, `mode:` and a numeric `group:`, the note for a long diff and a slow one, and each
       // content description. `link`: a changed target, both replacements, and a missing target with its warning, on a
       // step that changes and one that was already right, a `target mode:` row alone, and one under a changed target.
@@ -228,6 +229,24 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
             )
           },
           fix: `echo 'zx=8.8.1 pnpm=11.2.0 fd=10.0.0' > '${marker("versions")}'`,
+        })
+        await h.ensure("Configure the container", {
+          want: {
+            image: "sonarr:4.0.15",
+            env: { TZ: "America/New_York", PUID: 1000 },
+            labels: { "traefik.enable": true },
+            restart: "unless-stopped",
+          },
+          check: async ({ read }) =>
+            (await read(`cat '${marker("container")}' 2>/dev/null || true`)) === "done"
+              ? {
+                  image: "sonarr:4.0.15",
+                  env: { TZ: "America/New_York", PUID: 1000 },
+                  labels: { "traefik.enable": true },
+                  restart: "unless-stopped",
+                }
+              : { image: "sonarr:4.0.14", env: { TZ: "UTC" }, restart: { policy: "always" } },
+          fix: `echo done > '${marker("container")}'`,
         })
         await h.ensure(
           "Write the hosts list",

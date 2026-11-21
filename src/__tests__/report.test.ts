@@ -10,6 +10,7 @@ import { attempt, err } from "ts-explicit-errors"
 import { CONTENT_LIMIT_BYTES } from "#core/__tests__/content.ts"
 import {
   UNREACHABLE_TARGET,
+  castInvalid,
   createFakeSudoSession,
   createSession,
   createWrappedSession,
@@ -707,6 +708,16 @@ describe("renderHostBlock for a step that would change a set", () => {
   })
 })
 
+/** Returns the rows a record `want` shows against a check that returns `got`. */
+const formatRecordRows = async (want: Want, got: unknown) =>
+  (
+    await formatBlock(async (h) => {
+      await h.ensure("Configure the app", { want, check: () => castInvalid(got), fix: "true" })
+    }, "plan")
+  )
+    ?.split("\n")
+    .slice(2)
+
 describe("renderHostBlock for a step that would change a record", () => {
   it("should show a row per key that differs, in want's order, then the extra keys, with (none) for an absent side", async () => {
     const hostBlock = await formatBlock(async (h) => {
@@ -750,6 +761,64 @@ describe("renderHostBlock for a step that would change a record", () => {
 
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      17 keys differ, run with --verbose to see them"])
     expect([verboseLines?.length, verboseLines?.at(-1)]).toStrictEqual([17, "      other: 1 -> (none)"])
+  })
+
+  it("should show a nested record's keys under a heading, each level lined up on its own", async () => {
+    const rows = await formatRecordRows(
+      { image: "sonarr:4.0.15", env: { TZ: "America/New_York", PUID: 1000 }, labels: { "traefik.enable": true } },
+      { image: "sonarr:4.0.14", env: { TZ: "UTC" } },
+    )
+
+    expect(rows).toStrictEqual([
+      "      image: sonarr:4.0.14 -> sonarr:4.0.15",
+      "      env:",
+      "        TZ:   UTC -> America/New_York",
+      "        PUID: (none) -> 1000",
+      "      labels:",
+      "        traefik.enable: (none) -> true",
+    ])
+  })
+
+  it("should show a heading per level for one deep change", async () => {
+    const rows = await formatRecordRows({ a: { b: { c: 1 } }, d: "same" }, { a: { b: { c: 2 } }, d: "same" })
+
+    expect(rows).toStrictEqual(["      a:", "        b:", "          c: 2 -> 1"])
+  })
+
+  it("should leave a heading out of the column the other rows line up in", async () => {
+    const rows = await formatRecordRows({ environment: { TZ: "UTC" }, id: 1 }, { environment: { TZ: "GMT" }, id: 2 })
+
+    expect(rows).toStrictEqual(["      environment:", "        TZ: GMT -> UTC", "      id: 2 -> 1"])
+  })
+
+  it("should show a nested record's keys in want's order, then the extra ones", async () => {
+    const rows = await formatRecordRows({ env: { b: "1", c: "3" } }, { env: { a: "x", b: "2" } })
+
+    expect(rows).toStrictEqual(["      env:", "        b: 2 -> 1", "        c: (none) -> 3", "        a: x -> (none)"])
+  })
+
+  it("should show two kinds of value at one key, null, and an empty record on one row each", async () => {
+    // oxlint-disable-next-line unicorn/no-null - a record want can hold null
+    const rows = await formatRecordRows({ a: { b: "1" }, c: null, d: {} }, { a: "1", c: { x: 1 } })
+
+    expect(rows).toStrictEqual(['      a: 1 -> {"b":"1"}', '      c: {"x":1} -> null', "      d: (none) -> {}"])
+  })
+
+  it("should count a nested record's lines toward the note, which counts the top-level keys", async () => {
+    const env = Object.fromEntries(Array.from({ length: 15 }, (_, index) => [`KEY${index}`, "new"]))
+    const sync = async (h: Host) => {
+      await h.ensure("Set the env", { want: { env }, check: () => castInvalid({ env: {} }), fix: "true" })
+    }
+
+    const hostBlock = await formatBlock(sync, "plan")
+    const verboseLines = (await formatVerboseBlock(sync))?.split("\n").slice(2)
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      1 key differs, run with --verbose to see them"])
+    expect([verboseLines?.length, verboseLines?.[0], verboseLines?.[1]]).toStrictEqual([
+      16,
+      "      env:",
+      "        KEY0:  (none) -> new",
+    ])
   })
 })
 

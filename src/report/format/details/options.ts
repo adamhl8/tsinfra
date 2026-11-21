@@ -1,8 +1,9 @@
-import { headingElement, keyElement, optionEntriesElement, optionNameElement } from "#report/format/elements/labels.ts"
+import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
+import { formatHeadingRow, formatKeyHeadingRow, formatKeyRow } from "#report/format/details/shared/aligned-row.ts"
+import { headingElement, optionEntriesElement, optionNameElement } from "#report/format/elements/labels.ts"
 import { optionValueLineElements } from "#report/format/elements/values.ts"
-import { INDENT } from "#report/format/layout.ts"
+import { layoutRowsInOwnColumn } from "#report/format/layout.ts"
 import type { StepOption } from "#report/host-block.ts"
-import { getMaxWidth, padToWidth } from "#utils.ts"
 
 /** Reports whether any of `options`, or any of their entries, kept a value through the filter. */
 const hasValues = (options: StepOption[]): boolean =>
@@ -19,28 +20,15 @@ const formatOptionsLine = (options: StepOption[]): string => {
 }
 
 /**
- * Formats sibling options as block rows at `indent`: each as `name: value`, or as `name:` when it has no value, then
- * its entries one level deeper. Lines up the values of the siblings that have one, so they line up within one object,
- * and lines up a value's later lines under its first line's text.
+ * Formats options as rows: each as `name: value`, or as `name:` with its entries under it. An option whose value the
+ * filter left out has no entries, so it shows as its name alone.
  */
-const formatOptionsBlockRows = (options: StepOption[], indent: string): string[] => {
-  // Measure each key as it's formatted, with the space after it, so the width follows the key's own text.
-  const valueLabels = options.flatMap(({ name, value }) => (value === undefined ? [] : [`${keyElement(name)} `]))
-  const labelWidth = getMaxWidth(valueLabels)
-  const continuationIndent = " ".repeat(labelWidth)
-
-  return options.flatMap(({ name, value, entries }) => {
-    const label = keyElement(name)
-    const valueLines = value === undefined ? [] : optionValueLineElements(value.value)
-    const valueRows = valueLines.map((valueLine, index) => {
-      const lineStart = index === 0 ? padToWidth(label, labelWidth) : continuationIndent
-      return `${indent}${lineStart}${valueLine}`
-    })
-    const nameRows = value === undefined ? [`${indent}${label}`] : valueRows
-    const entryRows = formatOptionsBlockRows(entries, `${indent}${INDENT}`)
-    return [...nameRows, ...entryRows]
-  })
-}
+const formatOptionRows = (options: StepOption[]): AlignedRow[] =>
+  options.map(({ name, value, entries }) =>
+    value === undefined
+      ? formatKeyHeadingRow(name, formatOptionRows(entries))
+      : formatKeyRow(name, optionValueLineElements(value.value)),
+  )
 
 /**
  * Formats the options as their rows: a block with each value when the values show, or one line naming the options when
@@ -48,5 +36,5 @@ const formatOptionsBlockRows = (options: StepOption[], indent: string): string[]
  */
 export const formatOptions = (options: StepOption[]): string[] =>
   hasValues(options)
-    ? [headingElement("options"), ...formatOptionsBlockRows(options, INDENT)]
+    ? layoutRowsInOwnColumn([formatHeadingRow("options", formatOptionRows(options))])
     : [formatOptionsLine(options)]
