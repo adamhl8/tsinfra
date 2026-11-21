@@ -8,7 +8,7 @@ import { compareCheck, getWantKind } from "#core/session/handlers/ensure/compari
 import type { Fix } from "#core/session/handlers/ensure/fix.ts"
 import { fixSchema, toFixDifference } from "#core/session/handlers/ensure/fix.ts"
 import { getHostCheckDetails } from "#core/session/handlers/ensure/host-check-details.ts"
-import type { Want } from "#core/session/handlers/ensure/want.ts"
+import type { SchemaWant, Want } from "#core/session/handlers/ensure/want.ts"
 import { tagWant, wantSchema } from "#core/session/handlers/ensure/want.ts"
 import type { EnvOptions } from "#core/session/handlers/options/command.ts"
 import type { HandlerOptions, NeedsOptions } from "#core/session/handlers/options/step.ts"
@@ -53,7 +53,7 @@ export interface EnsureOptions<T extends Want> extends NeedsOptions, EnvOptions 
 // Set the defaults in a pipe, because ArkType only allows a default on a required key.
 // Tag `want` with its kind in the same pipe, so later code switches on it instead of working the kind out again.
 const ensureOptionsSchema = type
-  .declare<HandlerOptions<EnsureOptions<Want>>>()
+  .declare<HandlerOptions<EnsureOptions<SchemaWant>>>()
   .type(needsOptionsSchema.merge({ want: wantSchema, check: checkSchema, fix: fixSchema, "verify?": "boolean" }))
   // Refuse a command check for a record `want` before it runs, because a command's output has no keys.
   .narrow(({ want, check }, ctx) => {

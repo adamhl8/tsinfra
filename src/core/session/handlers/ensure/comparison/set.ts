@@ -41,6 +41,12 @@ export interface SetComparisonValues extends SetDifference {
   want: string[]
 }
 
+/** Returns what `want` has that `got` doesn't, in `want`'s order, and what `got` has that `want` doesn't, in `got`'s. */
+export const toSetDifference = <T>(got: ReadonlySet<T>, want: ReadonlySet<T>): { missing: T[]; extra: T[] } => ({
+  missing: [...want.difference(got)],
+  extra: [...got.difference(want)],
+})
+
 /**
  * Compares two sets of items, so their order and duplicates don't count. Each side's differences keep that side's
  * order, because a set keeps the order its items were added in.
@@ -48,10 +54,7 @@ export interface SetComparisonValues extends SetDifference {
 export const compareSets = (gotItems: Iterable<string>, wantItems: Iterable<string>): Comparison => {
   const got = [...gotItems]
   const want = [...wantItems]
-  const gotSet = new Set(got)
-  const wantSet = new Set(want)
-  const missing = [...wantSet.difference(gotSet)]
-  const extra = [...gotSet.difference(wantSet)]
+  const { missing, extra } = toSetDifference(new Set(got), new Set(want))
   const values: SetComparisonValues = { kind: "set", got, want, missing, extra }
   return { inSync: missing.length === 0 && extra.length === 0, values }
 }

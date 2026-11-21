@@ -1,7 +1,7 @@
 import { type } from "arktype"
 
 import type { RecordWant } from "#core/session/handlers/ensure/comparison/record.ts"
-import type { Want } from "#core/session/handlers/ensure/want.ts"
+import type { SchemaWant } from "#core/session/handlers/ensure/want.ts"
 import type { ReadTools } from "#core/session/handlers/tools.ts"
 import { nonEmptyStringSchema } from "#core/session/step.ts"
 
@@ -15,5 +15,5 @@ export type Check<T> = [T] extends [RecordWant] ? CheckFunction<T> : string | Ch
 
 // Type the function as a `CheckFunction`, because only "is a function" can be validated at runtime.
 export const checkSchema = type
-  .declare<Check<Want>>()
-  .type(nonEmptyStringSchema.or(type("Function").as<CheckFunction<Want>>()))
+  .declare<Check<SchemaWant>>()
+  .type(nonEmptyStringSchema.or(type("Function").as<CheckFunction<SchemaWant>>()))

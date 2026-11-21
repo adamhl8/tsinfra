@@ -7,7 +7,6 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 - [Next](#next)
   - [One note for an apply that didn't finish](#one-note-for-an-apply-that-didnt-finish)
   - [A neutral view of an empty `want`](#a-neutral-view-of-an-empty-want)
-  - [Lists and sets in a record `want`](#lists-and-sets-in-a-record-want)
   - [Commands with no terminal](#commands-with-no-terminal)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
@@ -56,10 +55,6 @@ When it's built, [CLI](./cli.md#how-the-report-is-built) describes the host's no
 ### A neutral view of an empty `want`
 
 An empty `want` means the check should come back empty, but what its items mean depends on the check. For a check that lists what's left to do, like outdated packages, the list diff's `-` lines read as removals. An empty `want` shows what the check reported under a neutral label, with no diff markers. Empty lists, sets, and records all show it the same way.
-
-### Lists and sets in a record `want`
-
-A record's values can be strings, numbers, booleans, `null`, and nested records, so a list of ports or a set of packages has to go in a string or in keys. A value can also be an array or a `Set`, by the same rule as the top level: an array compares in order, and a `Set` doesn't. An array holds any record value, and a `Set` holds strings, numbers, booleans, or `null`, because an object in a `Set` would only match itself. A nested list shows a list diff under its key, without the rules above and below, with an object or array item as one line of JSON. A nested set shows `missing:` and `extra:` rows under its key. One-line JSON shows a `Set` as `Set ["fd","jq"]`.
 
 ### Commands with no terminal
 

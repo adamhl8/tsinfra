@@ -25,14 +25,18 @@ const getValueColumn = (alignedRows: AlignedRow[]): number =>
 
 /**
  * Lays out aligned rows as `label: value` lines, with each value starting at `valueColumn`. A row with nested rows gets
- * its label on a line of its own, then its nested rows indented one level, lined up in a column of their own.
+ * its label on a line of its own, then its nested rows indented one level, aligned ones lined up in a column of their
+ * own.
  */
 const layoutAlignedRows = (alignedRows: AlignedRow[], valueColumn: number): string[] => {
   const continuationIndent = " ".repeat(valueColumn)
 
   return alignedRows.flatMap(({ label, valueLines, nestedRows }) => {
     if (nestedRows) {
-      const nestedLines = layoutAlignedRows(nestedRows, getValueColumn(nestedRows))
+      const nestedLines =
+        nestedRows.kind === "aligned"
+          ? layoutAlignedRows(nestedRows.rows, getValueColumn(nestedRows.rows))
+          : nestedRows.rows
       return [label, ...nestedLines.map((nestedLine) => `${INDENT}${nestedLine}`)]
     }
 

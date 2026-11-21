@@ -1,33 +1,29 @@
-import type {
-  RecordComparisonValues,
-  RecordValue,
-  RecordWant,
-} from "#core/session/handlers/ensure/comparison/record.ts"
+import type { RecordComparisonValues, RecordValue } from "#core/session/handlers/ensure/comparison/record.ts"
 import { toModeBits } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
-import type { DetailRows } from "#report/format/details.ts"
-import type { DiffLimits } from "#report/format/details/diff/limits.ts"
-import { formatRecordValues } from "#report/format/details/ensure/record.ts"
+import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
+import { formatAlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { formatMode } from "#report/format/details/shared/attributes.ts"
+import { changeElement } from "#report/format/elements/values.ts"
 
 /** Returns a directory's value as the report shows it: its mode in both notations, like a file's, and the rest as is. */
-const toShownDirValue = (key: string, value: RecordValue): RecordValue =>
-  key === "mode" && typeof value === "number" ? formatMode(toModeBits(value)) : value
+const toShownDirValue = (name: string, value: RecordValue | undefined): RecordValue | undefined =>
+  name === "mode" && typeof value === "number" ? formatMode(toModeBits(value)) : value
 
-/** Returns `record` with each of its values as the report shows it. */
-const toShownDirRecord = (record: RecordWant): Record<string, RecordValue> =>
-  Object.fromEntries(
-    Object.entries(record).map(([key, value]): [string, RecordValue] => [key, toShownDirValue(key, value)]),
-  )
+/** Formats a directory's value that differs as its row, like `mode: rwx------ (700) -> rwxr-x--- (750)`. */
+const formatDirRow = (name: string, got: RecordValue | undefined, want: RecordValue): AlignedRow =>
+  formatAlignedRow(name, [changeElement(toShownDirValue(name, got), toShownDirValue(name, want))])
 
 /**
- * Returns a directory's values with each one as the report shows it, so the record formatter prints them as they are.
- * The values compare as data, so the mode is recorded as its bits.
+ * Formats a directory's rows, one per value that differs, like a file's attribute rows, with `(none)` for a value the
+ * host doesn't have, like the mode of a directory that doesn't exist. Labels each row with the value's name, because
+ * tsinfra names them. Shows them in `want`'s order, and the host's record only has `want`'s keys, so none is extra.
  */
-const toShownDirValues = (values: RecordComparisonValues): RecordComparisonValues => {
-  const { got, want } = values
-  return { ...values, got: toShownDirRecord(got), want: toShownDirRecord(want) }
+export const formatDirValues = (values: RecordComparisonValues): AlignedRow[] => {
+  const { want, missing, changed } = values
+  return Object.keys(want).flatMap((name) => {
+    const change = changed[name]
+    if (change) return [formatDirRow(name, change.got, change.want)]
+    const missingValue = missing[name]
+    return missingValue === undefined ? [] : [formatDirRow(name, undefined, missingValue)]
+  })
 }
-
-/** Formats a directory's rows, one per key that differs, like a record `want`'s, with its mode like a file's. */
-export const formatDirValues = (values: RecordComparisonValues, diffLimits: DiffLimits): DetailRows =>
-  formatRecordValues(toShownDirValues(values), diffLimits)

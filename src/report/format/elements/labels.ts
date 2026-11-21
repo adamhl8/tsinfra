@@ -13,9 +13,6 @@ export type HeadingName = "options" | "commands" | "output" | ConvergePhase
  */
 export const headingElement = (name: HeadingName): string => styleItalic(styleMuted(`${name}:`))
 
-/** Formats a key of an object with its colon, like an option's `env:` or a record's `pnpm:`, muted like a row's label. */
-export const keyElement = (name: string): string => styleMuted(`${name}:`)
-
 /** Formats an option's name on the options line, like `env`. */
 export const optionNameElement = (name: string): string => styleMuted(name)
 

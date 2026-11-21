@@ -1,13 +1,14 @@
-import type { RecordWant } from "#core/session/handlers/ensure/comparison/record.ts"
+import type { RecordValue } from "#core/session/handlers/ensure/comparison/record.ts"
+import { isRecordList, isRecordSet } from "#core/session/handlers/ensure/comparison/record.ts"
 import { RECORDED_STAND_INS } from "#core/session/recorder/records.ts"
 import type { Style } from "#styles.ts"
 import { styleCurrent, styleItalic, styleMuted, stylePlain, styleValue, styleWanted } from "#styles.ts"
 
 /**
- * A value the report shows: a string, or a boolean, a number, `null`, or a record, which show differently so they can't
- * pass for one.
+ * A value the report shows: a string, or a boolean, a number, `null`, a list, a set, or a record, which show
+ * differently so they can't pass for one. It's any value a record can hold.
  */
-type Value = string | boolean | number | null | RecordWant
+type Value = RecordValue
 
 // Show an empty string in the same quotes that show edge whitespace, so it reads as a string with nothing in it.
 const EMPTY_MARKER = "''"
@@ -17,18 +18,33 @@ const NONE_MARKER = "(none)"
 const EDGE_WHITESPACE = /^\s|\s$/v
 
 /**
+ * Returns `value` as one line of JSON with no spacing, except that a `Set` shows as `Set` before its items, like `Set
+ * ["fd","jq"]`, at any depth, because JSON has no set. Shows a number as `String` does, because JSON writes `Infinity`
+ * as `null`. Keeps a record's own key order.
+ */
+const toOneLineJson = (value: Value): string => {
+  if (isRecordSet(value)) return `Set ${toOneLineJson([...value])}`
+  if (isRecordList(value)) return `[${value.map((item) => toOneLineJson(item)).join(",")}]`
+  if (typeof value === "number") return String(value)
+  if (typeof value !== "object" || value === null) return JSON.stringify(value)
+
+  const entryTexts = Object.entries(value).map(([key, item]) => `${JSON.stringify(key)}:${toOneLineJson(item)}`)
+  return `{${entryTexts.join(",")}}`
+}
+
+/**
  * Applies the rules every value follows, in the color the element picks. A string shows as it is, except that an empty
  * one shows as muted quotes, and one that starts or ends with whitespace is quoted, with the quotes unstyled, so the
  * whitespace shows. Anything else is italic, because its text could otherwise pass for a string's, like `true` or
- * `501`, and `describe` can put words around one that's hard to read alone, like `exit code 1`. `null` and a record
- * show as JSON, a record on one line, in its own key order.
+ * `501`, and `describe` can put words around one that's hard to read alone, like `exit code 1`. `null`, a list, a set,
+ * and a record show on one line, by `toOneLineJson`.
  */
 const applyValueRules = (
   value: Value,
   color: Style,
   describe: (value: boolean | number) => string = String,
 ): string => {
-  if (typeof value === "object") return styleItalic(color(JSON.stringify(value)))
+  if (typeof value === "object") return styleItalic(color(toOneLineJson(value)))
   if (typeof value !== "string") return styleItalic(color(describe(value)))
   if (value === "") return styleMuted(EMPTY_MARKER)
   return EDGE_WHITESPACE.test(value) ? `'${color(value)}'` : color(value)
@@ -39,6 +55,13 @@ interface FormatSideValue {
   <T extends boolean | number>(value: T, describe?: (value: T) => string): string
   (value: Value): string
 }
+
+/**
+ * Formats a key of a record, or of an option's entries, with its colon, like `TZ:`. Shows the key in the value color by
+ * the string rules, because the script or the host named it, so it can't pass for one of tsinfra's labels. Mutes the
+ * colon, like a label's.
+ */
+export const keyElement = (key: string): string => `${applyValueRules(key, styleValue)}${styleMuted(":")}`
 
 /** Formats a value the host has now, like a `got` value or the old side of a change. */
 export const gotValueElement: FormatSideValue = (value: Value, describe?: (value: boolean | number) => string) =>
@@ -59,7 +82,7 @@ export type ListItemChange = "removed" | "added" | "unchanged"
  * like what the script wants, and an unchanged one in the terminal's own text color. Styles the mark and the item
  * apart, because the value rules leave the quotes around edge whitespace unstyled.
  */
-export const listDiffItemElement = (itemChange: ListItemChange, item: string): string => {
+export const listDiffItemElement = (itemChange: ListItemChange, item: Value): string => {
   if (itemChange === "removed") return `${styleCurrent("-")}${gotValueElement(item)}`
   if (itemChange === "added") return `${styleWanted("+")}${wantValueElement(item)}`
   return ` ${unchangedValueElement(item)}`

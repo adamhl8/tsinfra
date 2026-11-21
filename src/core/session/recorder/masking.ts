@@ -41,7 +41,7 @@ const maskErrorChain = (error: Error, pattern: RegExp): void => {
   }
 }
 
-/** Returns `value` with each string in it masked, copying arrays and plain objects, and masking errors in place. */
+/** Returns `value` with each string in it masked, copying arrays, Sets, and plain objects, and masking errors in place. */
 const maskUnknown = (value: unknown, pattern: RegExp): unknown => {
   if (typeof value === "string") return maskText(value, pattern)
   if (value instanceof Error) {
@@ -49,6 +49,7 @@ const maskUnknown = (value: unknown, pattern: RegExp): unknown => {
     return value
   }
   if (Array.isArray(value)) return value.map((item: unknown) => maskUnknown(item, pattern))
+  if (value instanceof Set) return new Set(Array.from(value, (item: unknown) => maskUnknown(item, pattern)))
   if (isPlainObject(value))
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, maskUnknown(item, pattern)]))
 

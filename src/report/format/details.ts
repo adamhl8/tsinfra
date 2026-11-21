@@ -28,7 +28,7 @@ export const formatDetail = (detail: Detail, diffLimits: DiffLimits): DetailRows
   if (detail.kind === "fileComparisonValues") return { kind: "aligned", rows: formatFileValues(detail.values) }
   if (detail.kind === "linkComparisonValues") return { kind: "aligned", rows: formatLinkValues(detail.values) }
   if (detail.kind === "ensureComparisonValues") return formatEnsureValues(detail.values, diffLimits)
-  if (detail.kind === "dirComparisonValues") return formatDirValues(detail.values, diffLimits)
+  if (detail.kind === "dirComparisonValues") return { kind: "aligned", rows: formatDirValues(detail.values) }
   if (detail.kind === "stderr") return { kind: "aligned", rows: formatStderr(detail.command, detail.stderr) }
   if (detail.kind === "note") return { kind: "unaligned", rows: [formatDetailNote(detail.note)] }
   if (detail.kind === "warning") return { kind: "unaligned", rows: [formatWarning(detail.warning)] }

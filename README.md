@@ -238,7 +238,7 @@ Compares `want` with what `check` answers. When they differ, `apply` runs `fix`,
   - A string: compared with `check`'s stdout (or the function's return value). Trailing newlines are ignored.
   - A list of strings: compared in order with `check`'s lines, blank ones left out (or the function's array), so a reorder or a duplicate counts. `[]` means nothing is left to do.
   - A `Set` of strings: compared the same way, but as a set, so order and duplicates don't count. A check function returns a `Set`.
-  - A record of string keys and string, number, or boolean values: compared with the function's object by key, each value exactly, so `8080` never matches `"8080"`. It needs a check function.
+  - A record of string keys: compared with the function's object by key, each value exactly, so `8080` never matches `"8080"`. A value is a string, a number, a boolean, `null`, or a nested list, set, or record, each compared the way its type is at the top level. It needs a check function.
 - `check`: a command, or an async function given `{ read, inspect }` that returns the answer
 - `fix`: a command, or an async function given `{ exec, inspect }`. The function also gets what `check` found: `{ got }` for a string or a list `want`, `{ missing, extra }` for a set, and `{ missing, changed, unmet, extra }` for a record, where `unmet` maps each key that's missing or changed to its wanted value. It only runs in `apply`.
 - `verify` (default: `true`): run `check` again after `fix`, and fail if the state still differs
@@ -262,7 +262,7 @@ How a change shows depends on `want`:
 - A string shows `got:` and `want:` rows. For a multi-line value, the rows hold only the lines that differ.
 - A list shows a diff, with `-` for an item only the host has and `+` for one only `want` has.
 - A set shows `missing:` and `extra:` rows.
-- A record shows a row per key that differs.
+- A record shows a row per key that differs, with a nested record's, list's, or set's differences under its key.
 
 **A set** is for a set of things, like packages:
 
@@ -315,7 +315,7 @@ await h.ensure("Upgrade brew packages", { want: [], check: "brew outdated --quie
 - The fix gets `{ got }`, the host's list, because `missing` and `extra` can't describe a reorder.
 - `want: []` is for a check that lists what's left to do, like outdated packages, so everything it lists shows as a `-` line.
 
-**A record** of string keys and string, number, or boolean values is for names with a value each, like packages on a version each:
+**A record** of string keys is for names with a value each, like packages on a version each, or for structured config, like a container's `env`, `labels`, and `ports`:
 
 ```ts
 // The newest version each package's range allows, read from the registry.

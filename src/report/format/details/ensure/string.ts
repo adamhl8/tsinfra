@@ -2,7 +2,12 @@ import { diffArrays } from "diff"
 
 import type { DetailRows } from "#report/format/details.ts"
 import type { DiffLimits } from "#report/format/details/diff/limits.ts"
-import { FULL_DIFF_TIMEOUT_MS, LINE_LIMIT_FLAG, TIME_LIMIT_FLAG } from "#report/format/details/diff/limits.ts"
+import {
+  FULL_DIFF_TIMEOUT_MS,
+  LINE_LIMIT_FLAG,
+  TIME_LIMIT_FLAG,
+  isPastLineLimit,
+} from "#report/format/details/diff/limits.ts"
 import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { formatAlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { noteElement } from "#report/format/elements/messages.ts"
@@ -54,8 +59,7 @@ export const formatStringValues = (got: string, want: string, diffLimits: DiffLi
   const gotLines = changes.filter((change) => change.removed).flatMap((change) => change.value)
   const wantLines = changes.filter((change) => change.added).flatMap((change) => change.value)
   const lineCount = gotLines.length + wantLines.length
-  if (diffLimits.maxLines !== undefined && lineCount > diffLimits.maxLines)
-    return { kind: "unaligned", rows: [formatManyLinesNote(lineCount)] }
+  if (isPastLineLimit(lineCount, diffLimits)) return { kind: "unaligned", rows: [formatManyLinesNote(lineCount)] }
 
   const rows = [
     ...toSideRows("got", got, gotLines, gotValueElement),

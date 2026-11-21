@@ -122,6 +122,19 @@ describe("tsinfra", () => {
     expect(stdout).toContain(`${COLORS.cyan("token=")}${masked}`)
   })
 
+  it("should show a key in the value color, and a label, like an option's name or a set's missing, muted", async () => {
+    const { run } = await createProject()
+
+    const { stdout } = await run`tsinfra plan --hosts-dir hosts-keys -vvv`.env({ FORCE_COLOR: "1" }).nothrow()
+
+    const mutedColon = COLORS.dim(":")
+    expect(stdout).toContain(`${COLORS.cyan("TZ")}${mutedColon}`)
+    expect(stdout).toContain(`${COLORS.cyan("env")}${mutedColon}`)
+    expect(stdout).toContain(`${COLORS.cyan("URL")}${mutedColon}`)
+    expect(stdout).toContain(COLORS.dim("env:"))
+    expect(stdout).toContain(COLORS.dim("missing:"))
+  })
+
   it("should print a failed host's error on stdout and exit 1, even with drift on another host", async () => {
     const { run } = await createProject()
 

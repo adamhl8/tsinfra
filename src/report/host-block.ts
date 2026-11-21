@@ -77,7 +77,7 @@ export type Detail = PieceLevels
     | { kind: "fileComparisonValues"; values: FileComparisonValues }
     | { kind: "linkComparisonValues"; values: LinkComparisonValues }
     | { kind: "ensureComparisonValues"; values: EnsureComparisonValues }
-    // A `dir` step's record, which shows like a record `want`'s, but with its mode in both notations, like a file's.
+    // A `dir` step's record, which shows like a file's attribute rows, with its mode in both notations.
     | { kind: "dirComparisonValues"; values: RecordComparisonValues }
     // The stderr of a command that can explain a failure that still differs after its fix.
     | { kind: "stderr"; command: string; stderr: string }

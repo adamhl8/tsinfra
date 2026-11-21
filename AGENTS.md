@@ -14,6 +14,7 @@ tsinfra's design lives in the docs: `docs/README.md` (the design notes), `docs/s
 
 - `bunx bask test --all`, for changes to transports, sudo, or file and link writes. The `*.docker.ts` tests run on Alpine (busybox) and Debian (dash), with real root and real `sudo`. Neither `bun test` nor `bask lint` runs them.
 - A CLI test that changes a project's installed tsinfra uses `replaceInstalledFile`, which renames a new file over the old one. Bun hardlinks installs from its cache on Linux, so writing the file in place would change the cache for every later install. Another project's `node_modules/.bin/tsinfra` (`getInstalledBin`) stands in for a global copy.
+- Bun's `toMatchObject` takes any two `Set`s as matching, whatever they hold. Compare a `Set` with `toStrictEqual`, on its own or inside a value that has no other fields to leave out.
 - A test that sends content near the 10 MB limit through the local `sh` needs `CONTENT_LIMIT_TIMEOUT_MS`. macOS `/bin/sh` is bash, which reads a script on a pipe one byte at a time, so 10 MB takes about 2.5 seconds of the default 5 second timeout.
 
 ## Docs
@@ -47,7 +48,7 @@ Check new names, comments, docs, and error messages against these words.
 - **Status line** is a report entry's line (`StatusLine`). The CLI's transient line on stderr, like `Planning host 'sonarr'...`, is the **progress line**.
 - **"Note"** is the report's word. **"Diff"** means the line output in the report, so it doesn't name a comparison.
 - **"Owner"** stays the plain word for the concept and for the chmod permission class. The option is `user`, to pair with `group` and match `stat` and `chown user:group`. `FileOwner` is the type both take.
-- **A `want`'s kinds** are boolean, string, list, set, and record, in code, comments, docs, and test names (`RecordWant`, "a record `want`"). Never call a record an "object `want`" or a list an "array `want`". A list and a set are different kinds, so neither word stands in for the other. A value inside a record is named by its kind too, like "a nested record", never a "sub-object" or "child object". An error message names the JS type where it says what a value must be, like "an array of strings, a Set of strings, or an object of strings, numbers, booleans, null, or nested objects", so a reader can match it to their value. Where it talks about a kind, it uses the kind's name, like "a record want needs a check function".
+- **A `want`'s kinds** are boolean, string, list, set, and record, in code, comments, docs, and test names (`RecordWant`, "a record `want`"). Never call a record an "object `want`" or a list an "array `want`". A list and a set are different kinds, so neither word stands in for the other. A value inside a record is named by its kind too, like "a nested record", "a nested list", or "a nested set", never a "sub-object", "child object", or "nested array". An error message names the JS type where it says what a value must be, like "an array of strings, a Set of strings, or an object (of strings, numbers, booleans, null, arrays, Sets, or nested objects)", so a reader can match it to their value. Where it talks about a kind, it uses the kind's name, like "a record want needs a check function".
 
 ## Naming values from the host
 
@@ -70,6 +71,7 @@ Each name should say which side of a comparison it is. When naming anything in a
 
 ## Architecture
 
+- **Record values compare with fast-equals' `deepEqual`, in the comparison and the report, never Bun's `deepEquals`.** Bun's tells `-0` from `0`, which the report shows as the same `0`.
 - **`session.ts` is the only code that throws.** Everything the script can call (the `h` methods and the tools) is `callOrFail` around a `Result`-returning internal.
 - **Handlers never record anything.** What a step has one of is returned (`HandlerReturn { status, value }`), and what it has zero or more of is recorded by a wrapper it runs through.
 - **A check reports the same** whether it's a command string or a function with one `inspect`.

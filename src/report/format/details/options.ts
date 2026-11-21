@@ -1,5 +1,11 @@
 import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
-import { formatHeadingRow, formatKeyHeadingRow, formatKeyRow } from "#report/format/details/shared/aligned-row.ts"
+import {
+  formatAlignedRow,
+  formatHeadingRow,
+  formatKeyHeadingRow,
+  formatKeyRow,
+  formatLabelHeadingRow,
+} from "#report/format/details/shared/aligned-row.ts"
 import { headingElement, optionEntriesElement, optionNameElement } from "#report/format/elements/labels.ts"
 import { optionValueLineElements } from "#report/format/elements/values.ts"
 import { layoutRowsInOwnColumn } from "#report/format/layout.ts"
@@ -19,15 +25,24 @@ const formatOptionsLine = (options: StepOption[]): string => {
   return `${headingElement("options")} ${optionsLineParts.join(", ")}`
 }
 
+/** Formats an option's entries as rows, each as `key: value`, or as `key:` with its own entries under it. */
+const formatEntryRows = (entries: StepOption[]): AlignedRow[] =>
+  entries.map(({ name, value, entries: nestedEntries }) =>
+    value === undefined
+      ? formatKeyHeadingRow(name, { kind: "aligned", rows: formatEntryRows(nestedEntries) })
+      : formatKeyRow(name, optionValueLineElements(value.value)),
+  )
+
 /**
- * Formats options as rows: each as `name: value`, or as `name:` with its entries under it. An option whose value the
- * filter left out has no entries, so it shows as its name alone.
+ * Formats options as rows: each as `name: value`, or as `name:` with its entries under it. Labels an option by its
+ * name, because tsinfra names its options, and an entry by its key, because the script names those. An option whose
+ * value the filter left out has no entries, so it shows as its name alone.
  */
 const formatOptionRows = (options: StepOption[]): AlignedRow[] =>
   options.map(({ name, value, entries }) =>
     value === undefined
-      ? formatKeyHeadingRow(name, formatOptionRows(entries))
-      : formatKeyRow(name, optionValueLineElements(value.value)),
+      ? formatLabelHeadingRow(name, formatEntryRows(entries))
+      : formatAlignedRow(name, optionValueLineElements(value.value)),
   )
 
 /**

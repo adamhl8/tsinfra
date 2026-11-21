@@ -19,11 +19,13 @@ import { err, isErr } from "ts-explicit-errors"
 import type { HostFunction, HostSudo } from "#core/hosts/host.ts"
 import { finishHosts, initializeHosts } from "#core/hosts/prepare.ts"
 import { runHost } from "#core/hosts/run.ts"
+import type { RecordWant } from "#core/session/handlers/ensure/comparison/record.ts"
 import {
   GROUP_DIRECTORY_MODE,
   PRIVATE_FILE_MODE,
   PUBLIC_FILE_MODE,
 } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
+import type { ReadTools } from "#core/session/handlers/tools.ts"
 import type { HostRecord } from "#core/session/recorder/records.ts"
 import { createHostRecord } from "#core/session/recorder/records.ts"
 import { runLocal } from "#core/transport/local.ts"
@@ -97,6 +99,13 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
     want: wanted,
     check: `cat '${marker(file)}' 2>/dev/null || ${fallback}`,
     fix: `printf '%s' '${wanted === "" ? "" : `${wanted}\n`}' > '${marker(file)}'`,
+  })
+  // Return `got` until a marker exists, so the check finds `got` before the fix and `want` after it.
+  const recordStep = (file: string, want: RecordWant, got: RecordWant) => ({
+    want,
+    check: async ({ read }: ReadTools) =>
+      (await read(`cat '${marker(file)}' 2>/dev/null || true`)) === "done" ? want : got,
+    fix: `echo done > '${marker(file)}'`,
   })
 
   return [
@@ -188,13 +197,16 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
         await chmod(marker("netrc"), 0o644)
         await symlink(marker("old-dotfile"), marker("netrc-link"))
 
-        await h.ensure("Set the hostname", linesStep("hostname", "true", "web1"))
+        await h.ensure("Set the hostname (string want)", linesStep("hostname", "true", "web1"))
         const packages = await h.ensure(
-          "Upgrade packages",
+          "Upgrade packages (string want)",
           linesStep("outdated", String.raw`printf 'fd\n\nripgrep \n'`, ""),
         )
-        await h.ensure("Install packages", linesStep("installed", String.raw`printf 'fd\njq\n'`, "fd\njq\nripgrep"))
-        await h.ensure("Sync the package list", {
+        await h.ensure(
+          "Install packages (string want)",
+          linesStep("installed", String.raw`printf 'fd\njq\n'`, "fd\njq\nripgrep"),
+        )
+        await h.ensure("Sync the package list (set want)", {
           want: new Set(["fd", "jq", "ripgrep"]),
           check: String.raw`cat '${marker("package-list")}' 2>/dev/null || printf 'zsh\nfd\nbat\n'`,
           fix: async ({ exec }, { missing, extra }) => {
@@ -202,7 +214,7 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
             await exec(`cat > '${marker("package-list")}'`, { input: "fd\njq\nripgrep\n" })
           },
         })
-        await h.ensure("Set the search domains", {
+        await h.ensure("Set the search domains (list want)", {
           want: ["lan", "home.arpa"],
           check: String.raw`cat '${marker("search-domains")}' 2>/dev/null || printf 'home.arpa\nlan\n'`,
           fix: async ({ exec }, { got }) => {
@@ -210,12 +222,12 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
             await exec(String.raw`printf 'lan\nhome.arpa\n' > '${marker("search-domains")}'`)
           },
         })
-        await h.ensure("Upgrade brew packages", {
+        await h.ensure("Upgrade brew packages (list want)", {
           want: [],
           check: `cat '${marker("outdated-list")}' 2>/dev/null || printf 'node\\npython\\n'`,
           fix: `: > '${marker("outdated-list")}'`,
         })
-        await h.ensure("Sync the versions", {
+        await h.ensure("Sync the versions (record want)", {
           want: { zx: "8.8.1", pnpm: "11.2.0", fd: "10.0.0" },
           check: async ({ read }) => {
             const listing = await read(
@@ -230,31 +242,47 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
           },
           fix: `echo 'zx=8.8.1 pnpm=11.2.0 fd=10.0.0' > '${marker("versions")}'`,
         })
-        await h.ensure("Configure the container", {
-          want: {
-            image: "sonarr:4.0.15",
-            env: { TZ: "America/New_York", PUID: 1000 },
-            labels: { "traefik.enable": true },
-            restart: "unless-stopped",
-          },
-          check: async ({ read }) =>
-            (await read(`cat '${marker("container")}' 2>/dev/null || true`)) === "done"
-              ? {
-                  image: "sonarr:4.0.15",
-                  env: { TZ: "America/New_York", PUID: 1000 },
-                  labels: { "traefik.enable": true },
-                  restart: "unless-stopped",
-                }
-              : { image: "sonarr:4.0.14", env: { TZ: "UTC" }, restart: { policy: "always" } },
-          fix: `echo done > '${marker("container")}'`,
-        })
         await h.ensure(
-          "Write the hosts list",
+          "Configure the container (record want)",
+          recordStep(
+            "container",
+            {
+              image: "sonarr:4.0.15",
+              // oxlint-disable-next-line unicorn/no-null - a record want can hold null
+              env: { TZ: "America/New_York", PUID: 1000, LOG_LEVEL: null },
+              labels: { traefik: { enable: true, http: { port: 8989 } } },
+              network: { ports: ["80:80", "8990:8989"], dns: ["1.1.1.1", "9.9.9.9"] },
+              args: ["--port", "8989", "--log", "info", "--data", "/data", "--branch", "main"],
+              volumes: [
+                { host: "/data", container: "/tv" },
+                { host: "/config", container: "/config", readOnly: true },
+              ],
+              groups: new Set(["media", "docker"]),
+              aliases: new Set(["sonarr"]),
+              devices: [],
+            },
+            {
+              image: "sonarr:4.0.14",
+              env: { TZ: "UTC", LOG_LEVEL: "info", DEBUG: "1" },
+              network: { ports: ["80:80", "8989:8989"] },
+              args: ["--port", "8989", "--log", "debug", "--data", "/data", "--branch", "develop"],
+              volumes: [
+                { host: "/data", container: "/tv" },
+                { host: "/config", container: "/config" },
+              ],
+              groups: new Set(["media", "wheel"]),
+              aliases: ["sonarr"],
+              capabilities: new Set(["NET_ADMIN"]),
+            },
+          ),
+        )
+        await h.ensure(
+          "Write the hosts list (string want)",
           linesStep("hosts", printNumberedLines("old", 8), numberedLines("new", 8)),
         )
         if (verbosity < 2) {
           await h.ensure(
-            "Write the big list",
+            "Write the big list (string want)",
             linesStep(
               "big",
               printNumberedLines("old", BIG_VALUE_LINE_COUNT),

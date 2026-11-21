@@ -3,7 +3,7 @@ import type { RecordDifference, RecordValue } from "#core/session/handlers/ensur
 import { toUnmet } from "#core/session/handlers/ensure/comparison/record.ts"
 import type { SetDifference, SetWant } from "#core/session/handlers/ensure/comparison/set.ts"
 import type { StringDifference, StringWant } from "#core/session/handlers/ensure/comparison/string.ts"
-import type { Want } from "#core/session/handlers/ensure/want.ts"
+import type { SchemaWant, Want } from "#core/session/handlers/ensure/want.ts"
 import type { Change } from "#core/session/handlers/shared/change.ts"
 import { changeSchema } from "#core/session/handlers/shared/change.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
@@ -36,7 +36,7 @@ export type FixDifference<T extends Want> = [T] extends [boolean]
 export type Fix<T extends Want> = [T] extends [boolean] ? Change : Change<[difference: FixDifference<T>]>
 
 // Validate a fix as a change, because both are a command or a function at runtime, and type it as a fix.
-export const fixSchema = changeSchema.as<Fix<Want>>()
+export const fixSchema = changeSchema.as<Fix<SchemaWant>>()
 
 /**
  * Returns what a fix function gets from how the check compared: nothing for a boolean, `got` for a string or a list,

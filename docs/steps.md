@@ -519,7 +519,7 @@ await h.file("/srv/sonarr/config.xml", sonarrConfig, { needs: [data], user: "son
 
 Makes sure `path` is a directory, with the mode and owner the script gives, and reports whether it changed. The step is named by its path, and its path follows the same rules as `file`'s (see [`file`](#file)).
 
-`dir` is a step of its own, built on the record `want` of [`ensure`](#ensure). It compares a record of what the script gave with `ensure`'s comparison, so the report shows a row per key that differs, laid out like a record `want`'s, with its mode in both notations like a file's. A directory has no content to send, hash, or diff, which is what `file` exists for.
+`dir` is a step of its own, built on the record `want` of [`ensure`](#ensure). It compares a record of what the script gave with `ensure`'s comparison, and the report shows a row per attribute that differs, like a file's attribute rows, with its mode in both notations. A directory has no content to send, hash, or diff, which is what `file` exists for.
 
 - **What it compares** is `exists`, and only the attributes the script gave, like `{ exists: true, mode: "750", user: "sonarr", group: "sonarr" }`. A missing directory is `exists: false`, and every other key shows `(none)`.
 - **`mode`** takes the same forms as `file`'s, and the directory constants in its table, and compares as octal. So `"750"`, `"rwxr-x---"`, and `GROUP_DIRECTORY_MODE` all match the same directory. It includes the setuid, setgid, and sticky bits, so `"750"` doesn't match a `2750` directory, and `"2750"` asks for setgid. It's recorded as its bits, and the report shows it like a file's, like `rwx------ (700) -> rwxr-x--- (750)`.
@@ -537,8 +537,10 @@ Makes sure `path` is a directory, with the mode and owner the script gives, and 
 ## `ensure`
 
 ```ts
-// A record's values can be strings, numbers, booleans, `null`, or nested records of the same.
-type RecordValue = string | number | boolean | null | RecordWant
+// A record's values can be strings, numbers, booleans, `null`, lists of record values, sets of the first four, or
+// nested records, to any depth.
+type RecordPrimitive = string | number | boolean | null
+type RecordValue = RecordPrimitive | readonly RecordValue[] | ReadonlySet<RecordPrimitive> | RecordWant
 interface RecordWant {
   readonly [key: string]: RecordValue
 }
@@ -549,7 +551,8 @@ type EnsureOptions<T extends boolean | string | readonly string[] | ReadonlySet<
   // A string is compared to the command's stdout, or the function's value.
   // A list is compared to the command's lines, or the function's array, in order.
   // A set is compared to the command's lines, or the function's `Set`, as a set.
-  // A record is compared to the function's object, by key, and a nested record the same way.
+  // A record is compared to the function's object, by key, with a nested list in order, a nested set as a set,
+  // and a nested record by key.
   want: T
   // A record `want` takes only a function, because a command's output has no keys.
   check: string | ((tools: ReadTools) => Promise<T>)
@@ -635,7 +638,7 @@ The report shows a diff from the host's list to the wanted one, framed like a fi
 
 **The type picks the comparison, not an option.** An array has an order and can hold an item twice, and a `Set` has neither, so the value's type already says which comparison the script means. An `ordered: true` option would say it again, and would leave an array meant as ordered compared as a set by default.
 
-**A record `want`**, an object of string keys, compares values by key, like a package name to its version, or a config's settings. A value is a string, a number, a boolean, `null`, or a nested record of the same, like a container's `env` or `labels`. A nested record compares by key too, so key order doesn't count at any depth. Each value is compared exactly, so a number never matches a string that reads the same: `8080` and `"8080"` differ, and the report shows the number in italics. `-0` matches `0`, as it does with `===`, because the report shows both as `0`. `null` is a value, so `{ port: null }` and `{}` differ. A key only one side has is a difference at any depth. Only a check function can return a record, because a command's output has no keys, so `check: "..."` with a record `want` is a type error, and refused before it runs for a script that gets past the types. A record must be a plain object at every depth, so a `Map`, a class instance, or a `Promise` from a missing `await` is refused, because it would otherwise be compared by its own keys, which it usually has none of. A record that holds itself is refused too, because showing it would never end. The error names the path to the value, like `want.env.PUID`. A fix function's `missing`, `changed`, `unmet`, and `extra` hold `want`'s own value type, so a `want` of strings gives it strings.
+**A record `want`**, an object of string keys, compares values by key, like a package name to its version, or a config's settings. A value is a string, a number, a boolean, `null`, an array, a `Set`, or a nested record, to any depth, like a container's `env`, `labels`, or `ports`. Each compares the way its type does at the top level: a nested list in order, a nested set as a set, and a nested record by key, so key order doesn't count at any depth, and an array and a `Set` with the same items differ. A nested set holds only strings, numbers, booleans, and `null`, because a `Set` matches an object or an array only by identity, so one in a set would never match what the check returns. Each value is compared exactly, so a number never matches a string that reads the same: `8080` and `"8080"` differ, and the report shows the number in italics. `-0` matches `0`, as it does with `===`, at any depth, because the report shows both as `0`. `null` is a value, so `{ port: null }` and `{}` differ. A key only one side has is a difference at any depth. Only a check function can return a record, because a command's output has no keys, so `check: "..."` with a record `want` is a type error, and refused before it runs for a script that gets past the types. A record must be a plain object at every depth, so a `Map`, a class instance, or a `Promise` from a missing `await` is refused, because it would otherwise be compared by its own keys, which it usually has none of. A list or a record that holds itself is refused too, because showing it would never end. The error names the path to the value, like `want.env.PUID` or `want.ports[1]`. A fix function's `missing`, `changed`, `unmet`, and `extra` hold `want`'s own value type, so a `want` of strings gives it strings.
 
 ```ts
 const wanted: Record<string, string> = {}
@@ -663,7 +666,7 @@ The report shows a row per key that differs, from the host's value to the wanted
       typescript: 5.9.2 -> (none)
 ```
 
-A nested record shows its keys that differ under its own key, indented, with each level lined up on its own. A key whose record one side doesn't have at all shows that record's keys against `(none)`. Two kinds of value at one key, like a string and a record, show on one row, with the record as one line of JSON:
+A nested record shows its keys that differ under its own key, indented, with each level lined up on its own. A key whose record one side doesn't have at all shows that record's keys against `(none)`. A nested list shows a diff under its key, like a list `want`'s, with an object or an array item as one line of JSON. A nested set shows `missing:` and `extra:` rows under its key, like a set `want`'s. Two kinds of value at one key, like a string and a record, or a list and a set, show on one row, each as one line of JSON, with a `Set` as `Set [...]`:
 
 ```
   ~ change: (ensure) Configure the container
@@ -673,6 +676,14 @@ A nested record shows its keys that differ under its own key, indented, with eac
         PUID: (none) -> 1000
       labels:
         traefik.enable: (none) -> true
+      ports:
+         80:80
+        -8989:8989
+        +8990:8989
+      groups:
+        missing: docker
+        extra:   wheel
+      aliases: ["sonarr"] -> Set ["sonarr"]
       restart: {"policy":"always"} -> unless-stopped
 ```
 

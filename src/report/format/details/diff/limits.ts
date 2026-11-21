@@ -19,6 +19,10 @@ const QUICK_TIMEOUT_MS = 200
 // Hide more than 15 lines below `-v`, so one big change can't push the rest of a plan off the screen.
 const MAX_LINES = 15
 
+/** Checks whether `lineCount` lines go past the line limit in `diffLimits`, which doesn't apply when it's unset. */
+export const isPastLineLimit = (lineCount: number, diffLimits: DiffLimits): boolean =>
+  diffLimits.maxLines !== undefined && lineCount > diffLimits.maxLines
+
 /** The flag that lifts the line limit, for the notes that suggest it. */
 export const LINE_LIMIT_FLAG = "--verbose"
 /** The flag that lifts the time limit, for the notes that suggest it. */
@@ -43,23 +47,28 @@ export const formatSlowDiffNote = (hasTimeLimit: boolean): string =>
 const formatLongDiffNote = (lineCount: number): string =>
   noteElement(`long diff (${lineCount} lines), run with ${LINE_LIMIT_FLAG} to see it`)
 
+/** Returns the dim rule for a diff's formatted hunks. */
+const formatDiffRule = (hunkLines: string[][]): string => {
+  // Draw the rule as wide as the diff's widest line, so it reads as a divider within the diff.
+  const ruleWidth = getMaxWidth(hunkLines.flat())
+  return diffRuleElement(ruleWidth)
+}
+
+/** Returns a diff's formatted hunks as one diff, with a dim rule between hunks but none around the diff. */
+export const formatUnframedDiff = (hunkLines: string[][]): string[] => {
+  const rule = formatDiffRule(hunkLines)
+  return hunkLines.flatMap((lines, index) => (index > 0 ? [rule, ...lines] : lines))
+}
+
 /**
  * Returns a diff's formatted hunks as one diff, with a dim rule between hunks and one above and below. A diff longer
  * than `diffLimits` allows, counting the rules between hunks, becomes a note that names the flag that shows it.
  */
 export const formatFramedDiff = (hunkLines: string[][], diffLimits: DiffLimits): string[] => {
-  // Draw the rule as wide as the diff's widest line, so it reads as a divider within the diff.
-  const ruleWidth = getMaxWidth(hunkLines.flat())
-  const rule = diffRuleElement(ruleWidth)
-  const diffLines: string[] = []
-  for (const [index, lines] of hunkLines.entries()) {
-    if (index > 0) diffLines.push(rule)
-    diffLines.push(...lines)
-  }
-
-  if (diffLimits.maxLines !== undefined && diffLines.length > diffLimits.maxLines)
-    return [formatLongDiffNote(diffLines.length)]
+  const diffLines = formatUnframedDiff(hunkLines)
+  if (isPastLineLimit(diffLines.length, diffLimits)) return [formatLongDiffNote(diffLines.length)]
 
   // Frame the diff with a rule above and below, so it stands apart from the lines around it, like a `stderr:` row.
+  const rule = formatDiffRule(hunkLines)
   return [rule, ...diffLines, rule]
 }

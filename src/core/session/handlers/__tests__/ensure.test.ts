@@ -20,6 +20,13 @@ const toRecord = (text: string) =>
     }),
   )
 
+/** Returns a record whose nested `a[0]` is `a` itself. */
+const createSelfHoldingList = () => {
+  const a: unknown[] = []
+  a.push(a)
+  return { a }
+}
+
 /** Returns a record whose nested `a.self` is `a` itself. */
 const createSelfHoldingRecord = () => {
   const a: Record<string, unknown> = { b: "1" }
@@ -562,6 +569,23 @@ describe("h.ensure with a record want", () => {
     expect(result).toMatchObject({ changed: false })
   })
 
+  it("should compare a nested list in order and a nested set as a set, at any depth", async () => {
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, {
+      want: {
+        packages: new Set(["fd", "jq"]),
+        services: [{ name: "web", ports: ["80", "443"], tags: new Set([1, null]) }],
+      },
+      check: async ({ read }) => ({
+        packages: new Set((await read(String.raw`printf 'jq\nfd\n'`)).split("\n")),
+        services: [{ tags: new Set([null, 1]), ports: ["80", "443"], name: "web" }],
+      }),
+      fix: "exit 1",
+    })
+
+    expect(result).toMatchObject({ changed: false })
+  })
+
   it.each([
     {
       description: "a number against a string that reads the same",
@@ -571,6 +595,22 @@ describe("h.ensure with a record want", () => {
     { description: "a key only the check found", want: { env: { TZ: "UTC" } }, got: { env: { TZ: "UTC", PUID: "1" } } },
     { description: "a key only want has", want: { env: { TZ: "UTC", PUID: "1" } }, got: { env: { TZ: "UTC" } } },
     { description: "null against a missing key", want: { env: { TZ: null } }, got: { env: {} } },
+    {
+      description: "a list in another order",
+      want: { env: { ports: ["80", "443"] } },
+      got: { env: { ports: ["443", "80"] } },
+    },
+    { description: "a Set against an array", want: { env: { tags: new Set(["a"]) } }, got: { env: { tags: ["a"] } } },
+    {
+      description: "a set with another item",
+      want: { env: { tags: new Set(["a"]) } },
+      got: { env: { tags: new Set(["b"]) } },
+    },
+    {
+      description: "a record in a list",
+      want: { env: { services: [{ name: "web", port: 80 }] } },
+      got: { env: { services: [{ name: "web", port: 81 }] } },
+    },
   ])("should find a difference in a nested record for $description", async ({ want, got }) => {
     const hostSession = await createSession("plan")
     const result = await ensureOrMessage(hostSession.host, {
@@ -645,6 +685,65 @@ describe("h.ensure with a record want", () => {
     expect(gotServers).toStrictEqual([{ port: 80 }, { port: 8080 }])
   })
 
+  it("should give the fix nested lists and sets as they are", async () => {
+    // Type `ports` as readonly, so the test stops compiling if a nested list can't be.
+    const ports: readonly string[] = ["80", "443"]
+    const { host: h } = await createSession()
+    const differences: unknown[] = []
+    await ensureOrMessage(h, {
+      want: { packages: new Set(["fd", "jq"]), ports },
+      check: async ({ read }) => ({ packages: new Set([await read("echo jq")]), ports: [] }),
+      fix: async (_, difference) => {
+        differences.push(difference)
+        await Promise.resolve()
+      },
+      verify: false,
+    })
+
+    expect(differences).toStrictEqual([
+      {
+        missing: {},
+        changed: {
+          packages: { got: new Set(["jq"]), want: new Set(["fd", "jq"]) },
+          ports: { got: [], want: ["80", "443"] },
+        },
+        unmet: { packages: new Set(["fd", "jq"]), ports: ["80", "443"] },
+        extra: {},
+      },
+    ])
+  })
+
+  it("should give the fix a nested set with the want's own type", async () => {
+    const { host: h } = await createSession()
+    // Type the list by the set, so the test stops compiling if the fix gets wider values.
+    const gotSets: ReadonlySet<string>[] = []
+    await ensureOrMessage(h, {
+      want: { packages: new Set(["fd"]) },
+      check: async ({ read }) => ({ packages: new Set([await read("echo jq")]) }),
+      fix: async (_, { changed }) => {
+        gotSets.push(...Object.values(changed).map(({ got }) => got))
+        await Promise.resolve()
+      },
+      verify: false,
+    })
+
+    expect(gotSets).toStrictEqual([new Set(["jq"])])
+  })
+
+  it("should mask a secret in a nested set", async () => {
+    const hostSession = await createSession("plan")
+    await ensureOrMessage(hostSession.host, {
+      want: { tokens: new Set(["other"]) },
+      check: async ({ read }) => ({ tokens: new Set([await read("echo s3cret-token")]) }),
+      fix: "true",
+      secretEnv: { TOKEN: "s3cret-token" },
+    })
+
+    const values = hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values
+    // Compare the set itself, because `toMatchObject` takes any two Sets as matching.
+    expect(values?.kind === "record" ? values.changed["tokens"]?.got : undefined).toStrictEqual(new Set(["[MASKED]"]))
+  })
+
   it("should name the path when a function check returns a Map in a nested record", async () => {
     const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
@@ -671,11 +770,29 @@ describe("h.ensure with a record want", () => {
     )
   })
 
+  it("should name the path when a function check returns a list that holds itself", async () => {
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, {
+      want: { a: ["1"] },
+      check: () => castInvalid(createSelfHoldingList()),
+      fix: "true",
+    })
+
+    expect(result).toBe(
+      "failed to compare the host with what the step wants -> failed to validate the value the check returned -> value.a[0] must be a value of its own (was a list that holds it)",
+    )
+  })
+
   it("should match -0 to 0 at any depth", async () => {
     const { host: h } = await createSession()
     const result = await ensureOrMessage(h, {
-      want: { port: 0, env: { offset: -0 } },
-      check: async ({ read }) => ({ port: Number(await read("echo -0")), env: { offset: 0 } }),
+      want: { port: 0, env: { offset: -0 }, items: [-0, { n: -0 }], ids: new Set([-0]) },
+      check: async ({ read }) => ({
+        port: Number(await read("echo -0")),
+        env: { offset: 0 },
+        items: [0, { n: 0 }],
+        ids: new Set([0]),
+      }),
       fix: "exit 1",
     })
 
@@ -967,7 +1084,7 @@ describe("h.ensure with invalid input", () => {
       description: "whose want is none of the kinds it can be",
       options: { want: 1, check: "true", fix: "true" },
       message:
-        "want must be a boolean, a string, an array of strings, a Set of strings, or an object of strings, numbers, booleans, null, or nested objects (was a number)",
+        "want must be a boolean, a string, an array of strings, a Set of strings, or an object (of strings, numbers, booleans, null, arrays, Sets, or nested objects) (was a number)",
     },
     {
       description: "whose want is a Set with an item that isn't a string",
@@ -988,7 +1105,7 @@ describe("h.ensure with invalid input", () => {
       description: "whose want is a function",
       options: { want: () => "a", check: "true", fix: "true" },
       message:
-        "want must be a boolean, a string, an array of strings, a Set of strings, or an object of strings, numbers, booleans, null, or nested objects (was Function(want))",
+        "want must be a boolean, a string, an array of strings, a Set of strings, or an object (of strings, numbers, booleans, null, arrays, Sets, or nested objects) (was Function(want))",
     },
     {
       description: "whose want is a record with a Map in a nested record",
@@ -998,7 +1115,41 @@ describe("h.ensure with invalid input", () => {
     {
       description: "whose want is a record with undefined in a nested record",
       options: { want: { a: { b: undefined } }, check: "true", fix: "true" },
-      message: "want.a.b must be a number, a string, an object, boolean or null (was undefined)",
+      message:
+        "want.a.b must be a string, a number, a boolean, null, an array, a Set, or a plain object (was undefined)",
+    },
+    {
+      description: "whose want is a record with a Map in a nested list",
+      options: { want: { a: [1, new Map()] }, check: "true", fix: "true" },
+      message: "want.a[1] must be a plain object (was Map)",
+    },
+    {
+      description: "whose want is a record with undefined in a list in a list",
+      options: { want: { a: [[undefined]] }, check: "true", fix: "true" },
+      message:
+        "want.a[0][0] must be a string, a number, a boolean, null, an array, a Set, or a plain object (was undefined)",
+    },
+    {
+      description: "whose want is a record with NaN",
+      options: { want: { a: { b: Number.NaN } }, check: "true", fix: "true" },
+      message: "want.a.b must be a string, a number, a boolean, null, an array, a Set, or a plain object (was NaN)",
+    },
+    {
+      description: "whose want is a record with a record in a nested set",
+      options: { want: { a: new Set([{}]) }, check: "true", fix: "true" },
+      message:
+        "want.a must be a Set of strings, numbers, booleans, or null (was a Set holding an item of type 'object')",
+    },
+    {
+      description: "whose want is a record with undefined in a nested set",
+      options: { want: { a: new Set(["b", undefined]) }, check: "true", fix: "true" },
+      message:
+        "want.a must be a Set of strings, numbers, booleans, or null (was a Set holding an item of type 'undefined')",
+    },
+    {
+      description: "whose want is a record with a list that holds itself",
+      options: { want: createSelfHoldingList(), check: "true", fix: "true" },
+      message: "want.a[0] must be a value of its own (was a list that holds it)",
     },
     {
       description: "whose want is a record that holds itself",

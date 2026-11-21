@@ -804,6 +804,12 @@ describe("renderHostBlock for a step that would change a record", () => {
     expect(rows).toStrictEqual(['      a: 1 -> {"b":"1"}', '      c: {"x":1} -> null', "      d: (none) -> {}"])
   })
 
+  it("should show an empty key and one with whitespace at its edge by the string rules", async () => {
+    const rows = await formatRecordRows({ "": "a", " padded ": 1 }, {})
+
+    expect(rows).toStrictEqual(["      '':         (none) -> a", "      ' padded ': (none) -> 1"])
+  })
+
   it("should count a nested record's lines toward the note, which counts the top-level keys", async () => {
     const env = Object.fromEntries(Array.from({ length: 15 }, (_, index) => [`KEY${index}`, "new"]))
     const sync = async (h: Host) => {
@@ -819,6 +825,149 @@ describe("renderHostBlock for a step that would change a record", () => {
       "      env:",
       "        KEY0:  (none) -> new",
     ])
+  })
+})
+
+describe("renderHostBlock for a step that would change a nested list or set", () => {
+  it("should show a nested list's diff under its key, with no rule around it", async () => {
+    const rows = await formatRecordRows(
+      { image: "sonarr:4.0.15", ports: ["80:80", "8990:8989"] },
+      { image: "sonarr:4.0.14", ports: ["80:80", "8989:8989"] },
+    )
+
+    expect(rows).toStrictEqual([
+      "      image: sonarr:4.0.14 -> sonarr:4.0.15",
+      "      ports:",
+      "         80:80",
+      "        -8989:8989",
+      "        +8990:8989",
+    ])
+  })
+
+  it("should show a reorder and an insert in a nested list", async () => {
+    const rows = await formatRecordRows({ order: ["a", "b", "c", "new"] }, { order: ["b", "a", "c"] })
+
+    expect(rows).toStrictEqual(["      order:", "        -b", "         a", "        +b", "         c", "        +new"])
+  })
+
+  it("should split far-apart changes in a nested list into hunks, with a rule only between them", async () => {
+    const items = Array.from({ length: 12 }, (_, index) => `i${index}`)
+    const rows = await formatRecordRows({ items: items.with(1, "I1").with(10, "I10") }, { items })
+
+    expect(rows).toStrictEqual([
+      "      items:",
+      "         i0",
+      "        -i1",
+      "        +I1",
+      "         i2",
+      "        ────",
+      "         i9",
+      "        -i10",
+      "        +I10",
+      "         i11",
+    ])
+  })
+
+  it("should show a changed object in a nested list as one line on each side", async () => {
+    const rows = await formatRecordRows(
+      {
+        rules: [
+          { port: 80, allow: true },
+          { port: 443, allow: true },
+        ],
+      },
+      {
+        rules: [
+          { port: 80, allow: true },
+          { port: 443, allow: false },
+        ],
+      },
+    )
+
+    expect(rows).toStrictEqual([
+      "      rules:",
+      '         {"port":80,"allow":true}',
+      '        -{"port":443,"allow":false}',
+      '        +{"port":443,"allow":true}',
+    ])
+  })
+
+  it("should show a nested set's missing and extra items under its key", async () => {
+    const rows = await formatRecordRows(
+      { packages: { formula: new Set(["fd", "jq"]), cask: new Set(["signal"]) } },
+      { packages: { formula: new Set(["jq", "rg"]), cask: new Set(["signal"]) } },
+    )
+
+    expect(rows).toStrictEqual([
+      "      packages:",
+      "        formula:",
+      "          missing: fd",
+      "          extra:   rg",
+    ])
+  })
+
+  it("should show a list or a set that only one side has as all added or removed items", async () => {
+    const rows = await formatRecordRows({ tags: ["web", "media"] }, { groups: new Set([1000, 1001]) })
+
+    expect(rows).toStrictEqual([
+      "      tags:",
+      "        +web",
+      "        +media",
+      "      groups:",
+      "        extra: 1000",
+      "               1001",
+    ])
+  })
+
+  it("should show a set against a list, and an empty list or set against an absent side, on one row", async () => {
+    const rows = await formatRecordRows({ a: new Set(["x"]), b: [], c: new Set() }, { a: ["x"] })
+
+    expect(rows).toStrictEqual(['      a: ["x"] -> Set ["x"]', "      b: (none) -> []", "      c: (none) -> Set []"])
+  })
+
+  it("should show a set inside a nested list's item as Set and its items", async () => {
+    const rows = await formatRecordRows(
+      { users: [{ name: "alice", groups: new Set(["wheel"]) }] },
+      { users: [{ name: "alice", groups: new Set(["staff"]) }] },
+    )
+
+    expect(rows).toStrictEqual([
+      "      users:",
+      '        -{"name":"alice","groups":Set ["staff"]}',
+      '        +{"name":"alice","groups":Set ["wheel"]}',
+    ])
+  })
+
+  it("should count a nested list's lines toward the note, which counts the top-level keys", async () => {
+    const ports = Array.from({ length: 15 }, (_, index) => `${8000 + index}:80`)
+    const sync = async (h: Host) => {
+      await h.ensure("Set the ports", { want: { ports }, check: () => castInvalid({ ports: [] }), fix: "true" })
+    }
+
+    const hostBlock = await formatBlock(sync, "plan")
+    const verboseLines = (await formatVerboseBlock(sync))?.split("\n").slice(2)
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      1 key differs, run with --verbose to see them"])
+    expect([verboseLines?.length, verboseLines?.[0], verboseLines?.[1]]).toStrictEqual([
+      16,
+      "      ports:",
+      "        +8000:80",
+    ])
+  })
+
+  it("should count a nested set's lines toward the note", async () => {
+    const packages = new Set(Array.from({ length: 15 }, (_, index) => `pkg${index}`))
+    const sync = async (h: Host) => {
+      await h.ensure("Install packages", {
+        want: { packages },
+        check: () => castInvalid({ packages: new Set() }),
+        fix: "true",
+      })
+    }
+
+    const hostBlock = await formatBlock(sync, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      1 key differs, run with --verbose to see them"])
   })
 })
 
