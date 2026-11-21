@@ -628,13 +628,11 @@ The report shows a diff from the host's list to the wanted one, framed like a fi
       +home.arpa
       ──────────
   ~ change: (ensure) Upgrade brew packages
-      ───────
-      -node
-      -python
-      ───────
+      found: node
+             python
 ```
 
-`want: []` means nothing is left to do, for a check that lists what's left, like outdated packages. An empty list is the same in order or as a set, and each item the check found shows as a `-` line, because you want none of it. `want: new Set()` does the same, with an `extra:` row.
+`want: []` means nothing is left to do, for a check that lists what's left, like outdated packages. An empty list is the same in order or as a set. The report shows what the check found on a `found:` row, with no `-` lines, because what an item means depends on the check: an outdated package gets upgraded, not removed. `want: new Set()` shows the same way, and `want: {}` shows the record's keys and values under a `found:` heading.
 
 **The type picks the comparison, not an option.** An array has an order and can hold an item twice, and a `Set` has neither, so the value's type already says which comparison the script means. An `ordered: true` option would say it again, and would leave an array meant as ordered compared as a set by default.
 

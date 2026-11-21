@@ -6,7 +6,6 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 
 - [Next](#next)
   - [One note for an apply that didn't finish](#one-note-for-an-apply-that-didnt-finish)
-  - [A neutral view of an empty `want`](#a-neutral-view-of-an-empty-want)
   - [Commands with no terminal](#commands-with-no-terminal)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
@@ -51,10 +50,6 @@ After an apply fails, the next pass shows every step that changed in it, and is 
 - **It shows at the default level,** like the `resume` lines it explains, and only when the block has a `resume` or `ranFromOpenChanges` line.
 
 When it's built, [CLI](./cli.md#how-the-report-is-built) describes the host's note in place of the two per-step notes, and [Steps](./steps.md#when-an-apply-doesnt-finish) drops the quoted notes.
-
-### A neutral view of an empty `want`
-
-An empty `want` means the check should come back empty, but what its items mean depends on the check. For a check that lists what's left to do, like outdated packages, the list diff's `-` lines read as removals. An empty `want` shows what the check reported under a neutral label, with no diff markers. Empty lists, sets, and records all show it the same way.
 
 ### Commands with no terminal
 

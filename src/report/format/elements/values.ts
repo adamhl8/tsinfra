@@ -71,6 +71,12 @@ export const gotValueElement: FormatSideValue = (value: Value, describe?: (value
 export const wantValueElement: FormatSideValue = (value: Value, describe?: (value: boolean | number) => string) =>
   applyValueRules(value, styleWanted, describe)
 
+/**
+ * Formats a value a check found against an empty `want`, in the value color, because it's from the host but isn't a
+ * side of a change.
+ */
+export const foundValueElement = (value: Value): string => applyValueRules(value, styleValue)
+
 /** Formats a value neither side changes, like a list diff's unchanged item, in the terminal's own text color. */
 const unchangedValueElement = (value: Value): string => applyValueRules(value, stylePlain)
 

@@ -563,25 +563,17 @@ describe("renderHostBlock for a step that would change a list", () => {
     ])
   })
 
-  it("should show each item of an empty want as a removed line", async () => {
-    const hostBlock = await formatBlock(async (h) => {
-      await h.ensure("Upgrade packages", { want: [], check: String.raw`printf 'fd\nrg\n'`, fix: "true" })
-    }, "plan")
-
-    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      ───", "      -fd", "      -rg", "      ───"])
-  })
-
   it("should show a note for a diff longer than 15 lines, and the full diff with --verbose", async () => {
     const items = Array.from({ length: 16 }, (_, index) => `pkg${index}`)
     const upgrade = async (h: Host) => {
-      await h.ensure("Upgrade packages", { want: [], check: `printf '%s\\n' ${items.join(" ")}`, fix: "true" })
+      await h.ensure("Upgrade packages", { want: ["new"], check: `printf '%s\\n' ${items.join(" ")}`, fix: "true" })
     }
 
     const hostBlock = await formatBlock(upgrade, "plan")
     const verboseLines = (await formatVerboseBlock(upgrade))?.split("\n").slice(2)
 
-    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      long diff (16 lines), run with --verbose to see it"])
-    expect([verboseLines?.length, verboseLines?.[1]]).toStrictEqual([18, "      -pkg0"])
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      long diff (17 lines), run with --verbose to see it"])
+    expect([verboseLines?.length, verboseLines?.[1]]).toStrictEqual([19, "      -pkg0"])
   })
 })
 
@@ -668,10 +660,14 @@ describe("renderHostBlock for a step that would change a set", () => {
 
   it("should leave out the row of a side with no items", async () => {
     const hostBlock = await formatBlock(async (h) => {
-      await h.ensure("Upgrade packages", { want: new Set(), check: String.raw`printf 'fd\nrg\n'`, fix: "true" })
+      await h.ensure("Install packages", {
+        want: new Set(["fd"]),
+        check: String.raw`printf 'fd\nrg\nzsh\n'`,
+        fix: "true",
+      })
     }, "plan")
 
-    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      extra: fd", "             rg"])
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      extra: rg", "             zsh"])
   })
 
   it("should leave out the extra row when the check found only what want has", async () => {
@@ -694,7 +690,7 @@ describe("renderHostBlock for a step that would change a set", () => {
     const items = Array.from({ length: 16 }, (_, index) => `pkg${index}`)
     const upgrade = async (h: Host) => {
       await h.ensure("Upgrade packages", {
-        want: new Set(),
+        want: new Set(["new"]),
         check: `printf '%s\\n' ${items.join(" ")}`,
         fix: "true",
       })
@@ -703,8 +699,12 @@ describe("renderHostBlock for a step that would change a set", () => {
     const hostBlock = await formatBlock(upgrade, "plan")
     const verboseLines = (await formatVerboseBlock(upgrade))?.split("\n").slice(2)
 
-    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      16 items differ, run with --verbose to see them"])
-    expect([verboseLines?.length, verboseLines?.[0]]).toStrictEqual([16, "      extra: pkg0"])
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      17 items differ, run with --verbose to see them"])
+    expect([verboseLines?.length, verboseLines?.[0], verboseLines?.[1]]).toStrictEqual([
+      17,
+      "      missing: new",
+      "      extra:   pkg0",
+    ])
   })
 })
 
@@ -717,6 +717,67 @@ const formatRecordRows = async (want: Want, got: unknown) =>
   )
     ?.split("\n")
     .slice(2)
+
+describe("renderHostBlock for a step with an empty want", () => {
+  it("should show what the check found against an empty list, with no diff marks", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Upgrade packages", { want: [], check: String.raw`printf 'fd\nrg\n'`, fix: "true" })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      found: fd", "             rg"])
+  })
+
+  it("should show what the check found against an empty set the same way", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Upgrade packages", { want: new Set(), check: String.raw`printf 'fd\nrg\n'`, fix: "true" })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      found: fd", "             rg"])
+  })
+
+  it("should show each found item by the value rules, like an empty one", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Upgrade packages", {
+        want: [],
+        check: async ({ read }) => ["", await read("echo rg")],
+        fix: "true",
+      })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      found: ''", "             rg"])
+  })
+
+  it("should show what the check found against an empty record as its keys under a heading", async () => {
+    const rows = await formatRecordRows({}, { typescript: "5.9.2", port: 8080, env: { TZ: "UTC" } })
+
+    expect(rows).toStrictEqual([
+      "      found:",
+      "        typescript: 5.9.2",
+      "        port:       8080",
+      '        env:        {"TZ":"UTC"}',
+    ])
+  })
+
+  it("should show a note for more than 15 found items, and every item with --verbose", async () => {
+    const items = Array.from({ length: 16 }, (_, index) => `pkg${index}`)
+    const upgrade = async (h: Host) => {
+      await h.ensure("Upgrade packages", { want: [], check: `printf '%s\\n' ${items.join(" ")}`, fix: "true" })
+    }
+
+    const hostBlock = await formatBlock(upgrade, "plan")
+    const verboseLines = (await formatVerboseBlock(upgrade))?.split("\n").slice(2)
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      16 items found, run with --verbose to see them"])
+    expect([verboseLines?.length, verboseLines?.[0]]).toStrictEqual([16, "      found: pkg0"])
+  })
+
+  it("should show a note for more than 15 lines of found keys, which counts the keys", async () => {
+    const got = Object.fromEntries(Array.from({ length: 15 }, (_, index) => [`key${index}`, index]))
+    const rows = await formatRecordRows({}, got)
+
+    expect(rows).toStrictEqual(["      15 keys found, run with --verbose to see them"])
+  })
+})
 
 describe("renderHostBlock for a step that would change a record", () => {
   it("should show a row per key that differs, in want's order, then the extra keys, with (none) for an absent side", async () => {

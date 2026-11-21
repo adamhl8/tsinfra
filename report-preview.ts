@@ -158,10 +158,10 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
     {
       // Every element on steps that succeed. `ensure` strings: `got:` and `want:` rows, multi-line rows with a lone side,
       // `''` for a value and a line, a quoted trailing space, and the notes for too many lines and a slow compare.
-      // `ensure` sets: `missing:` and `extra:` rows. `ensure` lists: a diff for a reorder, and `want: []` with only `-`
-      // lines.
-      // `ensure` records: a row per key that differs, with `(none)` for a key only one side has, a nested record's
-      // rows under its key, and a string against a record on one row.
+      // `ensure` sets: `missing:` and `extra:` rows. `ensure` lists: a diff for a reorder, and `want: []` with what the
+      // check found under `found:`.
+      // `ensure` records: a row per key that differs, with `(none)` for a key only one side has, and under a key, a
+      // nested record's rows, a nested list's diff, and a nested set's rows, and two kinds of value on one row.
       // `file`: a diff with two hunks, `mode:` and a numeric `group:`, the note for a long diff and a slow one, and each
       // content description. `link`: a changed target, both replacements, and a missing target with its warning, on a
       // step that changes and one that was already right, a `target mode:` row alone, and one under a changed target.
@@ -222,7 +222,7 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
             await exec(String.raw`printf 'lan\nhome.arpa\n' > '${marker("search-domains")}'`)
           },
         })
-        await h.ensure("Upgrade brew packages (list want)", {
+        await h.ensure("Upgrade brew packages (empty list want)", {
           want: [],
           check: `cat '${marker("outdated-list")}' 2>/dev/null || printf 'node\\npython\\n'`,
           fix: `: > '${marker("outdated-list")}'`,

@@ -305,15 +305,13 @@ await h.ensure("Upgrade brew packages", { want: [], check: "brew outdated --quie
       +home.arpa
       ──────────
   ~ change: (ensure) Upgrade brew packages
-      ────────────
-      -node
-      -python@3.13
-      ────────────
+      found: node
+             python@3.13
 ```
 
 - A reorder shows as the item leaving one place and arriving in another.
 - The fix gets `{ got }`, the host's list, because `missing` and `extra` can't describe a reorder.
-- `want: []` is for a check that lists what's left to do, like outdated packages, so everything it lists shows as a `-` line.
+- `want: []` is for a check that lists what's left to do, like outdated packages, so everything it lists shows on a `found:` row.
 
 **A record** of string keys is for names with a value each, like packages on a version each, or for structured config, like a container's `env`, `labels`, and `ports`:
 
