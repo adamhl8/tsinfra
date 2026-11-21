@@ -8,7 +8,7 @@ import { handleDir } from "#core/session/handlers/dir.ts"
 import type { EnsureOptions } from "#core/session/handlers/ensure.ts"
 import { handleEnsure } from "#core/session/handlers/ensure.ts"
 import type { SetWant } from "#core/session/handlers/ensure/comparison/set.ts"
-import type { Want } from "#core/session/handlers/ensure/want.ts"
+import type { WantOf } from "#core/session/handlers/ensure/want.ts"
 import type { FileContent, FileOptions } from "#core/session/handlers/file.ts"
 import { handleFile } from "#core/session/handlers/file.ts"
 import type { InspectOptions } from "#core/session/handlers/inspect.ts"
@@ -107,7 +107,7 @@ export interface Host<O extends HostOptions = HostOptions> extends Record<StepKi
   ensure: {
     // Try a set `want` first, so an empty `new Set()` is a set of strings, not of `unknown`.
     (name: string, options: EnsureOptions<SetWant>): Promise<ChangeStepResult<"ensure">>
-    <T extends Want>(name: string, options: EnsureOptions<T>): Promise<ChangeStepResult<"ensure">>
+    <T extends WantOf<T>>(name: string, options: EnsureOptions<T>): Promise<ChangeStepResult<"ensure">>
   }
   /**
    * Runs `cmd`, a command or a function given `exec`, when a step in `after` changed, or on every pass with `after:
@@ -275,7 +275,7 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
     link: async (path, target, options) =>
       callStep(path, "link", async (ctx) => handleLink(ctx, path, target, options), options),
     dir: async (path, options) => callStep(path, "dir", async (ctx) => handleDir(ctx, path, options), options),
-    ensure: async <T extends Want>(stepName: string, options: EnsureOptions<T>) =>
+    ensure: async <T extends WantOf<T>>(stepName: string, options: EnsureOptions<T>) =>
       callStep(stepName, "ensure", async (ctx) => handleEnsure(ctx, options), options),
     run: async (stepName, cmd, options) =>
       callStep(stepName, "run", async (ctx) => handleRun(ctx, cmd, options), options),

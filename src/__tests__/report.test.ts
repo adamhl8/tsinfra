@@ -22,7 +22,7 @@ import type { HostFunction } from "#core/hosts/host.ts"
 import { host } from "#core/hosts/host.ts"
 import type { Host } from "#core/session.ts"
 import type { EnsureOptions } from "#core/session/handlers/ensure.ts"
-import type { Want } from "#core/session/handlers/ensure/want.ts"
+import type { Want, WantOf } from "#core/session/handlers/ensure/want.ts"
 import type { Exec } from "#core/session/handlers/tools.ts"
 import type { HostRecord } from "#core/session/recorder/records.ts"
 import type { Mode } from "#mode.ts"
@@ -385,7 +385,7 @@ describe("renderHostBlock", () => {
 })
 
 /** Formats the block of an apply whose step still differs after its fix, as the lines under the error. */
-const formatFailedCheck = async <T extends Want>(options: EnsureOptions<T>) => {
+const formatFailedCheck = async <T extends WantOf<T>>(options: EnsureOptions<T>) => {
   const hostBlock = await formatBlock(async (h) => {
     await h.ensure("Make it", options)
   }, "apply")

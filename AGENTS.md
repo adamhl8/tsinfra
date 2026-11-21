@@ -73,6 +73,7 @@ Each name should say which side of a comparison it is. When naming anything in a
 ## Architecture
 
 - **Record values compare with fast-equals' `deepEqual`, in the comparison and the report, never Bun's `deepEquals`.** Bun's tells `-0` from `0`, which the report shows as the same `0`.
+- **A generic over a step's `want` takes `T extends WantOf<T>`, never `T extends Want`.** `Want`'s record is an index signature, which a type an interface declares can't match. `RecordWantOf` maps each valid value to `unknown`, because a primitive there keeps `want`'s inferred values literal, so `{ a: "1" }` couldn't match a check that returns any string.
 - **`session.ts` is the only code that throws.** Everything the script can call (the `h` methods and the tools) is `callOrFail` around a `Result`-returning internal.
 - **Handlers never record anything.** What a step has one of is returned (`HandlerReturn { status, value }`), and what it has zero or more of is recorded by a wrapper it runs through.
 - **A check reports the same** whether it's a command string or a function with one `inspect`.

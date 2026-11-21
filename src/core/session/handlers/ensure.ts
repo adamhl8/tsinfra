@@ -8,7 +8,7 @@ import { compareCheck, getWantKind } from "#core/session/handlers/ensure/compari
 import type { Fix } from "#core/session/handlers/ensure/fix.ts"
 import { fixSchema, toFixDifference } from "#core/session/handlers/ensure/fix.ts"
 import { getHostCheckDetails } from "#core/session/handlers/ensure/host-check-details.ts"
-import type { SchemaWant, Want } from "#core/session/handlers/ensure/want.ts"
+import type { SchemaWant, WantOf } from "#core/session/handlers/ensure/want.ts"
 import { tagWant, wantSchema } from "#core/session/handlers/ensure/want.ts"
 import type { EnvOptions } from "#core/session/handlers/options/command.ts"
 import type { HandlerOptions, NeedsOptions } from "#core/session/handlers/options/step.ts"
@@ -23,7 +23,7 @@ import type { HandlerReturn, StepContext } from "#core/session/step.ts"
 // Re-export the record comparison for `dir`, which is built on it, so its rows render as a record `want`'s.
 
 /** `T` ties a check function's return type, and a fix function's difference, to `want`. */
-export interface EnsureOptions<T extends Want> extends NeedsOptions, EnvOptions {
+export interface EnsureOptions<T extends WantOf<T>> extends NeedsOptions, EnvOptions {
   /**
    * The answer `check` gives when already right. `true` means a command exits 0, and `false` means it exits non-zero. A
    * string is compared to a command's stdout, with trailing newlines ignored on both sides. A list, an array of

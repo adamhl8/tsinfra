@@ -20,6 +20,24 @@ export interface RecordWant {
 }
 
 /**
+ * Checks a record `want` by its own keys, so `T extends RecordWantOf<T>` holds when each value is a `RecordValue`. A
+ * type an interface declares can't be a `RecordWant`, because TypeScript never gives an interface an index signature.
+ */
+export type RecordWantOf<T> = { readonly [K in keyof T]: RecordValueOf<T[K]> }
+
+// Map a valid value to `unknown`, because a primitive here would keep `want`'s inferred values literal, like `"1"`.
+// Refuse a function first, because a class instance like a `Date` would otherwise pass as a record of its methods.
+type RecordValueOf<V> = V extends (...args: never) => unknown
+  ? never
+  : V extends RecordPrimitive | ReadonlySet<RecordPrimitive>
+    ? unknown
+    : V extends readonly (infer E)[]
+      ? readonly RecordValueOf<E>[]
+      : V extends object
+        ? RecordWantOf<V>
+        : never
+
+/**
  * A record `want` as its schema types it, with mutable lists, which a `RecordWant` takes. Type the schemas with it,
  * because ArkType 2.2.10's inference never ends on a recursive readonly array. Once ArkType infers one, type the
  * schemas with `RecordWant` and `Want`, and delete this and `SchemaWant`.
@@ -56,7 +74,7 @@ export const recordWantSchema = type("object")
  * which repeats the two for a fix that sets every wanted value. `extra` maps a key `want` doesn't have to its current
  * value.
  */
-export interface RecordDifference<V extends RecordValue = RecordValue> {
+export interface RecordDifference<V = RecordValue> {
   missing: Record<string, V>
   changed: Record<string, { got: V; want: V }>
   unmet: Record<string, V>

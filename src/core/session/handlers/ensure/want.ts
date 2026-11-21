@@ -5,7 +5,7 @@ import type { BooleanWant } from "#core/session/handlers/ensure/comparison.ts"
 import { booleanWantSchema, getWantKind } from "#core/session/handlers/ensure/comparison.ts"
 import type { ListWant } from "#core/session/handlers/ensure/comparison/list.ts"
 import { listWantSchema } from "#core/session/handlers/ensure/comparison/list.ts"
-import type { RecordWant, SchemaRecordWant } from "#core/session/handlers/ensure/comparison/record.ts"
+import type { RecordWant, RecordWantOf, SchemaRecordWant } from "#core/session/handlers/ensure/comparison/record.ts"
 import { recordWantSchema } from "#core/session/handlers/ensure/comparison/record.ts"
 import type { SetWant } from "#core/session/handlers/ensure/comparison/set.ts"
 import { setWantSchema } from "#core/session/handlers/ensure/comparison/set.ts"
@@ -19,6 +19,16 @@ type BaseWant = BooleanWant | StringWant | ListWant | SetWant
  * record of string keys and strings, numbers, booleans, `null`, or nested lists, sets, and records, to match by key.
  */
 export type Want = BaseWant | RecordWant
+
+/**
+ * What `T` must be to be a `want`, so a step's options take `T extends WantOf<T>`. It checks a record by its own keys
+ * (see `RecordWantOf`), so a type an interface declares works too.
+ */
+// Intersect with `object`, because a mapped type over a primitive is the primitive itself.
+export type WantOf<T> = BaseWant | (RecordWantOf<T> & object)
+
+/** Whether `T` is only a record `want`, because it's an object and no part of it is another kind. */
+export type IsRecordWant<T> = [T] extends [object] ? ([Extract<T, BaseWant>] extends [never] ? true : false) : false
 
 /** A `want` as its schema types it, with a record's lists mutable (see `SchemaRecordWant`). */
 export type SchemaWant = BaseWant | SchemaRecordWant

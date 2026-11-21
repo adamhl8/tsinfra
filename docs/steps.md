@@ -34,7 +34,7 @@ interface Host<O extends HostOptions = HostOptions> {
   inspect(cmd: string, options?: InspectOptions): Promise<InspectResult>
   file(path: string, content: string | Uint8Array | Blob, options?: FileOptions): Promise<ChangeStepResult>
   link(path: string, target: string, options?: LinkOptions): Promise<ChangeStepResult>
-  ensure<T extends string | boolean>(name: string, options: EnsureOptions<T>): Promise<ChangeStepResult>
+  ensure<T extends WantOf<T>>(name: string, options: EnsureOptions<T>): Promise<ChangeStepResult>
   run(
     name: string,
     cmd: string | ((tools: ChangeTools) => Promise<void>),
@@ -545,8 +545,12 @@ interface RecordWant {
   readonly [key: string]: RecordValue
 }
 
+// A `want` is a boolean, a string, a list or a set of strings, or a record. `WantOf<T>` checks a record by its own
+// keys, each value a `RecordValue`, so a type an interface declares works too.
+type WantOf<T> = boolean | string | readonly string[] | ReadonlySet<string> | { readonly [K in keyof T]: RecordValue }
+
 // `T` ties a check function's return type to `want`, so a boolean check can't be compared to a string.
-type EnsureOptions<T extends boolean | string | readonly string[] | ReadonlySet<string> | RecordWant> = {
+type EnsureOptions<T extends WantOf<T>> = {
   // `true` means exit 0, or a function returning true, is already right. `false` means the opposite.
   // A string is compared to the command's stdout, or the function's value.
   // A list is compared to the command's lines, or the function's array, in order.
@@ -636,7 +640,7 @@ The report shows a diff from the host's list to the wanted one, framed like a fi
 
 **The type picks the comparison, not an option.** An array has an order and can hold an item twice, and a `Set` has neither, so the value's type already says which comparison the script means. An `ordered: true` option would say it again, and would leave an array meant as ordered compared as a set by default.
 
-**A record `want`**, an object of string keys, compares values by key, like a package name to its version, or a config's settings. A value is a string, a number, a boolean, `null`, an array, a `Set`, or a nested record, to any depth, like a container's `env`, `labels`, or `ports`. Each compares the way its type does at the top level: a nested list in order, a nested set as a set, and a nested record by key, so key order doesn't count at any depth, and an array and a `Set` with the same items differ. A nested set holds only strings, numbers, booleans, and `null`, because a `Set` matches an object or an array only by identity, so one in a set would never match what the check returns. Each value is compared exactly, so a number never matches a string that reads the same: `8080` and `"8080"` differ, and the report shows the number in italics. `-0` matches `0`, as it does with `===`, at any depth, because the report shows both as `0`. `null` is a value, so `{ port: null }` and `{}` differ. A key only one side has is a difference at any depth. Only a check function can return a record, because a command's output has no keys, so `check: "..."` with a record `want` is a type error, and refused before it runs for a script that gets past the types. A record must be a plain object at every depth, so a `Map`, a class instance, or a `Promise` from a missing `await` is refused, because it would otherwise be compared by its own keys, which it usually has none of. A list or a record that holds itself is refused too, because showing it would never end. The error names the path to the value, like `want.env.PUID` or `want.ports[1]`. A fix function's `missing`, `changed`, `unmet`, and `extra` hold `want`'s own value type, so a `want` of strings gives it strings.
+**A record `want`**, an object of string keys, compares values by key, like a package name to its version, or a config's settings. A value is a string, a number, a boolean, `null`, an array, a `Set`, or a nested record, to any depth, like a container's `env`, `labels`, or `ports`. Each compares the way its type does at the top level: a nested list in order, a nested set as a set, and a nested record by key, so key order doesn't count at any depth, and an array and a `Set` with the same items differ. A nested set holds only strings, numbers, booleans, and `null`, because a `Set` matches an object or an array only by identity, so one in a set would never match what the check returns. Each value is compared exactly, so a number never matches a string that reads the same: `8080` and `"8080"` differ, and the report shows the number in italics. `-0` matches `0`, as it does with `===`, at any depth, because the report shows both as `0`. `null` is a value, so `{ port: null }` and `{}` differ. A key only one side has is a difference at any depth. Only a check function can return a record, because a command's output has no keys, so `check: "..."` with a record `want` is a type error, and refused before it runs for a script that gets past the types. A record must be a plain object at every depth, so a `Map`, a class instance, or a `Promise` from a missing `await` is refused, because it would otherwise be compared by its own keys, which it usually has none of. A list or a record that holds itself is refused too, because showing it would never end. The error names the path to the value, like `want.env.PUID` or `want.ports[1]`. A fix function's `missing`, `changed`, `unmet`, and `extra` hold `want`'s own value type, so a `want` of strings gives it strings. A record's type can come from an `interface`, not only a type alias or a literal. TypeScript never lets an interface stand in for an index signature like `RecordWant`'s, so the types check a record by its own keys instead, and the exported `WantOf<T>` is that check: a helper that passes a step's options on takes `<T extends WantOf<T>>(options: EnsureOptions<T>)`.
 
 ```ts
 const wanted: Record<string, string> = {}

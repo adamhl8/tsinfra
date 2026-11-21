@@ -18,7 +18,7 @@ import { runHost } from "#core/hosts/run.ts"
 import type { Host, SessionContext } from "#core/session.ts"
 import { createHostSession } from "#core/session.ts"
 import type { EnsureOptions } from "#core/session/handlers/ensure.ts"
-import type { Want } from "#core/session/handlers/ensure/want.ts"
+import type { WantOf } from "#core/session/handlers/ensure/want.ts"
 import type { ReadOptions } from "#core/session/handlers/read.ts"
 import type { RunOptions } from "#core/session/handlers/run.ts"
 import type { ChangeStepResult } from "#core/session/handlers/shared/change-step-result.ts"
@@ -250,7 +250,7 @@ export const readOrMessage = async (h: Host, cmd: string, options?: ReadOptions)
 }
 
 /** Runs `h.ensure` and returns its result, or the thrown error's message chain. */
-export const ensureOrMessage = async <T extends Want>(h: Host, options: EnsureOptions<T>) => {
+export const ensureOrMessage = async <T extends WantOf<T>>(h: Host, options: EnsureOptions<T>) => {
   const result = await attempt(async () => h.ensure("Make marker", options))
   return isErr(result) ? messageChain(result) : result
 }

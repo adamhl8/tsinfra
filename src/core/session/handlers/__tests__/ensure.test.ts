@@ -37,6 +37,24 @@ const createSelfHoldingRecord = () => {
 // Widen `want` to the union, which lets a mismatched check through the types, as an untyped host script would.
 const toLooseWant = (value: Want) => value
 
+// Declare these with `interface`, because an interface has no index signature, unlike a type alias.
+interface ServiceConfig {
+  image: string
+  env: ServiceEnv
+  ports: readonly number[]
+  replicas?: number
+}
+
+interface ServiceEnv {
+  TZ: string
+}
+
+interface ScheduledService {
+  startAt: Date
+}
+
+const SERVICE_CONFIG: ServiceConfig = { image: "caddy", env: { TZ: "UTC" }, ports: [80, 443] }
+
 /** Returns a path in a new temp dir, plus a step that creates a file there. */
 const createMarkerStep = async () => {
   const marker = path.join(await makeTempDir(), "marker")
@@ -832,6 +850,62 @@ describe("h.ensure with a record want", () => {
 
     expect(result).toBe(
       "failed to compare the host with what the step wants -> failed to validate the value the check returned -> it's of type 'array', but want is of type 'object'",
+    )
+  })
+
+  it("should accept a record want an interface declares, at any depth", async () => {
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, {
+      want: SERVICE_CONFIG,
+      check: async ({ read }) => ({ ...SERVICE_CONFIG, env: { TZ: await read("echo UTC") } }),
+      fix: "exit 1",
+    })
+
+    expect(result).toMatchObject({ changed: false })
+  })
+
+  it("should give the fix the difference for a record want an interface declares", async () => {
+    const { host: h } = await createSession()
+    const unmets: unknown[] = []
+    await ensureOrMessage(h, {
+      want: SERVICE_CONFIG,
+      check: async ({ read }) => ({ ...SERVICE_CONFIG, image: await read("echo nginx") }),
+      fix: async ({ exec }, { unmet }) => {
+        unmets.push(unmet)
+        await exec("true")
+      },
+      verify: false,
+    })
+
+    expect(unmets).toStrictEqual([{ image: "caddy" }])
+  })
+
+  it("should refuse a command check for a record want an interface declares", async () => {
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, {
+      want: SERVICE_CONFIG,
+      // @ts-expect-error - a record want takes only a check function
+      check: "true",
+      fix: "true",
+    })
+
+    expect(result).toBe(
+      "failed to validate the options given to 'ensure' -> check must be a check function for a record want (was a command)",
+    )
+  })
+
+  it("should refuse a Date in a record want an interface declares", async () => {
+    const { host: h } = await createSession()
+    const want: ScheduledService = { startAt: new Date(0) }
+    const result = await ensureOrMessage(h, {
+      // @ts-expect-error - a Date isn't a record value
+      want,
+      check: () => castInvalid(want),
+      fix: "true",
+    })
+
+    expect(result).toBe(
+      "failed to validate the options given to 'ensure' -> want.startAt must be a plain object (was Date)",
     )
   })
 

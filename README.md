@@ -238,7 +238,7 @@ Compares `want` with what `check` answers. When they differ, `apply` runs `fix`,
   - A string: compared with `check`'s stdout (or the function's return value). Trailing newlines are ignored.
   - A list of strings: compared in order with `check`'s lines, blank ones left out (or the function's array), so a reorder or a duplicate counts. `[]` means nothing is left to do.
   - A `Set` of strings: compared the same way, but as a set, so order and duplicates don't count. A check function returns a `Set`.
-  - A record of string keys: compared with the function's object by key, each value exactly, so `8080` never matches `"8080"`. A value is a string, a number, a boolean, `null`, or a nested list, set, or record, each compared the way its type is at the top level. It needs a check function.
+  - A record of string keys: compared with the function's object by key, each value exactly, so `8080` never matches `"8080"`. A value is a string, a number, a boolean, `null`, or a nested list, set, or record, each compared the way its type is at the top level. Its type can come from an `interface`. It needs a check function.
 - `check`: a command, or an async function given `{ read, inspect }` that returns the answer
 - `fix`: a command, or an async function given `{ exec, inspect }`. The function also gets what `check` found: `{ got }` for a string or a list `want`, `{ missing, extra }` for a set, and `{ missing, changed, unmet, extra }` for a record, where `unmet` maps each key that's missing or changed to its wanted value. It only runs in `apply`.
 - `verify` (default: `true`): run `check` again after `fix`, and fail if the state still differs
