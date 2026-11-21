@@ -1,3 +1,15 @@
+## [0.13.0](https://github.com/adamhl8/tsinfra/compare/v0.12.1..v0.13.0) - 2026-11-21
+
+### 🚀 Features
+
+- _(transport)_ start commands with no terminal ([b65ba70](https://github.com/adamhl8/tsinfra/commit/b65ba7062e54d65feac69f8ea9d03c4d4e4949f7) by @adamhl8)
+
+- _(report)_ show what the check found for an empty want ([72c7d21](https://github.com/adamhl8/tsinfra/commit/72c7d21cb52a159973eb848d10aaaa2b6951e7f1) by @adamhl8)
+
+- _(ensure)_ allow lists and sets in a record want ([5c3f8dc](https://github.com/adamhl8/tsinfra/commit/5c3f8dc480578009a415639f5e7f0565d2c3d208) by @adamhl8)
+
+- _(ensure)_ allow nested records and null in a record want ([409eab5](https://github.com/adamhl8/tsinfra/commit/409eab574e903e8d4f05179253af7bf9bd6aa8e1) by @adamhl8)
+
 ## [0.12.1](https://github.com/adamhl8/tsinfra/compare/v0.12.0..v0.12.1) - 2026-11-20
 
 ### ⚙️ Miscellaneous Tasks
