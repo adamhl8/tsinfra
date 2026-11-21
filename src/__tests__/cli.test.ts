@@ -4,8 +4,9 @@ import path from "node:path"
 import process from "node:process"
 
 import { makeTempDir, minimalEnv } from "@adamhl8/configs/test"
-import bun from "bun"
+import bun, { sleep, spawn } from "bun"
 import pc from "picocolors"
+import { attempt, isErr } from "ts-explicit-errors"
 
 import { createProject, getInstalledBin, removeInstalledFile, replaceInstalledFile } from "#__tests__/cli-project.ts"
 import { answerPrompts } from "#__tests__/terminal.ts"
@@ -33,6 +34,37 @@ const buildPlanCommand = (dir: string, hostsDir: string) => [
   "--hosts-dir",
   path.join(dir, hostsDir),
 ]
+
+/** Returns the pid in `pidFile`, waiting until a command has written it. */
+const waitForPid = async (pidFile: string): Promise<number> => {
+  const pidText = await attempt(async () => bun.file(pidFile).text())
+  // Wait out an empty file too, because `Number("")` is 0.
+  const pid = isErr(pidText) ? 0 : Number(pidText)
+  if (Number.isInteger(pid) && pid > 0) return pid
+
+  await sleep(50)
+  return waitForPid(pidFile)
+}
+
+/** Reports whether a process with `pid` is still running, after giving it about a second to exit. */
+const isStillRunning = async (pid: number, triesLeft = 20): Promise<boolean> => {
+  if (isErr(attempt(() => process.kill(pid, 0)))) return false
+  if (triesLeft === 0) return true
+
+  await sleep(50)
+  return isStillRunning(pid, triesLeft - 1)
+}
+
+/** Runs `cmd` in a terminal, and presses Ctrl-C once a command has written its pid to `pidFile`. */
+const interruptOnceStarted = async (cmd: string[], pidFile: string, env: Record<string, string | undefined>) => {
+  const subprocess = spawn(cmd, { env, terminal: {} })
+  const pid = await waitForPid(pidFile)
+  subprocess.terminal?.write("\u0003")
+  await subprocess.exited
+  subprocess.terminal?.close()
+
+  return { pid, signalCode: subprocess.signalCode ?? undefined }
+}
 
 /** Returns what the terminal showed after the last progress line was cleared, which is the report. */
 const getScreenAfterProgress = (screen: string) =>
@@ -207,6 +239,17 @@ describe("tsinfra", () => {
       `${CLEAR_PROGRESS}Planning host 'slow' · (read) sleep 0.5 # ${"x".repeat(36)}…${CLEAR_PROGRESS}`,
     )
     expect(getScreenAfterProgress(screen)).toBe("slow   unchanged\r\n")
+  })
+
+  it("should stop the command that's running and end by SIGINT on Ctrl-C", async () => {
+    const { dir } = await createProject()
+    const pidFile = path.join(dir, "pid")
+    const command = [process.execPath, getInstalledBin(dir), "apply", "--hosts-dir", path.join(dir, "hosts-interrupt")]
+
+    const { pid, signalCode } = await interruptOnceStarted(command, pidFile, { ...minimalEnv(), PID_FILE: pidFile })
+
+    expect(signalCode).toBe("SIGINT")
+    expect(await isStillRunning(pid)).toBe(false)
   })
 })
 

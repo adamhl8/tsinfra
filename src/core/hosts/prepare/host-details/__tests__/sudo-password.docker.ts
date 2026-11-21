@@ -4,6 +4,7 @@ import { rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
+import { makeTempDir } from "@adamhl8/configs/test"
 import bun, { $ } from "bun"
 import type { Result } from "ts-explicit-errors"
 import { isErr, messageChain } from "ts-explicit-errors"
@@ -17,13 +18,30 @@ import {
   readOrMessage,
 } from "#core/__tests__/session.ts"
 import { SSHD_TARGET, startSshd, stopSshd } from "#core/__tests__/sshd.ts"
-import type { SessionContext } from "#core/session.ts"
+import type { Host, SessionContext } from "#core/session.ts"
 import { closeConnections } from "#core/transport.ts"
 
 // `setup.sh` gives this user this password.
 const PASSWORD = "it's tsinfra"
 // Find the helper in the real home, because preparation writes it before the test preload swaps the session's `home`.
 const ASKPASS_HELPER_PATH = path.join(os.homedir(), ".tsinfra", "askpass.sh")
+
+// Print the password from a variable the step sets, like the helper in the recipe for a program that runs sudo itself.
+const APP_ASKPASS_HELPER = String.raw`#!/bin/sh
+printf '%s\n' "$APP_SUDO_PASSWORD"
+`
+// Run sudo in a shell of its own, which doesn't see tsinfra's `sudo` function, the way a program's own sudo doesn't.
+// Use `-k`, so sudo ignores cached credentials and has to run the helper.
+const OWN_SUDO_COMMAND = "sh -c 'sudo -k id -u'"
+
+/** Writes the recipe's helper, and returns the options that point a program's own sudo at it, plus `env`. */
+const writeAppAskpassHelper = async (h: Host, env: Record<string, string> = {}) => {
+  const helperPath = path.join(await makeTempDir(), "app-askpass")
+  await h.file(helperPath, APP_ASKPASS_HELPER, { mode: "755" })
+  const { sudoPassword = "" } = h.meta
+
+  return { env: { SUDO_ASKPASS: helperPath, ...env }, secretEnv: { APP_SUDO_PASSWORD: sudoPassword } }
+}
 
 /** Returns why preparing a host failed as its message chain, or `prepared`. */
 const toPreparationMessage = (sessionContext: Result<SessionContext>) =>
@@ -72,6 +90,22 @@ describe("a user whose sudo needs a password", () => {
   it("should fail in preparation with sudo: true and no password", async () => {
     expect(toPreparationMessage(await buildLocalSessionContext({ sudo: true }))).toBe(
       "needs a sudo password: set up passwordless sudo, or pass sudo: { password } to host() -> exited with code 1: sudo: a password is required",
+    )
+  })
+
+  it("should give a program's own sudo the password through SUDO_ASKPASS once DISPLAY is set", async () => {
+    const { host: h } = await createSession("apply", { sudo: { password: PASSWORD } })
+    const askpassOptions = await writeAppAskpassHelper(h, { DISPLAY: ":0" })
+
+    expect(await readOrMessage(h, OWN_SUDO_COMMAND, askpassOptions)).toBe("0")
+  })
+
+  it("should fail a program's own sudo without DISPLAY, because it has no terminal to prompt on", async () => {
+    const { host: h } = await createSession("apply", { sudo: { password: PASSWORD } })
+    const askpassOptions = await writeAppAskpassHelper(h)
+
+    expect(await readOrMessage(h, OWN_SUDO_COMMAND, askpassOptions)).toContain(
+      "sudo: a terminal is required to read the password",
     )
   })
 })

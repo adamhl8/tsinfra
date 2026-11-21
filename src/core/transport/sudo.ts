@@ -14,7 +14,8 @@ const ASKPASS_HELPER = `#!/bin/sh\nprintf '%s\\n' "$${SUDO_PASSWORD_VARIABLE}"\n
 export const buildAskpassHelperWriteScript = (helperPath: string): string =>
   buildPrivateFileWriteScript(helperPath, ASKPASS_HELPER, { executable: true })
 
-// Use `-n`, because a `sudo` that needs a password would otherwise prompt on a local terminal, in the middle of the report.
+// Use `-n`, so a `sudo` that needs a password fails with only `a password is required`.
+// It also never runs an askpass helper that the host's own environment sets along with `DISPLAY`.
 const PASSWORDLESS_SUDO_FUNCTION = `sudo() { command sudo -n "$@"; }`
 
 /** Returns the `sudo` function that gives sudo `password` through the askpass helper at `helperPath`. */

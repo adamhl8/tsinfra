@@ -5,6 +5,7 @@ Two transports, local and SSH. Both run the same scripts the same way. The only 
 <!-- toc -->
 
 - [Commands travel on stdin](#commands-travel-on-stdin)
+  - [No terminal](#no-terminal)
   - [Input](#input)
 - [Login shells](#login-shells)
 - [File writes](#file-writes)
@@ -56,6 +57,14 @@ export URL='https://example.com'
 - **Preparation's commands get no prelude,** because only steps and tool calls take `env`.
 
 Output comes back as stdout, stderr, and an exit code. `ssh` itself exits 255 when the connection fails, so a 255 always gets the connection error from ssh's stderr rather than being treated as the command's exit code (see [SSH and ControlMaster](#ssh-and-controlmaster)).
+
+### No terminal
+
+Every process tsinfra starts on the control machine, `sh -s` for a local host and `ssh` for any other, starts in a session of its own, through `spawn`'s `detached` option, which calls `setsid()`. So it has no controlling terminal, and nothing it runs can open `/dev/tty`, the terminal tsinfra runs in. A program that runs `/usr/bin/sudo` itself without `-A` fails under its step with `sudo: a terminal is required to read the password; either use the -S option to read from standard input or configure an askpass helper`, instead of prompting in the middle of the report, where nothing would say which step asked. A step can still give that sudo the password through askpass (see [sudo](#sudo)). A command on an ssh host had no terminal already, because `-T` never gives the session one. A command that needs a person waits for [Interactive commands](./roadmap.md#interactive-commands).
+
+- **Ctrl-C still stops the commands that are running.** A detached process isn't in the terminal's foreground process group, so Ctrl-C reaches only tsinfra. While commands are running, tsinfra sends the `SIGINT` on to each one's process group, which holds everything the command started. Then it raises the signal again on itself, so the run ends by `SIGINT`, the same as with no command running. Closing the terminal (`SIGHUP`) and `SIGTERM` are passed on the same way.
+- **A signal while no command runs ends tsinfra straight away,** like at the sudo password prompt, because tsinfra listens for these signals only while a command runs.
+- **The tests check** that a local command run in a terminal can't open `/dev/tty`, and that Ctrl-C during a long local command ends the run by `SIGINT` and stops the command.
 
 ### Input
 
@@ -312,7 +321,7 @@ With `-A`, sudo runs the `SUDO_ASKPASS` program when it needs a password and rea
 - **The password never goes into a command line, a file, or the record.** The helper reads it from a variable the function sets for that one `sudo` call, and the script that sets it travels on stdin. sudo runs the helper with the caller's environment, which the Docker tests check on Alpine and Debian. Root and the same user can still see it while the command runs, the same as Ansible's become password.
 - **The record shows the command as written,** like `sudo systemctl restart caddy`.
 - **tsinfra's own commands escalate the same way,** through the same function, so the command that starts the shell never runs under sudo. With `sudo: true`, the step's script runs in a nested `sudo sh -s`, sent in a heredoc with a random delimiter, because a path in the script can hold any line. The record holds the step's script as tsinfra wrote it, without the nesting.
-- **A `sudo` inside a child process,** like a script file the command runs, or `xargs sudo`, doesn't see the function. Exporting `SUDO_ASKPASS` doesn't cover it, because sudo only runs the helper with `-A`. Such a program needs passwordless sudo, or the password from `h.meta.sudoPassword`, passed the way that program takes it (see [Recipes](./recipes.md#a-program-that-runs-sudo-itself)).
+- **A `sudo` inside a child process,** like a script file the command runs, or `xargs sudo`, doesn't see the function. With no terminal (see [No terminal](#no-terminal)), sudo runs an exported `SUDO_ASKPASS` without `-A` only when `DISPLAY` is set too, to any value. tsinfra's helper still can't serve it, because `TSINFRA_SUDO_PASSWORD` is set only for the function's own `sudo` call. Such a program needs passwordless sudo, or the password from `h.meta.sudoPassword`, passed the way that program takes it, like through a helper of the script's own (see [Recipes](./recipes.md#a-program-that-runs-sudo-itself)).
 
 **The script gets the password as `h.meta.sudoPassword`.** It's a string when the host has a password, whether `host()` passed `sudo: { password }` or preparation prompted for it, and `undefined` when the host leaves `sudo` off or sets `sudo: true` on passwordless sudo. Both ways give the same value, so an integration reads it from `h` and never takes it as an option.
 
@@ -320,9 +329,9 @@ With `-A`, sudo runs the `SUDO_ASKPASS` program when it needs a password and rea
 
 - **It's masked from the start.** The session adds it to the host's secrets before the script runs, so it shows as `[MASKED]` in every command's output and error, and in the record, like a `secretEnv` value. A script still gives it to a command through `secretEnv`, never in the command's text.
 - **It's a non-enumerable getter,** so `console.log(h.meta)` shows `[Getter]`, and `{ ...h.meta }` and `JSON.stringify(h.meta)` leave it out. Bun's `console.log` prints a plain non-enumerable value, unlike Node's. Masking only covers what the recorder sees, and a script's own output goes straight to the terminal.
-- **There's no step option that hands it to a program.** Each program that runs sudo itself takes the password its own way. One that passes `-A` to sudo runs `SUDO_ASKPASS`, but Homebrew, which does, drops every variable but its own `HOMEBREW_*` ones, so `TSINFRA_SUDO_PASSWORD` never reaches the helper. Only the script knows what its program needs.
+- **There's no step option that hands it to a program.** Each program that runs sudo itself takes the password its own way. One that passes `-A` to sudo runs `SUDO_ASKPASS`, but Homebrew, which does, drops every variable but its own `HOMEBREW_*` ones and a short list of others, so `TSINFRA_SUDO_PASSWORD` never reaches the helper. Only the script knows what its program needs.
 
-**A host without a password,** one that leaves `sudo` out or sets `sudo: true` on passwordless sudo, gets a preamble that defines `sudo` as `sudo -n`. On a passwordless host that's all it needs. Where a password is needed, a plain `sudo` over SSH fails anyway, with no terminal to prompt on, but locally it could open the real terminal and prompt in the middle of the report. With `-n` it fails straight away with sudo's `a password is required`. When a host that leaves `sudo` off fails in a step whose own command printed that line, the report adds a hint under that step's failure, in italic yellow: `sudo needs a password on this host, so set the sudo option on host()`. The session works it out when the step fails, from the step's own commands and the host's `sudo` option, and records it on the step. It's a hint, not part of the error, so the error keeps sudo's own words. The match is on English text, so another locale gets no hint.
+**A host without a password,** one that leaves `sudo` out or sets `sudo: true` on passwordless sudo, gets a preamble that defines `sudo` as `sudo -n`. On a passwordless host that's all it needs. Where a password is needed, a plain `sudo` fails anyway, because no command has a terminal to prompt on (see [No terminal](#no-terminal)). `-n` makes it fail with only sudo's `a password is required`, and keeps sudo from running an askpass helper that the host's own environment sets. When a host that leaves `sudo` off fails in a step whose own command printed that line, the report adds a hint under that step's failure, in italic yellow: `sudo needs a password on this host, so set the sudo option on host()`. The session works it out when the step fails, from the step's own commands and the host's `sudo` option, and records it on the step. It's a hint, not part of the error, so the error keeps sudo's own words. The match is on English text, so another locale gets no hint.
 
 On `file`, `sudo: true` covers the whole operation: the file details script, the diff, and the write. A root-only file under `/etc` could not be hashed or read otherwise, so `plan` needs sudo too, which preparation provides. Content travels on stdin, inside the script, so it never shows up in `ps` or in the sudo log, unless sudoers sets `log_input`, which records stdin.
 

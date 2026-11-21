@@ -265,11 +265,11 @@ fix: 'fish_path="$(command -v fish)" && echo "$fish_path" | sudo tee -a /etc/she
 
 A program that runs `/usr/bin/sudo` itself never sees tsinfra's `sudo` function, so it can't get the password the way a command's own `sudo` does (see [Transport](./transport.md#sudo)). Homebrew does this when a cask installs a `.pkg`. Give it the password from `h.meta.sudoPassword` the way the program takes it.
 
-Homebrew runs `sudo -A` when `SUDO_ASKPASS` is set, and keeps only its own `HOMEBREW_*` variables, so the helper reads the password from one:
+Homebrew runs `sudo -A` when `SUDO_ASKPASS` is set. It passes on only its own `HOMEBREW_*` variables and a short list of others, like `PATH`, `SUDO_ASKPASS`, and `DISPLAY`, so the helper reads the password from a `HOMEBREW_*` one:
 
 ```ts
 // Give an absolute path, because sudo does not expand `~` in `SUDO_ASKPASS`.
-const helperPath = "/Users/me/.local/bin/brew-askpass"
+const helperPath = "/Users/alice/.local/bin/brew-askpass"
 await h.file(
   helperPath,
   String.raw`#!/bin/sh
@@ -282,10 +282,14 @@ const { sudoPassword } = h.meta
 const askpass =
   sudoPassword === undefined
     ? {}
-    : { env: { SUDO_ASKPASS: helperPath }, secretEnv: { HOMEBREW_SUDO_PASSWORD: sudoPassword } }
+    : {
+        env: { SUDO_ASKPASS: helperPath, DISPLAY: ":0" },
+        secretEnv: { HOMEBREW_SUDO_PASSWORD: sudoPassword },
+      }
 
 await h.run("Upgrade casks", "brew upgrade --cask", { after: "always", ...askpass })
 ```
 
 - **The helper holds no secret.** It only prints the variable, which `secretEnv` sets for that one step.
-- **`SUDO_ASKPASS` is set only with a password.** Homebrew runs `sudo -A` whenever it's set, so a helper with nothing to print would fail the cask.
+- **`DISPLAY` reaches a program Homebrew runs.** mas, which `brew bundle install` runs for a missing App Store app, calls sudo without `-A`. Commands run with no terminal (see [Transport](./transport.md#no-terminal)), and then sudo runs the `SUDO_ASKPASS` helper even without `-A`, but only when `DISPLAY` is set too. Any value works, because sudo takes it only as a sign there's a screen to draw a password dialog on. Homebrew passes `DISPLAY` on, so mas gets the password through the same helper, in `brew bundle cleanup`'s `mas uninstall` too.
+- **The variables are set only with a password.** Homebrew runs `sudo -A` whenever `SUDO_ASKPASS` is set, so a helper with nothing to print would fail the cask.

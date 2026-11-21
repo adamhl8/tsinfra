@@ -15,6 +15,7 @@ tsinfra's design lives in the docs: `docs/README.md` (the design notes), `docs/s
 - `bunx bask test --all`, for changes to transports, sudo, or file and link writes. The `*.docker.ts` tests run on Alpine (busybox) and Debian (dash), with real root and real `sudo`. Neither `bun test` nor `bask lint` runs them.
 - A CLI test that changes a project's installed tsinfra uses `replaceInstalledFile`, which renames a new file over the old one. Bun hardlinks installs from its cache on Linux, so writing the file in place would change the cache for every later install. Another project's `node_modules/.bin/tsinfra` (`getInstalledBin`) stands in for a global copy.
 - Bun's `toMatchObject` takes any two `Set`s as matching, whatever they hold. Compare a `Set` with `toStrictEqual`, on its own or inside a value that has no other fields to leave out.
+- A test that presses Ctrl-C during a command waits for the command to show it's running, like the pid file `hosts-interrupt` writes. The progress line names a step before its command starts, and a signal before then ends tsinfra without reaching any command.
 - A test that sends content near the 10 MB limit through the local `sh` needs `CONTENT_LIMIT_TIMEOUT_MS`. macOS `/bin/sh` is bash, which reads a script on a pipe one byte at a time, so 10 MB takes about 2.5 seconds of the default 5 second timeout.
 
 ## Docs
