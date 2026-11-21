@@ -1,18 +1,24 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 
-import { copyFixture, minimalEnv, packPackage } from "@adamhl8/configs/test"
+import { copyFixture, makeTempDir, minimalEnv, packPackage } from "@adamhl8/configs/test"
 import bun from "bun"
 
 const ROOT = path.resolve(import.meta.dir, "../..")
 const FIXTURE = path.resolve(import.meta.dir, "fixtures/project")
 
-/** Copies the fixture into a temp dir, installs the packed tsinfra, and returns the dir and a shell bound to it. */
+/**
+ * Copies the fixture into a temp dir and installs the packed tsinfra. Returns the dir, the `env` to run tsinfra with,
+ * and a shell bound to both. `env` has a temp `HOME`, so each project keeps its saved state apart from the real home's
+ * and from every other test's.
+ */
 export const createProject = async () => {
-  const { dir, run } = await copyFixture(FIXTURE, { shell: { env: minimalEnv() } })
-  await run`bun add -d ${await packPackage(ROOT)}`
+  const env = minimalEnv({ HOME: await makeTempDir() })
+  const { dir, run } = await copyFixture(FIXTURE, { shell: { env } })
+  // Install with the real `HOME`, because Bun's install cache is there.
+  await run`bun add -d ${await packPackage(ROOT)}`.env(minimalEnv())
 
-  return { dir, run }
+  return { dir, env, run }
 }
 
 /** Returns the path of the project's installed tsinfra bin, which stands in for a global copy in another project. */

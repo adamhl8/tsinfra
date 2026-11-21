@@ -3,7 +3,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import process from "node:process"
 
-import { makeTempDir, minimalEnv } from "@adamhl8/configs/test"
+import { makeTempDir } from "@adamhl8/configs/test"
 import bun, { sleep, spawn } from "bun"
 import pc from "picocolors"
 import { attempt, isErr } from "ts-explicit-errors"
@@ -203,10 +203,13 @@ describe("tsinfra", () => {
   })
 
   it("should show a progress line in a terminal while it prepares and runs each host, and clear it before the report", async () => {
-    const { dir } = await createProject()
-    const env = { ...minimalEnv(), MARKER: path.join(dir, "marker"), NO_COLOR: "1" }
+    const { dir, env } = await createProject()
 
-    const { screen } = await answerPrompts(buildPlanCommand(dir, "hosts"), "", [], env)
+    const { screen } = await answerPrompts(buildPlanCommand(dir, "hosts"), "", [], {
+      ...env,
+      MARKER: path.join(dir, "marker"),
+      NO_COLOR: "1",
+    })
 
     expect(screen).toStartWith(`Preparing 2 hosts...${CLEAR_PROGRESS}Planning host 'caddy'...${CLEAR_PROGRESS}`)
     expect(screen).toContain(`Planning host 'sonarr'...${CLEAR_PROGRESS}`)
@@ -227,10 +230,10 @@ describe("tsinfra", () => {
   })
 
   it("should show the running step on the progress line, cut to one line that fits the terminal", async () => {
-    const { dir } = await createProject()
+    const { dir, env } = await createProject()
 
     const { screen } = await answerPrompts(buildPlanCommand(dir, "hosts-progress"), "", [], {
-      ...minimalEnv(),
+      ...env,
       NO_COLOR: "1",
     })
 
@@ -242,11 +245,11 @@ describe("tsinfra", () => {
   })
 
   it("should stop the command that's running and end by SIGINT on Ctrl-C", async () => {
-    const { dir } = await createProject()
+    const { dir, env } = await createProject()
     const pidFile = path.join(dir, "pid")
     const command = [process.execPath, getInstalledBin(dir), "apply", "--hosts-dir", path.join(dir, "hosts-interrupt")]
 
-    const { pid, signalCode } = await interruptOnceStarted(command, pidFile, { ...minimalEnv(), PID_FILE: pidFile })
+    const { pid, signalCode } = await interruptOnceStarted(command, pidFile, { ...env, PID_FILE: pidFile })
 
     expect(signalCode).toBe("SIGINT")
     expect(await isStillRunning(pid)).toBe(false)
