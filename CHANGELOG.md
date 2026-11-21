@@ -1,3 +1,13 @@
+## [0.13.1](https://github.com/adamhl8/tsinfra/compare/v0.13.0..v0.13.1) - 2026-11-21
+
+### 🐛 Bug Fixes
+
+- _(ensure)_ accept a record want whose type is an interface ([96c0280](https://github.com/adamhl8/tsinfra/commit/96c0280eabd57b38ef8e4745d19d9d3414077ac1) by @adamhl8)
+
+### ⚙️ Miscellaneous Tasks
+
+- give each project its own temp HOME ([81fb8e1](https://github.com/adamhl8/tsinfra/commit/81fb8e1c1c7306ab7ba8b18b8cb71a1e70edb2c3) by @adamhl8)
+
 ## [0.13.0](https://github.com/adamhl8/tsinfra/compare/v0.12.1..v0.13.0) - 2026-11-21
 
 ### 🚀 Features
