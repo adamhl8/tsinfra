@@ -1,6 +1,7 @@
 import { type } from "arktype"
 import { deepEqual } from "fast-equals"
 
+import { getEntriesNotIn } from "#core/session/handlers/ensure/comparison/record/difference.ts"
 import { findRecordValueProblem } from "#core/session/handlers/ensure/comparison/record/validation.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
 import { isPlainObject } from "#utils.ts"
@@ -48,13 +49,6 @@ export interface SchemaRecordWant {
 
 type SchemaRecordValue = RecordPrimitive | SchemaRecordValue[] | ReadonlySet<RecordPrimitive> | SchemaRecordWant
 
-/** Checks whether `value` is a nested list, because `Array.isArray` doesn't narrow a readonly array. */
-export const isRecordList = (value: RecordValue | undefined): value is readonly RecordValue[] => Array.isArray(value)
-
-/** Checks whether `value` is a nested set, because `instanceof` doesn't narrow a `ReadonlySet`. */
-export const isRecordSet = (value: RecordValue | undefined): value is ReadonlySet<RecordPrimitive> =>
-  value instanceof Set
-
 /** A record `want`, a plain object of string keys and `RecordValue`s, which a function's object must match by key. */
 export const recordWantSchema = type("object")
   .narrow((record, ctx) => {
@@ -68,47 +62,25 @@ export const recordWantSchema = type("object")
   .as<SchemaRecordWant>()
 
 /**
- * What a record's fix gets: how the record the check gave differs from the one it wanted, by key. `missing` maps a key
- * the host doesn't have to its wanted value, and `changed` maps a key both have to its two values, because the pairing
- * is the difference. `unmet` maps every key that's `missing` or `changed` to its wanted value, in `want`'s key order,
- * which repeats the two for a fix that sets every wanted value. `extra` maps a key `want` doesn't have to its current
- * value.
+ * A record the check gave and the one it wanted, and how they differ by top-level key. `missing` maps a key the host
+ * doesn't have to its wanted value, `changed` maps a key both have to its two values, and `extra` maps a key `want`
+ * doesn't have to the host's value.
  */
-export interface RecordDifference<V = RecordValue> {
-  missing: Record<string, V>
-  changed: Record<string, { got: V; want: V }>
-  unmet: Record<string, V>
-  extra: Record<string, V>
-}
-
-/** Returns the entries of `want` whose keys are `missing` or `changed`, in `want`'s key order. */
-export const toUnmet = (values: RecordComparisonValues): RecordWant => {
-  const { want, missing, changed } = values
-  return Object.fromEntries(
-    Object.entries(want).filter(([key]) => Object.hasOwn(missing, key) || Object.hasOwn(changed, key)),
-  )
-}
-
-/**
- * A record the check gave and the one it wanted, and how they differ. It leaves out `unmet`, because only the fix needs
- * it.
- */
-export interface RecordComparisonValues extends Omit<RecordDifference, "unmet"> {
+export interface RecordComparisonValues {
   kind: "record"
   got: RecordWant
   want: RecordWant
+  missing: RecordWant
+  changed: Record<string, { got: RecordValue; want: RecordValue }>
+  extra: RecordWant
 }
-
-/** Returns the entries of `record` whose keys `others` doesn't have, in `record`'s key order. */
-const getEntriesNotIn = (record: RecordWant, others: RecordWant): RecordWant =>
-  Object.fromEntries(Object.entries(record).filter(([key]) => !Object.hasOwn(others, key)))
 
 /**
  * Compares two records by key, with each value compared exactly and nested records compared the same way, so key order
  * doesn't count at any depth. Matches `-0` to `0`, because the report shows both as `0`. `missing` and `changed` keep
  * `want`'s key order, and `extra` keeps the check's. Each holds a top-level key's whole value.
  */
-export const compareRecords = (gotRecord: RecordWant, wantRecord: RecordWant): Comparison => {
+export const compareRecords = (gotRecord: RecordWant, wantRecord: RecordWant): Comparison<RecordComparisonValues> => {
   // Copy both, so a script that changes its own records after the step can't change what was recorded.
   const got = structuredClone(gotRecord)
   const want = structuredClone(wantRecord)

@@ -26,23 +26,32 @@ export const setWantSchema = type
   .as<SetWant>()
 
 /**
- * How a set the check gave differs from the one it wanted. `missing` is what `want` has that the check didn't find, in
- * `want`'s order, and `extra` the reverse, in the check's.
+ * What a set's fix gets: the wanted set, and how the one the check gave differs from it. Takes `want`'s type, which a
+ * nested set's items can make a set of numbers, booleans, or `null`.
  */
-export interface SetDifference {
+export interface SetDifference<T = SetWant> {
+  /** The set the step wants. */
+  want: ReadonlySet<SetItemOf<T>>
+  /** What `want` has that the check didn't find, in `want`'s order. */
+  missing: SetItemOf<T>[]
+  /** What the check found that `want` doesn't have, in the check's order. */
+  extra: SetItemOf<T>[]
+}
+
+type SetItemOf<T> = T extends ReadonlySet<infer I> ? I : never
+
+/** A set the check gave and the one it wanted, and how they differ. */
+export interface SetComparisonValues {
+  kind: "set"
+  got: string[]
+  want: string[]
   missing: string[]
   extra: string[]
 }
 
-/** A set the check gave and the one it wanted, and how they differ. */
-export interface SetComparisonValues extends SetDifference {
-  kind: "set"
-  got: string[]
-  want: string[]
-}
-
-/** Returns what `want` has that `got` doesn't, in `want`'s order, and what `got` has that `want` doesn't, in `got`'s. */
-export const toSetDifference = <T>(got: ReadonlySet<T>, want: ReadonlySet<T>): { missing: T[]; extra: T[] } => ({
+/** Returns `want`, what it has that `got` doesn't, in `want`'s order, and what `got` has that it doesn't, in `got`'s. */
+export const toSetDifference = <I>(got: ReadonlySet<I>, want: ReadonlySet<I>): SetDifference<ReadonlySet<I>> => ({
+  want,
   missing: [...want.difference(got)],
   extra: [...got.difference(want)],
 })
@@ -51,7 +60,10 @@ export const toSetDifference = <T>(got: ReadonlySet<T>, want: ReadonlySet<T>): {
  * Compares two sets of items, so their order and duplicates don't count. Each side's differences keep that side's
  * order, because a set keeps the order its items were added in.
  */
-export const compareSets = (gotItems: Iterable<string>, wantItems: Iterable<string>): Comparison => {
+export const compareSets = (
+  gotItems: Iterable<string>,
+  wantItems: Iterable<string>,
+): Comparison<SetComparisonValues> => {
   const got = [...gotItems]
   const want = [...wantItems]
   const { missing, extra } = toSetDifference(new Set(got), new Set(want))

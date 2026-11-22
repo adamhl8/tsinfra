@@ -1,5 +1,5 @@
 import type { RecordValue } from "#core/session/handlers/ensure/comparison/record.ts"
-import { isRecordList, isRecordSet } from "#core/session/handlers/ensure/comparison/record.ts"
+import { isRecordList, isRecordSet } from "#core/session/handlers/ensure/comparison/record/nested-kinds.ts"
 import { RECORDED_STAND_INS } from "#core/session/recorder/records.ts"
 import type { Style } from "#styles.ts"
 import { styleCurrent, styleItalic, styleMuted, stylePlain, styleValue, styleWanted } from "#styles.ts"

@@ -31,6 +31,7 @@
         "release-it": "^21.1.2",
         "release-it-git-cliff": "^0.2.1",
         "tsdown": "^0.23.7",
+        "tstyche": "8.0.0-beta.0",
         "typescript": "7.1.0-beta",
       },
     },
@@ -1135,6 +1136,8 @@
     "tsdown": ["tsdown@0.23.7", "", { "dependencies": { "cac": "^7.1.0", "defu": "^6.1.7", "empathic": "^2.1.0", "hookable": "^6.1.2", "import-without-cache": "^0.4.1", "obug": "^3.0.0", "picomatch": "^4.0.7", "rolldown": "~1.3.0", "rolldown-plugin-dts": "^0.30.0", "tinyexec": "^1.3.1", "tinyglobby": "^0.2.17", "tinyps": "^0.5.1", "unconfig-core": "^7.5.0", "verkit": "^0.5.0" }, "peerDependencies": { "@arethetypeswrong/core": "^0.18.1", "@tsdown/css": "0.23.7", "@tsdown/exe": "0.23.7", "@vitejs/devtools": "*", "publint": "^0.3.8", "tsx": "*", "typescript": "^5.0.0 || ^6.0.0 || ^7.0.0", "unplugin-unused": ">=0.5.0", "unrun": "*" }, "optionalPeers": ["@arethetypeswrong/core", "@tsdown/css", "@tsdown/exe", "@vitejs/devtools", "publint", "tsx", "typescript", "unplugin-unused", "unrun"], "bin": { "tsdown": "./dist/run.mjs" } }, "sha512-w9nmWyEimfqQ7/HpVeKTldAeBvWGXiaWyNP7xaxSrr0GhKxsngEyTWqk1nOruRqvqRSkdpMMkpV2BcoWfLB4Uw=="],
 
     "tslib": ["tslib@2.9.1", "", {}, "sha512-a4Ux9VKuIMHsOS7ENbEq6hK2ZGYIT27Rtl0E4eD9KqwxhKiQeMZE/9xb3IdYwWaSOyIBQLExhQgXDTYoiCxnWA=="],
+
+    "tstyche": ["tstyche@8.0.0-beta.0", "", { "peerDependencies": { "typescript": ">=5.4" }, "optionalPeers": ["typescript"], "bin": "./dist/bin.js" }, "sha512-0qTikEYbJc9dRZ3m1d/4yMpJGZ6XgC9i+dXPMtT4Jl4D05uq/hoSwENgLZuyLhJgSctjY5KxYJ3ZstaFCQo4ag=="],
 
     "type-check": ["type-check@0.4.0", "", { "dependencies": { "prelude-ls": "^1.2.1" } }, "sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew=="],
 

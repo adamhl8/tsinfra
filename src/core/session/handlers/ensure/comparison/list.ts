@@ -11,14 +11,18 @@ type ListItems = typeof listWantSchema.infer
 /** A list `want` as a script passes it, readonly so a constant or `as const` works, which the schema can't express. */
 export type ListWant = Readonly<ListItems>
 
-/** What a list's fix gets: the list the check gave, because `missing` and `extra` can't describe a reorder. */
+/** What a list's fix gets. It gets no `missing` or `extra`, because they can't describe a reorder. */
 export interface ListDifference {
+  /** The list the check gave, with a command's blank lines left out. */
   got: ListItems
+  /** The list the step wants. A fix writes it whole. */
+  want: ListItems
 }
 
 /** A list the check gave and the one it wanted. */
-export interface ListComparisonValues extends ListDifference {
+export interface ListComparisonValues {
   kind: "list"
+  got: ListItems
   want: ListItems
 }
 
@@ -26,7 +30,7 @@ export interface ListComparisonValues extends ListDifference {
 export const toListItems = (stdout: string): string[] => splitNonEmptyLines(stdout)
 
 /** Compares two lists in order, so they match only with the same items in the same order, duplicates included. */
-export const compareLists = (gotItems: ListWant, wantItems: ListWant): Comparison => {
+export const compareLists = (gotItems: ListWant, wantItems: ListWant): Comparison<ListComparisonValues> => {
   const values: ListComparisonValues = { kind: "list", got: [...gotItems], want: [...wantItems] }
   return { inSync: deepEquals(gotItems, wantItems), values }
 }

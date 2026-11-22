@@ -560,8 +560,9 @@ type EnsureOptions<T extends WantOf<T>> = {
   want: T
   // A record `want` takes only a function, because a command's output has no keys.
   check: string | ((tools: ReadTools) => Promise<T>)
-  // A function also gets what the check found: `{ got }` for a string or a list `want`, `{ missing, extra }` for a
-  // set, and `{ missing, changed, unmet, extra }` for a record. See `FixDifference`.
+  // A function also gets `want` and what the check found: `{ want }` for a boolean, `{ got, want }` for a string or a
+  // list, `{ want, missing, extra }` for a set, and `{ got, want, unmet, extra, nestedExtra }` for a record.
+  // See `FixDifference`.
   fix: string | ((tools: ChangeTools, difference: FixDifference<T>) => Promise<void>)
   verify?: boolean // default true
   env?: Record<string, string> // see EnvOptions
@@ -640,7 +641,7 @@ The report shows a diff from the host's list to the wanted one, framed like a fi
 
 **The type picks the comparison, not an option.** An array has an order and can hold an item twice, and a `Set` has neither, so the value's type already says which comparison the script means. An `ordered: true` option would say it again, and would leave an array meant as ordered compared as a set by default.
 
-**A record `want`**, an object of string keys, compares values by key, like a package name to its version, or a config's settings. A value is a string, a number, a boolean, `null`, an array, a `Set`, or a nested record, to any depth, like a container's `env`, `labels`, or `ports`. Each compares the way its type does at the top level: a nested list in order, a nested set as a set, and a nested record by key, so key order doesn't count at any depth, and an array and a `Set` with the same items differ. A nested set holds only strings, numbers, booleans, and `null`, because a `Set` matches an object or an array only by identity, so one in a set would never match what the check returns. Each value is compared exactly, so a number never matches a string that reads the same: `8080` and `"8080"` differ, and the report shows the number in italics. `-0` matches `0`, as it does with `===`, at any depth, because the report shows both as `0`. `null` is a value, so `{ port: null }` and `{}` differ. A key only one side has is a difference at any depth. Only a check function can return a record, because a command's output has no keys, so `check: "..."` with a record `want` is a type error, and refused before it runs for a script that gets past the types. A record must be a plain object at every depth, so a `Map`, a class instance, or a `Promise` from a missing `await` is refused, because it would otherwise be compared by its own keys, which it usually has none of. A list or a record that holds itself is refused too, because showing it would never end. The error names the path to the value, like `want.env.PUID` or `want.ports[1]`. A fix function's `missing`, `changed`, `unmet`, and `extra` hold `want`'s own value type, so a `want` of strings gives it strings. A record's type can come from an `interface`, not only a type alias or a literal. TypeScript never lets an interface stand in for an index signature like `RecordWant`'s, so the types check a record by its own keys instead, and the exported `WantOf<T>` is that check: a helper that passes a step's options on takes `<T extends WantOf<T>>(options: EnsureOptions<T>)`.
+**A record `want`**, an object of string keys, compares values by key, like a package name to its version, or a config's settings. A value is a string, a number, a boolean, `null`, an array, a `Set`, or a nested record, to any depth, like a container's `env`, `labels`, or `ports`. Each compares the way its type does at the top level: a nested list in order, a nested set as a set, and a nested record by key, so key order doesn't count at any depth, and an array and a `Set` with the same items differ. A nested set holds only strings, numbers, booleans, and `null`, because a `Set` matches an object or an array only by identity, so one in a set would never match what the check returns. Each value is compared exactly, so a number never matches a string that reads the same: `8080` and `"8080"` differ, and the report shows the number in italics. `-0` matches `0`, as it does with `===`, at any depth, because the report shows both as `0`. `null` is a value, so `{ port: null }` and `{}` differ. A key only one side has is a difference at any depth. Only a check function can return a record, because a command's output has no keys, so `check: "..."` with a record `want` is a type error, and refused before it runs for a script that gets past the types. A record must be a plain object at every depth, so a `Map`, a class instance, or a `Promise` from a missing `await` is refused, because it would otherwise be compared by its own keys, which it usually has none of. A list or a record that holds itself is refused too, because showing it would never end. The error names the path to the value, like `want.env.PUID` or `want.ports[1]`. A fix function's `got`, `want`, and `unmet` follow `want`'s own type, so a `want` of strings gives it strings (see [What the check found](#fix)). A record's type can come from an `interface`, not only a type alias or a literal. TypeScript never lets an interface stand in for an index signature like `RecordWant`'s, so the types check a record by its own keys instead, and the exported `WantOf<T>` is that check: a helper that passes a step's options on takes `<T extends WantOf<T>>(options: EnsureOptions<T>)`.
 
 ```ts
 const wanted: Record<string, string> = {}
@@ -789,7 +790,12 @@ fix: async ({ exec }) => {
 
 The fix function only runs in `apply`, so it can change things and do work on the control machine.
 
-**What the check found.** A fix function gets a second argument after its tools, with what the check found: `{ got }` for a string or a list `want`, what the check answered, `{ missing, extra }` for a set, and `{ missing, changed, unmet, extra }` for a record, the same items and keys the report shows. A record's `missing` maps a key to its wanted value, and `changed` maps a key to `{ got, want }`. Its `unmet` maps every key that's `missing` or `changed` to its wanted value, in `want`'s key order, for a fix that sets each one, like the bun packages example above. Its `extra` maps a key to its current value. Each holds a top-level key's whole value, so a nested record's `changed.env` holds both `env` records, because a fix acts on a whole container or package, not on one nested value. A fix can act on it without reading the host again:
+**What the check found.** A fix function gets a second argument after its tools, with `want` and what the check found, so a fix acts on the difference without reading the host again or comparing anything itself. The two sides come first, `got` then `want`, then what the comparison found:
+
+- **A boolean `want`** gives `{ want }`.
+- **A string or a list `want`** gives `{ got, want }`, with `got` what the check answered.
+- **A set** gives `{ want, missing, extra }`. `missing` is what `want` has that the check didn't find, in `want`'s order, and `extra` is what the check found that `want` doesn't have, in the check's order.
+- **A record** gives `{ got, want, unmet, extra, nestedExtra }`, which compare at any depth (see below).
 
 ```ts
 await h.ensure("Update Caddy", {
@@ -801,12 +807,49 @@ await h.ensure("Update Caddy", {
 })
 ```
 
-- **It holds what the fix can't work out from `want`, plus a record's `unmet`.** `want` is already in the script, so a string comparison, which is plain equality, adds only `got`. A set's `got` isn't passed, because it's `want` minus `missing`, plus `extra`, and passing it would only invite redoing the comparison. A record's `got` isn't passed for the same reason. A list's is, because `missing` and `extra` can't describe a reorder: with every item there but out of order, both would be empty. A record's `unmet` repeats `missing` and `changed`, because setting every wanted value is the most common record fix, and building it from them means merging two shapes.
-- **A boolean `want` gives nothing more,** because `got` is just `!want`. A fix function that declares a second argument for one is a type error. A `want` typed as the full `Want` union gets the union of the four.
+A record's parts:
+
+- **`unmet` is `want` pruned to what the host doesn't match, at any depth,** in `want`'s key order. A nested record keeps only the keys that differ, and a nested set keeps only its missing items. Any other value stays whole: a string, a number, a boolean, `null`, a nested list, or a value of another kind than the host's. A key the host doesn't have holds its whole wanted value, so an empty record or set in `unmet` is one to create. For a flat record, `unmet` is every wanted key that's missing or differs, like the bun packages example above.
+- **`extra` maps each top-level key `want` doesn't have to the host's value,** in the check's order.
+- **`nestedExtra` lists what the host has inside the values `want` keeps,** where both sides are records or both are sets. `{ kind: "key", path, value }` is a key the host has in a nested record, with `path` from the top-level key down to it, like `["env", "DEBUG"]`. `{ kind: "items", path, value }` holds a nested set's extra items in the check's order, with `path` naming the set. The entries follow `want`'s key order, and a nested record's own extra keys come after the entries inside its wanted keys.
+- **A list has no extras,** because a reorder or a duplicate isn't an item to remove. A fix writes a list whole. One that edits a list item by item, like inserting one entry, works it out from `got` and `want` itself.
+
+```ts
+import { pick } from "es-toolkit"
+
+await h.ensure("Configure git", {
+  want: { user: { name: "Alice" }, alias: { co: "checkout", st: "status" } },
+  // Keep only the managed sections, because `git config` lists every one.
+  check: async ({ read }) => pick(parseGitConfig(await read("git config --global --list")), ["user", "alias"]),
+  fix: async ({ exec }, { unmet, nestedExtra }) => {
+    // Only the keys that differ, like { alias: { st: "status" } }.
+    for (const [section, keys] of Object.entries(unmet))
+      for (const [key, value] of Object.entries(keys ?? {}))
+        await exec(`git config --global ${section}.${key} '${value}'`)
+
+    // The keys the host has in a wanted section, like ["alias", "lg"].
+    for (const { path } of nestedExtra) await exec(`git config --global --unset ${path.join(".")}`)
+  },
+})
+```
+
+What the argument asks of a fix:
+
+- **Write a whole value from `want`, not `unmet`.** A fix that replaces a nested value in one command, like a dict it writes whole, takes it from `want`, because `unmet` holds only the part that differs.
+- **Remove where `want` stops.** What a fix removes is in `extra` and `nestedExtra`, so no fix walks `got` to find it.
+- **A comparison that isn't plain equality belongs in the check.** The check returns the host's values in `want`'s form, like a name in the case `want` uses, or a number parsed from text (see "A check reports the host's state" above). A fix that compares values itself can disagree with the comparison, like on `-0`.
+- **A list's fix writes the whole list.** A list whose order doesn't matter is a set, which gets `missing` and `extra`.
+
+Why it's shaped this way:
+
+- **Every fix gets `want`,** so a fix an integration passes on, or builds in code generic over `want`, needs nothing from its closure.
+- **A set's `got` isn't passed,** because it's `want` minus `missing`, plus `extra`. A record's is, because `unmet` leaves out the host's values and nothing else holds them. A list's is, because `missing` and `extra` can't describe a reorder: with every item there but out of order, both would be empty.
 - **It's a second argument, not part of the tools,** because the tools are what a fix can call, and this is data about one comparison.
 - **Only a fix function gets it.** A command fix stays the form for simple cases, and a run's function gets only its tools.
 - **It's fresh.** In `apply`, the comparison runs right before the fix, so `got` describes the host the fix changes. The check after the fix still catches a fix that acts on it and misses something.
-- **The comparison computes it, and the report and the fix both read it,** so `plan` shows exactly what the fix gets. The type is `FixDifference<T>`, exported for helpers that build a fix.
+- **The fix and the report read the same comparison,** so `plan` shows exactly what the fix acts on.
+- **Its types follow `want`.** `got` and `want` have `want`'s type, `unmet` has `want`'s shape with every key optional, and the entries of `nestedExtra` are typed by the values `want` nests. Its type only has the entry kinds `want` can produce, so a `want` that nests no set gets only key entries, with no `kind` to check, and a `want` that can't nest a record or a set has no `nestedExtra` at all. Its types follow `want` 8 levels down, and past that its entries take any record value and any set item. `unmet`'s types have no limit.
+- **Its types are exported.** `FixDifference<T>` is the argument for any `want`, and each kind's is `BooleanDifference`, `StringDifference`, `ListDifference`, `SetDifference`, or `RecordDifference`, with the entry types `NestedExtraKey` and `NestedExtraItems`. A `want` typed as the full `Want` union gets the union of them. So are the names a hover shows: each kind's `want` type (`BooleanWant`, `StringWant`, `ListWant`, `SetWant`, `RecordWant`), `RecordValue`, `RecordPrimitive`, `Fix`, `CheckFunction`, and `ChangeFunction`.
 
 **One step or several.** A fix re-runs every command whenever its check fails. If one command's effect can be in place while the check still fails, that effect is state of its own, and it gets its own step. In the apt example, an updated package index does not matter, so running `apt-get update` again is harmless. This one is wrong:
 

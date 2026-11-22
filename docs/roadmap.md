@@ -6,6 +6,8 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 
 - [Next](#next)
   - [One note for an apply that didn't finish](#one-note-for-an-apply-that-didnt-finish)
+  - [A logger for a step's functions](#a-logger-for-a-steps-functions)
+  - [Building every difference from the two sides](#building-every-difference-from-the-two-sides)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
   - [Live progress](#live-progress)
@@ -49,6 +51,25 @@ After an apply fails, the next pass shows every step that changed in it, and is 
 - **It shows at the default level,** like the `resume` lines it explains, and only when the block has a `resume` or `ranFromOpenChanges` line.
 
 When it's built, [CLI](./cli.md#how-the-report-is-built) describes the host's note in place of the two per-step notes, and [Steps](./steps.md#when-an-apply-doesnt-finish) drops the quoted notes.
+
+### A logger for a step's functions
+
+A check, fix, or run function can only run commands with its tools (`read`, `inspect`, `exec`), so it has no way to add anything of its own to the report. Sometimes it knows something the user should see that is neither drift nor a failure, like a setting it found somewhere other than where the script declared it. Each of these functions also gets a logger with its tools, along the lines of `logger.info(message)` and `logger.warn(message)`, and what it logs shows under its step in the report, the way a link step's missing target already shows as a warning. Unlike [diagnostic logs](#diagnostic-logs), which are about what tsinfra itself did, these messages are part of the report. The exact shape, the levels, and which verbosity shows each level are still to be decided.
+
+### Building every difference from the two sides
+
+A fix's argument comes from `toRecordDifference` and `toSetDifference` (see [Steps](./steps.md#fix)), but the comparison and the report still work out differences their own way. `compareRecords` records `missing`, `changed`, and `extra` next to `got` and `want`, `compareSets` records `missing` and `extra`, and the report's nested record rows walk both records with their own `deepEqual`. Each place that needs a difference should build it from the two sides with the same functions, so no two can disagree, and a comparison records only what the report shows.
+
+- **One implementation of each difference.** `toRecordDifference(got, want)` and `toSetDifference(got, want)` decide whether a step is in sync, and build the report's rows and `dir`'s rows, as they build the fix's argument. They stay unexported, because a fix never compares.
+- **A comparison's values hold only the two sides.** Every kind records `{ kind, got, want }`. `compareSets` and `compareRecords` stop holding their differences, so a record stops holding each changed value twice, and masking stops walking the copies. `getEntriesNotIn` stops being exported, because only the difference uses it.
+- **Each side holds its `want`'s type.** A set's recorded `got` and `want` become `Set`s, like a nested set inside a record, rather than arrays. Masking already copies a `Set`. `toFixDifference` then passes a set's recorded sides as they are.
+- **The report's nested rows come from the record's difference.** `formatRecordRows` walks `want`'s keys and shows each one `unmet` holds or a `nestedExtra` path passes through, then that level's extra keys, with the host's side from `got`. That replaces `getKeys`, `getOwnValue`, and its own `deepEqual`. The kind checks stay, because the report shows two kinds at one key on one row rather than treating one as empty. If the walk turns out more tangled than today's, the report keeps its own, and only the report gives up the shared implementation.
+- **`dir`'s rows** walk `unmet`, with `got` for the host's side.
+
+The work is piece 2 of this change. The fix's argument was piece 1. It makes no public change, and the report shows the same rows:
+
+- **2a.** `compareRecords` and `compareSets` keep only `{ kind, got, want }`, a set's as `Set`s, and tell `inSync` from the functions. `toFixDifference` passes a set's recorded sides as they are. `formatDirValues` and `formatSetValues` make their differences with the functions. The `ensure`, `dir`, and masking tests that read a recorded `changed` or a set's arrays read the new values instead.
+- **2b.** The report's nested record rows come from `toRecordDifference`. The report tests for nested records, lists, and sets stay as they are. This entry goes.
 
 ## Planned
 

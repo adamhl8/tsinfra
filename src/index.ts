@@ -1,9 +1,19 @@
 export type { HostConfig, HostDefinition, HostFunction, HostOptions } from "#core/hosts/host.ts"
 export { host } from "#core/hosts/host.ts"
 export type { DirOptions } from "#core/session/handlers/dir.ts"
-export type { Check } from "#core/session/handlers/ensure/check.ts"
+export type { Check, CheckFunction } from "#core/session/handlers/ensure/check.ts"
 export type { EnsureOptions } from "#core/session/handlers/ensure.ts"
-export type { FixDifference } from "#core/session/handlers/ensure/fix.ts"
+export type { BooleanDifference, BooleanWant } from "#core/session/handlers/ensure/comparison/boolean.ts"
+export type { ListDifference, ListWant } from "#core/session/handlers/ensure/comparison/list.ts"
+export type { RecordPrimitive, RecordValue, RecordWant } from "#core/session/handlers/ensure/comparison/record.ts"
+export type {
+  NestedExtraItems,
+  NestedExtraKey,
+  RecordDifference,
+} from "#core/session/handlers/ensure/comparison/record/difference.ts"
+export type { SetDifference, SetWant } from "#core/session/handlers/ensure/comparison/set.ts"
+export type { StringDifference, StringWant } from "#core/session/handlers/ensure/comparison/string.ts"
+export type { Fix, FixDifference } from "#core/session/handlers/ensure/fix.ts"
 export type { Want, WantOf } from "#core/session/handlers/ensure/want.ts"
 export type { FileContent, FileOptions } from "#core/session/handlers/file.ts"
 export type { InspectOptions } from "#core/session/handlers/inspect.ts"
@@ -11,7 +21,7 @@ export type { LinkOptions } from "#core/session/handlers/link.ts"
 export type { ReadOptions } from "#core/session/handlers/read.ts"
 export type { RunOptions, RunTrigger } from "#core/session/handlers/run.ts"
 export type { ChangeStepResult } from "#core/session/handlers/shared/change-step-result.ts"
-export type { Change } from "#core/session/handlers/shared/change.ts"
+export type { Change, ChangeFunction } from "#core/session/handlers/shared/change.ts"
 export type { Content } from "#core/content.ts"
 export type { FileMode, OctalMode, SymbolicMode } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 export {

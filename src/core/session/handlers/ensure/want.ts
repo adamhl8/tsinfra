@@ -1,8 +1,9 @@
 import type { Type } from "arktype"
 import { type } from "arktype"
 
-import type { BooleanWant } from "#core/session/handlers/ensure/comparison.ts"
-import { booleanWantSchema, getWantKind } from "#core/session/handlers/ensure/comparison.ts"
+import { getWantKind } from "#core/session/handlers/ensure/comparison.ts"
+import type { BooleanWant } from "#core/session/handlers/ensure/comparison/boolean.ts"
+import { booleanWantSchema } from "#core/session/handlers/ensure/comparison/boolean.ts"
 import type { ListWant } from "#core/session/handlers/ensure/comparison/list.ts"
 import { listWantSchema } from "#core/session/handlers/ensure/comparison/list.ts"
 import type { RecordWant, RecordWantOf, SchemaRecordWant } from "#core/session/handlers/ensure/comparison/record.ts"
@@ -15,17 +16,19 @@ import { stringWantSchema } from "#core/session/handlers/ensure/comparison/strin
 type BaseWant = BooleanWant | StringWant | ListWant | SetWant
 
 /**
- * What a step wants: an exit status as a boolean, a string to match, a list or a set of strings to match as a set, or a
- * record of string keys and strings, numbers, booleans, `null`, or nested lists, sets, and records, to match by key.
+ * What a step wants: an exit status as a boolean, a string to match, a list of strings to match in order, a set of
+ * strings to match as a set, or a record of string keys and strings, numbers, booleans, `null`, or nested lists, sets,
+ * and records, to match by key.
  */
-export type Want = BaseWant | RecordWant
+// Name the kinds rather than `BaseWant`, so a hover shows them.
+export type Want = BooleanWant | StringWant | ListWant | SetWant | RecordWant
 
 /**
  * What `T` must be to be a `want`, so a step's options take `T extends WantOf<T>`. It checks a record by its own keys
  * (see `RecordWantOf`), so a type an interface declares works too.
  */
 // Intersect with `object`, because a mapped type over a primitive is the primitive itself.
-export type WantOf<T> = BaseWant | (RecordWantOf<T> & object)
+export type WantOf<T> = BooleanWant | StringWant | ListWant | SetWant | (RecordWantOf<T> & object)
 
 /** Whether `T` is only a record `want`, because it's an object and no part of it is another kind. */
 export type IsRecordWant<T> = [T] extends [object] ? ([Extract<T, BaseWant>] extends [never] ? true : false) : false

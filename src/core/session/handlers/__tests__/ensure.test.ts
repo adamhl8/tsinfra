@@ -328,7 +328,7 @@ describe("h.ensure with a list want", () => {
     expect(await ensureOrMessage(h, { want: [], check: "echo a", fix: "true" })).toMatchObject({ changed: true })
   })
 
-  it("should give the fix the host's list as got, and return changed once it matches", async () => {
+  it("should give the fix the host's list as got, and want, and return changed once it matches", async () => {
     const marker = path.join(await makeTempDir(), "domains")
     const { host: h } = await createSession()
     const differences: unknown[] = []
@@ -343,7 +343,7 @@ describe("h.ensure with a list want", () => {
 
     expect([result, differences]).toStrictEqual([
       { name: "Make marker", kind: "ensure", changed: true },
-      [{ got: ["b", "a"] }],
+      [{ got: ["b", "a"], want: ["a", "b"] }],
     ])
   })
 
@@ -409,7 +409,7 @@ describe("h.ensure with a set want", () => {
     expect(result).toMatchObject({ changed: false })
   })
 
-  it("should give the fix what's missing and extra, and return changed once they're gone", async () => {
+  it("should give the fix the wanted set and what's missing and extra, and return changed once they're gone", async () => {
     const marker = path.join(await makeTempDir(), "packages")
     const { host: h } = await createSession()
     const differences: unknown[] = []
@@ -424,7 +424,7 @@ describe("h.ensure with a set want", () => {
 
     expect([result, differences]).toStrictEqual([
       { name: "Make marker", kind: "ensure", changed: true },
-      [{ missing: ["b"], extra: ["c"] }],
+      [{ want: new Set(["a", "b"]), missing: ["b"], extra: ["c"] }],
     ])
   })
 
@@ -484,7 +484,7 @@ describe("h.ensure with a record want", () => {
     expect(result).toMatchObject({ changed: false })
   })
 
-  it("should give the fix what's missing, changed, unmet, and extra, and return changed once they're gone", async () => {
+  it("should give the fix got, want, unmet, and extra, and return changed once they're gone", async () => {
     const marker = path.join(await makeTempDir(), "versions")
     const { host: h } = await createSession()
     const differences: unknown[] = []
@@ -502,10 +502,11 @@ describe("h.ensure with a record want", () => {
       { name: "Make marker", kind: "ensure", changed: true },
       [
         {
-          missing: { d: "4" },
-          changed: { b: { got: "9", want: "2" } },
+          got: { a: "1", c: "3", b: "9" },
+          want: { a: "1", b: "2", d: "4" },
           unmet: { b: "2", d: "4" },
           extra: { c: "3" },
+          nestedExtra: [],
         },
       ],
     ])
@@ -556,21 +557,20 @@ describe("h.ensure with a record want", () => {
     ])
   })
 
-  it("should give the fix the values that differ with the want's own type", async () => {
+  it("should give the fix the host's values and the unmet ones with the want's own type", async () => {
     const marker = path.join(await makeTempDir(), "port")
     const { host: h } = await createSession()
-    // Type the list as numbers, so the test stops compiling if a want of numbers gives the fix wider values.
-    const gotPorts: number[] = []
+    const ports: number[] = []
     const result = await ensureOrMessage(h, {
       want: { port: 8080 },
       check: async ({ read }) => ({ port: Number(await read(`cat '${marker}' 2>/dev/null || echo 80`)) }),
-      fix: async ({ exec }, { changed }) => {
-        gotPorts.push(...Object.values(changed).map(({ got }) => got))
+      fix: async ({ exec }, { got, unmet }) => {
+        ports.push(got.port, ...Object.values(unmet))
         await exec(`echo 8080 > '${marker}'`)
       },
     })
 
-    expect([result, gotPorts]).toStrictEqual([{ name: "Make marker", kind: "ensure", changed: true }, [80]])
+    expect([result, ports]).toStrictEqual([{ name: "Make marker", kind: "ensure", changed: true }, [80, 8080]])
   })
 
   it("should compare nested records by key, so key order doesn't count at any depth", async () => {
@@ -657,7 +657,7 @@ describe("h.ensure with a record want", () => {
     ])
   })
 
-  it("should give the fix each top-level key's whole value", async () => {
+  it("should give the fix unmet at any depth, and extra at the top level", async () => {
     const marker = path.join(await makeTempDir(), "config")
     const { host: h } = await createSession()
     const differences: unknown[] = []
@@ -677,10 +677,11 @@ describe("h.ensure with a record want", () => {
       { name: "Make marker", kind: "ensure", changed: true },
       [
         {
-          missing: { labels: { app: "web" } },
-          changed: { env: { got: { TZ: "UTC", PUID: 1 }, want: { TZ: "UTC", PUID: 1000 } } },
-          unmet: { env: { TZ: "UTC", PUID: 1000 }, labels: { app: "web" } },
+          got: { env: { TZ: "UTC", PUID: 1 }, ports: { http: 80 } },
+          want: { env: { TZ: "UTC", PUID: 1000 }, labels: { app: "web" } },
+          unmet: { env: { PUID: 1000 }, labels: { app: "web" } },
           extra: { ports: { http: 80 } },
+          nestedExtra: [],
         },
       ],
     ])
@@ -689,21 +690,20 @@ describe("h.ensure with a record want", () => {
   it("should give the fix nested values with the want's own type", async () => {
     const marker = path.join(await makeTempDir(), "port")
     const { host: h } = await createSession()
-    // Type the list by the nested record, so the test stops compiling if the fix gets wider values.
-    const gotServers: { port: number }[] = []
+    const ports: (number | undefined)[] = []
     await ensureOrMessage(h, {
       want: { web: { port: 8080 } },
       check: async ({ read }) => ({ web: { port: Number(await read(`cat '${marker}' 2>/dev/null || echo 80`)) } }),
-      fix: async ({ exec }, { changed, unmet }) => {
-        gotServers.push(...Object.values(changed).map(({ got }) => got), ...Object.values(unmet))
+      fix: async ({ exec }, { got, unmet }) => {
+        ports.push(got.web.port, unmet.web?.port)
         await exec(`echo 8080 > '${marker}'`)
       },
     })
 
-    expect(gotServers).toStrictEqual([{ port: 80 }, { port: 8080 }])
+    expect(ports).toStrictEqual([80, 8080])
   })
 
-  it("should give the fix nested lists and sets as they are", async () => {
+  it("should give the fix a nested list whole and a nested set's missing items", async () => {
     // Type `ports` as readonly, so the test stops compiling if a nested list can't be.
     const ports: readonly string[] = ["80", "443"]
     const { host: h } = await createSession()
@@ -720,32 +720,118 @@ describe("h.ensure with a record want", () => {
 
     expect(differences).toStrictEqual([
       {
-        missing: {},
-        changed: {
-          packages: { got: new Set(["jq"]), want: new Set(["fd", "jq"]) },
-          ports: { got: [], want: ["80", "443"] },
-        },
-        unmet: { packages: new Set(["fd", "jq"]), ports: ["80", "443"] },
+        got: { packages: new Set(["jq"]), ports: [] },
+        want: { packages: new Set(["fd", "jq"]), ports: ["80", "443"] },
+        unmet: { packages: new Set(["fd"]), ports: ["80", "443"] },
         extra: {},
+        nestedExtra: [],
       },
     ])
   })
 
   it("should give the fix a nested set with the want's own type", async () => {
     const { host: h } = await createSession()
-    // Type the list by the set, so the test stops compiling if the fix gets wider values.
-    const gotSets: ReadonlySet<string>[] = []
+    const sets: (ReadonlySet<string> | undefined)[] = []
     await ensureOrMessage(h, {
       want: { packages: new Set(["fd"]) },
       check: async ({ read }) => ({ packages: new Set([await read("echo jq")]) }),
-      fix: async (_, { changed }) => {
-        gotSets.push(...Object.values(changed).map(({ got }) => got))
+      fix: async (_, { got, unmet }) => {
+        sets.push(got.packages, unmet.packages)
         await Promise.resolve()
       },
       verify: false,
     })
 
-    expect(gotSets).toStrictEqual([new Set(["jq"])])
+    expect(sets).toStrictEqual([new Set(["jq"]), new Set(["fd"])])
+  })
+
+  it.each([
+    {
+      description: "a nested record that differs",
+      want: { env: { TZ: "UTC", PUID: 1000 } },
+      got: { env: { TZ: "UTC", PUID: 1 } },
+      unmet: { env: { PUID: 1000 } },
+      nestedExtra: [],
+    },
+    {
+      description: "a key the host lacks",
+      want: { env: { TZ: "UTC" }, labels: {} },
+      got: {},
+      unmet: { env: { TZ: "UTC" }, labels: {} },
+      nestedExtra: [],
+    },
+    {
+      description: "a value of another kind",
+      want: { env: { TZ: "UTC" } },
+      got: { env: "TZ=UTC" },
+      unmet: { env: { TZ: "UTC" } },
+      nestedExtra: [],
+    },
+    {
+      description: "a nested list that differs",
+      want: { ports: ["80", "443"] },
+      got: { ports: ["443", "8080"] },
+      unmet: { ports: ["80", "443"] },
+      nestedExtra: [],
+    },
+    {
+      description: "a nested set that differs",
+      want: { tags: new Set(["a", "b"]) },
+      got: { tags: new Set(["c", "a", "d"]) },
+      unmet: { tags: new Set(["b"]) },
+      nestedExtra: [{ kind: "items", path: ["tags"], value: ["c", "d"] }],
+    },
+    {
+      description: "an empty nested record whose host value has keys",
+      want: { env: {} },
+      got: { env: { TZ: "UTC" } },
+      unmet: {},
+      nestedExtra: [{ kind: "key", path: ["env", "TZ"], value: "UTC" }],
+    },
+  ])("should give the fix unmet and nestedExtra for $description", async ({ want, got, unmet, nestedExtra }) => {
+    const { host: h } = await createSession()
+    const differences: unknown[] = []
+    await ensureOrMessage(h, {
+      want: toLooseWant(want),
+      check: () => castInvalid(got),
+      fix: async (_, difference) => {
+        differences.push(difference)
+        await Promise.resolve()
+      },
+      verify: false,
+    })
+
+    expect(differences).toStrictEqual([{ got, want, unmet, extra: {}, nestedExtra }])
+  })
+
+  it("should give the fix nestedExtra in want's key order, with a record's own extra keys after its nested ones", async () => {
+    const want = { a: { b: { x: 1 }, c: 1 }, s: new Set([1]) }
+    const got = { s: new Set([2, 1]), a: { z: 9, b: { y: 1, x: 1 }, c: 1 }, top: 1 }
+    const { host: h } = await createSession()
+    const differences: unknown[] = []
+    await ensureOrMessage(h, {
+      want: toLooseWant(want),
+      check: () => castInvalid(got),
+      fix: async (_, difference) => {
+        differences.push(difference)
+        await Promise.resolve()
+      },
+      verify: false,
+    })
+
+    expect(differences).toStrictEqual([
+      {
+        got,
+        want,
+        unmet: {},
+        extra: { top: 1 },
+        nestedExtra: [
+          { kind: "key", path: ["a", "b", "y"], value: 1 },
+          { kind: "key", path: ["a", "z"], value: 9 },
+          { kind: "items", path: ["s"], value: [2] },
+        ],
+      },
+    ])
   })
 
   it("should mask a secret in a nested set", async () => {
@@ -1301,51 +1387,69 @@ describe("h.ensure with invalid input", () => {
 })
 
 describe("h.ensure with a fix function's difference", () => {
-  it("should give the fix what a command check answered, as got", async () => {
+  it("should give the fix what a command check answered, as got, and want", async () => {
     const marker = path.join(await makeTempDir(), "mode")
     const { host: h } = await createSession()
-    const gots: string[] = []
+    const differences: unknown[] = []
     const result = await ensureOrMessage(h, {
       want: "production",
       check: `cat '${marker}' 2>/dev/null || echo staging`,
-      fix: async ({ exec }, { got }) => {
-        gots.push(got)
+      fix: async ({ exec }, difference) => {
+        differences.push(difference)
         await exec(`echo production > '${marker}'`)
       },
     })
 
-    expect([result, gots]).toStrictEqual([{ name: "Make marker", kind: "ensure", changed: true }, ["staging"]])
+    expect([result, differences]).toStrictEqual([
+      { name: "Make marker", kind: "ensure", changed: true },
+      [{ got: "staging", want: "production" }],
+    ])
   })
 
-  it("should give the fix what a function check returned, as got", async () => {
+  it("should give the fix what a function check returned, as got, and want", async () => {
     const marker = path.join(await makeTempDir(), "version")
     const { host: h } = await createSession()
-    const gots: string[] = []
+    const differences: unknown[] = []
     await ensureOrMessage(h, {
       want: "2.0",
       check: async ({ read }) => read(`cat '${marker}' 2>/dev/null || echo 1.0`),
-      fix: async ({ exec }, { got }) => {
-        gots.push(got)
+      fix: async ({ exec }, difference) => {
+        differences.push(difference)
         await exec(`echo 2.0 > '${marker}'`)
       },
     })
 
-    expect(gots).toStrictEqual(["1.0"])
+    expect(differences).toStrictEqual([{ got: "1.0", want: "2.0" }])
   })
 
-  it("should give a boolean want's fix no difference", async () => {
+  it("should give a boolean want's fix want, for a command check", async () => {
     const { marker, options } = await createMarkerStep()
     const { host: h } = await createSession()
     const differences: unknown[] = []
     await ensureOrMessage(h, {
       ...options,
-      // @ts-expect-error - a boolean want gives a fix no difference, so a second argument is a type error
-      fix: async ({ exec }: ChangeTools, difference: unknown) => {
+      fix: async ({ exec }, difference) => {
         differences.push(difference)
         await exec(`touch '${marker}'`)
       },
     })
 
-    expect(differences).toStrictEqual([undefined])
+    expect(differences).toStrictEqual([{ want: true }])
+  })
+
+  it("should give a boolean want's fix want, for a function check", async () => {
+    const { host: h } = await createSession()
+    const differences: unknown[] = []
+    await ensureOrMessage(h, {
+      want: false,
+      check: async ({ read }) => (await read("echo yes")) === "yes",
+      fix: async (_, difference) => {
+        differences.push(difference)
+        await Promise.resolve()
+      },
+      verify: false,
+    })
+
+    expect(differences).toStrictEqual([{ want: false }])
   })
 })

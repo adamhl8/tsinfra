@@ -5,35 +5,38 @@ import type { StepNeeds } from "#core/session/handlers/options/step.ts"
 import type { ComparePhase } from "#core/session/recorder/session-recorder.ts"
 import type { ChangeStepKind, ComparisonValues, StepContext, StepStatus } from "#core/session/step.ts"
 
-/** How the part of the host one step manages compared with what the step wants, and the values it compared. */
-export interface Comparison {
+/**
+ * How the part of the host one step manages compared with what the step wants, and the values it compared. Takes the
+ * values' type, so a step's fix gets only its own kinds of values.
+ */
+export interface Comparison<V extends ComparisonValues = ComparisonValues> {
   inSync: boolean
-  values: ComparisonValues
+  values: V
 }
 
 /**
  * What a step gives `converge`: how to read the host's state, how to compare it, how to fix it, and whether to compare
  * again after. Each function returns a bare error, because `converge` names the step when it wraps it.
  */
-interface ConvergeSpec<HostDetails> {
+interface ConvergeSpec<HostDetails, V extends ComparisonValues> {
   /** Earlier steps whose change this step's state depends on. */
   needs: StepNeeds
   /** Reads what the step manages on the host. Runs in each compare phase, so its commands are recorded under it. */
   getHostDetails: () => Promise<Result<HostDetails>>
   /** Compares what `getHostDetails` read with what the step wants. A comparison that reads nothing more can be sync. */
-  compare: (hostDetails: HostDetails) => Result<Comparison> | Promise<Result<Comparison>>
+  compare: (hostDetails: HostDetails) => Result<Comparison<V>> | Promise<Result<Comparison<V>>>
   /**
    * Gets what the `before` phase read, because a write keeps what it can of what it replaces, and how it compared, so a
    * fix can act on what differs.
    */
-  fix: (hostDetails: HostDetails, comparison: Comparison) => Promise<Result>
+  fix: (hostDetails: HostDetails, comparison: Comparison<V>) => Promise<Result>
   verify: boolean
 }
 
 /** What one compare phase read from the host, and how it compared. */
-interface PhaseResult<HostDetails> {
+interface PhaseResult<HostDetails, V extends ComparisonValues> {
   hostDetails: HostDetails
-  comparison: Comparison
+  comparison: Comparison<V>
 }
 
 const FAILED_COMPARE_MESSAGE = "failed to compare the host with what the step wants"
@@ -43,15 +46,15 @@ const FAILED_COMPARE_MESSAGE = "failed to compare the host with what the step wa
  * Records what it does as it goes. Opens the step's change right before the fix, so the change is saved even when the
  * connection drops right after the fix succeeds.
  */
-export const converge = async <HostDetails>(
+export const converge = async <HostDetails, V extends ComparisonValues>(
   ctx: StepContext<ChangeStepKind>,
-  spec: ConvergeSpec<HostDetails>,
+  spec: ConvergeSpec<HostDetails, V>,
 ): Promise<Result<StepStatus>> => {
   const { stepName, mode, savedStateManager, changedStepNames, convergeRecorder } = ctx
   const { startPhase, recordComparison, recordWaitingOn } = convergeRecorder
   const { needs, getHostDetails, compare, fix, verify } = spec
 
-  const compareInPhase = async (phase: ComparePhase): Promise<Result<PhaseResult<HostDetails>>> => {
+  const compareInPhase = async (phase: ComparePhase): Promise<Result<PhaseResult<HostDetails, V>>> => {
     startPhase(phase)
     const hostDetails = await getHostDetails()
     if (isErr(hostDetails)) return hostDetails

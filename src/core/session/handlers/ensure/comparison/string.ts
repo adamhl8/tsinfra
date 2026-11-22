@@ -7,19 +7,23 @@ import { stripTrailingNewlines } from "#utils.ts"
 export const stringWantSchema = type("string")
 export type StringWant = typeof stringWantSchema.infer
 
-/** What a string's fix gets: what the check answered. */
+/** What a string's fix gets. */
 export interface StringDifference {
+  /** What the check answered, with its trailing newlines stripped. */
   got: StringWant
+  /** The string the step wants, with its trailing newlines stripped. */
+  want: StringWant
 }
 
 /** A string the check gave and the one it wanted, with their trailing newlines stripped. */
-export interface StringComparisonValues extends StringDifference {
+export interface StringComparisonValues {
   kind: "string"
+  got: StringWant
   want: StringWant
 }
 
 /** Compares two strings exactly, after stripping their trailing newlines, the way `$(cmd)` does. */
-export const compareStrings = (gotString: StringWant, wantString: StringWant): Comparison => {
+export const compareStrings = (gotString: StringWant, wantString: StringWant): Comparison<StringComparisonValues> => {
   const got = stripTrailingNewlines(gotString)
   const want = stripTrailingNewlines(wantString)
   const values: StringComparisonValues = { kind: "string", got, want }

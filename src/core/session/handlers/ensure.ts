@@ -27,9 +27,10 @@ export interface EnsureOptions<T extends WantOf<T>> extends NeedsOptions, EnvOpt
   /**
    * The answer `check` gives when already right. `true` means a command exits 0, and `false` means it exits non-zero. A
    * string is compared to a command's stdout, with trailing newlines ignored on both sides. A list, an array of
-   * strings, is compared to a command's lines as a set. A set, a `Set` of strings, is compared the same way, and a
-   * check function returns a `Set` for it. A record, an object of string keys and string, number, or boolean values, is
-   * compared to a function's object by key, each value exactly, so a number never matches a string.
+   * strings, is compared to a command's lines in order, so a reorder or a duplicate counts. A set, a `Set` of strings,
+   * is compared as a set, and a check function returns a `Set` for it. A record, an object of string keys, is compared
+   * to a function's object by key, each value exactly, so a number never matches a string. Its values can be strings,
+   * numbers, booleans, `null`, or nested lists, sets, and records.
    */
   want: T
   /**
@@ -38,8 +39,8 @@ export interface EnsureOptions<T extends WantOf<T>> extends NeedsOptions, EnvOpt
    */
   check: Check<T>
   /**
-   * A command, or a function that runs several commands by calling `exec`. A function also gets what the check found,
-   * as its `FixDifference`, except for a boolean `want`. It only runs in `apply`.
+   * A command, or a function that runs several commands by calling `exec`. A function also gets `want` and what the
+   * check found, as its `FixDifference`. It only runs in `apply`.
    */
   fix: Fix<T>
   /**

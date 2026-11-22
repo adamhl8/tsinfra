@@ -6,7 +6,7 @@ import type {
   RecordValue,
   RecordWant,
 } from "#core/session/handlers/ensure/comparison/record.ts"
-import { isRecordList, isRecordSet } from "#core/session/handlers/ensure/comparison/record.ts"
+import { isRecordList, isRecordSet } from "#core/session/handlers/ensure/comparison/record/nested-kinds.ts"
 import { toSetDifference } from "#core/session/handlers/ensure/comparison/set.ts"
 import type { DetailRows } from "#report/format/details.ts"
 import type { DiffLimits } from "#report/format/details/diff/limits.ts"

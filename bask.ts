@@ -25,6 +25,9 @@ test.wrap(
   { args: { all: { desc: "Also run the tests that need Linux, real root, and real sudo, in Docker" } } },
   async ({ sh, args, original }) => {
     await original()
+    // Run the type tests too, because `bun test` doesn't check types.
+    // Run them on the real Node, because TypeScript 7's API reads a Node-only internal of a child process's stdout.
+    await sh`tstyche`.bun(false)
     if (!args.all) return
     for (const distro of DOCKER_DISTROS) {
       const image = `oven/bun:${bun.version}-${distro}`

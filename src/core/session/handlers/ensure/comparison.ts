@@ -3,6 +3,12 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
+import type { BooleanComparisonValues, ExitComparisonValues } from "#core/session/handlers/ensure/comparison/boolean.ts"
+import {
+  booleanWantSchema,
+  compareBooleans,
+  compareExitCode,
+} from "#core/session/handlers/ensure/comparison/boolean.ts"
 import type { ListComparisonValues } from "#core/session/handlers/ensure/comparison/list.ts"
 import { compareLists, listWantSchema, toListItems } from "#core/session/handlers/ensure/comparison/list.ts"
 import type { RecordComparisonValues } from "#core/session/handlers/ensure/comparison/record.ts"
@@ -17,19 +23,17 @@ import type { Comparison } from "#core/session/handlers/shared/converge.ts"
 import type { CommandOutput } from "#core/transport.ts"
 import { createCommandExitError, describeType } from "#utils.ts"
 
-/** A boolean `want`, which a command's exit status or a function's value must match. */
-export const booleanWantSchema = type("boolean")
-export type BooleanWant = typeof booleanWantSchema.infer
-
 /** What the check gave and what it wanted, as raw values. `kind` says how the output shows them. */
 export type EnsureComparisonValues =
-  // `got` is the exit code, and `want: true` means exit 0.
-  | { kind: "exit"; got: number; want: boolean }
-  | { kind: "boolean"; got: boolean; want: boolean }
+  | ExitComparisonValues
+  | BooleanComparisonValues
   | StringComparisonValues
   | ListComparisonValues
   | SetComparisonValues
   | RecordComparisonValues
+
+/** How a check compared, with only `ensure`'s kinds of values. */
+export type EnsureComparison = Comparison<EnsureComparisonValues>
 
 /**
  * Names the kind of `want` that `value` is shaped like, or nothing for a value no `want` can be. Looks only at the
@@ -79,16 +83,12 @@ const validateCheckValue = <K extends WantKind>(
  * Validates a check function's value against `want`'s kind, then compares the two. The value is `unknown` because a
  * script can get past the types and return anything.
  */
-const compareFnValue = (value: unknown, taggedWant: TaggedWant): Result<Comparison> => {
+const compareFnValue = (value: unknown, taggedWant: TaggedWant): Result<EnsureComparison> => {
   const { kind: wantKind, want } = taggedWant
 
   if (wantKind === "boolean") {
     const validValue = validateCheckValue(value, taggedWant)
-    if (isErr(validValue)) return validValue
-    return {
-      inSync: validValue === want,
-      values: { kind: "boolean", got: validValue, want },
-    }
+    return isErr(validValue) ? validValue : compareBooleans(validValue, want)
   }
   if (wantKind === "string") {
     const validValue = validateCheckValue(value, taggedWant)
@@ -111,16 +111,15 @@ const compareFnValue = (value: unknown, taggedWant: TaggedWant): Result<Comparis
  * Returns `comparison`, or an error for a check that exited non-zero but whose output still matches, so a broken check
  * can't look converged.
  */
-const withExitCodeChecked = (commandOutput: CommandOutput, comparison: Comparison): Result<Comparison> =>
+const withExitCodeChecked = (commandOutput: CommandOutput, comparison: EnsureComparison): Result<EnsureComparison> =>
   commandOutput.exitCode !== 0 && comparison.inSync ? createCommandExitError(commandOutput) : comparison
 
 /** Compares a check command's stdout, its lines, or its exit code, to `want`. */
-const compareCommandOutput = (commandOutput: CommandOutput, taggedWant: TaggedWant): Result<Comparison> => {
+const compareCommandOutput = (commandOutput: CommandOutput, taggedWant: TaggedWant): Result<EnsureComparison> => {
   const { stdout, exitCode } = commandOutput
   const { kind: wantKind, want } = taggedWant
 
-  if (wantKind === "boolean")
-    return { inSync: (exitCode === 0) === want, values: { kind: "exit", got: exitCode, want } }
+  if (wantKind === "boolean") return compareExitCode(exitCode, want)
 
   if (wantKind === "string") return withExitCodeChecked(commandOutput, compareStrings(stdout, want))
   if (wantKind === "list") return withExitCodeChecked(commandOutput, compareLists(toListItems(stdout), want))
@@ -131,7 +130,7 @@ const compareCommandOutput = (commandOutput: CommandOutput, taggedWant: TaggedWa
 }
 
 /** Compares what the check found on the host to `want`. */
-export const compareCheck = (hostCheckDetails: HostCheckDetails, taggedWant: TaggedWant): Result<Comparison> =>
+export const compareCheck = (hostCheckDetails: HostCheckDetails, taggedWant: TaggedWant): Result<EnsureComparison> =>
   hostCheckDetails.kind === "function"
     ? compareFnValue(hostCheckDetails.value, taggedWant)
     : compareCommandOutput(hostCheckDetails.commandOutput, taggedWant)
