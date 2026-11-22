@@ -1,7 +1,7 @@
 import { type } from "arktype"
-import { deepEqual } from "fast-equals"
 
-import { getEntriesNotIn } from "#core/session/handlers/ensure/comparison/record/difference.ts"
+import type { RecordDifference } from "#core/session/handlers/ensure/comparison/record/difference.ts"
+import { toRecordDifference } from "#core/session/handlers/ensure/comparison/record/difference.ts"
 import { findRecordValueProblem } from "#core/session/handlers/ensure/comparison/record/validation.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
 import { isPlainObject } from "#utils.ts"
@@ -61,41 +61,22 @@ export const recordWantSchema = type("object")
   })
   .as<SchemaRecordWant>()
 
-/**
- * A record the check gave and the one it wanted, and how they differ by top-level key. `missing` maps a key the host
- * doesn't have to its wanted value, `changed` maps a key both have to its two values, and `extra` maps a key `want`
- * doesn't have to the host's value.
- */
-export interface RecordComparisonValues {
+/** A record the check gave and the one it wanted, and their difference, which the fix and the report both read. */
+export interface RecordComparisonValues extends RecordDifference {
   kind: "record"
-  got: RecordWant
-  want: RecordWant
-  missing: RecordWant
-  changed: Record<string, { got: RecordValue; want: RecordValue }>
-  extra: RecordWant
 }
 
 /**
- * Compares two records by key, with each value compared exactly and nested records compared the same way, so key order
- * doesn't count at any depth. Matches `-0` to `0`, because the report shows both as `0`. `missing` and `changed` keep
- * `want`'s key order, and `extra` keeps the check's. Each holds a top-level key's whole value.
+ * Compares two records at every depth, with each value compared exactly, so key order doesn't count and `-0` matches
+ * `0`, because the report shows both as `0`. Records their difference, so the report shows what the fix acts on.
  */
 export const compareRecords = (gotRecord: RecordWant, wantRecord: RecordWant): Comparison<RecordComparisonValues> => {
   // Copy both, so a script that changes its own records after the step can't change what was recorded.
   const got = structuredClone(gotRecord)
   const want = structuredClone(wantRecord)
 
-  const missing = getEntriesNotIn(want, got)
-  const changed = Object.fromEntries(
-    Object.entries(want).flatMap(([key, wantValue]) => {
-      const gotValue = got[key]
-      const isChanged = Object.hasOwn(got, key) && gotValue !== undefined && !deepEqual(gotValue, wantValue)
-      return isChanged ? [[key, { got: gotValue, want: wantValue }]] : []
-    }),
-  )
-  const extra = getEntriesNotIn(got, want)
-
-  const values: RecordComparisonValues = { kind: "record", got, want, missing, changed, extra }
-  const inSync = [missing, changed, extra].every((part) => Object.keys(part).length === 0)
+  const values: RecordComparisonValues = { kind: "record", ...toRecordDifference(got, want) }
+  const { unmet, extra, nestedExtra } = values
+  const inSync = Object.keys(unmet).length === 0 && Object.keys(extra).length === 0 && nestedExtra.length === 0
   return { inSync, values }
 }

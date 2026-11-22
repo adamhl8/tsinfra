@@ -2,9 +2,7 @@ import type { EnsureComparison } from "#core/session/handlers/ensure/comparison.
 import type { BooleanDifference } from "#core/session/handlers/ensure/comparison/boolean.ts"
 import type { ListDifference, ListWant } from "#core/session/handlers/ensure/comparison/list.ts"
 import type { RecordDifference } from "#core/session/handlers/ensure/comparison/record/difference.ts"
-import { toRecordDifference } from "#core/session/handlers/ensure/comparison/record/difference.ts"
 import type { SetDifference, SetWant } from "#core/session/handlers/ensure/comparison/set.ts"
-import { toSetDifference } from "#core/session/handlers/ensure/comparison/set.ts"
 import type { StringDifference, StringWant } from "#core/session/handlers/ensure/comparison/string.ts"
 import type { IsRecordWant, SchemaWant, Want, WantOf } from "#core/session/handlers/ensure/want.ts"
 import type { Change } from "#core/session/handlers/shared/change.ts"
@@ -33,11 +31,13 @@ export type Fix<T extends WantOf<T>> = Change<[difference: FixDifference<T>]>
 // Validate a fix as a change, because both are a command or a function at runtime, and type it as a fix.
 export const fixSchema = changeSchema.as<Fix<SchemaWant>>()
 
-/** Returns what a fix function gets from how the check compared: its kind's difference, built from the two sides. */
+/** Returns what a fix function gets from how the check compared: its kind's difference, which the comparison recorded. */
 export const toFixDifference = ({ values }: EnsureComparison): FixDifference<Want> => {
   if (values.kind === "exit" || values.kind === "boolean") return { want: values.want }
   if (values.kind === "string") return { got: values.got, want: values.want }
   if (values.kind === "list") return { got: values.got, want: values.want }
-  if (values.kind === "set") return toSetDifference(new Set(values.got), new Set(values.want))
-  return toRecordDifference(values.got, values.want)
+  if (values.kind === "set") return { want: new Set(values.want), missing: values.missing, extra: values.extra }
+
+  const { got, want, unmet, extra, nestedExtra } = values
+  return { got, want, unmet, extra, nestedExtra }
 }

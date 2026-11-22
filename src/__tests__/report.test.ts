@@ -658,6 +658,19 @@ describe("renderHostBlock for a step that would change a set", () => {
     ])
   })
 
+  it("should show a missing and an extra item that are different secrets, though both mask to [MASKED]", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Install tokens", {
+        want: new Set(["tok-wanted"]),
+        check: 'printf %s "$OLD"',
+        fix: "true",
+        secretEnv: { NEW: "tok-wanted", OLD: "tok-old" },
+      })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      missing: [MASKED]", "      extra:   [MASKED]"])
+  })
+
   it("should leave out the row of a side with no items", async () => {
     const hostBlock = await formatBlock(async (h) => {
       await h.ensure("Install packages", {
@@ -735,6 +748,24 @@ describe("renderHostBlock for a step with an empty want", () => {
     expect(hostBlock?.split("\n").slice(2)).toStrictEqual(["      found: fd", "             rg"])
   })
 
+  it("should show each line the check gave against an empty set, even a duplicate or two secrets", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Rotate tokens", {
+        want: new Set(),
+        check: String.raw`printf 'fd\nfd\n%s\n%s\n' "$OLD" "$OLDER"`,
+        fix: "true",
+        secretEnv: { OLD: "tok-old", OLDER: "tok-older" },
+      })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
+      "      found: fd",
+      "             fd",
+      "             [MASKED]",
+      "             [MASKED]",
+    ])
+  })
+
   it("should show each found item by the value rules, like an empty one", async () => {
     const hostBlock = await formatBlock(async (h) => {
       await h.ensure("Upgrade packages", {
@@ -793,6 +824,26 @@ describe("renderHostBlock for a step that would change a record", () => {
       "      zx:         (none) -> 8.8.1",
       "      pnpm:       11.1.0 -> 11.2.0",
       "      typescript: 5.9.2 -> (none)",
+    ])
+  })
+
+  it("should show a value that differs only in secrets, though both sides mask to [MASKED]", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Set the tokens", {
+        want: { token: "tok-wanted", auth: { token: "tok-wanted" } },
+        check: async ({ read }) => {
+          const token = await read('printf %s "$OLD"')
+          return { token, auth: { token } }
+        },
+        fix: "true",
+        secretEnv: { NEW: "tok-wanted", OLD: "tok-old" },
+      })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
+      "      token: [MASKED] -> [MASKED]",
+      "      auth:",
+      "        token: [MASKED] -> [MASKED]",
     ])
   })
 

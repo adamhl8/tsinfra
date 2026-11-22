@@ -64,7 +64,8 @@ describe("h.dir in plan", () => {
     expect(await bun.file(dirPath).exists()).toBe(false)
     expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toMatchObject({
       kind: "record",
-      changed: { exists: { got: false, want: true } },
+      got: { exists: false },
+      unmet: { exists: true },
     })
   })
 })

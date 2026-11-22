@@ -20,8 +20,6 @@ import { converge } from "#core/session/handlers/shared/converge.ts"
 import { validateInput } from "#core/session/handlers/shared/validate-input.ts"
 import type { HandlerReturn, StepContext } from "#core/session/step.ts"
 
-// Re-export the record comparison for `dir`, which is built on it, so its rows render as a record `want`'s.
-
 /** `T` ties a check function's return type, and a fix function's difference, to `want`. */
 export interface EnsureOptions<T extends WantOf<T>> extends NeedsOptions, EnvOptions {
   /**

@@ -3,8 +3,9 @@ import { deepEqual } from "fast-equals"
 import type { RecordPrimitive, RecordValue, RecordWant } from "#core/session/handlers/ensure/comparison/record.ts"
 import type { NestedExtraList } from "#core/session/handlers/ensure/comparison/record/difference/nested-extra.ts"
 import type { UnmetRecord } from "#core/session/handlers/ensure/comparison/record/difference/unmet.ts"
-import { isRecordRecord, isRecordSet } from "#core/session/handlers/ensure/comparison/record/nested-kinds.ts"
+import { isNestedRecord, isNestedSet } from "#core/session/handlers/ensure/comparison/record/nested-kinds.ts"
 import { toSetDifference } from "#core/session/handlers/ensure/comparison/set.ts"
+import { getOwnValue } from "#utils.ts"
 
 /**
  * What a record's fix gets: the two records, and how they differ at any depth. Takes `want`'s type, and its default is
@@ -68,8 +69,8 @@ export type IsNever<T> = [T] extends [never] ? true : false
 // oxlint-disable-next-line typescript/ban-types - the `{}` is what makes a hover show the flattened type
 export type Simplify<T> = { [K in keyof T]: T[K] } & {}
 
-/** The extras the comparison builds, for any record. */
-type NestedExtraEntry = NestedExtraKey | NestedExtraItems
+/** A `nestedExtra` entry for any record, as the comparison builds it and the report reads it. */
+export type NestedExtraEntry = NestedExtraKey | NestedExtraItems
 
 /** The path to a value inside a record, from its top-level key. */
 type ValuePath = readonly [string, ...string[]]
@@ -86,12 +87,8 @@ interface WantedKeysDifference {
   nestedExtra: NestedExtraEntry[]
 }
 
-/** Returns the value `record` has at `key`, or nothing when it doesn't have the key. */
-const getOwnValue = (record: RecordWant, key: string): RecordValue | undefined =>
-  Object.hasOwn(record, key) ? record[key] : undefined
-
 /** Returns the entries of `record` whose keys `others` doesn't have, in `record`'s key order. */
-export const getEntriesNotIn = (record: RecordWant, others: RecordWant): RecordWant =>
+const getEntriesNotIn = (record: RecordWant, others: RecordWant): RecordWant =>
   Object.fromEntries(Object.entries(record).filter(([key]) => !Object.hasOwn(others, key)))
 
 /** Compares two nested sets: the missing items are unmet, and the host's other items are one entry of extras. */
@@ -133,8 +130,8 @@ const toValueDifference = (
   wantValue: RecordValue,
   path: ValuePath,
 ): ValueDifference => {
-  if (isRecordRecord(gotValue) && isRecordRecord(wantValue)) return toNestedRecordDifference(gotValue, wantValue, path)
-  if (isRecordSet(gotValue) && isRecordSet(wantValue)) return toNestedSetDifference(gotValue, wantValue, path)
+  if (isNestedRecord(gotValue) && isNestedRecord(wantValue)) return toNestedRecordDifference(gotValue, wantValue, path)
+  if (isNestedSet(gotValue) && isNestedSet(wantValue)) return toNestedSetDifference(gotValue, wantValue, path)
 
   const unmet = deepEqual(gotValue, wantValue) ? undefined : wantValue
   return { unmet, nestedExtra: [] }

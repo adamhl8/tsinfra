@@ -44,6 +44,13 @@ export const isPlainObject = (value: unknown): value is Record<PropertyKey, unkn
 }
 
 /**
+ * Returns the value `record` has at `key`, or nothing when it doesn't have the key itself, like an inherited
+ * `toString`.
+ */
+export const getOwnValue = <V>(record: Readonly<Record<string, V>> | undefined, key: string): V | undefined =>
+  record !== undefined && Object.hasOwn(record, key) ? record[key] : undefined
+
+/**
  * Names the type of `value`, saying "array" for an array and its class's name for any other object that isn't plain,
  * like `Set`, because `typeof` says "object" for all of them.
  */

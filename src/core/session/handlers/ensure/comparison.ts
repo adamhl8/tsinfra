@@ -23,7 +23,10 @@ import type { Comparison } from "#core/session/handlers/shared/converge.ts"
 import type { CommandOutput } from "#core/transport.ts"
 import { createCommandExitError, describeType } from "#utils.ts"
 
-/** What the check gave and what it wanted, as raw values. `kind` says how the output shows them. */
+/**
+ * What the check gave, what it wanted, and for a set or a record, their difference. `kind` says how the output shows
+ * them.
+ */
 export type EnsureComparisonValues =
   | ExitComparisonValues
   | BooleanComparisonValues

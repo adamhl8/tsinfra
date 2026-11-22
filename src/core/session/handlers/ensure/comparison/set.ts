@@ -26,8 +26,8 @@ export const setWantSchema = type
   .as<SetWant>()
 
 /**
- * What a set's fix gets: the wanted set, and how the one the check gave differs from it. Takes `want`'s type, which a
- * nested set's items can make a set of numbers, booleans, or `null`.
+ * What a set's fix gets: the wanted set, and how the one the check gave differs from it. Takes `want`'s type, because a
+ * nested set's items can be numbers, booleans, or `null`, not only strings.
  */
 export interface SetDifference<T = SetWant> {
   /** The set the step wants. */
@@ -40,7 +40,9 @@ export interface SetDifference<T = SetWant> {
 
 type SetItemOf<T> = T extends ReadonlySet<infer I> ? I : never
 
-/** A set the check gave and the one it wanted, and how they differ. */
+/** A set the check gave and the one it wanted, and their difference, which the fix and the report both read. */
+// Keep the sides as arrays, so the rows for an empty `want` show each line the check gave.
+// A `Set` would merge duplicates, and two secrets that mask to the same `[MASKED]`.
 export interface SetComparisonValues {
   kind: "set"
   got: string[]

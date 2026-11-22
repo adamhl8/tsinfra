@@ -553,7 +553,7 @@ describe("h.ensure with a record want", () => {
 
     expect([result, hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values]).toMatchObject([
       { changed: true },
-      { kind: "record", changed: { port: { got: "8080", want: 8080 } } },
+      { kind: "record", got: { port: "8080" }, unmet: { port: 8080 } },
     ])
   })
 
@@ -609,27 +609,59 @@ describe("h.ensure with a record want", () => {
       description: "a number against a string that reads the same",
       want: { env: { PUID: 1000 } },
       got: { env: { PUID: "1000" } },
+      unmet: { env: { PUID: 1000 } },
+      nestedExtra: [],
     },
-    { description: "a key only the check found", want: { env: { TZ: "UTC" } }, got: { env: { TZ: "UTC", PUID: "1" } } },
-    { description: "a key only want has", want: { env: { TZ: "UTC", PUID: "1" } }, got: { env: { TZ: "UTC" } } },
-    { description: "null against a missing key", want: { env: { TZ: null } }, got: { env: {} } },
+    {
+      description: "a key only the check found",
+      want: { env: { TZ: "UTC" } },
+      got: { env: { TZ: "UTC", PUID: "1" } },
+      unmet: {},
+      nestedExtra: [{ kind: "key", path: ["env", "PUID"], value: "1" }],
+    },
+    {
+      description: "a key only want has",
+      want: { env: { TZ: "UTC", PUID: "1" } },
+      got: { env: { TZ: "UTC" } },
+      unmet: { env: { PUID: "1" } },
+      nestedExtra: [],
+    },
+    {
+      description: "null against a missing key",
+      want: { env: { TZ: null } },
+      got: { env: {} },
+      unmet: { env: { TZ: null } },
+      nestedExtra: [],
+    },
     {
       description: "a list in another order",
       want: { env: { ports: ["80", "443"] } },
       got: { env: { ports: ["443", "80"] } },
+      unmet: { env: { ports: ["80", "443"] } },
+      nestedExtra: [],
     },
-    { description: "a Set against an array", want: { env: { tags: new Set(["a"]) } }, got: { env: { tags: ["a"] } } },
+    {
+      description: "a Set against an array",
+      want: { env: { tags: new Set(["a"]) } },
+      got: { env: { tags: ["a"] } },
+      unmet: { env: { tags: new Set(["a"]) } },
+      nestedExtra: [],
+    },
     {
       description: "a set with another item",
       want: { env: { tags: new Set(["a"]) } },
       got: { env: { tags: new Set(["b"]) } },
+      unmet: { env: { tags: new Set(["a"]) } },
+      nestedExtra: [{ kind: "items", path: ["env", "tags"], value: ["b"] }],
     },
     {
       description: "a record in a list",
       want: { env: { services: [{ name: "web", port: 80 }] } },
       got: { env: { services: [{ name: "web", port: 81 }] } },
+      unmet: { env: { services: [{ name: "web", port: 80 }] } },
+      nestedExtra: [],
     },
-  ])("should find a difference in a nested record for $description", async ({ want, got }) => {
+  ])("should record the difference in a nested record for $description", async ({ want, got, unmet, nestedExtra }) => {
     const hostSession = await createSession("plan")
     const result = await ensureOrMessage(hostSession.host, {
       want: toLooseWant(want),
@@ -637,10 +669,12 @@ describe("h.ensure with a record want", () => {
       fix: "true",
     })
 
-    expect([result, hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values]).toMatchObject([
-      { changed: true },
-      { kind: "record", changed: { env: { got: got.env, want: want.env } } },
-    ])
+    const values = hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values
+    const difference: unknown =
+      values?.kind === "record" ? { unmet: values.unmet, nestedExtra: values.nestedExtra } : undefined
+    expect(result).toMatchObject({ changed: true })
+    // Compare with `toStrictEqual`, because `toMatchObject` takes any two Sets as matching.
+    expect(difference).toStrictEqual({ unmet, nestedExtra })
   })
 
   it("should tell null from a missing key at the top level", async () => {
@@ -653,7 +687,7 @@ describe("h.ensure with a record want", () => {
 
     expect([result, hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values]).toMatchObject([
       { changed: true },
-      { kind: "record", missing: { a: null } },
+      { kind: "record", unmet: { a: null } },
     ])
   })
 
@@ -845,7 +879,7 @@ describe("h.ensure with a record want", () => {
 
     const values = hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values
     // Compare the set itself, because `toMatchObject` takes any two Sets as matching.
-    expect(values?.kind === "record" ? values.changed["tokens"]?.got : undefined).toStrictEqual(new Set(["[MASKED]"]))
+    expect(values?.kind === "record" ? values.got["tokens"] : undefined).toStrictEqual(new Set(["[MASKED]"]))
   })
 
   it("should name the path when a function check returns a Map in a nested record", async () => {

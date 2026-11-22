@@ -1,5 +1,5 @@
 import type { RecordValue } from "#core/session/handlers/ensure/comparison/record.ts"
-import { isRecordList, isRecordSet } from "#core/session/handlers/ensure/comparison/record/nested-kinds.ts"
+import { isNestedList, isNestedSet } from "#core/session/handlers/ensure/comparison/record/nested-kinds.ts"
 import { RECORDED_STAND_INS } from "#core/session/recorder/records.ts"
 import type { Style } from "#styles.ts"
 import { styleCurrent, styleItalic, styleMuted, stylePlain, styleValue, styleWanted } from "#styles.ts"
@@ -23,8 +23,8 @@ const EDGE_WHITESPACE = /^\s|\s$/v
  * as `null`. Keeps a record's own key order.
  */
 const toOneLineJson = (value: Value): string => {
-  if (isRecordSet(value)) return `Set ${toOneLineJson([...value])}`
-  if (isRecordList(value)) return `[${value.map((item) => toOneLineJson(item)).join(",")}]`
+  if (isNestedSet(value)) return `Set ${toOneLineJson([...value])}`
+  if (isNestedList(value)) return `[${value.map((item) => toOneLineJson(item)).join(",")}]`
   if (typeof value === "number") return String(value)
   if (typeof value !== "object" || value === null) return JSON.stringify(value)
 
