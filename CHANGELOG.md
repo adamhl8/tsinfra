@@ -1,3 +1,13 @@
+## [0.14.0](https://github.com/adamhl8/tsinfra/compare/v0.13.1..v0.14.0) - 2026-11-22
+
+### 🚀 Features
+
+- _(ensure)_ give each fix want and a record's difference at any depth ([cb863b4](https://github.com/adamhl8/tsinfra/commit/cb863b4ebb60eb55652a06d5218e823f9940e6df) by @adamhl8)
+
+### 🚜 Refactor
+
+- _(ensure)_ record each comparison's difference for the fix and the report ([d4a0572](https://github.com/adamhl8/tsinfra/commit/d4a05726738fbc442366c7a0460d4c936f34f9dc) by @adamhl8)
+
 ## [0.13.1](https://github.com/adamhl8/tsinfra/compare/v0.13.0..v0.13.1) - 2026-11-21
 
 ### 🐛 Bug Fixes
