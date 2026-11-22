@@ -152,6 +152,7 @@ describe("tsinfra", () => {
     const masked = COLORS.dim("[MASKED]")
     expect(stdout.split(masked).length).toBe(stdout.split("[MASKED]").length)
     expect(stdout).toContain(`${COLORS.cyan("token=")}${masked}`)
+    expect(stdout).toContain(`${COLORS.yellowBright("- warning")}: the token is ${masked}`)
   })
 
   it("should show a key in the value color, and a label, like an option's name or a set's missing, muted", async () => {

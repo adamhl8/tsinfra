@@ -1,5 +1,5 @@
 import { entryNameElement, entryNoteElement, kindElement, statusElement } from "#report/format/elements/entry.ts"
-import type { EntryStatus, HostBlockEntry, NotePart } from "#report/host-block.ts"
+import type { EntryStatus, NotePart, StatusLineEntry } from "#report/host-block.ts"
 import { quoteNames } from "#utils.ts"
 
 /** An entry's status line, with each field formatted, before layout puts them on one line. */
@@ -37,8 +37,8 @@ const getNotePartWords = (notePart: NotePart): string => {
 }
 
 /** Formats the fields an entry's status line shows, and joins its note's parts into their text. */
-export const formatStatusLine = (hostBlockEntry: HostBlockEntry): StatusLine => {
-  const { status, kind, name, note } = hostBlockEntry
+export const formatStatusLine = (statusLineEntry: StatusLineEntry): StatusLine => {
+  const { status, kind, name, note } = statusLineEntry
   const noteText = note.map((notePart) => getNotePartWords(notePart)).join(", ")
 
   return {

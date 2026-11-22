@@ -12,6 +12,7 @@ import {
   createFakeSudoSession,
   createSession,
   dirOrMessage,
+  getFinishedStepRecords,
   getStepRecords,
   linkOrMessage,
   runOrMessage,
@@ -50,7 +51,7 @@ describe("h.link in plan", () => {
     const result = await linkOrMessage(hostSession.host, linkPath, target)
 
     expect(result).toStrictEqual({ name: linkPath, kind: "link", changed: true })
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toStrictEqual({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before?.values).toStrictEqual({
       kind: "link",
       linkChange: { kind: "new", want: target },
       ownerChanges: [],
@@ -76,7 +77,7 @@ describe("h.link in plan", () => {
 
     await linkOrMessage(hostSession.host, linkPath, target)
 
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before?.values).toMatchObject({
       linkChange: { kind: "changed", got: "/old", want: target },
     })
     expect(await readlink(linkPath)).toBe("/old")
@@ -88,7 +89,9 @@ describe("h.link in plan", () => {
 
     await linkOrMessage(hostSession.host, linkPath, target)
 
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toMatchObject({ targetExists: false })
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before?.values).toMatchObject({
+      targetExists: false,
+    })
   })
 
   it("should report an owner that differs on a link that points at the target", async () => {
@@ -99,7 +102,7 @@ describe("h.link in plan", () => {
 
     await linkOrMessage(hostSession.host, linkPath, target, { user: uid + 1, sudo: true })
 
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before?.values).toMatchObject({
       linkChange: { kind: "same" },
       ownerChanges: [{ name: "user", got: uid, want: uid + 1 }],
     })
@@ -164,7 +167,7 @@ describe("h.link in apply", () => {
 
     await linkOrMessage(hostSession.host, linkPath, target)
 
-    const commands = hostSession.hostRecord.stepRecords[0]?.commands
+    const commands = getFinishedStepRecords(hostSession.hostRecord)[0]?.commands
     expect(commands?.map(({ label, phase }) => [label, phase])).toStrictEqual([
       ["link details script", "before"],
       ["link write script", "fix"],
@@ -201,7 +204,7 @@ describe("h.link in apply", () => {
 
     await linkOrMessage(hostSession.host, `~/${directoryName}/link`, "~/target", { user: uid })
 
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before?.values).toMatchObject({
       linkChange: { kind: "new", want: path.join(hostSession.home, "target") },
     })
   })
@@ -239,7 +242,7 @@ describe("h.link replacing something", () => {
 
     expect(await linkOrMessage(hostSession.host, linkPath, target, { force: true })).toMatchObject({ changed: true })
     expect(await readlink(linkPath)).toBe(target)
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before?.values).toMatchObject({
       linkChange: { kind: "replacesFile", want: target },
     })
   })
@@ -357,8 +360,8 @@ describe("h.link with other steps", () => {
     expect(await linkOrMessage(hostSession.host, linkPath, target, { needs: [needed] })).toMatchObject({
       changed: true,
     })
-    expect(hostSession.hostRecord.stepRecords[1]?.status).toBe("waiting")
-    expect(hostSession.hostRecord.stepRecords[1]?.commands).toStrictEqual([])
+    expect(getFinishedStepRecords(hostSession.hostRecord)[1]?.status).toBe("waiting")
+    expect(getFinishedStepRecords(hostSession.hostRecord)[1]?.commands).toStrictEqual([])
   })
 
   it("should be a step that another step can need, and a run can follow", async () => {
@@ -370,7 +373,7 @@ describe("h.link with other steps", () => {
     expect(await linkOrMessage(hostSession.host, `${linkPath}2`, target, { needs: [link] })).toMatchObject({
       changed: true,
     })
-    expect(hostSession.hostRecord.stepRecords[2]?.status).toBe("waiting")
+    expect(getFinishedStepRecords(hostSession.hostRecord)[2]?.status).toBe("waiting")
   })
 })
 
@@ -382,7 +385,7 @@ describe("h.link targetAttributes in plan", () => {
     expect(
       await linkOrMessage(hostSession.host, linkPath, target, { targetAttributes: { mode: "600" } }),
     ).toMatchObject({ changed: true })
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before?.values).toMatchObject({
       linkChange: { kind: "same" },
       targetAttributeChanges: [{ name: "mode", got: toModeBits(0o644), want: toModeBits(0o600) }],
     })
@@ -406,7 +409,7 @@ describe("h.link targetAttributes in plan", () => {
     expect(
       await linkOrMessage(hostSession.host, linkPath, target, { targetAttributes: { mode: "600" } }),
     ).toMatchObject({ changed: false })
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before?.values).toMatchObject({
       targetAttributeChanges: [],
       targetExists: false,
     })

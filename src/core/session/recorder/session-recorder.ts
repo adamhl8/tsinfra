@@ -3,6 +3,7 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { ValidHostOptions } from "#core/hosts/host.ts"
+import type { MessageKind } from "#core/session/handlers/log.ts"
 import type { ValidStepShellOptions } from "#core/session/handlers/options/step.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
 import type { GetToolShell, ToolName, ValidToolOptions } from "#core/session/handlers/tools.ts"
@@ -16,6 +17,7 @@ import type {
   SessionFailureKind,
   StepOptionsRecord,
   StepOptionsToRecord,
+  StepMessageRecord,
   StepRecord,
   ToolCallRecord,
 } from "#core/session/recorder/records.ts"
@@ -100,6 +102,11 @@ export interface SessionRecorder {
   finishStep: (status: StepStatus) => void
   /** Fails the running step with `error`, and marks no step as running. */
   failStep: (error: Error) => void
+  /**
+   * Records a message the script logged, masked. Records it on the running step, with its phase and its place among the
+   * step's commands, or as an entry of its own when no step is running.
+   */
+  recordMessage: (messageKind: MessageKind, text: string) => void
   convergeRecorder: ConvergeRecorder
 }
 
@@ -214,6 +221,7 @@ export const createSessionRecorder = (
       commands: [],
       comparisons: {},
       waitingOn: [],
+      messages: [],
     }
   }
 
@@ -240,12 +248,30 @@ export const createSessionRecorder = (
     // `exec` in a fix. It still fails the host, and it belongs to this step.
     // Pass the host's own error, because there's no new one, and the keep rule leaves it as it is.
     if (hostRecord.failure) recordStepFailure(stepRecord, hostRecord.failure.error)
-    else hostRecord.stepRecords.push({ ...stepRecord, status })
+    else hostRecord.entries.push({ ...stepRecord, status })
   }
 
   const failStep = (error: Error) => {
     const stepRecord = endStep()
     if (stepRecord) recordStepFailure(stepRecord, error)
+  }
+
+  const recordMessage = (messageKind: MessageKind, _text: string) => {
+    const text = mask(_text)
+    const { runningStep } = hostRecord
+    if (!runningStep) {
+      hostRecord.entries.push({ kind: "message", messageKind, text })
+      return
+    }
+
+    const commandsBefore = runningStep.commands.length
+    const stepMessageRecord: StepMessageRecord = {
+      messageKind,
+      text,
+      ...(currentPhase && { phase: currentPhase }),
+      commandsBefore,
+    }
+    runningStep.messages.push(stepMessageRecord)
   }
 
   const startPhase = (phase: ConvergePhase) => {
@@ -274,6 +300,7 @@ export const createSessionRecorder = (
     startStep,
     finishStep,
     failStep,
+    recordMessage,
     convergeRecorder,
   }
 }

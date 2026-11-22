@@ -13,6 +13,7 @@ import {
   createSession,
   dirOrMessage,
   fileOrMessage,
+  getFinishedStepRecords,
   getStepRecords,
 } from "#core/__tests__/session.ts"
 import { GROUP_DIRECTORY_MODE } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
@@ -62,7 +63,7 @@ describe("h.dir in plan", () => {
 
     expect(await dirOrMessage(hostSession.host, dirPath)).toMatchObject({ changed: true })
     expect(await bun.file(dirPath).exists()).toBe(false)
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before?.values).toMatchObject({
       kind: "record",
       got: { exists: false },
       unmet: { exists: true },
@@ -222,7 +223,7 @@ describe("h.dir with other steps", () => {
     const madeDir = await hostSession.host.dir(dirPath)
     await hostSession.host.file(path.join(dirPath, "app.conf"), "a\n", { needs: [madeDir] })
 
-    expect(hostSession.hostRecord.stepRecords[1]).toMatchObject({ status: "waiting", waitingOn: [dirPath] })
+    expect(getFinishedStepRecords(hostSession.hostRecord)[1]).toMatchObject({ status: "waiting", waitingOn: [dirPath] })
   })
 
   it("should trigger a run that follows it when it makes the directory", async () => {
@@ -230,7 +231,7 @@ describe("h.dir with other steps", () => {
     const madeDir = await hostSession.host.dir(await createNestedPath())
     await hostSession.host.run("Restart", "true", { after: [madeDir] })
 
-    expect(hostSession.hostRecord.stepRecords[1]).toMatchObject({ name: "Restart", status: "ran" })
+    expect(getFinishedStepRecords(hostSession.hostRecord)[1]).toMatchObject({ name: "Restart", status: "ran" })
   })
 
   it("should clash with a file on the same path", async () => {

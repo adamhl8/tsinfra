@@ -140,17 +140,18 @@ tsinfra plan            # every host
 
 ## Concepts
 
-|           |                                                                                                  |
-| --------- | ------------------------------------------------------------------------------------------------ |
-| **Host**  | A file in `hosts/` that exports `host({ name, target, sudo? }, fn)`. The CLI picks it by `name`. |
-| **Step**  | One call on `h`, like `h.ensure` or `h.read`. Steps run one at a time.                           |
-| **Need**  | An earlier step whose change a step's state depends on, named in `needs`.                        |
-| **Plan**  | Read every step's state, run no fix. Show what would change.                                     |
-| **Apply** | Read every step's state, and run the fix wherever it differs.                                    |
+|             |                                                                                                  |
+| ----------- | ------------------------------------------------------------------------------------------------ |
+| **Host**    | A file in `hosts/` that exports `host({ name, target, sudo? }, fn)`. The CLI picks it by `name`. |
+| **Step**    | One call on `h`, like `h.ensure` or `h.read`. Steps run one at a time.                           |
+| **Message** | What `h.log.info` or `h.log.warn` records for the report.                                        |
+| **Need**    | An earlier step whose change a step's state depends on, named in `needs`.                        |
+| **Plan**    | Read every step's state, run no fix. Show what would change.                                     |
+| **Apply**   | Read every step's state, and run the fix wherever it differs.                                    |
 
 ## Contents
 
-- **[Steps](./steps.md)**: choosing a method, `ensure`, `file`, `run`, `read`, `inspect`, verification, and what happens on failure
+- **[Steps](./steps.md)**: choosing a method, `ensure`, `file`, `run`, `read`, `inspect`, verification, messages, and what happens on failure
 - **[Waiting on earlier steps](./needs.md)**: `needs`, and how `plan` waits on an earlier change
 - **[Transport](./transport.md)**: local and SSH, ControlMaster, sudo, and how commands and files cross
 - **[CLI](./cli.md)**: the `hosts/` folder, `plan` and `apply`, output, and exit codes

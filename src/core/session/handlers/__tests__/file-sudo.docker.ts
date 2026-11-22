@@ -5,7 +5,7 @@ import { makeTempDir } from "@adamhl8/configs/test"
 import { $ } from "bun"
 
 import { CONTENT_LIMIT_BYTES, createRandomBytes, hashBytes } from "#core/__tests__/content.ts"
-import { createSession, fileOrMessage } from "#core/__tests__/session.ts"
+import { createSession, fileOrMessage, getFinishedStepRecords } from "#core/__tests__/session.ts"
 import type { Host } from "#core/session.ts"
 
 const ROOT_OWNED_DIR = "/etc/tsinfra-docker"
@@ -67,7 +67,7 @@ describe("h.file with real sudo", () => {
 
     await fileOrMessage(hostSession.host, filePath, "new\n", { sudo: true })
 
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toStrictEqual({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before?.values).toStrictEqual({
       kind: "file",
       content: { kind: "text", got: "old\n", want: "new\n" },
       attributeChanges: [],

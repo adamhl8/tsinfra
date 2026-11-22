@@ -6,7 +6,7 @@ import { sliceAnsi } from "bun"
 import type { HostRecord, StepRecord } from "#core/session/recorder/records.ts"
 import type { Mode } from "#mode.ts"
 import { entryNameElement, kindElement } from "#report/format/elements/entry.ts"
-import { toStepName } from "#report/host-block/entries.ts"
+import { toStepName } from "#report/host-block/entries/step.ts"
 import { styleMuted, styleValue } from "#styles.ts"
 import { countOf } from "#utils.ts"
 

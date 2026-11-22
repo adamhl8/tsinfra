@@ -34,9 +34,16 @@ import type { Mode } from "#mode.ts"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
+/** Returns the records of the steps a host finished, in order, without the messages logged between them. */
+export const getFinishedStepRecords = (hostRecord: HostRecord): FinishedStepRecord[] =>
+  hostRecord.entries.filter((entry) => entry.kind !== "message")
+
 /** Returns every step a host recorded, in order: the steps that finished, then the step that failed, if one did. */
-export const getStepRecords = ({ stepRecords, failure }: HostRecord): (FinishedStepRecord | StepRecord)[] =>
-  failure?.kind === "step" ? [...stepRecords, failure.stepRecord] : stepRecords
+export const getStepRecords = (hostRecord: HostRecord): (FinishedStepRecord | StepRecord)[] => {
+  const { failure } = hostRecord
+  const finishedStepRecords = getFinishedStepRecords(hostRecord)
+  return failure?.kind === "step" ? [...finishedStepRecords, failure.stepRecord] : finishedStepRecords
+}
 
 /** A target that can't be prepared, because ssh rejects the space in it before it reads any config or connects. */
 export const UNREACHABLE_TARGET = "unreachable host"

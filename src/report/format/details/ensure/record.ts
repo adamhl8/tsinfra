@@ -17,7 +17,7 @@ import { formatNestedListDiff } from "#report/format/details/diff/list.ts"
 import { formatSetRows } from "#report/format/details/ensure/set.ts"
 import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { countRowLines, formatKeyHeadingRow, formatKeyRow } from "#report/format/details/shared/aligned-row.ts"
-import { noteElement } from "#report/format/elements/messages.ts"
+import { noteElement } from "#report/format/elements/asides.ts"
 import { changeElement } from "#report/format/elements/values.ts"
 import { countOf, getOwnValue } from "#utils.ts"
 

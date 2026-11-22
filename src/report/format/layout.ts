@@ -69,6 +69,10 @@ const layoutBody = (body: Body): string[] => {
 }
 
 const layoutEntry = (formattedEntry: FormattedEntry): string[] => {
+  // Lay out a message's row in a column of its own, so its text's later lines line up under its first.
+  if (formattedEntry.kind === "message")
+    return layoutRowsInOwnColumn([formattedEntry.row]).map((messageLine) => `${INDENT}${messageLine}`)
+
   const { statusLine, body } = formattedEntry
   const bodyLines = layoutBody(body).map((bodyLine) => `${DETAIL_INDENT}${bodyLine}`)
   return [layoutStatusLine(statusLine), ...bodyLines]
@@ -81,5 +85,5 @@ export const layoutHostBlock = (name: string, formattedEntries: FormattedEntry[]
   return [name, ...entryLines].join("\n")
 }
 
-/** Lays out the block of a host with no steps: its name, then its "no steps" note under it. */
-export const layoutNoStepsBlock = (name: string, note: string): string => [name, `${INDENT}${note}`].join("\n")
+/** Lays out the block of a host with no entries: its name, then its "empty script" note under it. */
+export const layoutNoEntriesBlock = (name: string, note: string): string => [name, `${INDENT}${note}`].join("\n")

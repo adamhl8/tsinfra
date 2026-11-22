@@ -5,7 +5,7 @@ import type { DiffLimits } from "#report/format/details/diff/limits.ts"
 import { LINE_LIMIT_FLAG, isPastLineLimit } from "#report/format/details/diff/limits.ts"
 import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { formatAlignedRow } from "#report/format/details/shared/aligned-row.ts"
-import { noteElement } from "#report/format/elements/messages.ts"
+import { noteElement } from "#report/format/elements/asides.ts"
 import { gotValueElement, wantValueElement } from "#report/format/elements/values.ts"
 
 type SetValues = Extract<EnsureComparisonValues, { kind: "set" }>

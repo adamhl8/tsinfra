@@ -66,7 +66,10 @@ const keepShownInDetail = (detail: Detail, verbosity: Verbosity): Detail => {
 
 /** Keeps the entries that show at `verbosity`, each with only the note parts and details that show. */
 const keepShownEntries = (hostBlockEntries: HostBlockEntry[], verbosity: Verbosity): HostBlockEntry[] =>
-  hostBlockEntries.flatMap((hostBlockEntry) => {
+  hostBlockEntries.flatMap((hostBlockEntry): HostBlockEntry[] => {
+    // Keep a message only when its own level shows, because nothing inside it has a level.
+    if (hostBlockEntry.kind === "message") return isShownAt(hostBlockEntry, verbosity) ? [hostBlockEntry] : []
+
     const note = hostBlockEntry.note.filter((notePart) => isShownAt(notePart, verbosity))
     const shownDetails = hostBlockEntry.details.filter((detail) => isShownAt(detail, verbosity))
     const details = shownDetails.map((detail) => keepShownInDetail(detail, verbosity))
@@ -77,10 +80,10 @@ const keepShownEntries = (hostBlockEntries: HostBlockEntry[], verbosity: Verbosi
 
 /**
  * Returns a host's block with only what shows at `verbosity`: each entry that shows, with only the pieces that show. A
- * host with no steps keeps its block at every level, so it's clear the host ran.
+ * host with no entries keeps its block at every level, so it's clear the host ran.
  */
 export const toShownHostBlock = (hostBlock: HostBlock, verbosity: Verbosity): HostBlock => {
-  if (hostBlock.kind === "noSteps") return hostBlock
+  if (hostBlock.kind === "noEntries") return hostBlock
 
   const entries = keepShownEntries(hostBlock.entries, verbosity)
   return { ...hostBlock, entries }
@@ -94,9 +97,9 @@ export const renderHostBlock = (hostBlock: HostBlock, reportOptions: ReportOptio
   const { verbosity } = reportOptions
   // Give the diff limits instead of a level, because computing a full diff only to drop it would be slow.
   const diffLimits = toDiffLimits(verbosity)
-  if (hostBlock.kind === "noSteps") return formatHostBlock(hostBlock, diffLimits)
+  if (hostBlock.kind === "noEntries") return formatHostBlock(hostBlock, diffLimits)
 
-  // Give a host whose steps are all hidden no block, because its line in the summary already says how it went.
+  // Give a host whose entries are all hidden no block, because its line in the summary already says how it went.
   if (hostBlock.entries.length === 0) return
 
   return formatHostBlock(hostBlock, diffLimits)

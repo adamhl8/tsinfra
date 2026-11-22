@@ -8,7 +8,7 @@ import {
   formatKeyRow,
   formatLabelHeadingRow,
 } from "#report/format/details/shared/aligned-row.ts"
-import { noteElement } from "#report/format/elements/messages.ts"
+import { noteElement } from "#report/format/elements/asides.ts"
 import { foundValueElement } from "#report/format/elements/values.ts"
 import { countOf } from "#utils.ts"
 

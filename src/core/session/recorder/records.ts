@@ -4,6 +4,7 @@ import type { EnsureOptions } from "#core/session/handlers/ensure.ts"
 import type { Want } from "#core/session/handlers/ensure/want.ts"
 import type { FileOptions } from "#core/session/handlers/file.ts"
 import type { LinkOptions } from "#core/session/handlers/link.ts"
+import type { MessageKind } from "#core/session/handlers/log.ts"
 import type { InputOptions, MaskOptions } from "#core/session/handlers/options/command.ts"
 import type { StepShellOptions } from "#core/session/handlers/options/step.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
@@ -17,7 +18,7 @@ export const createHostRecord = (name: string, target: string): HostRecord => ({
   target,
   preparationCommands: [],
   runningStep: undefined,
-  stepRecords: [],
+  entries: [],
 })
 
 export interface HostRecord {
@@ -25,10 +26,13 @@ export interface HostRecord {
   target: string
   /** Every command preparation ran on the host, before its script ran. */
   preparationCommands: CommandRecord[]
-  /** The step that's running, until it finishes and joins `stepRecords`, or fails and becomes the failure's. */
+  /** The step that's running, until it finishes and joins `entries`, or fails and becomes the failure's. */
   runningStep: StepRecord | undefined
-  /** Every step that finished, in the order the script called them. The step that failed is the failure's. */
-  stepRecords: FinishedStepRecord[]
+  /**
+   * Every step that finished, and every message logged outside a step, in the order the script made them. The step that
+   * failed is the failure's.
+   */
+  entries: EntryRecord[]
   /** The host's one failure, if it failed, and where it came from. */
   failure?: RecordedFailure
 }
@@ -76,6 +80,9 @@ interface RecordedStepFailure extends BaseRecordedFailure {
   stepRecord: StepRecord
 }
 
+/** One entry of a host's record: a step that finished, or a message logged outside a step. */
+export type EntryRecord = FinishedStepRecord | MessageRecord
+
 /** The record of a step that finished, with how it turned out. */
 export interface FinishedStepRecord extends StepRecord {
   status: StepStatus
@@ -95,6 +102,27 @@ export interface StepRecord {
   comparisons: StepComparisons
   /** The names of the needed steps this step waited on. */
   waitingOn: string[]
+  /** The messages the step's functions logged, in the order they logged them. */
+  messages: StepMessageRecord[]
+}
+
+/** A message the script logged with `h.log`. */
+interface BaseMessageRecord {
+  messageKind: MessageKind
+  text: string
+}
+
+/** A message the script logged outside a step, which the report shows between the steps around it. */
+export interface MessageRecord extends BaseMessageRecord {
+  kind: "message"
+}
+
+/** A message a step's function logged. */
+export interface StepMessageRecord extends BaseMessageRecord {
+  /** The part of `converge` that was running. Unset for a step that doesn't converge. */
+  phase?: ConvergePhase
+  /** How many of the step's commands were recorded before it, which places it among them. */
+  commandsBefore: number
 }
 
 const NO_VARIABLES: Record<string, string> = {}

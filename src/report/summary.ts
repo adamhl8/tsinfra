@@ -1,5 +1,5 @@
 import type { Mode } from "#mode.ts"
-import { planReminderElement } from "#report/format/elements/messages.ts"
+import { planReminderElement } from "#report/format/elements/asides.ts"
 import { statusTextElement, warningCountElement } from "#report/format/elements/summary.ts"
 import { COLUMN_GAP } from "#report/format/layout.ts"
 import type { EntryStatus, HostBlock, HostBlockEntry } from "#report/host-block.ts"
@@ -22,28 +22,40 @@ const IN_CHANGE_COUNT: Record<EntryStatus, boolean> = {
 
 const getEntries = (hostBlock: HostBlock): HostBlockEntry[] => (hostBlock.kind === "entries" ? hostBlock.entries : [])
 
+/** Reports whether any status line entry in the block has one of `statuses`, because a message has no status. */
+const hasStatus = (hostBlock: HostBlock, statuses: EntryStatus[]): boolean =>
+  getEntries(hostBlock).some(
+    (hostBlockEntry) => hostBlockEntry.kind !== "message" && statuses.includes(hostBlockEntry.status),
+  )
+
 /** Reports whether the host failed, which the block shows as a `failed` entry. */
-export const hasFailed = (hostBlock: HostBlock): boolean =>
-  getEntries(hostBlock).some(({ status }) => status === "failed")
+export const hasFailed = (hostBlock: HostBlock): boolean => hasStatus(hostBlock, ["failed"])
 
 /**
  * Reports whether a step found the host different from the script, which is drift, and makes `plan` exit 2. A follow-up
  * that only an open change triggered counts too, because nothing else in the pass explains it, and `apply` would run
  * it.
  */
-export const hasDrift = (hostBlock: HostBlock): boolean =>
-  getEntries(hostBlock).some(({ status }) => status === "changed" || status === "ranFromOpenChanges")
+export const hasDrift = (hostBlock: HostBlock): boolean => hasStatus(hostBlock, ["changed", "ranFromOpenChanges"])
 
 const formatHostStatus = (hostBlock: HostBlock): string => {
   if (hasFailed(hostBlock)) return statusTextElement("failed", "failed")
 
-  const entries = getEntries(hostBlock)
-  const statuses = entries.map(({ status }) => status)
+  // Count warnings too, a step's and a message's, so one isn't lost when the blocks have scrolled away.
+  let changeCount = 0
+  let waitingCount = 0
+  let warningCount = 0
+  for (const hostBlockEntry of getEntries(hostBlock)) {
+    if (hostBlockEntry.kind === "message") {
+      if (hostBlockEntry.messageKind === "warn") warningCount += 1
+      continue
+    }
 
-  const changeCount = statuses.filter((status) => IN_CHANGE_COUNT[status]).length
-  const waitingCount = statuses.filter((status) => status === "waiting").length
-  // Count warnings too, so one isn't lost when the blocks have scrolled away.
-  const warningCount = entries.flatMap(({ details }) => details).filter(({ kind }) => kind === "warning").length
+    const { status, details } = hostBlockEntry
+    if (IN_CHANGE_COUNT[status]) changeCount += 1
+    if (status === "waiting") waitingCount += 1
+    warningCount += details.filter(({ kind }) => kind === "warning").length
+  }
 
   // Leave the comma between the counts unstyled.
   const counts: string[] = []

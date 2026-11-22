@@ -15,6 +15,8 @@ import type { InspectOptions } from "#core/session/handlers/inspect.ts"
 import { handleInspect } from "#core/session/handlers/inspect.ts"
 import type { LinkOptions } from "#core/session/handlers/link.ts"
 import { handleLink } from "#core/session/handlers/link.ts"
+import type { Log, MessageKind } from "#core/session/handlers/log.ts"
+import { validateMessage } from "#core/session/handlers/log.ts"
 import type { StepShellOptions } from "#core/session/handlers/options/step.ts"
 import { stepShellOptionsSchema } from "#core/session/handlers/options/step.ts"
 import type { ReadOptions } from "#core/session/handlers/read.ts"
@@ -53,10 +55,18 @@ export interface SessionContext {
 }
 
 // Extend `Record<StepKind, unknown>` so a step kind with no method fails to compile.
-/** What a host's function is given. Each method call is one step, and steps run one at a time at the top level. */
+/**
+ * What a host's function is given. Each call to a step's method is one step, and steps run one at a time at the top
+ * level.
+ */
 export interface Host<O extends HostOptions = HostOptions> extends Record<StepKind, unknown> {
   /** What the script is given about the host besides its steps, like its name. `O` is the type of its options. */
   readonly meta: HostMeta<O>
+  /**
+   * Records a message for the report, which shows it under the step whose function logged it, or between the steps
+   * around it. A message that isn't a non-empty string fails the host and throws.
+   */
+  readonly log: Log
   /**
    * Runs `cmd` on the host and returns its stdout, trimmed. It must not change what the script manages, because it also
    * runs during `plan`.
@@ -136,18 +146,31 @@ const STEP_NAME_LABELS: Record<StepKind, string> = {
  *
  * This is the only code that throws, because throwing is the contract with the script. Every function the script can
  * call, on `h` or as a tool, goes through `callOrFail` around an internal function from `handlers/` that returns errors
- * as values.
+ * as values. `h.log` is synchronous, so its methods make the same checks without `callOrFail`.
  */
 export const createHostSession = (sessionContext: SessionContext, mode: Mode): Host => {
   const { meta, home, savedStateManager, sessionRecorder } = sessionContext
-  const { getStepShells, recordOptions, getFailure, recordFailure, startStep, finishStep, failStep, convergeRecorder } =
-    sessionRecorder
+  const {
+    getStepShells,
+    recordOptions,
+    getFailure,
+    recordFailure,
+    startStep,
+    finishStep,
+    failStep,
+    recordMessage,
+    convergeRecorder,
+  } = sessionRecorder
+
+  // Throw the failure on every later call, so a script that catches it still can't use the host.
+  const throwIfFailed = () => {
+    const failure = getFailure()
+    if (failure) throw failure
+  }
 
   // oxlint-disable-next-line promise/prefer-await-to-callbacks - `callback` is awaited, and the rule only matches its name
   const callOrFail = async <T>(callback: () => Promise<Result<T>>) => {
-    // Throw the failure on every later call, so a script that catches it still can't use the host.
-    const failure = getFailure()
-    if (failure) throw failure
+    throwIfFailed()
 
     // oxlint-disable-next-line promise/prefer-await-to-callbacks - `callback` is awaited, and the rule only matches its name
     const value = await callback()
@@ -265,8 +288,21 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
       return handlerReturn.value
     })
 
+  // Keep `h.log` synchronous, because it runs nothing, and a script shouldn't have to await a message.
+  const createLogMethod = (messageKind: MessageKind) => (message: unknown) => {
+    throwIfFailed()
+
+    const validMessage = validateMessage(messageKind, message)
+    if (isErr(validMessage)) throw recordFailure(validMessage, "host fn")
+
+    recordMessage(messageKind, validMessage)
+  }
+
+  const log: Log = { info: createLogMethod("info"), warn: createLogMethod("warn") }
+
   const host: Host = {
     meta,
+    log,
     // Pass `cmd` as the step name, because `h.read` and `h.inspect` take no name.
     read: async (cmd, options) => callStep(cmd, "read", async (ctx) => handleRead(ctx, cmd, options), options),
     inspect: async (cmd, options) => callStep(cmd, "inspect", async (ctx) => handleInspect(ctx, cmd, options), options),

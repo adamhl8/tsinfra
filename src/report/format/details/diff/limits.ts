@@ -1,5 +1,5 @@
+import { noteElement } from "#report/format/elements/asides.ts"
 import { diffRuleElement } from "#report/format/elements/diff.ts"
-import { noteElement } from "#report/format/elements/messages.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 import { getMaxWidth } from "#utils.ts"
 

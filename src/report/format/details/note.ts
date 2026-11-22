@@ -1,4 +1,4 @@
-import { noteElement } from "#report/format/elements/messages.ts"
+import { noteElement } from "#report/format/elements/asides.ts"
 import type { DetailNote, StillDiffersPhase } from "#report/host-block.ts"
 
 // Say when the commands ran, because the phases' names are internal.

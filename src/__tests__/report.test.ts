@@ -171,15 +171,15 @@ describe("renderHostBlock", () => {
     )
   })
 
-  it("should give a host with no steps a block by default", async () => {
+  it("should give a host with an empty script a block by default", async () => {
     expect(
       await formatBlock(async () => {
         /* empty */
       }, "plan"),
-    ).toBe(["a", "  no steps"].join("\n"))
+    ).toBe(["a", "  empty script"].join("\n"))
   })
 
-  it("should show a failure thrown before any step, not no steps", async () => {
+  it("should show a failure thrown before any step, not an empty script", async () => {
     expect(await formatBlock(throwBoom, "plan")).toBe(
       "a\n  ! failed: (host fn)\n      boom\n        thrown in the host function, outside any step",
     )
@@ -253,7 +253,7 @@ describe("renderHostBlock", () => {
         target: "a.lan",
         preparationCommands: [],
         runningStep: undefined,
-        stepRecords: [],
+        entries: [],
         failure: {
           kind: "preparation",
           error: new Error("Host key verification failed."),
@@ -280,7 +280,7 @@ describe("renderHostBlock", () => {
         target: "a.lan",
         preparationCommands: [],
         runningStep: undefined,
-        stepRecords: [],
+        entries: [],
         failure: {
           kind: "saved state",
           error: new Error("failed to delete the saved state in '/home/a/.tsinfra/state/a.json'"),
@@ -307,7 +307,7 @@ describe("renderHostBlock", () => {
         target: "a.lan",
         preparationCommands: [],
         runningStep: undefined,
-        stepRecords: [],
+        entries: [],
         failure: { kind: "preparation", error: new Error("failed"), hints: [{ kind: "changedHostKey" }] },
       },
       "plan",
@@ -340,7 +340,7 @@ describe("renderHostBlock", () => {
           { cmd: String.raw`printf '%s\n' "$HOME"`, label: "home directory" },
         ],
         runningStep: undefined,
-        stepRecords: [],
+        entries: [],
         failure: {
           kind: "preparation",
           error: new Error("Host key verification failed."),
@@ -1739,6 +1739,92 @@ describe("renderHostBlock and renderSummary for a warning", () => {
     } finally {
       await chmod(directory, 0o755)
     }
+  })
+})
+
+/** Returns a host function that only calls `log`, so it makes no step. */
+const logOnly =
+  (log: (h: Host) => void): HostFunction =>
+  async (h) => {
+    log(h)
+    // Await something, because a host function returns a promise, and the lint fix strips `async` without an `await`.
+    await Promise.resolve()
+  }
+
+const logBetweenSteps = async (h: Host) => {
+  await h.read("true")
+  h.log.info("Debian 11, so the Incus setup is skipped")
+  h.log.warn("the old unit is still there")
+  await h.ensure("Install Caddy", { want: true, check: "false", fix: "true" })
+}
+
+describe("renderHostBlock and renderSummary for a message between steps", () => {
+  it("should show a warning between the steps around it at the default level, and leave out an info", async () => {
+    const hostRecord = await runNamedHost("a", logBetweenSteps, "plan")
+
+    expect(renderRecord(hostRecord, "plan")).toBe(
+      ["a", "  - warning: the old unit is still there", "  ~ change: (ensure) Install Caddy"].join("\n"),
+    )
+  })
+
+  it("should show an info from level 1, in script order with the steps", async () => {
+    const hostRecord = await runNamedHost("a", logBetweenSteps, "plan")
+
+    expect(renderRecord(hostRecord, "plan", 1)).toBe(
+      [
+        "a",
+        "  · observed: (read) true",
+        "  - info: Debian 11, so the Incus setup is skipped",
+        "  - warning: the old unit is still there",
+        "  ~ change: (ensure) Install Caddy",
+      ].join("\n"),
+    )
+  })
+
+  it("should count a shown warning in the summary, and never an info", async () => {
+    const hostRecord = await runNamedHost("a", logBetweenSteps, "plan")
+
+    expect([
+      renderRecordsSummary([hostRecord], "plan").split("\n").at(-1),
+      renderRecordsSummary([hostRecord], "plan", 1).split("\n").at(-1),
+    ]).toStrictEqual(["a   1 change, 1 warning", "a   1 change, 1 warning"])
+  })
+
+  it("should give a host that only logged an info no block by default, and a block from level 1", async () => {
+    const hostRecord = await runNamedHost(
+      "a",
+      logOnly((h) => {
+        h.log.info("nothing to do here")
+      }),
+      "plan",
+    )
+
+    expect([renderRecord(hostRecord, "plan"), renderRecord(hostRecord, "plan", 1)]).toStrictEqual([
+      undefined,
+      ["a", "  - info: nothing to do here"].join("\n"),
+    ])
+  })
+
+  it("should give a host whose script only logged no empty script note", async () => {
+    const hostBlock = await formatBlock(
+      logOnly((h) => {
+        h.log.warn("only this")
+      }),
+      "plan",
+    )
+
+    expect(hostBlock).toBe(["a", "  - warning: only this"].join("\n"))
+  })
+
+  it("should line up a multi-line message's later lines under its first line's text", async () => {
+    const hostBlock = await formatBlock(
+      logOnly((h) => {
+        h.log.warn("the first line\nthe second line")
+      }),
+      "plan",
+    )
+
+    expect(hostBlock).toBe(["a", "  - warning: the first line", "             the second line"].join("\n"))
   })
 })
 

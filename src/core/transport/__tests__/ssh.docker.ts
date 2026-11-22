@@ -104,7 +104,7 @@ describe("the ssh transport against a real sshd", () => {
     expect(hostRecord).toMatchObject({
       name: "a",
       target: NO_SSHD_TARGET,
-      stepRecords: [],
+      entries: [],
       failure: { kind: "preparation", hints: [] },
     })
     expect(toMessage(hostRecord.failure?.error)).toBe(

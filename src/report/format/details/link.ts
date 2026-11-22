@@ -2,7 +2,7 @@ import type { LinkComparisonValues, LinkChange } from "#core/session/handlers/li
 import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { formatAlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { formatAttributeChange } from "#report/format/details/shared/attributes.ts"
-import { changeDescriptionElement } from "#report/format/elements/messages.ts"
+import { changeDescriptionElement } from "#report/format/elements/asides.ts"
 import { changeElement, wantValueElement } from "#report/format/elements/values.ts"
 
 // Give each way of making a link its words.

@@ -12,6 +12,7 @@ import {
   dirOrMessage,
   ensureOrMessage,
   getFailureMessage,
+  getFinishedStepRecords,
   getStepRecords,
   linkOrMessage,
   readOrMessage,
@@ -82,7 +83,7 @@ describe("step results", () => {
       { name: "Change", kind: "ensure", changed: true },
       { name: "Follow up", kind: "run", changed: true },
     ])
-    expect(hostSession.hostRecord.stepRecords[0]?.status).toBe("changed")
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.status).toBe("changed")
   })
 })
 
@@ -292,7 +293,11 @@ describe("step records", () => {
     await hostSession.host.file(path.join(directory, "user.conf"), "a\n")
     await hostSession.host.read("true")
 
-    expect(hostSession.hostRecord.stepRecords.map(({ options }) => options)).toStrictEqual([{ sudo: true }, {}, {}])
+    expect(getFinishedStepRecords(hostSession.hostRecord).map(({ options }) => options)).toStrictEqual([
+      { sudo: true },
+      {},
+      {},
+    ])
   })
 
   it("should record an ensure's check, fix, and second check in apply", async () => {
@@ -308,7 +313,7 @@ describe("step records", () => {
         commands: [`test -f '${marker}'`, `touch '${marker}'`, `test -f '${marker}'`],
       },
     ])
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toStrictEqual({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before?.values).toStrictEqual({
       kind: "exit",
       got: 1,
       want: true,
@@ -327,7 +332,7 @@ describe("step records", () => {
         commands: ["false"],
       },
     ])
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toStrictEqual({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before?.values).toStrictEqual({
       kind: "exit",
       got: 1,
       want: true,
@@ -346,7 +351,7 @@ describe("step records", () => {
         commands: ["echo old"],
       },
     ])
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values).toStrictEqual({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before?.values).toStrictEqual({
       kind: "string",
       got: "old",
       want: "new",
@@ -371,7 +376,7 @@ describe("step records", () => {
     expect(toPlainRecords(hostSession.hostRecord)).toStrictEqual([
       { name: cmd, kind: "read", status: "observed", commands: [cmd] },
     ])
-    expect(toPlainResult(hostSession.hostRecord.stepRecords[0]?.commands[0]?.output)).toStrictEqual({
+    expect(toPlainResult(getFinishedStepRecords(hostSession.hostRecord)[0]?.commands[0]?.output)).toStrictEqual({
       stdout: "out\n",
       stderr: "err\n",
       exitCode: 0,
@@ -473,7 +478,7 @@ describe("step records", () => {
       verify: false,
     })
 
-    expect(hostSession.hostRecord.stepRecords[0]?.commands).toMatchObject([
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.commands).toMatchObject([
       { cmd: "sleep 0.1", phase: "before" },
       { cmd: "echo old", phase: "before" },
       { cmd: "true", phase: "fix" },
@@ -618,7 +623,7 @@ describe("what a converging step records", () => {
     const brew = await h.ensure("Install brew packages", { want: true, check: "false", fix: "true" })
     await h.ensure("Install fish plugins", { needs: [brew], want: true, check: "true", fix: "true" })
 
-    expect(hostSession.hostRecord.stepRecords[1]).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[1]).toMatchObject({
       status: "waiting",
       waitingOn: ["Install brew packages"],
       comparisons: {},
@@ -634,7 +639,7 @@ describe("what a converging step records", () => {
     const hostSession = await createSession()
     await callStep(hostSession.host)
 
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons).toStrictEqual({})
-    expect(hostSession.hostRecord.stepRecords[0]?.commands[0]).not.toHaveProperty("phase")
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons).toStrictEqual({})
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.commands[0]).not.toHaveProperty("phase")
   })
 })

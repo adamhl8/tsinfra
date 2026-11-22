@@ -6,10 +6,11 @@ import bun from "bun"
 import { messageChain } from "ts-explicit-errors"
 
 import {
-  UNREACHABLE_TARGET,
+  getFinishedStepRecords,
   getPreparationFailure,
-  prepareAndRunHost,
   loadHostDefinition,
+  prepareAndRunHost,
+  UNREACHABLE_TARGET,
 } from "#core/__tests__/session.ts"
 import { host } from "#core/hosts/host.ts"
 import type { LoadedHost } from "#core/hosts/load.ts"
@@ -74,7 +75,9 @@ describe("initializeHosts and finishHosts", () => {
       { cmd: `printf '%s' "$HOME"`, label: "home directory", output: { exitCode: 0 } },
       { cmd: "id -un", label: "user name", output: { exitCode: 0 } },
     ])
-    expect(hostRecord.stepRecords.map(({ commands }) => commands.map(({ cmd }) => cmd))).toStrictEqual([["echo hi"]])
+    expect(getFinishedStepRecords(hostRecord).map(({ commands }) => commands.map(({ cmd }) => cmd))).toStrictEqual([
+      ["echo hi"],
+    ])
   })
 
   it("should record the ssh -G a target failed on", async () => {

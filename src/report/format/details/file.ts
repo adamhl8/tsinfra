@@ -6,7 +6,7 @@ import type { ContentComparison, SizeComparison } from "#core/session/handlers/f
 import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { formatAlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { formatAttributeChange } from "#report/format/details/shared/attributes.ts"
-import { changeDescriptionElement } from "#report/format/elements/messages.ts"
+import { changeDescriptionElement } from "#report/format/elements/asides.ts"
 import { changeElement, wantValueElement } from "#report/format/elements/values.ts"
 
 // Spell out a size in bytes, because a lone `B` reads like "billion".

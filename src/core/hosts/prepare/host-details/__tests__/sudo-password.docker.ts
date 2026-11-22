@@ -15,6 +15,7 @@ import {
   createSession,
   createSessionOn,
   fileOrMessage,
+  getFinishedStepRecords,
   readOrMessage,
 } from "#core/__tests__/session.ts"
 import { SSHD_TARGET, startSshd, stopSshd } from "#core/__tests__/sshd.ts"
@@ -70,7 +71,7 @@ describe("a user whose sudo needs a password", () => {
     // Print the password through `env`, which masks nothing, so only the masking from the start can hide it.
     expect(await readOrMessage(h, 'printf "%s" "$PASSWORD"', { env: { PASSWORD } })).toBe(PASSWORD)
     expect(JSON.stringify(hostRecord)).not.toContain(PASSWORD)
-    expect(hostRecord.stepRecords[0]?.commands[0]?.output).toMatchObject({ stdout: "[MASKED]" })
+    expect(getFinishedStepRecords(hostRecord)[0]?.commands[0]?.output).toMatchObject({ stdout: "[MASKED]" })
   })
 
   it("should leave the sudo password out of h.meta when it's logged, spread, or stringified", async () => {

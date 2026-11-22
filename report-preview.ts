@@ -329,12 +329,25 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
       },
     },
     {
-      // A block with "no steps", which shows at every level, and the summary's `unchanged`.
-      name: "no-steps",
+      // A block with "empty script", which shows at every level, and the summary's `unchanged`.
+      name: "empty-script",
       target: "@local",
       pass: "apply",
       fn: async () => {
-        // A script with no steps.
+        // A script with no steps and no messages.
+      },
+    },
+    {
+      // Messages between steps: a warning at every level, an info from level 1, and a multi-line warning with its later
+      // lines lined up under its first.
+      name: "messages",
+      target: "@local",
+      pass: "apply",
+      fn: async (h) => {
+        await h.read("uname -s")
+        h.log.info("Debian 11, so the Incus setup is skipped")
+        h.log.warn("the old unit is still there\nremove it by hand")
+        await h.ensure("Install Caddy", { want: true, check: "true", fix: "true" })
       },
     },
     {
@@ -457,10 +470,10 @@ const createSavedStateFailureRecord = (): HostRecord => ({
  * changes triggered, each with its note.
  */
 const createResumeRecord = (): HostRecord => {
-  const stepRecord = { options: {}, commands: [], comparisons: {}, waitingOn: [] }
+  const stepRecord = { options: {}, commands: [], comparisons: {}, waitingOn: [], messages: [] }
   return {
     ...createHostRecord("resume", "web.lan"),
-    stepRecords: [
+    entries: [
       { ...stepRecord, name: "/etc/caddy/Caddyfile", kind: "file", status: "resume" },
       { ...stepRecord, name: "Restart caddy", kind: "run", status: "ranFromOpenChanges" },
     ],

@@ -4,7 +4,14 @@ import path from "node:path"
 import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
 
-import { castInvalid, createSession, getFailureMessage, runOrMessage, throwBoom } from "#core/__tests__/session.ts"
+import {
+  castInvalid,
+  createSession,
+  getFailureMessage,
+  getFinishedStepRecords,
+  runOrMessage,
+  throwBoom,
+} from "#core/__tests__/session.ts"
 
 const createMarker = async () => path.join(await makeTempDir(), "marker")
 
@@ -66,7 +73,7 @@ describe("h.run", () => {
 /** Returns each finished step's status, by its name. */
 const getStatuses = (hostSession: Awaited<ReturnType<typeof createSession>>) => {
   const { hostRecord } = hostSession
-  return Object.fromEntries(hostRecord.stepRecords.map(({ name, status }) => [name, status]))
+  return Object.fromEntries(getFinishedStepRecords(hostRecord).map(({ name, status }) => [name, status]))
 }
 
 describe("h.run's status", () => {

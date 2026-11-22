@@ -3,7 +3,12 @@ import os from "node:os"
 
 import bun, { $ } from "bun"
 
-import { getPreparedHome, loadHostThatStopsBeforeRun, prepareAndRunHost } from "#core/__tests__/session.ts"
+import {
+  getFinishedStepRecords,
+  getPreparedHome,
+  loadHostThatStopsBeforeRun,
+  prepareAndRunHost,
+} from "#core/__tests__/session.ts"
 import { SSHD_TARGET, startSshd, stopSshd } from "#core/__tests__/sshd.ts"
 import { toSavedStatePath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
 import type { HostRecord } from "#core/session/recorder/records.ts"
@@ -12,7 +17,8 @@ import { closeConnections } from "#core/transport.ts"
 // `setup.sh` gives this user this password.
 const PASSWORD = "it's tsinfra"
 
-const toStatuses = ({ stepRecords }: HostRecord) => stepRecords.map(({ name, status }) => [name, status])
+const toStatuses = (hostRecord: HostRecord) =>
+  getFinishedStepRecords(hostRecord).map(({ name, status }) => [name, status])
 
 const getOwner = async (filePath: string) => (await $`stat -c %U ${filePath}`.text()).trim()
 

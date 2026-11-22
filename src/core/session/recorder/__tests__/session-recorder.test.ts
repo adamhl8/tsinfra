@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 
 import { err, messageChain } from "ts-explicit-errors"
 
+import { getFinishedStepRecords } from "#core/__tests__/session.ts"
 import type { ValidStepShellOptions } from "#core/session/handlers/options/step.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
 import type { ValidToolOptions } from "#core/session/handlers/tools.ts"
@@ -108,11 +109,11 @@ describe("SessionRecorder steps", () => {
     )
     sessionRecorder.startStep("a", "file")
     await sessionRecorder.getStepShells(NO_SHELL_OPTIONS).stepShell.exec("echo hi")
-    const whileRunning = [hostRecord.runningStep?.name, hostRecord.stepRecords.length]
+    const whileRunning = [hostRecord.runningStep?.name, getFinishedStepRecords(hostRecord).length]
 
     sessionRecorder.finishStep("changed")
 
-    const [stepRecord] = hostRecord.stepRecords
+    const [stepRecord] = getFinishedStepRecords(hostRecord)
     expect([
       whileRunning,
       hostRecord.runningStep,
@@ -121,7 +122,7 @@ describe("SessionRecorder steps", () => {
     ]).toStrictEqual([["a", 0], undefined, "changed", ["echo hi"]])
   })
 
-  it("should give a failed step to the host's failure, not to the step records", () => {
+  it("should give a failed step to the host's failure, not to the host's entries", () => {
     const hostRecord = createHostRecord("a", "@local")
     const sessionRecorder = createSessionRecorder(
       hostRecord,
@@ -141,8 +142,9 @@ describe("SessionRecorder steps", () => {
       commands: [],
       comparisons: {},
       waitingOn: [],
+      messages: [],
     }
-    expect([hostRecord.runningStep, hostRecord.stepRecords, hostRecord.failure]).toStrictEqual([
+    expect([hostRecord.runningStep, hostRecord.entries, hostRecord.failure]).toStrictEqual([
       undefined,
       [],
       { kind: "step", stepRecord, error, hints: [] },
@@ -154,7 +156,7 @@ const SECRET = "s3cret-value"
 
 /** Returns each finished step's name, and each of its commands with its output. */
 const getStepCommands = (hostRecord: HostRecord) =>
-  hostRecord.stepRecords.map(({ name, commands }) => ({
+  getFinishedStepRecords(hostRecord).map(({ name, commands }) => ({
     name,
     commands: commands.map(({ cmd, output }) => ({ cmd, output })),
   }))

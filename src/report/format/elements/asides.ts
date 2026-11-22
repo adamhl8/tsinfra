@@ -1,6 +1,6 @@
 import { styleError, styleItalic, styleMuted, styleWarning } from "#styles.ts"
 
-/** Formats tsinfra's own aside, like "no steps" or a note in place of a diff, muted and italic. */
+/** Formats tsinfra's own aside, like "empty script" or a note in place of a diff, muted and italic. */
 export const noteElement = (text: string): string => styleItalic(styleMuted(text))
 
 /** Formats how to fix a failure in the warning color, italic because it has no label to set it apart. */

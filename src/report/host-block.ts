@@ -2,6 +2,7 @@ import type { EnsureComparisonValues } from "#core/session/handlers/ensure/compa
 import type { RecordComparisonValues } from "#core/session/handlers/ensure/comparison/record.ts"
 import type { FileComparisonValues } from "#core/session/handlers/file/comparison.ts"
 import type { LinkComparisonValues } from "#core/session/handlers/link/comparison.ts"
+import type { MessageKind } from "#core/session/handlers/log.ts"
 import type { ToolName } from "#core/session/handlers/tools.ts"
 import type { ConvergePhase, FailureHint, HostRecord, RecordedUnownedFailure } from "#core/session/recorder/records.ts"
 import type { StepKind, StepStatus } from "#core/session/step.ts"
@@ -15,14 +16,17 @@ export interface PieceLevels {
   until?: Verbosity
 }
 
-/** A host's block: its name, then its entries, or "no steps" for a script that made none and didn't fail. */
-export type HostBlock = { name: string } & ({ kind: "entries"; entries: HostBlockEntry[] } | { kind: "noSteps" })
+/** A host's block: its name, then its entries, or "empty script" for a host that recorded none and didn't fail. */
+export type HostBlock = { name: string } & ({ kind: "entries"; entries: HostBlockEntry[] } | { kind: "noEntries" })
+
+/** One entry of a host block: a status line, or a message logged between steps. */
+export type HostBlockEntry = StatusLineEntry | MessageEntry
 
 /**
- * One entry of a host block: a step, or the one failure no step owns. Its levels are where its own line shows, and it
- * also shows when a note part or a detail inside it shows.
+ * An entry shown as a status line, with its details under it: a step, or the one failure no step owns. Its levels are
+ * where its own line shows, and it also shows when a note part or a detail inside it shows.
  */
-export interface HostBlockEntry extends PieceLevels {
+export interface StatusLineEntry extends PieceLevels {
   status: EntryStatus
   /** What the entry is about, which shows before the name. */
   kind: EntryKind
@@ -38,11 +42,18 @@ export interface HostBlockEntry extends PieceLevels {
 
 export type EntryStatus = StepStatus | "failed"
 
-/** What a host block entry is about: a kind of step, or a failure no step owns. */
+/** What a status line entry is about: a kind of step, or a failure no step owns. */
 export type EntryKind = StepKind | UnownedFailureKind
 
 /** Where a failure no step owns happened: in preparation, or in the host function, for `host fn`. */
 export type UnownedFailureKind = RecordedUnownedFailure["kind"]
+
+/** A message logged between steps, shown as its kind's label and its text. Its levels are where it shows. */
+export interface MessageEntry extends PieceLevels {
+  kind: "message"
+  messageKind: MessageKind
+  text: string
+}
 
 /** A host block entry's name, and what kind of name it is, which decides how it's styled. */
 export interface EntryName {
@@ -160,13 +171,13 @@ export type StillDiffersPhase = Extract<ConvergePhase, "fix" | "after">
 
 /**
  * Returns a host's block, with every piece at every level, each with the level it shows from: an entry per finished
- * step, then the host's failure, if it failed. A host whose script made no steps and didn't fail gets "no steps"
+ * step, then the host's failure, if it failed. A host that recorded no entries and didn't fail gets "empty script"
  * instead, so it's clear the host ran.
  */
 export const toHostBlock = (hostRecord: HostRecord, mode: Mode): HostBlock => {
-  const { name, stepRecords, failure } = hostRecord
-  if (stepRecords.length === 0 && !failure) return { name, kind: "noSteps" }
+  const { name, entries, failure } = hostRecord
+  if (entries.length === 0 && !failure) return { name, kind: "noEntries" }
 
-  const entries = toHostBlockEntries(hostRecord, mode)
-  return { name, kind: "entries", entries }
+  const hostBlockEntries = toHostBlockEntries(hostRecord, mode)
+  return { name, kind: "entries", entries: hostBlockEntries }
 }

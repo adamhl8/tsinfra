@@ -4,7 +4,7 @@ import path from "node:path"
 import { makeTempDir } from "@adamhl8/configs/test"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
-import { castInvalid, createSession, getFailureMessage } from "#core/__tests__/session.ts"
+import { castInvalid, createSession, getFailureMessage, getFinishedStepRecords } from "#core/__tests__/session.ts"
 import type { Host } from "#core/session.ts"
 import type { ReadOptions } from "#core/session/handlers/read.ts"
 
@@ -21,7 +21,7 @@ const readOrMessage = async (h: Host, cmd: string, options: ReadOptions) => {
 
 /** Returns each finished step's name, options, and the stdout each of its commands recorded. */
 const getRecordedSteps = (hostSession: Awaited<ReturnType<typeof createSession>>) =>
-  hostSession.hostRecord.stepRecords.map(({ name, options, commands }) => ({
+  getFinishedStepRecords(hostSession.hostRecord).map(({ name, options, commands }) => ({
     name,
     options,
     stdouts: commands.map(({ output }) => (output === undefined || isErr(output) ? undefined : output.stdout)),
@@ -29,7 +29,7 @@ const getRecordedSteps = (hostSession: Awaited<ReturnType<typeof createSession>>
 
 /** Returns the tool call each finished step's commands recorded, keyed by each command. */
 const getRecordedToolCalls = (hostSession: Awaited<ReturnType<typeof createSession>>) =>
-  hostSession.hostRecord.stepRecords.map(({ commands }) =>
+  getFinishedStepRecords(hostSession.hostRecord).map(({ commands }) =>
     Object.fromEntries(commands.map(({ cmd, toolCall }) => [cmd, toolCall])),
   )
 
@@ -332,7 +332,7 @@ describe("tool calls", () => {
     await hostSession.host.read("cat >/dev/null", { input: "x", maskOutput: true })
 
     expect({
-      options: hostSession.hostRecord.stepRecords.map(({ options }) => options),
+      options: getFinishedStepRecords(hostSession.hostRecord).map(({ options }) => options),
       toolCalls: getRecordedToolCalls(hostSession),
     }).toStrictEqual({
       options: [{ input: "<content>", maskOutput: true }],

@@ -6,7 +6,13 @@ import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
-import { createSession, loadTestHost, prepareSession, readOpenChanges } from "#core/__tests__/session.ts"
+import {
+  createSession,
+  getFinishedStepRecords,
+  loadTestHost,
+  prepareSession,
+  readOpenChanges,
+} from "#core/__tests__/session.ts"
 import type { HomeDirectory } from "#core/hosts/prepare/host-details.ts"
 import { toSavedStatePath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
 import type { EnsureOptions } from "#core/session/handlers/ensure.ts"
@@ -26,7 +32,7 @@ const loadHostWithMarker = async () => ({ loadedHost: loadTestHost(), marker: ma
 
 /** Returns the status the step named `stepName` finished with, or nothing when it didn't finish. */
 const getStatus = ({ hostRecord }: { hostRecord: HostRecord }, stepName: string) =>
-  hostRecord.stepRecords.find(({ name }) => name === stepName)?.status
+  getFinishedStepRecords(hostRecord).find(({ name }) => name === stepName)?.status
 
 /** Runs `step` and returns what it failed with, as its message chain, or `succeeded`. */
 const getStepFailure = async (step: () => Promise<unknown>) => {
@@ -146,7 +152,7 @@ describe("changes still open from an earlier apply", () => {
         kind: "ensure",
         changed: true,
       })
-      expect(hostSession.hostRecord.stepRecords).toMatchObject([{ name: "Make marker", status: "resume" }])
+      expect(getFinishedStepRecords(hostSession.hostRecord)).toMatchObject([{ name: "Make marker", status: "resume" }])
     },
   )
 
@@ -174,7 +180,7 @@ describe("changes still open from an earlier apply", () => {
     const madeMarker = await hostSession.host.ensure("Make marker", marker)
     await hostSession.host.ensure("Check marker", { want: true, check: "true", fix: "true", needs: [madeMarker] })
 
-    expect(hostSession.hostRecord.stepRecords[1]).toMatchObject({ status: "unchanged", waitingOn: [] })
+    expect(getFinishedStepRecords(hostSession.hostRecord)[1]).toMatchObject({ status: "unchanged", waitingOn: [] })
   })
 
   it("should leave a step that isn't open unchanged", async () => {

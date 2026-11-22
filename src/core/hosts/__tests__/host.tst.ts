@@ -43,4 +43,13 @@ describe("host", () => {
   it("should take a host function written for the plain Host", () => {
     expect(host).type.toBeCallableWith({ name: "a", target: "@local", sudo: { password: "a" } }, configure)
   })
+
+  it("should type h.log's methods as taking a string and returning nothing", () => {
+    host({ name: "a", target: "@local" }, async (h) => {
+      expect(h.log.info).type.toBe<(message: string) => void>()
+      expect(h.log.warn).type.toBe<(message: string) => void>()
+      expect(h.log.info).type.not.toBeCallableWith(1)
+      await h.read("true")
+    })
+  })
 })

@@ -55,7 +55,7 @@ describe("runHost", () => {
     expect(hostRecord).toMatchObject({
       name: "a",
       target: UNREACHABLE_TARGET,
-      stepRecords: [],
+      entries: [],
       failure: { kind: "preparation", hints: [] },
     })
     expect(messageChain(getPreparationFailure(hostRecord))).toBe(
@@ -71,7 +71,7 @@ describe("runHost", () => {
     const hostRecord = await runHostA(readTwice)
 
     expect(hostRecord).toMatchObject({
-      stepRecords: [{ name: "echo hi" }],
+      entries: [{ name: "echo hi" }],
       failure: { kind: "step", stepRecord: { name: "exit 1" } },
     })
     expect(getMessage(hostRecord.failure)).toBe("failed to read 'exit 1' -> exited with code 1")

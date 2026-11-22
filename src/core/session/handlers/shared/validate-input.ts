@@ -3,6 +3,7 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
+import type { MessageKind } from "#core/session/handlers/log.ts"
 import type { ToolName } from "#core/session/handlers/tools.ts"
 import type { StepKind } from "#core/session/step.ts"
 
@@ -10,7 +11,7 @@ export interface InputDescription {
   /** What the input is to the script, like `options` or `command`. */
   inputLabel: string
   /** Who the script gave the input to. A step's error shows under its name, so this only needs the kind. */
-  givenTo: StepKind | ToolName
+  givenTo: StepKind | ToolName | `log.${MessageKind}`
   /** Replaces the summary ArkType writes. */
   reason?: string
 }

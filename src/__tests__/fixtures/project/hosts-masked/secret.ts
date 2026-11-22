@@ -5,6 +5,7 @@ const secretEnv = { TOKEN }
 
 export default host({ name: "secret", target: "@local" }, async (h) => {
   await h.read('printf "token=%s" "$TOKEN"', { secretEnv })
+  h.log.warn(`the token is ${TOKEN}`)
   await h.ensure(`Check ${TOKEN}`, { want: true, check: "true", fix: "true" })
   await h.ensure("Set the tokens", {
     want: [TOKEN, "new"],

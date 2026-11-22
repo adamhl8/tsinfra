@@ -1,4 +1,4 @@
-import { warningLabelElement } from "#report/format/elements/messages.ts"
+import { warningLabelElement } from "#report/format/elements/asides.ts"
 import { warningValueElement } from "#report/format/elements/values.ts"
 import type { StepWarning } from "#report/host-block.ts"
 

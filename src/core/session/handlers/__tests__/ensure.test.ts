@@ -7,7 +7,14 @@ import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
 import { attempt } from "ts-explicit-errors"
 
-import { castInvalid, createSession, ensureOrMessage, getFailureMessage, throwBoom } from "#core/__tests__/session.ts"
+import {
+  castInvalid,
+  createSession,
+  ensureOrMessage,
+  getFailureMessage,
+  getFinishedStepRecords,
+  throwBoom,
+} from "#core/__tests__/session.ts"
 import type { Want } from "#core/session/handlers/ensure/want.ts"
 import type { ChangeTools } from "#core/session/handlers/tools.ts"
 
@@ -551,7 +558,7 @@ describe("h.ensure with a record want", () => {
       fix: "true",
     })
 
-    expect([result, hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values]).toMatchObject([
+    expect([result, getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before?.values]).toMatchObject([
       { changed: true },
       { kind: "record", got: { port: "8080" }, unmet: { port: 8080 } },
     ])
@@ -669,7 +676,7 @@ describe("h.ensure with a record want", () => {
       fix: "true",
     })
 
-    const values = hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values
+    const values = getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before?.values
     const difference: unknown =
       values?.kind === "record" ? { unmet: values.unmet, nestedExtra: values.nestedExtra } : undefined
     expect(result).toMatchObject({ changed: true })
@@ -685,7 +692,7 @@ describe("h.ensure with a record want", () => {
       fix: "true",
     })
 
-    expect([result, hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values]).toMatchObject([
+    expect([result, getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before?.values]).toMatchObject([
       { changed: true },
       { kind: "record", unmet: { a: null } },
     ])
@@ -877,7 +884,7 @@ describe("h.ensure with a record want", () => {
       secretEnv: { TOKEN: "s3cret-token" },
     })
 
-    const values = hostSession.hostRecord.stepRecords[0]?.comparisons.before?.values
+    const values = getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before?.values
     // Compare the set itself, because `toMatchObject` takes any two Sets as matching.
     expect(values?.kind === "record" ? values.got["tokens"] : undefined).toStrictEqual(new Set(["[MASKED]"]))
   })
@@ -1069,7 +1076,7 @@ describe("h.ensure with needs", () => {
     const result = await h.ensure("Install fish plugins", { needs: [brew], want: true, check: "exit 1", fix: "true" })
 
     expect(result).toStrictEqual({ name: "Install fish plugins", kind: "ensure", changed: true })
-    expect(hostSession.hostRecord.stepRecords[1]).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[1]).toMatchObject({
       status: "waiting",
       waitingOn: ["Install brew packages"],
       commands: [],
@@ -1082,7 +1089,7 @@ describe("h.ensure with needs", () => {
     const brew = await h.ensure("Install brew packages", { want: true, check: "true", fix: "true" })
     await h.ensure("Install fish plugins", { needs: [brew], want: true, check: "false", fix: "true" })
 
-    expect(hostSession.hostRecord.stepRecords[1]?.status).toBe("changed")
+    expect(getFinishedStepRecords(hostSession.hostRecord)[1]?.status).toBe("changed")
   })
 
   it("should check as usual in plan when needs is empty", async () => {
@@ -1090,7 +1097,7 @@ describe("h.ensure with needs", () => {
     const { host: h } = hostSession
     await h.ensure("Install fish plugins", { needs: [], want: true, check: "false", fix: "true" })
 
-    expect(hostSession.hostRecord.stepRecords[0]?.status).toBe("changed")
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.status).toBe("changed")
   })
 
   it("should wait on a needed step that is itself waiting, and name it", async () => {
@@ -1100,7 +1107,10 @@ describe("h.ensure with needs", () => {
     const fish = await h.ensure("Install fish", { needs: [brew], want: true, check: "true", fix: "true" })
     await h.ensure("Install fish plugins", { needs: [fish], want: true, check: "true", fix: "true" })
 
-    expect(hostSession.hostRecord.stepRecords[2]).toMatchObject({ status: "waiting", waitingOn: ["Install fish"] })
+    expect(getFinishedStepRecords(hostSession.hostRecord)[2]).toMatchObject({
+      status: "waiting",
+      waitingOn: ["Install fish"],
+    })
   })
 
   it("should ignore needs in apply", async () => {
@@ -1109,7 +1119,10 @@ describe("h.ensure with needs", () => {
     const brew = await h.ensure("Install brew packages", { want: true, check: "false", fix: "true", verify: false })
     await h.ensure("Install fish plugins", { needs: [brew], want: true, check: "true", fix: "true" })
 
-    expect(hostSession.hostRecord.stepRecords[1]).toMatchObject({ status: "unchanged", commands: [{ cmd: "true" }] })
+    expect(getFinishedStepRecords(hostSession.hostRecord)[1]).toMatchObject({
+      status: "unchanged",
+      commands: [{ cmd: "true" }],
+    })
   })
 })
 

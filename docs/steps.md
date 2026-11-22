@@ -21,6 +21,7 @@ Everything a host script does to its host goes through `h`, the context passed t
   - [`fix`](#fix)
 - [`run`](#run)
   - [When an apply doesn't finish](#when-an-apply-doesnt-finish)
+- [Messages](#messages)
 - [Failure](#failure)
 - [What `plan` can and cannot show](#what-plan-can-and-cannot-show)
 
@@ -30,6 +31,7 @@ Everything a host script does to its host goes through `h`, the context passed t
 // `O` is the type of the host's options, which `host()` passes on to its function's `h`.
 interface Host<O extends HostOptions = HostOptions> {
   readonly meta: HostMeta<O>
+  readonly log: Log
   read(cmd: string, options?: ReadOptions): Promise<string>
   inspect(cmd: string, options?: InspectOptions): Promise<InspectResult>
   file(path: string, content: string | Uint8Array | Blob, options?: FileOptions): Promise<ChangeStepResult>
@@ -49,6 +51,12 @@ interface HostMeta<O extends HostOptions = HostOptions> {
   // `string` with sudo: { password }, `string | undefined` with sudo: true, `undefined` with sudo off.
   // See Transport's sudo section.
   readonly sudoPassword: SudoPassword<O["sudo"]>
+}
+
+// Records a message for the report. It runs nothing on the host, so it's synchronous. See Messages.
+interface Log {
+  info(message: string): void // shown from -v
+  warn(message: string): void // shown at the default level, and counted in the summary
 }
 
 // Tools that only read the host, given to a check function. These are the same as `h.read` and `h.inspect`.
@@ -110,7 +118,7 @@ So plain TypeScript control flow is fine in a host script, except for one decisi
 
 A fact that picks steps is one that no step on the host changes, like the CPU architecture or whether the host is a container. Branching on state that an earlier step changes runs into [what `plan` cannot show](#what-plan-can-and-cannot-show).
 
-Read a fact at the top level, and use it inside a step through the closure. A fact doesn't change during the run, so reading it once is enough, even when it only shapes one step, like the CPU architecture in a download URL. A step's function can't call `h`, so a one-off command that only a fix needs goes through the fix's own tools instead, and is recorded under that step.
+Read a fact at the top level, and use it inside a step through the closure. A fact doesn't change during the run, so reading it once is enough, even when it only shapes one step, like the CPU architecture in a download URL. A step's function can't call a step on `h`, so a one-off command that only a fix needs goes through the fix's own tools instead, and is recorded under that step.
 
 The wrong shape for a change is a read, an `if`, and a `run`:
 
@@ -227,7 +235,7 @@ A check function runs in `plan`, so a mistake there shows up on the first `plan`
 
 ## Steps
 
-A step is one call on `h`. A host function is a series of steps, run one at a time at the top level of the script. There are two kinds:
+A step is one call on `h`, other than `h.log` (see [Messages](#messages)). A host function is a series of steps, run one at a time at the top level of the script. There are two kinds:
 
 - **Read steps** tell the script about the host, and return what they found. They're [`read`](#read) and [`inspect`](#inspect).
 - **Change steps** can change the host, whether or not they do, and each returns a `ChangeStepResult`. They're all the others.
@@ -1032,6 +1040,24 @@ The open changes live in the host's saved state (see [Transport](./transport.md#
 - **A renamed change step loses its open change,** which is how every trigger works without them.
 - **A changed step opens its change with one more command,** and a run that follows an open change records itself with another.
 - **Two control machines applying to one host at once can race** on the saved state. tsinfra has no locking.
+
+## Messages
+
+`h.log` adds something of the script's own to the report, like a setting it found somewhere other than where the script declared it, or a section it skipped because of something it read. A `console.log` writes into the middle of tsinfra's output, so a script logs with `h.log` instead.
+
+```ts
+const release = await h.read("lsb_release -rs")
+if (release === "11") h.log.info("Debian 11, so the Incus setup is skipped")
+else await setUpIncus(h)
+```
+
+- **`h.log.info(message)` and `h.log.warn(message)`** are the two kinds of message. A warning shows at the default level, and the summary counts it with the other warnings, like `unchanged, 1 warning`. An info shows from `-v`, with the steps that were already right, so an info added while debugging a script doesn't clutter the default output. A message isn't drift, so it never changes the exit code.
+- **It's synchronous,** because it runs nothing on the host, so it needs no `await`. It records the same thing in `plan` and `apply`.
+- **A message logged outside a step** shows on its own line, in script order with the steps around it, like `- warning: the old unit is still there`. A remark about the host as a whole goes at the top or the bottom of the host function.
+- **A message a step's function logs** belongs to that step, because steps run one at a time, so the step that's running is the one that logged it. A fix logs only in `apply`, because `plan` never runs it, and a waiting step runs no functions. The report doesn't show these messages yet (see [Messages under their steps](./roadmap.md#messages-under-their-steps)).
+- **It's on `h`,** not imported from `tsinfra`, so it always knows which host logged, and an integration that takes `h` can log too.
+- **A secret in a message is `[MASKED]`,** like one in a command's output.
+- **A message must be a non-empty string.** Anything else fails the host and throws, like a bad argument to a step, and inside a step's function it fails that step. After the host has failed, `h.log` throws the host's failure, like every other call on `h`.
 
 ## Failure
 

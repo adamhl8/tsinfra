@@ -6,7 +6,8 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 
 - [Next](#next)
   - [One note for an apply that didn't finish](#one-note-for-an-apply-that-didnt-finish)
-  - [A logger for a step's functions](#a-logger-for-a-steps-functions)
+  - [Messages under their steps](#messages-under-their-steps)
+  - [A record's `differing` keys](#a-records-differing-keys)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
   - [Live progress](#live-progress)
@@ -51,9 +52,117 @@ After an apply fails, the next pass shows every step that changed in it, and is 
 
 When it's built, [CLI](./cli.md#how-the-report-is-built) describes the host's note in place of the two per-step notes, and [Steps](./steps.md#when-an-apply-doesnt-finish) drops the quoted notes.
 
-### A logger for a step's functions
+### Messages under their steps
 
-A check, fix, or run function can only run commands with its tools (`read`, `inspect`, `exec`), so it has no way to add anything of its own to the report. Sometimes it knows something the user should see that is neither drift nor a failure, like a setting it found somewhere other than where the script declared it. Each of these functions also gets a logger with its tools, along the lines of `logger.info(message)` and `logger.warn(message)`, and what it logs shows under its step in the report, the way a link step's missing target already shows as a warning. Unlike [diagnostic logs](#diagnostic-logs), which are about what tsinfra itself did, these messages are part of the report. The exact shape, the levels, and which verbosity shows each level are still to be decided.
+A message a step's function logs with `h.log` (see [Steps](./steps.md#messages)) is already recorded with its step, with the phase that was running and how many of the step's commands came before it. The report doesn't show it yet. A message logged outside a step already shows on its own line.
+
+```ts
+export default host({ name: "sonarr", target: "sonarr.lan" }, async (h) => {
+  const release = await h.read("lsb_release -rs")
+  if (release === "11") h.log.info("Debian 11, so the Incus setup is skipped")
+
+  await h.ensure("Set the API key", {
+    want: true,
+    check: async ({ read }) => {
+      const override = await read("grep -c '^API_KEY=' /etc/sonarr/env || true")
+      if (override !== "0") h.log.warn("/etc/sonarr/env also sets API_KEY, and it wins")
+      return (await read("grep -c '<ApiKey>' /var/lib/sonarr/config.xml || true")) === "1"
+    },
+    fix: async ({ exec }) => { ... },
+  })
+})
+```
+
+- **A message inside a step** is a row under the step's details, after the step's own warnings: `warning: <text>`, with the bright yellow label a step warning has, or `info: <text>`, with a dim label. The text is plain, because it's the script's own words. A row isn't lined up with the details' value column, like a step warning's, so a long label doesn't push the `got:` and `want:` values to the right. It's an aligned row of its own, like a message between steps, so a multi-line message's later lines line up under its first line's text.
+- **A `warn` shows at the default level, and an `info` from `-v`,** like a message between steps. A warning brings up its step at the default level even when the step was already right, the way a step warning does.
+- **Below `-vv`, each distinct message shows once,** in the order it first appeared. An `ensure` check runs before and after the fix in `apply`, so a check that logs the same thing both times shows it once, and an after-check that logs something new still shows it. Messages are compared by kind and text.
+- **From `-vv`, every message shows in place among the step's commands,** after the commands recorded before it, duplicates included, so it's clear which messages each pass reached. The commands at `-vv` already repeat a check's commands, so a repeated message reads the same way, and at `-vvv` each one sits under its phase's heading. A message starts in the tool column, where `(read)` starts, at every level, so it reads as a sibling of the commands, not as a command's text or output. The deduplicated rows stop at 2 (`until: 2`), and the in-place ones show from 2.
+- **A failed step keeps its messages.** Unlike a step warning, a message isn't worked out from the step's facts, which a failure can leave incomplete. The script wrote it, and it's often what explains the failure. The messages a step reached before it failed show, and the ones after the failure never ran.
+- **The summary's warning count includes a step's `warn` messages,** as long as its block shows them, like the ones between steps.
+
+The same host in `apply`, at each level:
+
+```
+sonarr                                                    # default
+  = unchanged: (ensure) Set the API key
+      warning: /etc/sonarr/env also sets API_KEY, and it wins
+
+sonarr                                                    # -v
+  · observed: (read) lsb_release -rs
+  - info: Debian 11, so the Incus setup is skipped
+  = unchanged: (ensure) Set the API key
+      warning: /etc/sonarr/env also sets API_KEY, and it wins
+
+sonarr                                                    # -vv
+  · observed: (read) lsb_release -rs
+  - info: Debian 11, so the Incus setup is skipped
+  = unchanged: (ensure) Set the API key
+      commands:
+        (read) $ grep -c '^API_KEY=' /etc/sonarr/env || true
+        warning: /etc/sonarr/env also sets API_KEY, and it wins
+        (read) $ grep -c '<ApiKey>' /var/lib/sonarr/config.xml || true
+
+sonarr                                                    # -vvv
+  · observed: (read) lsb_release -rs
+      output:
+        exit:   0
+        stdout: 11
+  - info: Debian 11, so the Incus setup is skipped
+  = unchanged: (ensure) Set the API key
+      commands:
+        before:
+          (read) $ grep -c '^API_KEY=' /etc/sonarr/env || true
+                     output:
+                       exit:   0
+                       stdout: 1
+          warning: /etc/sonarr/env also sets API_KEY, and it wins
+          (read) $ grep -c '<ApiKey>' /var/lib/sonarr/config.xml || true
+                     output:
+                       exit:   0
+                       stdout: 1
+```
+
+When it's built, [Steps](./steps.md#messages) says how a step's messages show, in place of "the report doesn't show these messages yet", and the `ensure` and `run` sections say that their functions can log. [CLI](./cli.md#how-the-report-is-built)'s Messages bullet covers the rows under a step, the deduplication, and the messages in place from `-vv`, and its summary bullet counts a step's warning messages.
+
+#### Building it
+
+The first two pieces of this feature are built: a host's record holds `entries`, and `h.log` records every message and shows the ones between steps. What's left is one piece, one commit, in three reviews.
+
+3. **Messages under their steps.**
+   - **3a.** Below `-vv`. A step's details get a messages detail after its warnings, with each distinct message once in first-seen order, `warning:` rows from 0 and `info:` rows from 1, stopping at 2. Failed steps get it too, through `toStepFailureDetails`. A shown `warn` row counts in the summary. Report tests cover deduplication across `before` and `after`, a new after-check message, an unchanged step that a warning brings up at the default level, and a failed step's messages.
+   - **3b.** From `-vv`. A `CommandGroup` holds commands and messages in the order they were recorded, using each message's command count to place it, so every message shows in place from 2, and under its phase from 3, duplicates included. A message line starts in the tool column. A `run`'s messages go in its one group. A step with messages and no commands still gets its `commands:` heading from 2. Report tests cover placement between commands at 2 and 3, under each phase, the tool column, and a `run`.
+   - **3c.** Docs and the preview. Steps' `ensure` and `run` sections say their functions can log, and CLI describes the deduplication and the in-place messages from `-vv`. `report-preview.ts` gets an `ensure` step whose check logs before and after the fix. This roadmap entry is deleted.
+
+### A record's `differing` keys
+
+Some fixes write whole values above the leaves. A macOS defaults fix writes a key, or one entry of a dict, whole, from `want`. Such a fix needs to know which wanted keys to rewrite, and neither `unmet` nor `nestedExtra` says that alone. A dict entry that only gained a key on the host isn't in `unmet`, because nothing it wants is wrong, and shows up only in `nestedExtra`. So the fix merges the two itself, and one that reads only `unmet` leaves that entry unwritten and fails the check after the fix. `differing` gives the fix that answer directly.
+
+- **It's a new field of a record's fix difference,** after `nestedExtra`. `got`, `want`, `unmet`, `extra`, and `nestedExtra` stay as they are, and the second argument stays flat.
+- **It marks every path where something differs as `true`, wanted or extra,** in `want`'s key order, with the host's keys after. A record above a mark holds only its keys that lead to one, the way `unmet` prunes a nested record. So `foo: { b: true }` means only `foo.b` differs, and `bar: { c: true }` means the host's `bar` has a key `c` that `want`'s doesn't. A top-level key only the host has is marked like any other, as `qux: true`.
+- **`true` means that exact path differs:** a value that changed, a nested set with missing or extra items, or a key only the host has. The host's keys under an extra key aren't listed, and neither are a record's keys when `want` has a plain value there and the host has a record.
+- **A wanted value the host doesn't have expands into its wanted keys,** like `unmet` holding the whole wanted value, so a missing `foo` is `{ foo: { a: true, b: true } }`. So is a wanted record where the host has another kind of value. An empty wanted record has no keys to expand into, so it's `true`.
+- **It holds no values.** Values would mix the two sides, so a fix couldn't tell a host's value from a wanted one. A key in `differing` may exist only on the host, which a fix tells by `want` not having it.
+
+Which field a fix reads:
+
+- **`unmet`:** what do I need to set?
+- **`extra` and `nestedExtra`:** what do I need to remove?
+- **`differing`:** which keys do I need to rewrite?
+
+A fix that sets and removes item by item, like a package list or a config's keys, reads the first two. One that writes whole values at some depth reads `differing` at that depth and rewrites each marked key from `want`, like `pick(want[domain] ?? {}, Object.keys(differing[domain] ?? {}))`. An extra below that depth is gone once its wanted ancestor is rewritten. A marked key at that depth that `want` doesn't have is one to remove, and `pick` drops it, so only a fix whose check can return such a key handles it.
+
+The fields stay separate because each one is a set of actions a fix applies without comparing anything: set each value in `unmet`, remove each entry in `extra` and `nestedExtra`, and rewrite each key `differing` marks. Merging any two brings back the comparison, because the fix would have to sort the actions out by looking at `want`. `nestedExtra` overlaps `differing`'s extra marks on purpose. It stays a list because a removal happens exactly where `want` stops, and a tree of host values couldn't say whether a whole record is extra or only a key inside a wanted one.
+
+```ts
+want        { foo: { a: 1, b: 2 }, bar: { a: 1, b: 2 }, baz: "x" }
+got         { foo: { a: 1, b: 3 }, bar: { a: 1, b: 2, c: 9 }, baz: "x", qux: "y" }
+unmet       { foo: { b: 2 } }
+extra       { qux: "y" }
+nestedExtra [{ kind: "key", path: ["bar", "c"], value: 9 }]
+differing   { foo: { b: true }, bar: { c: true }, qux: true }
+```
+
+When it's built, [Steps](./steps.md#fix) describes `differing` under "What the check found", with the three questions above, and its advice to write a whole value from `want` points to it.
 
 ## Planned
 

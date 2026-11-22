@@ -17,6 +17,7 @@ import {
   createFakeToolSession,
   createSession,
   fileOrMessage,
+  getFinishedStepRecords,
   getStepRecords,
 } from "#core/__tests__/session.ts"
 import { handleFile } from "#core/session/handlers/file.ts"
@@ -36,7 +37,8 @@ const getWriteScript = async (filePath: string) => {
   const hostSession = await createSession("apply")
   await fileOrMessage(hostSession.host, filePath, "new\n")
 
-  return hostSession.hostRecord.stepRecords[0]?.commands.find(({ label }) => label === "file write script")?.cmd
+  return getFinishedStepRecords(hostSession.hostRecord)[0]?.commands.find(({ label }) => label === "file write script")
+    ?.cmd
 }
 
 describe("h.file in plan", () => {
@@ -46,7 +48,7 @@ describe("h.file in plan", () => {
     const result = await fileOrMessage(hostSession.host, filePath, "a\n")
 
     expect(result).toStrictEqual({ name: filePath, kind: "file", changed: true })
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before).toMatchObject({
       values: { kind: "file", content: { kind: "new", wantSize: 2 }, attributeChanges: [] },
     })
     expect(await bun.file(filePath).exists()).toBe(false)
@@ -66,7 +68,7 @@ describe("h.file in plan", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, "a\nc\n")
 
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before).toMatchObject({
       values: { content: { kind: "text", got: "a\nb\n", want: "a\nc\n" } },
     })
   })
@@ -77,7 +79,7 @@ describe("h.file in plan", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, "a\nc\n")
 
-    expect(hostSession.hostRecord.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual([
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.commands.map(({ label }) => label)).toStrictEqual([
       "file details script",
       "file content",
       "user command",
@@ -95,7 +97,7 @@ describe("h.file in plan", () => {
     await fileOrMessage(hostSession.host, modeFilePath, "a\n", { mode: "644" })
     await fileOrMessage(hostSession.host, otherFilePath, "a\n")
 
-    expect(hostSession.hostRecord.stepRecords.map(({ comparisons }) => comparisons.before)).toMatchObject([
+    expect(getFinishedStepRecords(hostSession.hostRecord).map(({ comparisons }) => comparisons.before)).toMatchObject([
       {
         values: {
           content: { kind: "same" },
@@ -113,7 +115,7 @@ describe("h.file in plan", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, "a\n", { mode: PUBLIC_FILE_MODE })
 
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before).toMatchObject({
       values: { attributeChanges: [{ name: "mode", got: 0o600, want: 0o644 }] },
     })
   })
@@ -131,7 +133,7 @@ describe("h.file in plan", () => {
     await fileOrMessage(hostSession.host, uidFilePath, "a\n", { user: uid, sudo: true })
     await fileOrMessage(hostSession.host, otherUidFilePath, "a\n", { user: uid + 1, sudo: true })
 
-    expect(hostSession.hostRecord.stepRecords.map(({ comparisons }) => comparisons.before)).toMatchObject([
+    expect(getFinishedStepRecords(hostSession.hostRecord).map(({ comparisons }) => comparisons.before)).toMatchObject([
       { inSync: true },
       { inSync: true },
       { values: { attributeChanges: [{ name: "user", got: uid, want: uid + 1 }] } },
@@ -145,7 +147,7 @@ describe("h.file in plan", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, "a\n", { group: gid + 1 })
 
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before).toMatchObject({
       values: { attributeChanges: [{ name: "group", got: gid, want: gid + 1 }] },
     })
   })
@@ -156,10 +158,12 @@ describe("h.file in plan", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, "new token\n", { secret: true })
 
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before).toMatchObject({
       values: { content: { kind: "hidden" } },
     })
-    expect(hostSession.hostRecord.stepRecords[0]?.commands.some(({ cmd }) => cmd.startsWith("cat "))).toBe(false)
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.commands.some(({ cmd }) => cmd.startsWith("cat "))).toBe(
+      false,
+    )
   })
 
   it.each([
@@ -171,10 +175,12 @@ describe("h.file in plan", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, bytes)
 
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before).toMatchObject({
       values: { content: { kind: "binary" } },
     })
-    expect(hostSession.hostRecord.stepRecords[0]?.commands.some(({ cmd }) => cmd.startsWith("cat "))).toBe(false)
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.commands.some(({ cmd }) => cmd.startsWith("cat "))).toBe(
+      false,
+    )
   })
 
   it.each([
@@ -186,7 +192,7 @@ describe("h.file in plan", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, "a\n")
 
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before).toMatchObject({
       values: { content: { kind: "binary" } },
     })
   })
@@ -197,7 +203,7 @@ describe("h.file in plan", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, new Uint8Array([0, 1, 2]))
 
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before).toMatchObject({
       values: { content: { kind: "binary", gotSize: 2, wantSize: 3 } },
     })
   })
@@ -208,10 +214,12 @@ describe("h.file in plan", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, "b\n")
 
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before).toMatchObject({
       values: { content: { kind: "large" } },
     })
-    expect(hostSession.hostRecord.stepRecords[0]?.commands.some(({ cmd }) => cmd.startsWith("cat "))).toBe(false)
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.commands.some(({ cmd }) => cmd.startsWith("cat "))).toBe(
+      false,
+    )
   })
 
   it("should not diff new content over 100 kB", async () => {
@@ -220,10 +228,12 @@ describe("h.file in plan", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, "b".repeat(200 * 1024))
 
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before).toMatchObject({
       values: { content: { kind: "large" } },
     })
-    expect(hostSession.hostRecord.stepRecords[0]?.commands.some(({ cmd }) => cmd.startsWith("cat "))).toBe(false)
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.commands.some(({ cmd }) => cmd.startsWith("cat "))).toBe(
+      false,
+    )
   })
 
   it("should resolve ~/ to the SSH user's home", async () => {
@@ -231,7 +241,9 @@ describe("h.file in plan", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, `~/${relativePath}`, "a\n")
 
-    const commands = hostSession.hostRecord.stepRecords[0]?.commands.map(({ cmd }) => cmd).join("\n")
+    const commands = getFinishedStepRecords(hostSession.hostRecord)[0]
+      ?.commands.map(({ cmd }) => cmd)
+      .join("\n")
     expect(commands).toContain(`'${path.join(hostSession.home, relativePath)}'`)
   })
 })
@@ -259,7 +271,7 @@ describe("h.file content", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, bun.file(localPath))
 
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before).toMatchObject({
       values: { content: { kind: "text", got: "a\nb\n", want: "a\nc\n" } },
     })
   })
@@ -272,7 +284,7 @@ describe("h.file content", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, bun.file(localPath))
 
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before).toMatchObject({
       values: { content: { kind: "binary", gotSize: 2, wantSize: 3 } },
     })
   })
@@ -407,7 +419,7 @@ describe("h.file owner check", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, await createFilePath(), "a\n")
 
-    expect(hostSession.hostRecord.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual([
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.commands.map(({ label }) => label)).toStrictEqual([
       "file details script",
     ])
   })
@@ -520,7 +532,7 @@ describe("h.file in apply", () => {
     expect(result).toStrictEqual({ name: filePath, kind: "file", changed: true })
     expect(await bun.file(filePath).text()).toBe("a\n")
     expect(await getMode(filePath)).toBe(0o644)
-    expect(hostSession.hostRecord.stepRecords[0]?.status).toBe("changed")
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.status).toBe("changed")
   })
 
   it("should write a new secret file as private", async () => {
@@ -580,7 +592,7 @@ describe("h.file in apply", () => {
     const result = await fileOrMessage(hostSession.host, filePath, "a\n", { mode: "640" })
 
     expect(result).toStrictEqual({ name: filePath, kind: "file", changed: false })
-    expect(hostSession.hostRecord.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual([
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.commands.map(({ label }) => label)).toStrictEqual([
       "file details script",
     ])
   })
@@ -682,7 +694,7 @@ describe("h.file in apply", () => {
     const hostSession = await createSession("apply")
     await fileOrMessage(hostSession.host, filePath, "secret token\n", { secret: true })
 
-    const commands = hostSession.hostRecord.stepRecords[0]?.commands
+    const commands = getFinishedStepRecords(hostSession.hostRecord)[0]?.commands
     const encoded = Buffer.from("secret token\n").toString("base64")
     expect(commands?.map(({ label, phase }) => [label, phase])).toStrictEqual([
       ["file details script", "before"],
@@ -716,7 +728,7 @@ describe("h.file with sudo", () => {
 
     expect(await fileOrMessage(hostSession.host, filePath, "new\n", { sudo: true })).toMatchObject({ changed: true })
 
-    const commands = hostSession.hostRecord.stepRecords[0]?.commands
+    const commands = getFinishedStepRecords(hostSession.hostRecord)[0]?.commands
     expect(await bun.file(filePath).text()).toBe("new\n")
     expect(commands?.map(({ label }) => label)).toStrictEqual([
       "file details script",
@@ -767,7 +779,7 @@ describe("h.file with sudo", () => {
     )
 
     expect(hostSession.hostRecord).toMatchObject({
-      stepRecords: [],
+      entries: [],
       failure: { kind: "step", stepRecord: { commands: [] } },
     })
     expect(getStepRecords(hostSession.hostRecord).map(({ options }) => options)).toStrictEqual([{}])
@@ -903,7 +915,7 @@ describe("h.file with overwrite: false", () => {
     expect(result).toMatchObject({ changed: false })
     expect(await bun.file(filePath).text()).toBe("changed by the app\n")
     expect(await getMode(filePath)).toBe(0o644)
-    expect(hostSession.hostRecord.stepRecords[0]?.commands.map(({ label }) => label)).toStrictEqual([
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.commands.map(({ label }) => label)).toStrictEqual([
       "file details script",
     ])
   })
@@ -914,7 +926,7 @@ describe("h.file with overwrite: false", () => {
     const hostSession = await createSession("plan")
     await fileOrMessage(hostSession.host, filePath, "a\n", { overwrite: false })
 
-    expect(hostSession.hostRecord.stepRecords[0]?.comparisons.before).toMatchObject({
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons.before).toMatchObject({
       inSync: true,
       values: { content: { kind: "same" }, attributeChanges: [] },
     })

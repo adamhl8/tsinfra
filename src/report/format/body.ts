@@ -3,8 +3,8 @@ import { messageChain } from "ts-explicit-errors"
 import type { DetailRows } from "#report/format/details.ts"
 import { formatDetail } from "#report/format/details.ts"
 import type { DiffLimits } from "#report/format/details/diff/limits.ts"
-import { errorLineElement } from "#report/format/elements/messages.ts"
-import type { HostBlockEntry } from "#report/host-block.ts"
+import { errorLineElement } from "#report/format/elements/asides.ts"
+import type { StatusLineEntry } from "#report/host-block.ts"
 import { splitNonEmptyLines } from "#utils.ts"
 
 /** The lines under an entry's status line, each formatted, before layout lines up its aligned rows and indents them. */
@@ -15,8 +15,8 @@ export interface Body {
 }
 
 /** Formats an entry's error lines in red, if it failed, and each of its details' rows. */
-export const formatBody = (hostBlockEntry: HostBlockEntry, diffLimits: DiffLimits): Body => {
-  const { details, error } = hostBlockEntry
+export const formatBody = (statusLineEntry: StatusLineEntry, diffLimits: DiffLimits): Body => {
+  const { details, error } = statusLineEntry
   const detailRows = details.map((detail) => formatDetail(detail, diffLimits))
   if (!error) return { detailRows }
 

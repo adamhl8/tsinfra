@@ -4,7 +4,7 @@ import path from "node:path"
 
 import { makeTempDir } from "@adamhl8/configs/test"
 
-import { createFakeSudoSession, readOrMessage, writeFakeTool } from "#core/__tests__/session.ts"
+import { createFakeSudoSession, getFinishedStepRecords, readOrMessage, writeFakeTool } from "#core/__tests__/session.ts"
 import { runLocal } from "#core/transport/local.ts"
 import { buildAskpassHelperWriteScript, createAskpassSudoTransport } from "#core/transport/sudo.ts"
 
@@ -19,7 +19,7 @@ describe("createPasswordlessSudoTransport", () => {
 
     expect(await readOrMessage(hostSession.host, "sudo echo hi")).toBe("hi")
     expect(await readSudoCalls()).toStrictEqual(["-n echo hi"])
-    expect(hostSession.hostRecord.stepRecords[0]?.commands[0]?.cmd).toBe("sudo echo hi")
+    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.commands[0]?.cmd).toBe("sudo echo hi")
   })
 })
 
