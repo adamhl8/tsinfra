@@ -4,7 +4,7 @@ import type {
   RecordValue,
   RecordWant,
 } from "#core/session/handlers/ensure/comparison/record.ts"
-import type { NestedExtraEntry } from "#core/session/handlers/ensure/comparison/record/difference.ts"
+import type { NestedExtraEntry } from "#core/session/handlers/ensure/comparison/record/difference/nested-extra.ts"
 import {
   isNestedList,
   isNestedRecord,

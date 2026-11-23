@@ -1,9 +1,19 @@
 import { deepEqual } from "fast-equals"
 
 import type { RecordPrimitive, RecordValue, RecordWant } from "#core/session/handlers/ensure/comparison/record.ts"
-import type { NestedExtraList } from "#core/session/handlers/ensure/comparison/record/difference/nested-extra.ts"
+import type {
+  DifferingMark,
+  DifferingRecord,
+} from "#core/session/handlers/ensure/comparison/record/difference/differing.ts"
+import { markAllKeys, markExtraKeys } from "#core/session/handlers/ensure/comparison/record/difference/differing.ts"
+import type {
+  NestedExtraEntry,
+  NestedExtraKey,
+  NestedExtraList,
+} from "#core/session/handlers/ensure/comparison/record/difference/nested-extra.ts"
 import type { UnmetRecord } from "#core/session/handlers/ensure/comparison/record/difference/unmet.ts"
 import { isNestedRecord, isNestedSet } from "#core/session/handlers/ensure/comparison/record/nested-kinds.ts"
+import type { Simplify, WithoutNeverKeys } from "#core/session/handlers/ensure/comparison/record/utils.ts"
 import { toSetDifference } from "#core/session/handlers/ensure/comparison/set.ts"
 import { getOwnValue } from "#utils.ts"
 
@@ -27,32 +37,13 @@ export type RecordDifference<T = RecordWant> = Simplify<
     extra: Record<string, RecordValueIn<T>>
     /** What the host has inside the values `want` keeps: a key in a nested record, or a nested set's extra items. */
     nestedExtra: NestedExtraList<T>
+    /**
+     * Each path where the host differs from `want`, marked `true`, with a nested record holding only its keys that lead
+     * to a mark. A fix that writes whole values at some depth rewrites each key marked there from `want`.
+     */
+    differing: DifferingRecord<T>
   }>
 >
-
-// Leave out a key whose type is `never`, like `nestedExtra` for a `want` that can't nest a record or a set.
-// Map one object literal rather than intersect two, because an intersection's keys can show in any order in a hover.
-type WithoutNeverKeys<T> = { [K in keyof T as IsNever<T[K]> extends true ? never : K]: T[K] }
-
-/** A key the host has in a nested record that `want` doesn't. */
-export interface NestedExtraKey<V = RecordValue> {
-  /** Marks a key in a nested record, as opposed to a nested set's items. */
-  kind: "key"
-  /** The keys from the top-level key down to the extra one, like `["env", "DEBUG"]`. */
-  path: readonly [string, ...string[], string]
-  /** The host's value at `path`. */
-  value: V
-}
-
-/** The items the host has in a nested set that `want` doesn't. */
-export interface NestedExtraItems<I = RecordPrimitive> {
-  /** Marks a nested set's items, as opposed to a key in a nested record. */
-  kind: "items"
-  /** The keys from the top-level key down to the set, like `["packages"]`. */
-  path: readonly [string, ...string[]]
-  /** The items the host's set has that `want`'s doesn't, in the host's order. */
-  value: I[]
-}
 
 // Distribute over `T`, so a union of records gives each one's values.
 // Leave out `undefined`, which an optional key adds, because validation refuses it as a value.
@@ -61,30 +52,24 @@ export type RecordValueIn<T> = T extends unknown ? Exclude<T[keyof T], undefined
 /** A record value that isn't a nested record, with items of any type, so a list or a set `want` types matches too. */
 export type NonRecordValue = RecordPrimitive | readonly unknown[] | ReadonlySet<unknown>
 
-// Wrap `T` in a tuple, because a bare `T extends never` gives `never` for `never` instead of `true`.
-export type IsNever<T> = [T] extends [never] ? true : false
-
-// Flatten an intersection into one object type, so a hover shows its keys.
-// Intersect with `{}`, because a hover otherwise shows `Simplify<...>` around the intersection.
-// oxlint-disable-next-line typescript/ban-types - the `{}` is what makes a hover show the flattened type
-export type Simplify<T> = { [K in keyof T]: T[K] } & {}
-
-/** A `nestedExtra` entry for any record, as the comparison builds it and the report reads it. */
-export type NestedExtraEntry = NestedExtraKey | NestedExtraItems
-
 /** The path to a value inside a record, from its top-level key. */
 type ValuePath = readonly [string, ...string[]]
 
-/** How one wanted value differs from the host's: the part of it that's unmet, if any, and the extras inside it. */
+/**
+ * How one wanted value differs from the host's: the part of it that's unmet, if any, the extras inside it, and its
+ * mark, if anything differs.
+ */
 interface ValueDifference {
   unmet: RecordValue | undefined
   nestedExtra: NestedExtraEntry[]
+  differing: DifferingMark<RecordValue> | undefined
 }
 
 /** How the keys a record `want` has differ from the host's record, leaving out the keys only the host has. */
 interface WantedKeysDifference {
   unmet: RecordWant
   nestedExtra: NestedExtraEntry[]
+  differing: DifferingRecord<RecordWant>
 }
 
 /** Returns the entries of `record` whose keys `others` doesn't have, in `record`'s key order. */
@@ -100,30 +85,37 @@ const toNestedSetDifference = (
   const { missing, extra } = toSetDifference(got, want)
   const unmet = missing.length > 0 ? new Set(missing) : undefined
   const nestedExtra: NestedExtraEntry[] = extra.length > 0 ? [{ kind: "items", path, value: extra }] : []
-  return { unmet, nestedExtra }
+  const hasDifference = missing.length > 0 || extra.length > 0
+  const differing = hasDifference ? true : undefined
+  return { unmet, nestedExtra, differing }
 }
 
 /**
  * Compares two nested records by key. The keys that differ are unmet, and the host's other keys are extras, after the
- * extras inside the wanted keys.
+ * extras inside the wanted keys. Both kinds of key are marked, the wanted ones first.
  */
 const toNestedRecordDifference = (got: RecordWant, want: RecordWant, path: ValuePath): ValueDifference => {
   // oxlint-disable-next-line no-use-before-define - a nested record's keys compare like a record's
   const wantedKeysDifference = toWantedKeysDifference(got, want, path)
-  const extraKeys = Object.entries(getEntriesNotIn(got, want)).map(([key, value]): NestedExtraKey => ({
+  const extra = getEntriesNotIn(got, want)
+  const extraKeys = Object.entries(extra).map(([key, value]): NestedExtraKey => ({
     kind: "key",
     path: [...path, key],
     value,
   }))
+  const allDiffering = { ...wantedKeysDifference.differing, ...markExtraKeys(extra) }
 
   const hasUnmet = Object.keys(wantedKeysDifference.unmet).length > 0
   const unmet = hasUnmet ? wantedKeysDifference.unmet : undefined
-  return { unmet, nestedExtra: [...wantedKeysDifference.nestedExtra, ...extraKeys] }
+  const hasDiffering = Object.keys(allDiffering).length > 0
+  const differing = hasDiffering ? allDiffering : undefined
+  return { unmet, nestedExtra: [...wantedKeysDifference.nestedExtra, ...extraKeys], differing }
 }
 
 /**
  * Compares a wanted value with the host's. Two records or two sets compare inside, and any other value is unmet whole
- * unless it's equal, including a value of another kind than the host's, or one the host doesn't have.
+ * unless it's equal, including a value of another kind than the host's, or one the host doesn't have. Such a value is
+ * marked `true`, except a wanted record, which marks all its keys.
  */
 const toValueDifference = (
   gotValue: RecordValue | undefined,
@@ -132,9 +124,10 @@ const toValueDifference = (
 ): ValueDifference => {
   if (isNestedRecord(gotValue) && isNestedRecord(wantValue)) return toNestedRecordDifference(gotValue, wantValue, path)
   if (isNestedSet(gotValue) && isNestedSet(wantValue)) return toNestedSetDifference(gotValue, wantValue, path)
+  if (deepEqual(gotValue, wantValue)) return { unmet: undefined, nestedExtra: [], differing: undefined }
 
-  const unmet = deepEqual(gotValue, wantValue) ? undefined : wantValue
-  return { unmet, nestedExtra: [] }
+  const differing = isNestedRecord(wantValue) ? markAllKeys(wantValue) : true
+  return { unmet: wantValue, nestedExtra: [], differing }
 }
 
 /** Compares each key `want` has with the host's value there, keeping `want`'s key order. */
@@ -154,7 +147,12 @@ const toWantedKeysDifference = (
     ),
   )
   const nestedExtra = valueDifferences.flatMap(({ difference }) => difference.nestedExtra)
-  return { unmet, nestedExtra }
+  const differing = Object.fromEntries(
+    valueDifferences.flatMap(({ key, difference }): [string, DifferingMark<RecordValue>][] =>
+      difference.differing === undefined ? [] : [[key, difference.differing]],
+    ),
+  )
+  return { unmet, nestedExtra, differing }
 }
 
 /**
@@ -166,9 +164,12 @@ const toWantedKeysDifference = (
  * - Any other value stays whole, and so does a value of another kind than the host's, or one the host doesn't have.
  *
  * `extra` and `nestedExtra` keep the host's order inside each record and set, and `nestedExtra` follows `want`'s keys.
+ * `differing` marks every path where something differs, with each record's wanted keys before the host's own.
  */
 export const toRecordDifference = (got: RecordWant, want: RecordWant): RecordDifference => {
-  const { unmet, nestedExtra } = toWantedKeysDifference(got, want, [])
+  const wantedKeysDifference = toWantedKeysDifference(got, want, [])
+  const { unmet, nestedExtra } = wantedKeysDifference
   const extra = getEntriesNotIn(got, want)
-  return { got, want, unmet, extra, nestedExtra }
+  const differing = { ...wantedKeysDifference.differing, ...markExtraKeys(extra) }
+  return { got, want, unmet, extra, nestedExtra, differing }
 }

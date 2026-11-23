@@ -6,11 +6,11 @@ export type { EnsureOptions } from "#core/session/handlers/ensure.ts"
 export type { BooleanDifference, BooleanWant } from "#core/session/handlers/ensure/comparison/boolean.ts"
 export type { ListDifference, ListWant } from "#core/session/handlers/ensure/comparison/list.ts"
 export type { RecordPrimitive, RecordValue, RecordWant } from "#core/session/handlers/ensure/comparison/record.ts"
+export type { RecordDifference } from "#core/session/handlers/ensure/comparison/record/difference.ts"
 export type {
   NestedExtraItems,
   NestedExtraKey,
-  RecordDifference,
-} from "#core/session/handlers/ensure/comparison/record/difference.ts"
+} from "#core/session/handlers/ensure/comparison/record/difference/nested-extra.ts"
 export type { SetDifference, SetWant } from "#core/session/handlers/ensure/comparison/set.ts"
 export type { StringDifference, StringWant } from "#core/session/handlers/ensure/comparison/string.ts"
 export type { Fix, FixDifference } from "#core/session/handlers/ensure/fix.ts"

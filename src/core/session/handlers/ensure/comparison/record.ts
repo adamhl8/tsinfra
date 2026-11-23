@@ -76,7 +76,6 @@ export const compareRecords = (gotRecord: RecordWant, wantRecord: RecordWant): C
   const want = structuredClone(wantRecord)
 
   const values: RecordComparisonValues = { kind: "record", ...toRecordDifference(got, want) }
-  const { unmet, extra, nestedExtra } = values
-  const inSync = Object.keys(unmet).length === 0 && Object.keys(extra).length === 0 && nestedExtra.length === 0
+  const inSync = Object.keys(values.differing).length === 0
   return { inSync, values }
 }

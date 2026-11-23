@@ -4,7 +4,10 @@ import type { Host } from "#core/session.ts"
 import type { EnsureOptions } from "#core/session/handlers/ensure.ts"
 import type { Check } from "#core/session/handlers/ensure/check.ts"
 import type { RecordPrimitive, RecordValue } from "#core/session/handlers/ensure/comparison/record.ts"
-import type { NestedExtraItems, NestedExtraKey } from "#core/session/handlers/ensure/comparison/record/difference.ts"
+import type {
+  NestedExtraItems,
+  NestedExtraKey,
+} from "#core/session/handlers/ensure/comparison/record/difference/nested-extra.ts"
 import type { FixDifference } from "#core/session/handlers/ensure/fix.ts"
 import type { Want, WantOf } from "#core/session/handlers/ensure/want.ts"
 import type { ReadTools } from "#core/session/handlers/tools.ts"
@@ -70,6 +73,7 @@ describe("FixDifference", () => {
       want: Record<string, string>
       unmet: Readonly<Record<string, string>>
       extra: Record<string, string>
+      differing: Readonly<Record<string, true>>
     }>()
     expect<FixDifference<{ image: string; ports: readonly string[] }>>().type.not.toHaveProperty("nestedExtra")
   })
@@ -92,6 +96,56 @@ describe("FixDifference", () => {
     expect<FixDifference<{ packages: ReadonlySet<string> }>["unmet"]>().type.toBe<{
       readonly packages?: ReadonlySet<string>
     }>()
+  })
+
+  it("should mark each of want's keys that can't hold a record as true, with every key optional", () => {
+    expect<FixDifference<{ image: string; port: number; enabled: boolean }>["differing"]>().type.toBe<{
+      readonly image?: true
+      readonly port?: true
+      readonly enabled?: true
+    }>()
+  })
+
+  it("should mark a nested list and a nested set as true", () => {
+    expect<FixDifference<{ ports: readonly string[]; packages: ReadonlySet<string> }>["differing"]>().type.toBe<{
+      readonly ports?: true
+      readonly packages?: true
+    }>()
+  })
+
+  it("should mark a nested record as true or its own keys' marks", () => {
+    expect<FixDifference<{ env: { TZ: string; PUID: number } }>["differing"]>().type.toBe<{
+      readonly env?: true | { readonly TZ?: true; readonly PUID?: true }
+    }>()
+  })
+
+  it("should keep differing's index signatures, so their values aren't optional", () => {
+    expect<FixDifference<Record<string, { port: number }>>["differing"]>().type.toBe<
+      Readonly<Record<string, true | { readonly port?: true }>>
+    >()
+  })
+
+  it("should mark a value that's a string or a record as true or the record's marks", () => {
+    expect<FixDifference<{ value: string | { a: number } }>["differing"]>().type.toBe<{
+      readonly value?: true | { readonly a?: true }
+    }>()
+  })
+
+  it("should mark a record want an interface declares", () => {
+    expect<FixDifference<{ ac: PowerValues }>["differing"]>().type.toBe<{
+      readonly ac?: true | { readonly sleep?: true; readonly displaysleep?: true }
+    }>()
+  })
+
+  it("should keep a recursive want's marks at every depth of differing", () => {
+    type Differing = FixDifference<Record<string, DefaultsDict>>["differing"]
+    type Fourth = IndexedValue<IndexedValue<IndexedValue<IndexedValue<Differing>>>>
+    type Sixth = IndexedValue<IndexedValue<Fourth>>
+
+    expect<Fourth>().type.toBeAssignableFrom<true>()
+    expect<Fourth>().type.not.toBeAssignableFrom<string>()
+    expect<Sixth>().type.toBeAssignableFrom<true>()
+    expect<Sixth>().type.not.toBeAssignableFrom<string>()
   })
 
   it("should give only key entries to a want that nests records", () => {
@@ -163,10 +217,11 @@ describe("h.ensure's fix", () => {
     await h.ensure("Write env", {
       want: { env: { TZ: "UTC", PUID: 1000 }, labels: { app: "web" } },
       check: async ({ read }) => ({ env: { TZ: await read("echo UTC"), PUID: 1 }, labels: { app: "web" } }),
-      fix: async ({ exec }, { want, unmet, nestedExtra }) => {
+      fix: async ({ exec }, { want, unmet, nestedExtra, differing }) => {
         expect(want.env).type.toBe<{ TZ: string; PUID: number }>()
         expect(unmet.env).type.toBe<{ readonly TZ?: string; readonly PUID?: number } | undefined>()
         expect(nestedExtra).type.toBe<NestedExtraKey<string | number>[]>()
+        expect(differing.env).type.toBe<true | { readonly TZ?: true; readonly PUID?: true } | undefined>()
         await exec("true")
       },
     })

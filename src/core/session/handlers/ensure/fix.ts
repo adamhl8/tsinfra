@@ -38,6 +38,6 @@ export const toFixDifference = ({ values }: EnsureComparison): FixDifference<Wan
   if (values.kind === "list") return { got: values.got, want: values.want }
   if (values.kind === "set") return { want: new Set(values.want), missing: values.missing, extra: values.extra }
 
-  const { got, want, unmet, extra, nestedExtra } = values
-  return { got, want, unmet, extra, nestedExtra }
+  const { got, want, unmet, extra, nestedExtra, differing } = values
+  return { got, want, unmet, extra, nestedExtra, differing }
 }

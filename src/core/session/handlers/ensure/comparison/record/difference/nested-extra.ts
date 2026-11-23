@@ -1,11 +1,6 @@
-import type { RecordWant } from "#core/session/handlers/ensure/comparison/record.ts"
-import type {
-  IsNever,
-  NestedExtraItems,
-  NestedExtraKey,
-  NonRecordValue,
-  RecordValueIn,
-} from "#core/session/handlers/ensure/comparison/record/difference.ts"
+import type { RecordPrimitive, RecordValue, RecordWant } from "#core/session/handlers/ensure/comparison/record.ts"
+import type { NonRecordValue, RecordValueIn } from "#core/session/handlers/ensure/comparison/record/difference.ts"
+import type { IsNever } from "#core/session/handlers/ensure/comparison/record/utils.ts"
 
 /** A record difference's `nestedExtra`, or `never` when `want` can't nest a record or a set, because it would be empty. */
 // Spell out the union, so a hover shows the entry types rather than an alias.
@@ -13,6 +8,29 @@ export type NestedExtraList<T> =
   IsNever<NestedExtraKeyOf<T> | NestedExtraItemsOf<T>> extends true
     ? never
     : (NestedExtraKeyOf<T> | NestedExtraItemsOf<T>)[]
+
+/** A key the host has in a nested record that `want` doesn't. */
+export interface NestedExtraKey<V = RecordValue> {
+  /** Marks a key in a nested record, as opposed to a nested set's items. */
+  kind: "key"
+  /** The keys from the top-level key down to the extra one, like `["env", "DEBUG"]`. */
+  path: readonly [string, ...string[], string]
+  /** The host's value at `path`. */
+  value: V
+}
+
+/** The items the host has in a nested set that `want` doesn't. */
+export interface NestedExtraItems<I = RecordPrimitive> {
+  /** Marks a nested set's items, as opposed to a key in a nested record. */
+  kind: "items"
+  /** The keys from the top-level key down to the set, like `["packages"]`. */
+  path: readonly [string, ...string[]]
+  /** The items the host's set has that `want`'s doesn't, in the host's order. */
+  value: I[]
+}
+
+/** A `nestedExtra` entry for any record, as the comparison builds it and the report reads it. */
+export type NestedExtraEntry = NestedExtraKey | NestedExtraItems
 
 // Type a key entry's value by the values of `T`'s nested records.
 type NestedExtraKeyOf<T> =

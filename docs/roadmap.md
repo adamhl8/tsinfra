@@ -53,34 +53,16 @@ When it's built, [CLI](./cli.md#how-the-report-is-built) describes the host's no
 
 ### A record's `differing` keys
 
-Some fixes write whole values above the leaves. A macOS defaults fix writes a key, or one entry of a dict, whole, from `want`. Such a fix needs to know which wanted keys to rewrite, and neither `unmet` nor `nestedExtra` says that alone. A dict entry that only gained a key on the host isn't in `unmet`, because nothing it wants is wrong, and shows up only in `nestedExtra`. So the fix merges the two itself, and one that reads only `unmet` leaves that entry unwritten and fails the check after the fix. `differing` gives the fix that answer directly.
+`differing` is built (see [Steps](./steps.md#fix)). What's left is having the report pick a record's shown keys from it, as one commit.
 
-- **It's a new field of a record's fix difference,** after `nestedExtra`. `got`, `want`, `unmet`, `extra`, and `nestedExtra` stay as they are, and the second argument stays flat.
-- **It marks every path where something differs as `true`, wanted or extra,** in `want`'s key order, with the host's keys after. A record above a mark holds only its keys that lead to one, the way `unmet` prunes a nested record. So `foo: { b: true }` means only `foo.b` differs, and `bar: { c: true }` means the host's `bar` has a key `c` that `want`'s doesn't. A top-level key only the host has is marked like any other, as `qux: true`.
-- **`true` means that exact path differs:** a value that changed, a nested set with missing or extra items, or a key only the host has. The host's keys under an extra key aren't listed, and neither are a record's keys when `want` has a plain value there and the host has a record.
-- **A wanted value the host doesn't have expands into its wanted keys,** like `unmet` holding the whole wanted value, so a missing `foo` is `{ foo: { a: true, b: true } }`. So is a wanted record where the host has another kind of value. An empty wanted record has no keys to expand into, so it's `true`.
-- **It holds no values.** Values would mix the two sides, so a fix couldn't tell a host's value from a wanted one. A key in `differing` may exist only on the host, which a fix tells by `want` not having it.
+**2a: The report reads `differing`.**
 
-Which field a fix reads:
-
-- **`unmet`:** what do I need to set?
-- **`extra` and `nestedExtra`:** what do I need to remove?
-- **`differing`:** which keys do I need to rewrite?
-
-A fix that sets and removes item by item, like a package list or a config's keys, reads the first two. One that writes whole values at some depth reads `differing` at that depth and rewrites each marked key from `want`, like `pick(want[domain] ?? {}, Object.keys(differing[domain] ?? {}))`. An extra below that depth is gone once its wanted ancestor is rewritten. A marked key at that depth that `want` doesn't have is one to remove, and `pick` drops it, so only a fix whose check can return such a key handles it.
-
-The fields stay separate because each one is a set of actions a fix applies without comparing anything: set each value in `unmet`, remove each entry in `extra` and `nestedExtra`, and rewrite each key `differing` marks. Merging any two brings back the comparison, because the fix would have to sort the actions out by looking at `want`. `nestedExtra` overlaps `differing`'s extra marks on purpose. It stays a list because a removal happens exactly where `want` stops, and a tree of host values couldn't say whether a whole record is extra or only a key inside a wanted one.
-
-```ts
-want        { foo: { a: 1, b: 2 }, bar: { a: 1, b: 2 }, baz: "x" }
-got         { foo: { a: 1, b: 3 }, bar: { a: 1, b: 2, c: 9 }, baz: "x", qux: "y" }
-unmet       { foo: { b: 2 } }
-extra       { qux: "y" }
-nestedExtra [{ kind: "key", path: ["bar", "c"], value: 9 }]
-differing   { foo: { b: true }, bar: { c: true }, qux: true }
-```
-
-When it's built, [Steps](./steps.md#fix) describes `differing` under "What the check found", with the three questions above, and its advice to write a whole value from `want` points to it.
+- **A report test pins the case `differing` doesn't cover first,** passing on today's code: a key only the host has, whose value is a record, next to wanted keys that differ, shows each of the host's keys under its heading.
+- **`getShownKeys` returns the keys of the level's `differing`,** or `got`'s keys when `want` has nothing at that level. `differing` stops at `true` on a key only the host has, and every key of that value is extra, so taking them from `got` compares nothing.
+- **`RecordLevel` swaps `extra` for `differing`,** and `toKeyDifference` passes each key's mark down, with `true` holding no keys. `toNestedExtra` is deleted, because it only rebuilt a level's extra keys for `getShownKeys`.
+- **`unmet` and `nestedExtra` stay,** for a nested set's missing and extra items.
+- **No output changes,** so every other report test passes unchanged, and [CLI](./cli.md#how-the-report-is-built) stays as it is.
+- **This roadmap entry** and its line in the contents are deleted.
 
 ## Planned
 

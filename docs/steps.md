@@ -569,7 +569,7 @@ type EnsureOptions<T extends WantOf<T>> = {
   // A record `want` takes only a function, because a command's output has no keys.
   check: string | ((tools: ReadTools) => Promise<T>)
   // A function also gets `want` and what the check found: `{ want }` for a boolean, `{ got, want }` for a string or a
-  // list, `{ want, missing, extra }` for a set, and `{ got, want, unmet, extra, nestedExtra }` for a record.
+  // list, `{ want, missing, extra }` for a set, and `{ got, want, unmet, extra, nestedExtra, differing }` for a record.
   // See `FixDifference`.
   fix: string | ((tools: ChangeTools, difference: FixDifference<T>) => Promise<void>)
   verify?: boolean // default true
@@ -803,7 +803,7 @@ The fix function only runs in `apply`, so it can change things and do work on th
 - **A boolean `want`** gives `{ want }`.
 - **A string or a list `want`** gives `{ got, want }`, with `got` what the check answered.
 - **A set** gives `{ want, missing, extra }`. `missing` is what `want` has that the check didn't find, in `want`'s order, and `extra` is what the check found that `want` doesn't have, in the check's order.
-- **A record** gives `{ got, want, unmet, extra, nestedExtra }`, which compare at any depth (see below).
+- **A record** gives `{ got, want, unmet, extra, nestedExtra, differing }`, which compare at any depth (see below).
 
 ```ts
 await h.ensure("Update Caddy", {
@@ -820,7 +820,25 @@ A record's parts:
 - **`unmet` is `want` pruned to what the host doesn't match, at any depth,** in `want`'s key order. A nested record keeps only the keys that differ, and a nested set keeps only its missing items. Any other value stays whole: a string, a number, a boolean, `null`, a nested list, or a value of another kind than the host's. A key the host doesn't have holds its whole wanted value, so an empty record or set in `unmet` is one to create. For a flat record, `unmet` is every wanted key that's missing or differs, like the bun packages example above.
 - **`extra` maps each top-level key `want` doesn't have to the host's value,** in the check's order.
 - **`nestedExtra` lists what the host has inside the values `want` keeps,** where both sides are records or both are sets. `{ kind: "key", path, value }` is a key the host has in a nested record, with `path` from the top-level key down to it, like `["env", "DEBUG"]`. `{ kind: "items", path, value }` holds a nested set's extra items in the check's order, with `path` naming the set. The entries follow `want`'s key order, and a nested record's own extra keys come after the entries inside its wanted keys.
+- **`differing` marks every path where the host differs from `want` as `true`,** wanted or extra, in `want`'s key order with the host's keys after. A record above a mark keeps only its keys that lead to one, the way `unmet` prunes a nested record, so `{ env: { TZ: true } }` means only `env.TZ` differs. `true` means that exact path differs: a value that changed, a plain wanted value where the host has a record, a nested set with missing or extra items, or a key only the host has, whose own keys aren't listed. A wanted record the host doesn't have, or has as another kind of value, expands into its wanted keys at every depth, like `unmet` holding the whole wanted value, and an empty one is `true`. It holds no values, so a fix never mistakes a host's value for a wanted one, and a marked key that `want` doesn't have is one only the host has.
 - **A list has no extras,** because a reorder or a duplicate isn't an item to remove. A fix writes a list whole. One that edits a list item by item, like inserting one entry, works it out from `got` and `want` itself.
+
+```ts
+want        { foo: { a: 1, b: 2 }, bar: { a: 1, b: 2 }, baz: "x" }
+got         { foo: { a: 1, b: 3 }, bar: { a: 1, b: 2, c: 9 }, baz: "x", qux: "y" }
+unmet       { foo: { b: 2 } }
+extra       { qux: "y" }
+nestedExtra [{ kind: "key", path: ["bar", "c"], value: 9 }]
+differing   { foo: { b: true }, bar: { c: true }, qux: true }
+```
+
+Which field a fix reads:
+
+- **`unmet`:** what do I need to set?
+- **`extra` and `nestedExtra`:** what do I need to remove?
+- **`differing`:** which keys do I need to rewrite?
+
+A fix that sets and removes item by item, like a package list or a config's keys, reads the first two, like the git config example below. One that writes whole values at some depth reads `differing` at that depth and rewrites each marked key from `want`, like the macOS defaults example after it. An extra below that depth is gone once its wanted ancestor is rewritten. A marked key at that depth that `want` doesn't have is one to remove. `pick` leaves it out of what's written, so a fix whose check can return such a key removes it too.
 
 ```ts
 import { pick } from "es-toolkit"
@@ -841,9 +859,25 @@ await h.ensure("Configure git", {
 })
 ```
 
+```ts
+import { pick } from "es-toolkit"
+
+await h.ensure("Configure macOS defaults", {
+  want: { NSGlobalDomain: { NSUserKeyEquivalents: { "Show Sidebar": "@^s" } }, "com.apple.dock": { autohide: true } },
+  // Read only the keys `want` manages in each domain.
+  check: async ({ read }) => readManagedDefaults(read),
+  fix: async ({ exec }, { want, differing }) => {
+    // Each key that differs, written whole, like a dict that only gained an entry on the host.
+    for (const [domain, keys] of Object.entries(differing))
+      for (const [key, value] of Object.entries(pick(want[domain] ?? {}, Object.keys(keys))))
+        await exec(`defaults write ${domain} ${key} ${toDefaultsArgs(value)}`)
+  },
+})
+```
+
 What the argument asks of a fix:
 
-- **Write a whole value from `want`, not `unmet`.** A fix that replaces a nested value in one command, like a dict it writes whole, takes it from `want`, because `unmet` holds only the part that differs.
+- **Write a whole value from `want`, not `unmet`.** A fix that replaces a nested value in one command, like a dict it writes whole, takes it from `want`, because `unmet` holds only the part that differs. `differing` says which values to rewrite, including one that only gained a key on the host, which `unmet` leaves out.
 - **Remove where `want` stops.** What a fix removes is in `extra` and `nestedExtra`, so no fix walks `got` to find it.
 - **A comparison that isn't plain equality belongs in the check.** The check returns the host's values in `want`'s form, like a name in the case `want` uses, or a number parsed from text (see "A check reports the host's state" above). A fix that compares values itself can disagree with the comparison, like on `-0`.
 - **A list's fix writes the whole list.** A list whose order doesn't matter is a set, which gets `missing` and `extra`.
@@ -856,7 +890,8 @@ Why it's shaped this way:
 - **Only a fix function gets it.** A command fix stays the form for simple cases, and a run's function gets only its tools.
 - **It's fresh.** In `apply`, the comparison runs right before the fix, so `got` describes the host the fix changes. The check after the fix still catches a fix that acts on it and misses something.
 - **The fix and the report read the same comparison,** so `plan` shows exactly what the fix acts on.
-- **Its types follow `want`.** `got` and `want` have `want`'s type, `unmet` has `want`'s shape with every key optional, and the entries of `nestedExtra` are typed by the values `want` nests. Its type only has the entry kinds `want` can produce, so a `want` that nests no set gets only key entries, with no `kind` to check, and a `want` that can't nest a record or a set has no `nestedExtra` at all. Its types follow `want` 8 levels down, and past that its entries take any record value and any set item. `unmet`'s types have no limit.
+- **`unmet`, `extra`, `nestedExtra`, and `differing` stay separate,** because each one is a set of actions a fix applies without comparing anything: set each value in `unmet`, remove each entry in `extra` and `nestedExtra`, and rewrite each key `differing` marks. Merging any two brings the comparison back, because the fix would have to sort the actions out by looking at `want`. `nestedExtra` overlaps `differing`'s marks for extra keys on purpose. It stays a list because a removal happens exactly where `want` stops, and a tree of host values couldn't say whether a whole record is extra or only a key inside a wanted one.
+- **Its types follow `want`.** `got` and `want` have `want`'s type, `unmet` has `want`'s shape with every key optional, and the entries of `nestedExtra` are typed by the values `want` nests. Its type only has the entry kinds `want` can produce, so a `want` that nests no set gets only key entries, with no `kind` to check, and a `want` that can't nest a record or a set has no `nestedExtra` at all. Its types follow `want` 8 levels down, and past that its entries take any record value and any set item. `differing` has `want`'s shape with every key optional too, with `true` for a value that can't be a record, and `true` or its keys' marks for one that can. A key only the host has is in its type only where `want` has an index signature, the way `got` has `want`'s type. `unmet`'s and `differing`'s types have no limit.
 - **Its types are exported.** `FixDifference<T>` is the argument for any `want`, and each kind's is `BooleanDifference`, `StringDifference`, `ListDifference`, `SetDifference`, or `RecordDifference`, with the entry types `NestedExtraKey` and `NestedExtraItems`. A `want` typed as the full `Want` union gets the union of them. So are the names a hover shows: each kind's `want` type (`BooleanWant`, `StringWant`, `ListWant`, `SetWant`, `RecordWant`), `RecordValue`, `RecordPrimitive`, `Fix`, `CheckFunction`, and `ChangeFunction`.
 
 **One step or several.** A fix re-runs every command whenever its check fails. If one command's effect can be in place while the check still fails, that effect is state of its own, and it gets its own step. In the apt example, an updated package index does not matter, so running `apt-get update` again is harmless. This one is wrong:

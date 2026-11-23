@@ -17,6 +17,7 @@ import {
 } from "#core/__tests__/session.ts"
 import type { Want } from "#core/session/handlers/ensure/want.ts"
 import type { ChangeTools } from "#core/session/handlers/tools.ts"
+import { getOwnValue } from "#utils.ts"
 
 // Read `key=value` lines into a record, the shape a record check returns.
 const toRecord = (text: string) =>
@@ -514,6 +515,7 @@ describe("h.ensure with a record want", () => {
           unmet: { b: "2", d: "4" },
           extra: { c: "3" },
           nestedExtra: [],
+          differing: { b: true, d: true, c: true },
         },
       ],
     ])
@@ -723,6 +725,7 @@ describe("h.ensure with a record want", () => {
           unmet: { env: { PUID: 1000 }, labels: { app: "web" } },
           extra: { ports: { http: 80 } },
           nestedExtra: [],
+          differing: { env: { PUID: true }, labels: { app: true }, ports: true },
         },
       ],
     ])
@@ -766,6 +769,7 @@ describe("h.ensure with a record want", () => {
         unmet: { packages: new Set(["fd"]), ports: ["80", "443"] },
         extra: {},
         nestedExtra: [],
+        differing: { packages: true, ports: true },
       },
     ])
   })
@@ -793,6 +797,7 @@ describe("h.ensure with a record want", () => {
       got: { env: { TZ: "UTC", PUID: 1 } },
       unmet: { env: { PUID: 1000 } },
       nestedExtra: [],
+      differing: { env: { PUID: true } },
     },
     {
       description: "a key the host lacks",
@@ -800,6 +805,7 @@ describe("h.ensure with a record want", () => {
       got: {},
       unmet: { env: { TZ: "UTC" }, labels: {} },
       nestedExtra: [],
+      differing: { env: { TZ: true }, labels: true },
     },
     {
       description: "a value of another kind",
@@ -807,6 +813,7 @@ describe("h.ensure with a record want", () => {
       got: { env: "TZ=UTC" },
       unmet: { env: { TZ: "UTC" } },
       nestedExtra: [],
+      differing: { env: { TZ: true } },
     },
     {
       description: "a nested list that differs",
@@ -814,6 +821,7 @@ describe("h.ensure with a record want", () => {
       got: { ports: ["443", "8080"] },
       unmet: { ports: ["80", "443"] },
       nestedExtra: [],
+      differing: { ports: true },
     },
     {
       description: "a nested set that differs",
@@ -821,6 +829,7 @@ describe("h.ensure with a record want", () => {
       got: { tags: new Set(["c", "a", "d"]) },
       unmet: { tags: new Set(["b"]) },
       nestedExtra: [{ kind: "items", path: ["tags"], value: ["c", "d"] }],
+      differing: { tags: true },
     },
     {
       description: "an empty nested record whose host value has keys",
@@ -828,22 +837,26 @@ describe("h.ensure with a record want", () => {
       got: { env: { TZ: "UTC" } },
       unmet: {},
       nestedExtra: [{ kind: "key", path: ["env", "TZ"], value: "UTC" }],
+      differing: { env: { TZ: true } },
     },
-  ])("should give the fix unmet and nestedExtra for $description", async ({ want, got, unmet, nestedExtra }) => {
-    const { host: h } = await createSession()
-    const differences: unknown[] = []
-    await ensureOrMessage(h, {
-      want: toLooseWant(want),
-      check: () => castInvalid(got),
-      fix: async (_, difference) => {
-        differences.push(difference)
-        await Promise.resolve()
-      },
-      verify: false,
-    })
+  ])(
+    "should give the fix unmet, nestedExtra, and differing for $description",
+    async ({ want, got, unmet, nestedExtra, differing }) => {
+      const { host: h } = await createSession()
+      const differences: unknown[] = []
+      await ensureOrMessage(h, {
+        want: toLooseWant(want),
+        check: () => castInvalid(got),
+        fix: async (_, difference) => {
+          differences.push(difference)
+          await Promise.resolve()
+        },
+        verify: false,
+      })
 
-    expect(differences).toStrictEqual([{ got, want, unmet, extra: {}, nestedExtra }])
-  })
+      expect(differences).toStrictEqual([{ got, want, unmet, extra: {}, nestedExtra, differing }])
+    },
+  )
 
   it("should give the fix nestedExtra in want's key order, with a record's own extra keys after its nested ones", async () => {
     const want = { a: { b: { x: 1 }, c: 1 }, s: new Set([1]) }
@@ -871,7 +884,163 @@ describe("h.ensure with a record want", () => {
           { kind: "key", path: ["a", "z"], value: 9 },
           { kind: "items", path: ["s"], value: [2] },
         ],
+        differing: { a: { b: { y: true }, z: true }, s: true, top: true },
       },
+    ])
+  })
+
+  it("should give the fix differing next to the other fields for a record that differs in every way", async () => {
+    const want = { foo: { a: 1, b: 2 }, bar: { a: 1, b: 2 }, baz: "x" }
+    const got = { foo: { a: 1, b: 3 }, bar: { a: 1, b: 2, c: 9 }, baz: "x", qux: "y" }
+    const { host: h } = await createSession()
+    const differences: unknown[] = []
+    await ensureOrMessage(h, {
+      want: toLooseWant(want),
+      check: () => castInvalid(got),
+      fix: async (_, difference) => {
+        differences.push(difference)
+        await Promise.resolve()
+      },
+      verify: false,
+    })
+
+    expect(differences).toStrictEqual([
+      {
+        got,
+        want,
+        unmet: { foo: { b: 2 } },
+        extra: { qux: "y" },
+        nestedExtra: [{ kind: "key", path: ["bar", "c"], value: 9 }],
+        differing: { foo: { b: true }, bar: { c: true }, qux: true },
+      },
+    ])
+  })
+
+  it.each([
+    {
+      description: "a value that changed at depth",
+      want: { a: { b: { c: 1 } } },
+      got: { a: { b: { c: 2 } } },
+      differing: { a: { b: { c: true } } },
+    },
+    {
+      description: "a nested set with missing items",
+      want: { s: new Set([1, 2]) },
+      got: { s: new Set([1]) },
+      differing: { s: true },
+    },
+    {
+      description: "a nested set with extra items",
+      want: { s: new Set([1]) },
+      got: { s: new Set([1, 2]) },
+      differing: { s: true },
+    },
+    {
+      description: "a key only the host has in a nested record",
+      want: { env: { TZ: "UTC" } },
+      got: { env: { TZ: "UTC", PUID: 1 } },
+      differing: { env: { PUID: true } },
+    },
+    {
+      description: "a key only the host has at the top level",
+      want: { a: 1 },
+      got: { a: 1, b: 2 },
+      differing: { b: true },
+    },
+    {
+      description: "a key only the host has that holds a record",
+      want: { env: { TZ: "UTC" } },
+      got: { env: { TZ: "UTC", debug: { level: 1 } } },
+      differing: { env: { debug: true } },
+    },
+    {
+      description: "a plain wanted value where the host has a record",
+      want: { a: "x" },
+      got: { a: { b: 1 } },
+      differing: { a: true },
+    },
+    {
+      description: "a wanted record the host doesn't have",
+      want: { a: { b: { c: 1 }, d: 1 } },
+      got: {},
+      differing: { a: { b: { c: true }, d: true } },
+    },
+    {
+      description: "a wanted record where the host has a string",
+      want: { a: { b: 1 } },
+      got: { a: "b=1" },
+      differing: { a: { b: true } },
+    },
+    {
+      description: "an empty wanted record the host doesn't have",
+      want: { a: {} },
+      got: {},
+      differing: { a: true },
+    },
+    {
+      description: "an empty wanted record inside one the host doesn't have",
+      want: { a: { b: {} } },
+      got: {},
+      differing: { a: { b: true } },
+    },
+  ])("should mark $description in differing", async ({ want, got, differing }) => {
+    const { host: h } = await createSession()
+    const allDiffering: unknown[] = []
+    await ensureOrMessage(h, {
+      want: toLooseWant(want),
+      check: () => castInvalid(got),
+      fix: async (_, difference) => {
+        const givenDiffering = "differing" in difference ? difference.differing : undefined
+        allDiffering.push(givenDiffering)
+        await Promise.resolve()
+      },
+      verify: false,
+    })
+
+    expect(allDiffering).toStrictEqual([differing])
+  })
+
+  it("should give the fix differing in want's key order at each level, with the host's keys after", async () => {
+    const { host: h } = await createSession()
+    const keyOrders: string[][] = []
+    await ensureOrMessage(h, {
+      want: toLooseWant({ z: { y: 1, x: 1 }, a: 1 }),
+      check: () => castInvalid({ q: 1, a: 2, z: { w: 1, x: 2, y: 2 } }),
+      fix: async (_, difference) => {
+        const differing = "differing" in difference ? difference.differing : {}
+        keyOrders.push(Object.keys(differing), Object.keys(differing["z"] ?? {}))
+        await Promise.resolve()
+      },
+      verify: false,
+    })
+
+    expect(keyOrders).toStrictEqual([
+      ["z", "a", "q"],
+      ["y", "x", "w"],
+    ])
+  })
+
+  it("should let a fix that writes whole values rewrite one that only gained a key", async () => {
+    const want = { web: { port: 80, tls: true }, db: { port: 5432 } }
+    const settingsPath = path.join(await makeTempDir(), "settings.json")
+    await bun.write(settingsPath, JSON.stringify({ web: { port: 80, tls: true, debug: true }, db: { port: 5432 } }))
+    const { host: h } = await createSession()
+    const allUnmet: unknown[] = []
+    const result = await ensureOrMessage(h, {
+      want,
+      check: async ({ read }) => castInvalid(JSON.parse(await read(`cat '${settingsPath}'`))),
+      fix: async ({ exec }, { got, unmet, differing }) => {
+        allUnmet.push(unmet)
+        const rewritten = Object.fromEntries(Object.keys(differing).map((key) => [key, getOwnValue(want, key)]))
+        const settings = JSON.stringify({ ...got, ...rewritten })
+        await exec(`printf '%s' '${settings}' > '${settingsPath}'`)
+      },
+    })
+
+    expect([result, allUnmet, await bun.file(settingsPath).json()]).toStrictEqual([
+      { name: "Make marker", kind: "ensure", changed: true },
+      [{}],
+      want,
     ])
   })
 
