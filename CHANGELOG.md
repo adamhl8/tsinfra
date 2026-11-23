@@ -1,3 +1,11 @@
+## [0.15.0](https://github.com/adamhl8/tsinfra/compare/v0.14.0..v0.15.0) - 2026-11-23
+
+### 🚀 Features
+
+- _(report)_ show step messages under their steps ([9135bf9](https://github.com/adamhl8/tsinfra/commit/9135bf92755d5f17a6e3958dc36c18c72c49326d) by @adamhl8)
+
+- add h.log ([d4d73a9](https://github.com/adamhl8/tsinfra/commit/d4d73a9b51ee734db67ad03a4c7665af09f0ef5d) by @adamhl8)
+
 ## [0.14.0](https://github.com/adamhl8/tsinfra/compare/v0.13.1..v0.14.0) - 2026-11-22
 
 ### 🚀 Features
