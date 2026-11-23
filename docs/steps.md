@@ -796,7 +796,7 @@ fix: async ({ exec }) => {
 }
 ```
 
-The fix function only runs in `apply`, so it can change things and do work on the control machine.
+The fix function only runs in `apply`, so it can change things and do work on the control machine. A check function and a fix function can both log with `h.log`, and the message shows under the step (see [Messages](#messages)).
 
 **What the check found.** A fix function gets a second argument after its tools, with `want` and what the check found, so a fix acts on the difference without reading the host again or comparing anything itself. The two sides come first, `got` then `want`, then what the comparison found:
 
@@ -942,7 +942,7 @@ type RunOptions = EnvOptions & {
 }
 ```
 
-A step with no check: one command, or a function given `exec` for one action that takes several commands. `env` and `secretEnv` reach the command, or each `exec` in the function. Write `sudo` inside the command where it's needed.
+A step with no check: one command, or a function given `exec` for one action that takes several commands. `env` and `secretEnv` reach the command, or each `exec` in the function. Write `sudo` inside the command where it's needed. The function can log with `h.log`, and the message shows under the run (see [Messages](#messages)).
 
 A run is for work that something in this run triggers, not the host's state. There are two kinds, and both go in `after`, which is required, so a forgotten trigger is a type error:
 
@@ -1054,7 +1054,36 @@ else await setUpIncus(h)
 - **`h.log.info(message)` and `h.log.warn(message)`** are the two kinds of message. A warning shows at the default level, and the summary counts it with the other warnings, like `unchanged, 1 warning`. An info shows from `-v`, with the steps that were already right, so an info added while debugging a script doesn't clutter the default output. A message isn't drift, so it never changes the exit code.
 - **It's synchronous,** because it runs nothing on the host, so it needs no `await`. It records the same thing in `plan` and `apply`.
 - **A message logged outside a step** shows on its own line, in script order with the steps around it, like `- warning: the old unit is still there`. A remark about the host as a whole goes at the top or the bottom of the host function.
-- **A message a step's function logs** belongs to that step, because steps run one at a time, so the step that's running is the one that logged it. A fix logs only in `apply`, because `plan` never runs it, and a waiting step runs no functions. The report doesn't show these messages yet (see [Messages under their steps](./roadmap.md#messages-under-their-steps)).
+- **A message a step's function logs** belongs to that step, because steps run one at a time, so the step that's running is the one that logged it. A fix logs only in `apply`, because `plan` never runs it, and a waiting step runs no functions. It shows under its step, as `warning: <text>` or `info: <text>`, at the same levels as a message outside a step, so a warning brings up a step that was already right.
+- **Each distinct message shows once under its step.** An `ensure` check runs before and after the fix in `apply`, so a check that logs the same thing both times shows it once, and one that logs something new after the fix shows that too. The summary counts a step's warning once, however many times it was logged.
+- **From `-vv`, every message shows among the step's commands,** where it was logged, duplicates included, so it's clear which pass logged what. At `-vvv`, each one sits under the heading of the phase that logged it (see [CLI](./cli.md#output)).
+- **A failed step keeps its messages.** The script wrote them, and they often explain the failure. The ones it logged before it failed show, and the ones after the failure never ran.
+
+```ts
+await h.ensure("Set the API key", {
+  want: true,
+  check: async ({ read }) => {
+    const override = await read("grep -c '^API_KEY=' /etc/sonarr/env || true")
+    if (override !== "0") h.log.warn("/etc/sonarr/env also sets API_KEY, and it wins")
+    return (await read("grep -c '<ApiKey>' /var/lib/sonarr/config.xml || true")) === "1"
+  },
+  fix: async ({ exec }) => { ... },
+})
+```
+
+```
+sonarr                                                    # default
+  = unchanged: (ensure) Set the API key
+      warning: /etc/sonarr/env also sets API_KEY, and it wins
+
+sonarr                                                    # -vv
+  = unchanged: (ensure) Set the API key
+      commands:
+        (read) $ grep -c '^API_KEY=' /etc/sonarr/env || true
+        warning: /etc/sonarr/env also sets API_KEY, and it wins
+        (read) $ grep -c '<ApiKey>' /var/lib/sonarr/config.xml || true
+```
+
 - **It's on `h`,** not imported from `tsinfra`, so it always knows which host logged, and an integration that takes `h` can log too.
 - **A secret in a message is `[MASKED]`,** like one in a command's output.
 - **A message must be a non-empty string.** Anything else fails the host and throws, like a bad argument to a step, and inside a step's function it fails that step. After the host has failed, `h.log` throws the host's failure, like every other call on `h`.

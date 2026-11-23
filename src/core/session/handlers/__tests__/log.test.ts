@@ -25,8 +25,8 @@ describe("h.log", () => {
 
     expect(hostSession.hostRecord.entries).toMatchObject([
       { kind: "read", name: "echo one" },
-      { kind: "message", messageKind: "info", text: "between" },
-      { kind: "message", messageKind: "warn", text: "still between" },
+      { kind: "hostMessage", messageKind: "info", text: "between" },
+      { kind: "hostMessage", messageKind: "warn", text: "still between" },
       { kind: "read", name: "echo two" },
     ])
   })
@@ -48,7 +48,7 @@ describe("h.log", () => {
 
     expect(hostSession.hostRecord.entries).toHaveLength(1)
     expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.messages).toStrictEqual([
-      { messageKind: "info", text: "between", phase: "before", commandsBefore: 1 },
+      { messageKind: "info", text: "between", phase: "before", commandCount: 1 },
     ])
   })
 
@@ -71,9 +71,9 @@ describe("h.log", () => {
     })
 
     expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.messages).toStrictEqual([
-      { messageKind: "info", text: "exists: false", phase: "before", commandsBefore: 1 },
-      { messageKind: "warn", text: "making it", phase: "fix", commandsBefore: 1 },
-      { messageKind: "info", text: "exists: true", phase: "after", commandsBefore: 3 },
+      { messageKind: "info", text: "exists: false", phase: "before", commandCount: 1 },
+      { messageKind: "warn", text: "making it", phase: "fix", commandCount: 1 },
+      { messageKind: "info", text: "exists: true", phase: "after", commandCount: 3 },
     ])
   })
 
@@ -91,7 +91,7 @@ describe("h.log", () => {
     )
 
     expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.messages).toStrictEqual([
-      { messageKind: "info", text: "ran", commandsBefore: 1 },
+      { messageKind: "info", text: "ran", commandCount: 1 },
     ])
   })
 
@@ -131,7 +131,7 @@ describe("h.log", () => {
     expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.messages).toMatchObject([
       { text: "the token is [MASKED]" },
     ])
-    expect(entries.at(-1)).toStrictEqual({ kind: "message", messageKind: "info", text: "still [MASKED]" })
+    expect(entries.at(-1)).toStrictEqual({ kind: "hostMessage", messageKind: "info", text: "still [MASKED]" })
   })
 
   it.each([

@@ -3,8 +3,8 @@ import { formatBody } from "#report/format/body.ts"
 import type { DiffLimits } from "#report/format/details/diff/limits.ts"
 import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { noteElement } from "#report/format/elements/asides.ts"
+import { formatHostMessageEntry } from "#report/format/host-message.ts"
 import { layoutHostBlock, layoutNoEntriesBlock } from "#report/format/layout.ts"
-import { formatMessageEntry } from "#report/format/message.ts"
 import type { StatusLine } from "#report/format/status-line.ts"
 import { formatStatusLine } from "#report/format/status-line.ts"
 import type { HostBlock, HostBlockEntry } from "#report/host-block.ts"
@@ -13,7 +13,7 @@ import { styleBold } from "#styles.ts"
 // Re-export the summary's elements, because the summary is formatted outside this folder.
 
 /** An entry with each piece formatted, before layout lines it up with the block's other entries. */
-export type FormattedEntry = FormattedStatusLineEntry | FormattedMessageEntry
+export type FormattedEntry = FormattedStatusLineEntry | FormattedHostMessageEntry
 
 /** A status line entry with its status line and its body formatted. */
 interface FormattedStatusLineEntry {
@@ -22,15 +22,15 @@ interface FormattedStatusLineEntry {
   body: Body
 }
 
-/** A message entry formatted as one aligned row: its label, then its text. */
-export interface FormattedMessageEntry {
-  kind: "message"
+/** A host message entry formatted as one aligned row: its label, then its text. */
+export interface FormattedHostMessageEntry {
+  kind: "hostMessage"
   row: AlignedRow
 }
 
-/** Formats an entry's pieces, before layout: a status line entry's status line and body, or a message's row. */
+/** Formats an entry's pieces, before layout: a status line entry's status line and body, or a host message's row. */
 const formatHostBlockEntry = (hostBlockEntry: HostBlockEntry, diffLimits: DiffLimits): FormattedEntry => {
-  if (hostBlockEntry.kind === "message") return formatMessageEntry(hostBlockEntry)
+  if (hostBlockEntry.kind === "hostMessage") return formatHostMessageEntry(hostBlockEntry)
 
   const statusLine = formatStatusLine(hostBlockEntry)
   const body = formatBody(hostBlockEntry, diffLimits)

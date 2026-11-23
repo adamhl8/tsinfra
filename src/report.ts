@@ -1,12 +1,12 @@
 import { formatHostBlock } from "#report/format.ts"
 import { toDiffLimits } from "#report/format/details/diff/limits.ts"
 import type {
-  CommandGroup,
   Detail,
   HostBlock,
   HostBlockEntry,
   PieceLevels,
   StepCommand,
+  StepMessage,
   StepOption,
 } from "#report/host-block.ts"
 import type { Verbosity } from "#report/verbosity.ts"
@@ -29,26 +29,29 @@ const keepShownOptionValues = (option: StepOption, verbosity: Verbosity): StepOp
 
 /** Returns `command` with its options' values and what it printed only when each shows at `verbosity`. */
 const keepShownCommandPieces = (command: StepCommand, verbosity: Verbosity): StepCommand => {
-  const { cmd, label, toolName, options, output } = command
+  const { cmd, label, toolName, options, phase, output } = command
   return {
     cmd,
     ...(label !== undefined && { label }),
     ...(toolName !== undefined && { toolName }),
     ...(options && { options: options.map((option) => keepShownOptionValues(option, verbosity)) }),
+    ...(phase !== undefined && { phase }),
     ...(output && isShownAt(output, verbosity) && { output }),
   }
 }
 
-/** Returns `group` with its phase only when it shows at `verbosity`, and each command with only what shows. */
-const keepShownGroupPieces = (group: CommandGroup, verbosity: Verbosity): CommandGroup => {
-  const { phase } = group
-  const commands = group.commands.map((command) => keepShownCommandPieces(command, verbosity))
-  return { ...(phase && isShownAt(phase, verbosity) && { phase }), commands }
+/** Returns `stepMessage` with its `amongCommands` piece only when it shows at `verbosity`. */
+const keepShownStepMessagePieces = (stepMessage: StepMessage, verbosity: Verbosity): StepMessage => {
+  const { amongCommands, ...stepMessageWithoutPlacement } = stepMessage
+  return {
+    ...stepMessageWithoutPlacement,
+    ...(amongCommands && isShownAt(amongCommands, verbosity) && { amongCommands }),
+  }
 }
 
 /**
- * Returns `detail` with only the pieces inside it that show at `verbosity`: an option's values, a command group's
- * phase, and what a command printed.
+ * Returns `detail` with only the pieces inside it that show at `verbosity`: an option's values, the step messages and
+ * where each shows, a commands detail's phase headings, and what a command printed.
  */
 const keepShownInDetail = (detail: Detail, verbosity: Verbosity): Detail => {
   if (detail.kind === "options") {
@@ -56,9 +59,20 @@ const keepShownInDetail = (detail: Detail, verbosity: Verbosity): Detail => {
     return { ...detail, options }
   }
 
+  if (detail.kind === "stepMessages") {
+    const shownStepMessages = detail.stepMessages.filter((stepMessage) => isShownAt(stepMessage, verbosity))
+    const stepMessages = shownStepMessages.map((stepMessage) => keepShownStepMessagePieces(stepMessage, verbosity))
+    return { ...detail, stepMessages }
+  }
+
   if (detail.kind === "commands") {
-    const groups = detail.groups.map((group) => keepShownGroupPieces(group, verbosity))
-    return { ...detail, groups }
+    const { phaseHeadings, ...detailWithoutHeadings } = detail
+    const commands = detail.commands.map((command) => keepShownCommandPieces(command, verbosity))
+    return {
+      ...detailWithoutHeadings,
+      commands,
+      ...(phaseHeadings && isShownAt(phaseHeadings, verbosity) && { phaseHeadings }),
+    }
   }
 
   return detail
@@ -67,8 +81,8 @@ const keepShownInDetail = (detail: Detail, verbosity: Verbosity): Detail => {
 /** Keeps the entries that show at `verbosity`, each with only the note parts and details that show. */
 const keepShownEntries = (hostBlockEntries: HostBlockEntry[], verbosity: Verbosity): HostBlockEntry[] =>
   hostBlockEntries.flatMap((hostBlockEntry): HostBlockEntry[] => {
-    // Keep a message only when its own level shows, because nothing inside it has a level.
-    if (hostBlockEntry.kind === "message") return isShownAt(hostBlockEntry, verbosity) ? [hostBlockEntry] : []
+    // Keep a host message only when its own level shows, because nothing inside it has a level.
+    if (hostBlockEntry.kind === "hostMessage") return isShownAt(hostBlockEntry, verbosity) ? [hostBlockEntry] : []
 
     const note = hostBlockEntry.note.filter((notePart) => isShownAt(notePart, verbosity))
     const shownDetails = hostBlockEntry.details.filter((detail) => isShownAt(detail, verbosity))

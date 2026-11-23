@@ -34,9 +34,9 @@ import type { Mode } from "#mode.ts"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
-/** Returns the records of the steps a host finished, in order, without the messages logged between them. */
+/** Returns the records of the steps a host finished, in order, without the host messages between them. */
 export const getFinishedStepRecords = (hostRecord: HostRecord): FinishedStepRecord[] =>
-  hostRecord.entries.filter((entry) => entry.kind !== "message")
+  hostRecord.entries.filter((entry) => entry.kind !== "hostMessage")
 
 /** Returns every step a host recorded, in order: the steps that finished, then the step that failed, if one did. */
 export const getStepRecords = (hostRecord: HostRecord): (FinishedStepRecord | StepRecord)[] => {

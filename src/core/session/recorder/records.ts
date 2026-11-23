@@ -29,8 +29,8 @@ export interface HostRecord {
   /** The step that's running, until it finishes and joins `entries`, or fails and becomes the failure's. */
   runningStep: StepRecord | undefined
   /**
-   * Every step that finished, and every message logged outside a step, in the order the script made them. The step that
-   * failed is the failure's.
+   * Every step that finished, and every host message, in the order the script made them. The step that failed is the
+   * failure's.
    */
   entries: EntryRecord[]
   /** The host's one failure, if it failed, and where it came from. */
@@ -80,8 +80,8 @@ interface RecordedStepFailure extends BaseRecordedFailure {
   stepRecord: StepRecord
 }
 
-/** One entry of a host's record: a step that finished, or a message logged outside a step. */
-export type EntryRecord = FinishedStepRecord | MessageRecord
+/** One entry of a host's record: a step that finished, or a host message. */
+export type EntryRecord = FinishedStepRecord | HostMessageRecord
 
 /** The record of a step that finished, with how it turned out. */
 export interface FinishedStepRecord extends StepRecord {
@@ -106,23 +106,23 @@ export interface StepRecord {
   messages: StepMessageRecord[]
 }
 
-/** A message the script logged with `h.log`. */
+/** A message the script logged with `h.log`: a host message or a step message. */
 interface BaseMessageRecord {
   messageKind: MessageKind
   text: string
 }
 
-/** A message the script logged outside a step, which the report shows between the steps around it. */
-export interface MessageRecord extends BaseMessageRecord {
-  kind: "message"
+/** A host message: one the script logged outside a step, which the report shows between the steps around it. */
+export interface HostMessageRecord extends BaseMessageRecord {
+  kind: "hostMessage"
 }
 
-/** A message a step's function logged. */
+/** A step message: one a step's function logged. */
 export interface StepMessageRecord extends BaseMessageRecord {
   /** The part of `converge` that was running. Unset for a step that doesn't converge. */
   phase?: ConvergePhase
-  /** How many of the step's commands were recorded before it, which places it among them. */
-  commandsBefore: number
+  /** How many of the step's commands were recorded when it was logged, which places it among them. */
+  commandCount: number
 }
 
 const NO_VARIABLES: Record<string, string> = {}

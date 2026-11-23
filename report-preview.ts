@@ -351,6 +351,29 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
       },
     },
     {
+      // A step's messages: rows under it, each once, then every one among its commands from `-vv`, under its phase at
+      // `-vvv`. The check logs an info on both passes and a warning only after the fix, and the fix logs an info.
+      name: "step-messages",
+      target: "@local",
+      pass: "apply",
+      fn: async (h) => {
+        const keyPath = marker("api-key")
+        await h.ensure("Set the API key", {
+          want: true,
+          check: async ({ inspect }) => {
+            h.log.info("checking /etc/sonarr/env")
+            const { exitCode } = await inspect(`test -f '${keyPath}'`)
+            if (exitCode === 0) h.log.warn("/etc/sonarr/env also sets API_KEY, and it wins")
+            return exitCode === 0
+          },
+          fix: async ({ exec }) => {
+            h.log.info("writing the key")
+            await exec(`touch '${keyPath}'`)
+          },
+        })
+      },
+    },
+    {
       // A step that still differs after its fix, with italic exit codes, and a `command:` and `stderr:` row for each
       // phase that ran one command: the fix, and the multi-line check after it, its later lines lined up.
       name: "stderr",

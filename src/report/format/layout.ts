@@ -1,5 +1,6 @@
 import type { FormattedEntry } from "#report/format.ts"
 import type { Body } from "#report/format/body.ts"
+import type { DetailRows } from "#report/format/details.ts"
 import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import type { StatusLine } from "#report/format/status-line.ts"
 import { getMaxWidth, padToWidth } from "#utils.ts"
@@ -33,10 +34,11 @@ const layoutAlignedRows = (alignedRows: AlignedRow[], valueColumn: number): stri
 
   return alignedRows.flatMap(({ label, valueLines, nestedRows }) => {
     if (nestedRows) {
+      // Line up nested rows among themselves, whether or not they're in their own column, because they're under a label.
       const nestedLines =
-        nestedRows.kind === "aligned"
-          ? layoutAlignedRows(nestedRows.rows, getValueColumn(nestedRows.rows))
-          : nestedRows.rows
+        nestedRows.kind === "unaligned"
+          ? nestedRows.rows
+          : layoutAlignedRows(nestedRows.rows, getValueColumn(nestedRows.rows))
       return [label, ...nestedLines.map((nestedLine) => `${INDENT}${nestedLine}`)]
     }
 
@@ -49,6 +51,10 @@ const layoutAlignedRows = (alignedRows: AlignedRow[], valueColumn: number): stri
 export const layoutRowsInOwnColumn = (alignedRows: AlignedRow[]): string[] =>
   layoutAlignedRows(alignedRows, getValueColumn(alignedRows))
 
+/** Lays out one detail's rows: aligned ones at the entry's `valueColumn`, and unaligned ones as they are. */
+const layoutDetailRows = (detailRows: DetailRows, valueColumn: number): string[] =>
+  detailRows.kind === "aligned" ? layoutAlignedRows(detailRows.rows, valueColumn) : detailRows.rows
+
 /**
  * Lays out the lines under a status line: its error, if any, then its details. Lines up the values of every aligned row
  * in the entry in one column. Indents the details under an error, so an error stands apart and its details read as
@@ -59,9 +65,7 @@ const layoutBody = (body: Body): string[] => {
 
   const valueColumn = getValueColumn(detailRows.flatMap(({ kind, rows }) => (kind === "aligned" ? rows : [])))
 
-  const detailLines = detailRows.flatMap(({ kind, rows }) =>
-    kind === "aligned" ? layoutAlignedRows(rows, valueColumn) : rows,
-  )
+  const detailLines = detailRows.flatMap((formattedDetail) => layoutDetailRows(formattedDetail, valueColumn))
   if (!errorLines) return detailLines
 
   const indentedDetailLines = detailLines.map((detailLine) => `${INDENT}${detailLine}`)
@@ -70,7 +74,7 @@ const layoutBody = (body: Body): string[] => {
 
 const layoutEntry = (formattedEntry: FormattedEntry): string[] => {
   // Lay out a message's row in a column of its own, so its text's later lines line up under its first.
-  if (formattedEntry.kind === "message")
+  if (formattedEntry.kind === "hostMessage")
     return layoutRowsInOwnColumn([formattedEntry.row]).map((messageLine) => `${INDENT}${messageLine}`)
 
   const { statusLine, body } = formattedEntry

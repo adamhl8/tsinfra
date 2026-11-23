@@ -5,6 +5,7 @@ import { toCommandsDetail, toCommandsDetails } from "#report/host-block/details/
 import { toComparisonValuesDetails } from "#report/host-block/details/comparisons.ts"
 import { toFailedStepDetails } from "#report/host-block/details/failure.ts"
 import { toOptionsDetails } from "#report/host-block/details/options.ts"
+import { toStepMessagesDetails } from "#report/host-block/details/step-messages.ts"
 
 // Show how a string, a list, a set, a record, a file, or a link would change, because the step's name doesn't say.
 // An exit code or a boolean needs no details, because the name already says what yes and no mean.
@@ -37,8 +38,8 @@ const toWarningDetails = (stepRecord: FinishedStepRecord): Detail[] => {
 export const toHintDetails = (hints: FailureHint[]): Detail[] => hints.map((hint) => ({ kind: "hint", hint, from: 0 }))
 
 /**
- * Returns a finished step's details: its options, how a changed step's value would change, any warnings, then its
- * commands.
+ * Returns a finished step's details: its options, how a changed step's value would change, any warnings, its step
+ * messages, then its commands.
  */
 export const toStepDetails = (stepRecord: FinishedStepRecord): Detail[] => {
   const { status, comparisons } = stepRecord
@@ -52,15 +53,20 @@ export const toStepDetails = (stepRecord: FinishedStepRecord): Detail[] => {
   const showsChange = status === "changed" && values !== undefined && SHOWS_CHANGE_DETAILS[values.kind]
   const changeDetails = showsChange ? toComparisonValuesDetails(values, stepRecord.kind, 0) : []
   const warningDetails = toWarningDetails(stepRecord)
-  return [...optionsDetails, ...changeDetails, ...warningDetails, ...commandsDetails]
+  const stepMessagesDetails = toStepMessagesDetails(stepRecord)
+  return [...optionsDetails, ...changeDetails, ...warningDetails, ...stepMessagesDetails, ...commandsDetails]
 }
 
-/** Returns what a failed step shows under its error, before any hints: its options, what it found, and its commands. */
+/**
+ * Returns what a failed step shows under its error, before any hints: its options, what it found, its step messages,
+ * and its commands. Keeps the step messages, because they're the script's own words and often explain the failure.
+ */
 export const toStepFailureDetails = (stepRecord: StepRecord): Detail[] => {
   const optionsDetails = toOptionsDetails(stepRecord)
   const failedStepDetails = toFailedStepDetails(stepRecord)
+  const stepMessagesDetails = toStepMessagesDetails(stepRecord)
   const commandsDetails = toCommandsDetails(stepRecord)
-  return [...optionsDetails, ...failedStepDetails, ...commandsDetails]
+  return [...optionsDetails, ...failedStepDetails, ...stepMessagesDetails, ...commandsDetails]
 }
 
 /**
@@ -68,7 +74,7 @@ export const toStepFailureDetails = (stepRecord: StepRecord): Detail[] => {
  * how far preparation got. A host that was prepared lists none, because the same commands would repeat in every block.
  */
 export const toPreparationFailureDetails = (preparationCommands: CommandRecord[]): Detail[] =>
-  toCommandsDetail(preparationCommands)
+  preparationCommands.length > 0 ? [toCommandsDetail(preparationCommands)] : []
 
 /**
  * Returns what a host function failure shows under its error, before any hints: a note, because `host fn` alone doesn't

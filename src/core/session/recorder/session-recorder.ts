@@ -260,16 +260,16 @@ export const createSessionRecorder = (
     const text = mask(_text)
     const { runningStep } = hostRecord
     if (!runningStep) {
-      hostRecord.entries.push({ kind: "message", messageKind, text })
+      hostRecord.entries.push({ kind: "hostMessage", messageKind, text })
       return
     }
 
-    const commandsBefore = runningStep.commands.length
+    const commandCount = runningStep.commands.length
     const stepMessageRecord: StepMessageRecord = {
       messageKind,
       text,
       ...(currentPhase && { phase: currentPhase }),
-      commandsBefore,
+      commandCount,
     }
     runningStep.messages.push(stepMessageRecord)
   }

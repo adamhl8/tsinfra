@@ -23,7 +23,7 @@ import { host } from "#core/hosts/host.ts"
 import type { Host } from "#core/session.ts"
 import type { EnsureOptions } from "#core/session/handlers/ensure.ts"
 import type { Want, WantOf } from "#core/session/handlers/ensure/want.ts"
-import type { Exec } from "#core/session/handlers/tools.ts"
+import type { Exec, ReadTools } from "#core/session/handlers/tools.ts"
 import type { HostRecord } from "#core/session/recorder/records.ts"
 import type { Mode } from "#mode.ts"
 import { renderHostBlock, toShownHostBlock } from "#report.ts"
@@ -1825,6 +1825,267 @@ describe("renderHostBlock and renderSummary for a message between steps", () => 
     )
 
     expect(hostBlock).toBe(["a", "  - warning: the first line", "             the second line"].join("\n"))
+  })
+})
+
+/** Returns a check that logs `info` every time, and `warning` only once the marker at `markerPath` exists. */
+const checkAndLog =
+  (h: Host, markerPath: string) =>
+  async ({ inspect }: ReadTools): Promise<boolean> => {
+    h.log.info("checked")
+    const { exitCode } = await inspect(`test -e '${markerPath}'`)
+    if (exitCode === 0) h.log.warn("found it")
+    return exitCode === 0
+  }
+
+describe("renderHostBlock and renderSummary for a step's messages", () => {
+  it("should show a step's warning under it at the default level, which brings up a step that was already right", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Check it", {
+        want: true,
+        check: async ({ read }) => {
+          h.log.warn("looks off")
+          return (await read("echo yes")) === "yes"
+        },
+        fix: "true",
+      })
+    }, "plan")
+
+    expect(hostBlock).toBe(["a", "  = unchanged: (ensure) Check it", "      warning: looks off"].join("\n"))
+  })
+
+  it("should show a step's info only from level 1", async () => {
+    const hostRecord = await runNamedHost(
+      "a",
+      async (h) => {
+        await h.ensure("Check it", {
+          want: true,
+          check: async ({ read }) => {
+            h.log.info("all good")
+            return (await read("echo yes")) === "yes"
+          },
+          fix: "true",
+        })
+      },
+      "plan",
+    )
+
+    expect([renderRecord(hostRecord, "plan"), renderRecord(hostRecord, "plan", 1)]).toStrictEqual([
+      undefined,
+      ["a", "  = unchanged: (ensure) Check it", "      info: all good"].join("\n"),
+    ])
+  })
+
+  it("should show a message the check logs before and after the fix once, and a new one after the fix too", async () => {
+    const markerPath = path.join(await makeTempDir(), "made")
+    const hostRecord = await runNamedHost(
+      "a",
+      async (h) => {
+        await h.ensure("Make marker", { want: true, check: checkAndLog(h, markerPath), fix: `touch '${markerPath}'` })
+      },
+      "apply",
+    )
+
+    expect([renderRecord(hostRecord, "apply", 1), renderRecordsSummary([hostRecord], "apply")]).toStrictEqual([
+      ["a", "  ~ change: (ensure) Make marker", "      info: checked", "      warning: found it"].join("\n"),
+      "a   1 change, 1 warning",
+    ])
+  })
+
+  it("should show a step's messages after how its value would change, in a column of their own", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Start it", {
+        want: "active",
+        check: async ({ read }) => {
+          h.log.warn("it was stopped")
+          return read("echo inactive")
+        },
+        fix: "true",
+      })
+    }, "plan")
+
+    expect(hostBlock).toBe(
+      [
+        "a",
+        "  ~ change: (ensure) Start it",
+        "      got:  inactive",
+        "      want: active",
+        "      warning: it was stopped",
+      ].join("\n"),
+    )
+  })
+
+  it("should show the messages a failed step logged under its error", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Make it", {
+        want: true,
+        check: async ({ read }) => {
+          h.log.warn("about to fail")
+          return (await read("echo no")) === "yes"
+        },
+        fix: "exit 1",
+      })
+    }, "apply")
+
+    expect(hostBlock).toBe(
+      [
+        "a",
+        "  ! failed: (ensure) Make it",
+        "      failed to run the fix -> exited with code 1",
+        "        warning: about to fail",
+      ].join("\n"),
+    )
+  })
+
+  it("should line up a step's multi-line message's later lines under its first line's text", async () => {
+    const hostBlock = await formatBlock(async (h) => {
+      await h.ensure("Check it", {
+        want: true,
+        check: async ({ read }) => {
+          h.log.warn("the first line\nthe second line")
+          return (await read("echo yes")) === "yes"
+        },
+        fix: "true",
+      })
+    }, "plan")
+
+    expect(hostBlock?.split("\n").slice(2)).toStrictEqual([
+      "      warning: the first line",
+      "               the second line",
+    ])
+  })
+
+  it("should count a warning logged before and after the fix once in the summary", async () => {
+    const markerPath = path.join(await makeTempDir(), "made")
+    const hostRecord = await runNamedHost(
+      "a",
+      async (h) => {
+        await h.ensure("Make marker", {
+          want: true,
+          check: async ({ inspect }) => {
+            h.log.warn("same every time")
+            return (await inspect(`test -e '${markerPath}'`)).exitCode === 0
+          },
+          fix: `touch '${markerPath}'`,
+        })
+        h.log.warn("between steps")
+      },
+      "apply",
+    )
+
+    expect(renderRecordsSummary([hostRecord], "apply")).toBe("a   1 change, 2 warnings")
+  })
+})
+
+// Match what a command printed at -vvv, which starts past every tool and prompt.
+const COMMAND_OUTPUT_LINE = /^ {20}/v
+
+/** Applies an `ensure` whose check logs with `checkAndLog`, and whose fix logs before it makes the marker. */
+const applyMakeMarkerAndLog = async () => {
+  const markerPath = path.join(await makeTempDir(), "made")
+  const hostRecord = await runNamedHost(
+    "a",
+    async (h) => {
+      await h.ensure("Make marker", {
+        want: true,
+        check: checkAndLog(h, markerPath),
+        fix: async ({ exec }) => {
+          h.log.info("making it")
+          await exec(`touch '${markerPath}'`)
+        },
+      })
+    },
+    "apply",
+  )
+  return { markerPath, hostRecord }
+}
+
+describe("renderHostBlock and renderSummary for a step's messages among its commands", () => {
+  it("should show every message in place among the commands with -vv, starting in the tool column", async () => {
+    const { markerPath, hostRecord } = await applyMakeMarkerAndLog()
+
+    expect(renderRecord(hostRecord, "apply", 2)?.split("\n")).toStrictEqual([
+      "a",
+      "  ~ change: (ensure) Make marker",
+      "      commands:",
+      "        info: checked",
+      `        (inspect) $ test -e '${markerPath}'`,
+      "        info: making it",
+      `        (exec)    $ touch '${markerPath}'`,
+      "        info: checked",
+      `        (inspect) $ test -e '${markerPath}'`,
+      "        warning: found it",
+    ])
+  })
+
+  it("should show each message under the heading of the phase that logged it with -vvv", async () => {
+    const { markerPath, hostRecord } = await applyMakeMarkerAndLog()
+
+    const lines = renderRecord(hostRecord, "apply", 3)?.split("\n") ?? []
+    const linesWithoutOutput = lines.filter((line) => !COMMAND_OUTPUT_LINE.test(line))
+    expect(linesWithoutOutput).toStrictEqual([
+      "a",
+      "  ~ change: (ensure) Make marker",
+      "      commands:",
+      "        before:",
+      "          info: checked",
+      `          (inspect) $ test -e '${markerPath}'`,
+      "        fix:",
+      "          info: making it",
+      `          (exec)    $ touch '${markerPath}'`,
+      "        after:",
+      "          info: checked",
+      `          (inspect) $ test -e '${markerPath}'`,
+      "          warning: found it",
+    ])
+  })
+
+  it("should count a warning once in the summary with -vv, where it shows among the commands", async () => {
+    const { hostRecord } = await applyMakeMarkerAndLog()
+
+    expect(renderRecordsSummary([hostRecord], "apply", 2)).toBe("a   1 change, 1 warning")
+  })
+
+  it("should show a run's messages among its commands", async () => {
+    const hostSession = await createSession("apply")
+    const { host: h } = hostSession
+    await h.run(
+      "Restart",
+      async ({ exec }) => {
+        await exec("true")
+        h.log.info("restarted")
+      },
+      { after: "always" },
+    )
+
+    expect(renderRecord(hostSession.hostRecord, "apply", 2)?.split("\n").slice(2)).toStrictEqual([
+      "      commands:",
+      "        (exec) $ true",
+      "        info: restarted",
+    ])
+  })
+
+  it("should give a step that only logged a commands heading with -vv, with its messages under it", async () => {
+    const hostSession = await createSession("apply")
+    const { host: h } = hostSession
+    await h.run(
+      "Say hi",
+      async () => {
+        h.log.warn("the first line\nthe second line")
+        // Await something, because a run function returns a promise.
+        // The lint fix strips `async` from a function without an `await`.
+        await Promise.resolve()
+      },
+      { after: "always" },
+    )
+
+    expect(renderRecord(hostSession.hostRecord, "apply", 2)?.split("\n")).toStrictEqual([
+      "a",
+      "  > always: (run) Say hi",
+      "      commands:",
+      "        warning: the first line",
+      "                 the second line",
+    ])
   })
 })
 

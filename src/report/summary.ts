@@ -2,7 +2,7 @@ import type { Mode } from "#mode.ts"
 import { planReminderElement } from "#report/format/elements/asides.ts"
 import { statusTextElement, warningCountElement } from "#report/format/elements/summary.ts"
 import { COLUMN_GAP } from "#report/format/layout.ts"
-import type { EntryStatus, HostBlock, HostBlockEntry } from "#report/host-block.ts"
+import type { EntryStatus, HostBlock, HostBlockEntry, StatusLineEntry } from "#report/host-block.ts"
 import { countOf, getMaxWidth, padToWidth } from "#utils.ts"
 
 const PLAN_REMINDER = "Steps after a change were checked without that change, so apply may differ."
@@ -25,7 +25,7 @@ const getEntries = (hostBlock: HostBlock): HostBlockEntry[] => (hostBlock.kind =
 /** Reports whether any status line entry in the block has one of `statuses`, because a message has no status. */
 const hasStatus = (hostBlock: HostBlock, statuses: EntryStatus[]): boolean =>
   getEntries(hostBlock).some(
-    (hostBlockEntry) => hostBlockEntry.kind !== "message" && statuses.includes(hostBlockEntry.status),
+    (hostBlockEntry) => hostBlockEntry.kind !== "hostMessage" && statuses.includes(hostBlockEntry.status),
   )
 
 /** Reports whether the host failed, which the block shows as a `failed` entry. */
@@ -38,6 +38,18 @@ export const hasFailed = (hostBlock: HostBlock): boolean => hasStatus(hostBlock,
  */
 export const hasDrift = (hostBlock: HostBlock): boolean => hasStatus(hostBlock, ["changed", "ranFromOpenChanges"])
 
+/**
+ * Returns how many distinct warning messages a step's shown details hold, so one it logged before and after the fix
+ * counts once, wherever it shows.
+ */
+const countStepWarningMessages = (statusLineEntry: StatusLineEntry): number => {
+  const stepMessages = statusLineEntry.details.flatMap((detail) =>
+    detail.kind === "stepMessages" ? detail.stepMessages : [],
+  )
+  const warningTexts = stepMessages.flatMap(({ messageKind, text }) => (messageKind === "warn" ? [text] : []))
+  return new Set(warningTexts).size
+}
+
 const formatHostStatus = (hostBlock: HostBlock): string => {
   if (hasFailed(hostBlock)) return statusTextElement("failed", "failed")
 
@@ -46,7 +58,7 @@ const formatHostStatus = (hostBlock: HostBlock): string => {
   let waitingCount = 0
   let warningCount = 0
   for (const hostBlockEntry of getEntries(hostBlock)) {
-    if (hostBlockEntry.kind === "message") {
+    if (hostBlockEntry.kind === "hostMessage") {
       if (hostBlockEntry.messageKind === "warn") warningCount += 1
       continue
     }
@@ -54,7 +66,7 @@ const formatHostStatus = (hostBlock: HostBlock): string => {
     const { status, details } = hostBlockEntry
     if (IN_CHANGE_COUNT[status]) changeCount += 1
     if (status === "waiting") waitingCount += 1
-    warningCount += details.filter(({ kind }) => kind === "warning").length
+    warningCount += details.filter(({ kind }) => kind === "warning").length + countStepWarningMessages(hostBlockEntry)
   }
 
   // Leave the comma between the counts unstyled.

@@ -19,8 +19,8 @@ export interface PieceLevels {
 /** A host's block: its name, then its entries, or "empty script" for a host that recorded none and didn't fail. */
 export type HostBlock = { name: string } & ({ kind: "entries"; entries: HostBlockEntry[] } | { kind: "noEntries" })
 
-/** One entry of a host block: a status line, or a message logged between steps. */
-export type HostBlockEntry = StatusLineEntry | MessageEntry
+/** One entry of a host block: a status line, or a host message. */
+export type HostBlockEntry = StatusLineEntry | HostMessageEntry
 
 /**
  * An entry shown as a status line, with its details under it: a step, or the one failure no step owns. Its levels are
@@ -48,9 +48,9 @@ export type EntryKind = StepKind | UnownedFailureKind
 /** Where a failure no step owns happened: in preparation, or in the host function, for `host fn`. */
 export type UnownedFailureKind = RecordedUnownedFailure["kind"]
 
-/** A message logged between steps, shown as its kind's label and its text. Its levels are where it shows. */
-export interface MessageEntry extends PieceLevels {
-  kind: "message"
+/** A host message, logged outside a step, shown as its kind's label and its text. Its levels are where it shows. */
+export interface HostMessageEntry extends PieceLevels {
+  kind: "hostMessage"
   messageKind: MessageKind
   text: string
 }
@@ -96,8 +96,11 @@ export type Detail = PieceLevels
     | { kind: "note"; note: DetailNote }
     // Something that worked, but needs a look, like a link to a path where nothing exists.
     | { kind: "warning"; warning: StepWarning }
-    // The commands the step ran, in the order they ran, grouped by the phase that ran them.
-    | { kind: "commands"; groups: CommandGroup[] }
+    // Every step message the step's functions logged, in the order they were logged.
+    | { kind: "stepMessages"; stepMessages: StepMessage[] }
+    // The commands the step ran, in the order they ran. Its phase headings are a piece of their own, which the filter
+    // leaves out below its level, so the commands then show as one list.
+    | { kind: "commands"; commands: StepCommand[]; phaseHeadings?: PieceLevels }
     // What a read or inspect step's one command printed, because the step lists no commands to show it under.
     | { kind: "commandOutput"; output: CommandOutputDetail }
     // How to fix a failure, like setting the host's `sudo` option.
@@ -119,41 +122,6 @@ export interface OptionValue extends PieceLevels {
   value: string | boolean
 }
 
-/**
- * Commands that ran one after another in the same phase. Its phase is a piece of its own, which the filter leaves out
- * below its level, so the groups then show as one list.
- */
-export interface CommandGroup {
-  /** The part of a step that compares the host's state that ran the commands. Unset for a step that doesn't compare. */
-  phase?: PieceLevels & { phase: ConvergePhase }
-  commands: StepCommand[]
-}
-
-/**
- * A command a step ran, and its label when tsinfra wrote it, with any secret in its text masked. Its options' values
- * and what it printed are pieces of their own, which the filter leaves out below their level.
- */
-export interface StepCommand {
-  cmd: string
-  label?: string
-  /** The tool whose call ran the command. Unset for a step's own command and for tsinfra's. */
-  toolName?: ToolName
-  /** The options the tool call set. Unset when it set none, and for a command no tool call ran. */
-  options?: StepOption[]
-  output?: PieceLevels & CommandOutputDetail
-}
-
-/** What a command printed: its exit code and both streams, or the error it failed with when it couldn't run at all. */
-export type CommandOutputDetail =
-  | { kind: "exited"; exitCode: number; stdout: string; stderr: string }
-  | { kind: "failed"; error: Error }
-
-/** Something that worked but needs a look, as its kind, so the report picks the words. */
-export interface StepWarning {
-  kind: "missingTarget"
-  target: string
-}
-
 /** Tsinfra's own aside about the details around it, as its kind, so the report picks the words. */
 export type DetailNote =
   // The values from before the fix, under a failure, which may no longer be true.
@@ -168,6 +136,48 @@ export type DetailNote =
 
 /** The phases of a step whose commands can explain why its state still differs after the fix. */
 export type StillDiffersPhase = Extract<ConvergePhase, "fix" | "after">
+
+/** Something that worked but needs a look, as its kind, so the report picks the words. */
+export interface StepWarning {
+  kind: "missingTarget"
+  target: string
+}
+
+/**
+ * A step message: one a step's functions logged with `h.log`, as its kind, which picks its label, and its text. Its
+ * levels are where it shows. It shows as a row under the step, unless its `amongCommands` piece shows.
+ */
+export interface StepMessage extends PieceLevels {
+  messageKind: MessageKind
+  text: string
+  /** The part of a step that compares the host's state that logged it. Unset for a step that doesn't compare. */
+  phase?: ConvergePhase
+  /** How many of the step's commands were recorded when it was logged, which places it among them. */
+  commandCount: number
+  /** The levels it shows among the step's commands at, in place of a row under the step. */
+  amongCommands?: PieceLevels
+}
+
+/**
+ * A command a step ran, and its label when tsinfra wrote it, with any secret in its text masked. Its options' values
+ * and what it printed are pieces of their own, which the filter leaves out below their level.
+ */
+export interface StepCommand {
+  cmd: string
+  label?: string
+  /** The tool whose call ran the command. Unset for a step's own command and for tsinfra's. */
+  toolName?: ToolName
+  /** The options the tool call set. Unset when it set none, and for a command no tool call ran. */
+  options?: StepOption[]
+  /** The part of a step that compares the host's state that ran the command. Unset for a step that doesn't compare. */
+  phase?: ConvergePhase
+  output?: PieceLevels & CommandOutputDetail
+}
+
+/** What a command printed: its exit code and both streams, or the error it failed with when it couldn't run at all. */
+export type CommandOutputDetail =
+  | { kind: "exited"; exitCode: number; stdout: string; stderr: string }
+  | { kind: "failed"; error: Error }
 
 /**
  * Returns a host's block, with every piece at every level, each with the level it shows from: an entry per finished
