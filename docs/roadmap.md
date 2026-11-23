@@ -6,7 +6,6 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 
 - [Next](#next)
   - [One note for an apply that didn't finish](#one-note-for-an-apply-that-didnt-finish)
-  - [A record's `differing` keys](#a-records-differing-keys)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
   - [Live progress](#live-progress)
@@ -50,19 +49,6 @@ After an apply fails, the next pass shows every step that changed in it, and is 
 - **It shows at the default level,** like the `resume` lines it explains, and only when the block has a `resume` or `ranFromOpenChanges` line.
 
 When it's built, [CLI](./cli.md#how-the-report-is-built) describes the host's note in place of the two per-step notes, and [Steps](./steps.md#when-an-apply-doesnt-finish) drops the quoted notes.
-
-### A record's `differing` keys
-
-`differing` is built (see [Steps](./steps.md#fix)). What's left is having the report pick a record's shown keys from it, as one commit.
-
-**2a: The report reads `differing`.**
-
-- **A report test pins the case `differing` doesn't cover first,** passing on today's code: a key only the host has, whose value is a record, next to wanted keys that differ, shows each of the host's keys under its heading.
-- **`getShownKeys` returns the keys of the level's `differing`,** or `got`'s keys when `want` has nothing at that level. `differing` stops at `true` on a key only the host has, and every key of that value is extra, so taking them from `got` compares nothing.
-- **`RecordLevel` swaps `extra` for `differing`,** and `toKeyDifference` passes each key's mark down, with `true` holding no keys. `toNestedExtra` is deleted, because it only rebuilt a level's extra keys for `getShownKeys`.
-- **`unmet` and `nestedExtra` stay,** for a nested set's missing and extra items.
-- **No output changes,** so every other report test passes unchanged, and [CLI](./cli.md#how-the-report-is-built) stays as it is.
-- **This roadmap entry** and its line in the contents are deleted.
 
 ## Planned
 

@@ -4,6 +4,10 @@ import type {
   RecordValue,
   RecordWant,
 } from "#core/session/handlers/ensure/comparison/record.ts"
+import type {
+  DifferingMark,
+  DifferingRecord,
+} from "#core/session/handlers/ensure/comparison/record/difference/differing.ts"
 import type { NestedExtraEntry } from "#core/session/handlers/ensure/comparison/record/difference/nested-extra.ts"
 import {
   isNestedList,
@@ -47,48 +51,40 @@ interface RecordLevel {
   got: RecordWant | undefined
   want: RecordWant | undefined
   unmet: RecordWant | undefined
-  extra: RecordWant
   /** The `nestedExtra` entries under this level. */
   nestedExtra: readonly NestedExtraEntry[]
+  /** The marks of this level's keys, or nothing when none is marked. */
+  differing: DifferingRecord<RecordWant> | undefined
 }
 
-/** One key of a level, with its two sides, what's unmet there, and the `nestedExtra` entries under it. */
+/** One key of a level, with its two sides, what's unmet there, the `nestedExtra` entries under it, and its mark. */
 interface KeyDifference {
   gotValue: RecordValue | undefined
   wantValue: RecordValue | undefined
   unmetValue: RecordValue | undefined
   nestedExtra: readonly NestedExtraEntry[]
+  differingMark: DifferingMark<RecordValue> | undefined
 }
 
 /**
- * Returns the keys a level shows: each of `want`'s that's unmet or holds an extra, in `want`'s order, then the extra
- * keys, in the host's order. `depth` is where an entry's path names this level's keys.
+ * Returns the keys a level shows: the ones `differing` marks, `want`'s first, then the host's. A level `want` doesn't
+ * have shows all of the host's keys, because `differing` marks only the key that holds it, and every key in it is
+ * extra.
  */
-const getShownKeys = (level: RecordLevel, depth: number): string[] => {
-  const { want, unmet, extra, nestedExtra } = level
-  const wantedKeys = Object.keys(want ?? {}).filter(
-    (key) => getOwnValue(unmet, key) !== undefined || nestedExtra.some(({ path }) => path[depth] === key),
-  )
-  return [...wantedKeys, ...Object.keys(extra)]
+const getShownKeys = (level: RecordLevel): string[] => {
+  const { got, want, differing } = level
+  if (want === undefined) return Object.keys(got ?? {})
+  return Object.keys(differing ?? {})
 }
 
-/** Returns a key's sides from its level, with what's unmet there and the entries under it. */
+/** Returns a key's sides from its level, with what's unmet there, the entries under it, and its mark. */
 const toKeyDifference = (level: RecordLevel, key: string, depth: number): KeyDifference => ({
   gotValue: getOwnValue(level.got, key),
   wantValue: getOwnValue(level.want, key),
   unmetValue: getOwnValue(level.unmet, key),
   nestedExtra: level.nestedExtra.filter(({ path }) => path[depth] === key),
+  differingMark: getOwnValue(level.differing, key),
 })
-
-/** Returns a nested level's extra keys with the host's values, from the key entries whose path ends at `depth`. */
-const toNestedExtra = (nestedExtra: readonly NestedExtraEntry[], depth: number): RecordWant =>
-  Object.fromEntries(
-    nestedExtra.flatMap((entry): [string, RecordValue][] => {
-      const key = entry.path[depth]
-      const endsHere = entry.kind === "key" && key !== undefined && entry.path.length === depth + 1
-      return endsHere ? [[key, entry.value]] : []
-    }),
-  )
 
 /**
  * Formats a row per key the recorded difference holds at a level, from the host's value to the wanted one, with
@@ -97,7 +93,7 @@ const toNestedExtra = (nestedExtra: readonly NestedExtraEntry[], depth: number):
  * and a record, show on one row. `depth` is where an entry's path names this level's keys.
  */
 const formatRecordRows = (level: RecordLevel, depth: number, diffLimits: DiffLimits): AlignedRow[] =>
-  getShownKeys(level, depth).map((key) => {
+  getShownKeys(level).map((key) => {
     const keyDifference = toKeyDifference(level, key, depth)
     // oxlint-disable-next-line no-use-before-define - a nested record's rows are a record's rows
     const nestedRows = formatNestedRows(keyDifference, depth + 1, diffLimits)
@@ -116,13 +112,14 @@ const formatNestedRows = (
   depth: number,
   diffLimits: DiffLimits,
 ): DetailRows | undefined => {
-  const { gotValue, wantValue, unmetValue, nestedExtra } = keyDifference
+  const { gotValue, wantValue, unmetValue, nestedExtra, differingMark } = keyDifference
 
   if (isRecordOrAbsent(gotValue) && isRecordOrAbsent(wantValue)) {
     const unmet = isRecordOrAbsent(unmetValue) ? unmetValue : undefined
-    const extra = wantValue === undefined ? (gotValue ?? {}) : toNestedExtra(nestedExtra, depth)
+    // Pass `true` down as no marks, because it marks the key itself, like an empty wanted record.
+    const differing = differingMark === true ? undefined : differingMark
     const recordRows = formatRecordRows(
-      { got: gotValue, want: wantValue, unmet, extra, nestedExtra },
+      { got: gotValue, want: wantValue, unmet, nestedExtra, differing },
       depth,
       diffLimits,
     )

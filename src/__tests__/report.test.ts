@@ -909,6 +909,21 @@ describe("renderHostBlock for a step that would change a record", () => {
     expect(rows).toStrictEqual(["      env:", "        b: 2 -> 1", "        c: (none) -> 3", "        a: x -> (none)"])
   })
 
+  it("should show each of the host's keys under a key only the host has, at every depth", async () => {
+    const rows = await formatRecordRows(
+      { image: "caddy:2.9" },
+      { image: "caddy:2.8", logging: { level: "debug", file: { path: "/var/log/caddy" } } },
+    )
+
+    expect(rows).toStrictEqual([
+      "      image: caddy:2.8 -> caddy:2.9",
+      "      logging:",
+      "        level: debug -> (none)",
+      "        file:",
+      "          path: /var/log/caddy -> (none)",
+    ])
+  })
+
   it("should show two kinds of value at one key, null, and an empty record on one row each", async () => {
     // oxlint-disable-next-line unicorn/no-null - a record want can hold null
     const rows = await formatRecordRows({ a: { b: "1" }, c: null, d: {} }, { a: "1", c: { x: 1 } })
