@@ -1,3 +1,13 @@
+## [0.16.0](https://github.com/adamhl8/tsinfra/compare/v0.15.0..v0.16.0) - 2026-11-23
+
+### 🚀 Features
+
+- _(ensure)_ give the fix a differing object ([12e08aa](https://github.com/adamhl8/tsinfra/commit/12e08aa68410ec2524fb9ec4c1adc06c997c2f10) by @adamhl8)
+
+### 🚜 Refactor
+
+- _(report)_ show a record's keys from differing ([a5499b4](https://github.com/adamhl8/tsinfra/commit/a5499b43297023dc4646312aba9da89968185ac9) by @adamhl8)
+
 ## [0.15.0](https://github.com/adamhl8/tsinfra/compare/v0.14.0..v0.15.0) - 2026-11-23
 
 ### 🚀 Features
