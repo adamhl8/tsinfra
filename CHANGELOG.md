@@ -1,3 +1,13 @@
+## [0.17.0](https://github.com/adamhl8/tsinfra/compare/v0.16.0..v0.17.0) - 2026-11-24
+
+### 🚀 Features
+
+- _(report)_ note an unfinished apply once per host ([f7cba13](https://github.com/adamhl8/tsinfra/commit/f7cba13aa3ef440cb37e44c8cc1c11a5b2f7cc5a) by @adamhl8)
+
+### 🚜 Refactor
+
+- require properties that code always sets ([f42bb95](https://github.com/adamhl8/tsinfra/commit/f42bb951b9f185820056c5e1f552e00e5e791cdc) by @adamhl8)
+
 ## [0.16.0](https://github.com/adamhl8/tsinfra/compare/v0.15.0..v0.16.0) - 2026-11-23
 
 ### 🚀 Features
