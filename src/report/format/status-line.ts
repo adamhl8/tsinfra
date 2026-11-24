@@ -7,9 +7,9 @@ export interface StatusLine {
   status: string
   kind: string
   /** Unset when the entry has no name. */
-  name?: string
+  name: string | undefined
   /** Unset when the entry has no note. */
-  note?: string
+  note: string | undefined
 }
 
 // Give each status its word. The words have no tense, because a line reads the same in `plan`, where nothing has
@@ -36,14 +36,16 @@ const getNotePartWords = (notePart: NotePart): string => {
 
 /** Formats the fields an entry's status line shows, and joins its note's parts into their text. */
 export const formatStatusLine = (statusLineEntry: StatusLineEntry): StatusLine => {
-  const { status, kind, name, note } = statusLineEntry
-  const noteText = note.map((notePart) => getNotePartWords(notePart)).join(", ")
+  const { status, kind } = statusLineEntry
+  const name = statusLineEntry.name && entryNameElement(statusLineEntry.name)
+  const noteWords = statusLineEntry.note.map((notePart) => getNotePartWords(notePart))
+  const note = noteWords.length > 0 ? entryNoteElement(noteWords.join(", ")) : undefined
 
   return {
     // Leave the colon unstyled, so it reads as punctuation between the status and the kind.
     status: `${statusElement(status, STATUS_WORDS[status])}:`,
     kind: kindElement(kind),
-    ...(name && { name: entryNameElement(name) }),
-    ...(note.length > 0 && { note: entryNoteElement(noteText) }),
+    name,
+    note,
   }
 }

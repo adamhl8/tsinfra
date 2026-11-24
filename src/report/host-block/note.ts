@@ -1,6 +1,6 @@
-import type { HostRecord, StepRecord } from "#core/session/recorder/records.ts"
+import type { FinishedStepRecord, HostRecord } from "#core/session/recorder/records.ts"
 import { getFinishedStepRecords } from "#core/session/recorder/records.ts"
-import type { EntryStatus, HostNote, NotePart } from "#report/host-block.ts"
+import type { HostNote, NotePart } from "#report/host-block.ts"
 
 /** Returns the host's note, for a host with no entries and no failure, or with a `resume` step. */
 export const toHostNote = (hostRecord: HostRecord): HostNote | undefined => {
@@ -12,9 +12,10 @@ export const toHostNote = (hostRecord: HostRecord): HostNote | undefined => {
   return hasResumeStep ? { kind: "unfinishedApply", from: 0 } : undefined
 }
 
-/** Returns a step's note, for an entry that's waiting or `ranFromOpenChanges`. */
-export const toStepNote = (stepRecord: StepRecord, status: EntryStatus): NotePart[] => {
-  if (status === "waiting") return [{ kind: "needs", needs: stepRecord.waitingOn, from: 0 }]
+/** Returns a finished step's note, for one that's waiting or `ranFromOpenChanges`. */
+export const toStepNote = (stepRecord: FinishedStepRecord): NotePart[] => {
+  const { waitingOn, status } = stepRecord
+  if (status === "waiting") return [{ kind: "needs", needs: waitingOn, from: 0 }]
   if (status === "ranFromOpenChanges") return [{ kind: "triggeredByOpenChange", from: 0 }]
 
   return []

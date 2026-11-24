@@ -16,7 +16,7 @@ const toStepOption = (name: string, value: OptionsRecordValue): StepOption => {
   if (typeof value === "string" || typeof value === "boolean") return { name, value: toOptionValue(value), entries: [] }
 
   const entries = Object.entries(value).map(([entryName, entryValue]) => toStepOption(entryName, entryValue))
-  return { name, entries }
+  return { name, value: undefined, entries }
 }
 
 /** Returns the recorded options of a step or a tool call as nodes, in the order they were recorded. */

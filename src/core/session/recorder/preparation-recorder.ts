@@ -21,7 +21,12 @@ export const createPreparationRecorder = (
   // Record the output as it is, because preparation never sees a secret.
   const commandRecorder: CommandRecorder = {
     recordCommand: (shellCommand) => {
-      const commandRecord: CommandRecord = { ...shellCommand }
+      const commandRecord: CommandRecord = {
+        ...shellCommand,
+        toolCall: undefined,
+        phase: undefined,
+        output: undefined,
+      }
       hostRecord.preparationCommands.push(commandRecord)
 
       const recordOutput: RecordOutput = (output) => {

@@ -47,7 +47,7 @@ const hostNameElement = (name: string): string => styleBold(name)
 
 const HOST_NOTE_WORDS: Record<HostNote["kind"], string> = {
   noEntries: "empty script",
-  unfinishedApply: "an earlier apply didn't finish, so its follow-ups that didn't complete still trigger",
+  unfinishedApply: "an earlier apply didn't finish, so follow-ups that didn't complete still trigger",
 }
 
 /** Formats the note a block shows before its entries. */

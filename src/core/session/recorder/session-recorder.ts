@@ -133,10 +133,14 @@ export const createSessionRecorder = (
   const createCommandRecorder = (toolCallRecord?: ToolCallRecord): CommandRecorder => ({
     recordCommand: (shellCommand) => {
       const cmd = mask(shellCommand.cmd)
-      const commandRecord: CommandRecord = { ...shellCommand, cmd }
-      if (toolCallRecord) commandRecord.toolCall = toolCallRecord
-      // Stamp the phase before the command runs, because a reader wants to know when a command started.
-      if (currentPhase) commandRecord.phase = currentPhase
+      const commandRecord: CommandRecord = {
+        ...shellCommand,
+        cmd,
+        toolCall: toolCallRecord,
+        // Stamp the phase before the command runs, because a reader wants to know when a command started.
+        phase: currentPhase,
+        output: undefined,
+      }
       hostRecord.runningStep?.commands.push(commandRecord)
 
       const recordOutput: RecordOutput = (output, maskOutput) => {
@@ -219,7 +223,7 @@ export const createSessionRecorder = (
       kind,
       options: {},
       commands: [],
-      comparisons: {},
+      comparisons: { before: undefined, after: undefined },
       waitingOn: [],
       messages: [],
     }
@@ -265,12 +269,7 @@ export const createSessionRecorder = (
     }
 
     const commandCount = runningStep.commands.length
-    const stepMessageRecord: StepMessageRecord = {
-      messageKind,
-      text,
-      ...(currentPhase && { phase: currentPhase }),
-      commandCount,
-    }
+    const stepMessageRecord: StepMessageRecord = { messageKind, text, phase: currentPhase, commandCount }
     runningStep.messages.push(stepMessageRecord)
   }
 

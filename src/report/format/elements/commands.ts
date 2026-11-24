@@ -25,7 +25,7 @@ export const toolElement = (toolName: ToolName): string => styleMuted(`(${toolNa
  * command tsinfra wrote by its label in angle brackets, like `<file details script>`, because its text is tsinfra's
  * code, not the script's. Angle brackets mark text that isn't shown, as in the record's `<content as base64>`.
  */
-export const commandLineElements = ({ cmd, label }: { cmd: string; label?: string }): string[] => {
+export const commandLineElements = ({ cmd, label }: { cmd: string; label: string | undefined }): string[] => {
   const text = label === undefined ? cmd : `<${label}>`
   return text.split("\n").map((line) => styleMuted(line))
 }

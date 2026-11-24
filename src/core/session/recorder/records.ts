@@ -19,6 +19,7 @@ export const createHostRecord = (name: string, target: string): HostRecord => ({
   preparationCommands: [],
   runningStep: undefined,
   entries: [],
+  failure: undefined,
 })
 
 /** Returns the records of the steps a host finished, in order, without the host messages between them. */
@@ -38,7 +39,7 @@ export interface HostRecord {
    */
   entries: EntryRecord[]
   /** The host's one failure, if it failed, and where it came from. */
-  failure?: RecordedFailure
+  failure: RecordedFailure | undefined
 }
 
 /** A host's failure: one that no step owns, or a step's. */
@@ -124,7 +125,7 @@ export interface HostMessageRecord extends BaseMessageRecord {
 /** A step message: one a step's function logged. */
 export interface StepMessageRecord extends BaseMessageRecord {
   /** The part of `converge` that was running. Unset for a step that doesn't converge. */
-  phase?: ConvergePhase
+  phase: ConvergePhase | undefined
   /** How many of the step's commands were recorded when it was logged, which places it among them. */
   commandCount: number
 }
@@ -185,13 +186,13 @@ export type StepOptionsRecord = {
 export interface CommandRecord {
   cmd: string
   /** A short name for a command tsinfra wrote itself. Unset for a script's command. */
-  label?: string
+  label: string | undefined
   /** The tool call that ran the command. Unset for a step's own command and for tsinfra's. */
-  toolCall?: ToolCallRecord
+  toolCall: ToolCallRecord | undefined
   /** The part of `converge` that ran the command. Unset for a step that doesn't converge. */
-  phase?: ConvergePhase
+  phase: ConvergePhase | undefined
   /** Unset until the command finishes. */
-  output?: Result<CommandOutput>
+  output: Result<CommandOutput> | undefined
 }
 
 /** A tool call a step's function made: the tool the script called, and the options it set. */
@@ -208,6 +209,6 @@ type ToolOptionsRecord = Pick<StepOptionsRecord, keyof ToolOptions>
 export type ConvergePhase = "before" | "fix" | "after"
 
 interface StepComparisons {
-  before?: Comparison
-  after?: Comparison
+  before: Comparison | undefined
+  after: Comparison | undefined
 }

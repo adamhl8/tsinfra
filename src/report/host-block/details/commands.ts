@@ -36,16 +36,11 @@ const toCommandOutputDetail = (output: NonNullable<CommandRecord["output"]>): Co
  * Returns a command with the tool whose call ran it and the options that call set, and what it printed as a piece of
  * its own, from level 3, when each was recorded.
  */
-const toStepCommand = ({ cmd, label, toolCall, phase, output }: CommandRecord): StepCommand => {
+const toStepCommand = (commandRecord: CommandRecord): StepCommand => {
+  const { cmd, label, toolCall, phase, output } = commandRecord
   const options = toolCall === undefined ? [] : toStepOptions(toolCall.options)
-  return {
-    cmd,
-    ...(label !== undefined && { label }),
-    ...(toolCall !== undefined && { toolName: toolCall.toolName }),
-    ...(options.length > 0 && { options }),
-    ...(phase !== undefined && { phase }),
-    ...(output !== undefined && { output: { ...toCommandOutputDetail(output), from: OUTPUT_LEVEL } }),
-  }
+  const outputPiece = output && { ...toCommandOutputDetail(output), from: OUTPUT_LEVEL }
+  return { cmd, label, toolName: toolCall?.toolName, options, phase, output: outputPiece }
 }
 
 /** Returns `commandRecords` as one commands detail, in the order they ran, with phase headings from level 3. */

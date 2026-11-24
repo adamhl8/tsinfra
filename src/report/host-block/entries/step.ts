@@ -1,7 +1,7 @@
 import type { FinishedStepRecord, StepRecord } from "#core/session/recorder/records.ts"
 import type { StepKind, StepStatus } from "#core/session/step.ts"
 import type { Mode } from "#mode.ts"
-import type { EntryName, NameKind, StatusLineEntry } from "#report/host-block.ts"
+import type { EntryName, FinishedStepEntry, NameKind } from "#report/host-block.ts"
 import { toStepDetails } from "#report/host-block/details.ts"
 import { toStepNote } from "#report/host-block/note.ts"
 import type { Verbosity } from "#report/verbosity.ts"
@@ -43,11 +43,11 @@ const getEntryLevel = (status: StepStatus, mode: Mode): Verbosity =>
 export const toStepName = ({ name, kind }: StepRecord): EntryName => ({ text: name, kind: STEP_NAME_KINDS[kind] })
 
 /** Returns the entry of a step that finished. */
-export const toStepEntry = (stepRecord: FinishedStepRecord, mode: Mode): StatusLineEntry => {
+export const toStepEntry = (stepRecord: FinishedStepRecord, mode: Mode): FinishedStepEntry => {
   const { status, kind } = stepRecord
 
   const name = toStepName(stepRecord)
-  const note = toStepNote(stepRecord, status)
+  const note = toStepNote(stepRecord)
   const details = toStepDetails(stepRecord)
   const from = getEntryLevel(status, mode)
 

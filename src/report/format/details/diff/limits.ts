@@ -9,9 +9,9 @@ import { getMaxWidth } from "#utils.ts"
  */
 export interface DiffLimits {
   /** How long to compute it before giving up. Unset allows `FULL_DIFF_TIMEOUT_MS`. */
-  timeoutMs?: number
+  timeoutMs: number | undefined
   /** How many lines it may show, counting a diff's rules between hunks. Unset shows every line. */
-  maxLines?: number
+  maxLines: number | undefined
 }
 
 // Give up quickly below `-vv`, so a value that changed throughout can't stall `plan`.
@@ -29,10 +29,11 @@ export const LINE_LIMIT_FLAG = "--verbose"
 export const TIME_LIMIT_FLAG = "-vv"
 
 /** Returns the limits at `verbosity`: the time and the lines below `-v`, the time alone at `-v`, and none from `-vv`. */
-export const toDiffLimits = (verbosity: Verbosity): DiffLimits => ({
-  ...(verbosity < 2 && { timeoutMs: QUICK_TIMEOUT_MS }),
-  ...(verbosity < 1 && { maxLines: MAX_LINES }),
-})
+export const toDiffLimits = (verbosity: Verbosity): DiffLimits => {
+  const timeoutMs = verbosity < 2 ? QUICK_TIMEOUT_MS : undefined
+  const maxLines = verbosity < 1 ? MAX_LINES : undefined
+  return { timeoutMs, maxLines }
+}
 
 // Stop computing a full diff after this long anyway, so a value that's hard to diff can't hang the run.
 export const FULL_DIFF_TIMEOUT_MS = 10_000

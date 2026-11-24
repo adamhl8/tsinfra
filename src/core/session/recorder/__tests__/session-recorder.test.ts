@@ -139,7 +139,7 @@ describe("SessionRecorder steps", () => {
       kind: "file",
       options: {},
       commands: [],
-      comparisons: {},
+      comparisons: { before: undefined, after: undefined },
       waitingOn: [],
       messages: [],
     }

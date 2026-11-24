@@ -10,7 +10,7 @@ import { createCommandExitError } from "#utils.ts"
 /** A command a shell is about to run, as its record shows it, with a label when tsinfra wrote the command itself. */
 interface ShellCommand {
   cmd: string
-  label?: string
+  label: string | undefined
 }
 
 /** Records a command's output once it finishes, and masks it from then on when `maskOutput` is set. */
@@ -66,7 +66,7 @@ export const createShell = (transport: Transport, shellOptions: ShellOptions = {
 
     // Record the command before the input, the prelude, and the root shell wrap it, so the record holds the script's
     // own command. Record it before it runs, so commands run at once keep the order they were called in.
-    const recordOutput = commandRecorder?.recordCommand({ cmd: recordedCmd, ...(label !== undefined && { label }) })
+    const recordOutput = commandRecorder?.recordCommand({ cmd: recordedCmd, label })
     const cmdWithInput = inputBytes === undefined ? cmd : wrapCommandWithInput(cmd, inputBytes)
     // Add the prelude before the root shell wraps the command, so the variables are set inside the root shell, and
     // sudo's reset of the environment can't drop them.

@@ -19,7 +19,7 @@ const toStepMessage = (stepMessageRecord: StepMessageRecord): StepMessage => {
   return {
     messageKind,
     text,
-    ...(phase !== undefined && { phase }),
+    phase,
     commandCount,
     amongCommands: { from: COMMANDS_LEVEL },
     from: MESSAGE_LEVELS[messageKind],

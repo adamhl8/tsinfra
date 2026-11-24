@@ -34,7 +34,7 @@ const formatCommandLines = (command: StepCommand, toolWidth: number): string[] =
     return `${lineStart}${textLine}`
   })
   const detailIndent = `${textIndent}${INDENT}`
-  const optionsLines = options === undefined ? [] : formatOptions(options).map((row) => `${detailIndent}${row}`)
+  const optionsLines = options.length > 0 ? formatOptions(options).map((row) => `${detailIndent}${row}`) : []
   const outputLines = output === undefined ? [] : formatCommandOutputLines(output, detailIndent)
   return [...commandLines, ...optionsLines, ...outputLines]
 }

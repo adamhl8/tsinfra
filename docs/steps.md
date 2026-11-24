@@ -1065,7 +1065,7 @@ A run with `after` triggers when a step it follows changed. When the run fails, 
 
 On the next pass, in `plan` or `apply`:
 
-- **A step that's right, but whose change is still open, is `resume`.** It returns `changed: true`, so `after` and `if (x.changed)` treat it like a step that changed. The report shows it as `^ resume`, and the host's block notes once, before its entries, that an earlier apply didn't finish, and that its follow-ups that didn't complete still trigger. A run that didn't trigger, but whose own change is still open, is `resume` too, so a run after it can trigger.
+- **A step that's right, but whose change is still open, is `resume`.** It returns `changed: true`, so `after` and `if (x.changed)` treat it like a step that changed. The report shows it as `^ resume`, and the host's block notes once, before its entries, that an earlier apply didn't finish, and that follow-ups that didn't complete still trigger. A run that didn't trigger, but whose own change is still open, is `resume` too, so a run after it can trigger.
 - **A run triggers** when a step in its `after` changed in this pass, or has an open change that doesn't list it. A run that only open changes trigger is `ranFromOpenChanges`. It shows as `> triggered`, noted "triggered because it didn't complete in an earlier unfinished apply", and counts as drift, because nothing in this pass explains it. A run that fails shows only its error, and the host's note and the `resume` line before it say why it ran.
 - **`needs` doesn't wait on a `resume` step,** because its change is already on the host.
 

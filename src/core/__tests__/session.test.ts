@@ -639,7 +639,8 @@ describe("what a converging step records", () => {
     const hostSession = await createSession()
     await callStep(hostSession.host)
 
-    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.comparisons).toStrictEqual({})
-    expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.commands[0]).not.toHaveProperty("phase")
+    const [stepRecord] = getFinishedStepRecords(hostSession.hostRecord)
+    expect(stepRecord?.comparisons).toStrictEqual({ before: undefined, after: undefined })
+    expect(stepRecord?.commands.map(({ phase }) => phase)).toStrictEqual([undefined])
   })
 })

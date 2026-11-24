@@ -336,8 +336,14 @@ describe("renderHostBlock", () => {
         name: "a",
         target: "a.lan",
         preparationCommands: [
-          { cmd: "ssh -G -T -- a.lan", label: "ssh config" },
-          { cmd: String.raw`printf '%s\n' "$HOME"`, label: "home directory" },
+          { cmd: "ssh -G -T -- a.lan", label: "ssh config", toolCall: undefined, phase: undefined, output: undefined },
+          {
+            cmd: String.raw`printf '%s\n' "$HOME"`,
+            label: "home directory",
+            toolCall: undefined,
+            phase: undefined,
+            output: undefined,
+          },
         ],
         runningStep: undefined,
         entries: [],
@@ -2150,7 +2156,7 @@ describe("renderHostBlock for a step still open from an earlier apply", () => {
       expect(renderRecord(await resumeAfterFailedApply(mode), mode)).toBe(
         [
           "a",
-          "  an earlier apply didn't finish, so its follow-ups that didn't complete still trigger",
+          "  an earlier apply didn't finish, so follow-ups that didn't complete still trigger",
           "  ^ resume: (ensure) Make marker",
           "  > triggered: (run) Restart   triggered because it didn't complete in an earlier unfinished apply",
         ].join("\n"),
@@ -2172,7 +2178,7 @@ describe("renderHostBlock for a step still open from an earlier apply", () => {
       expect(renderRecord(hostRecord, mode)).toBe(
         [
           "a",
-          "  an earlier apply didn't finish, so its follow-ups that didn't complete still trigger",
+          "  an earlier apply didn't finish, so follow-ups that didn't complete still trigger",
           "  ^ resume: (ensure) Make first marker",
           "  ^ resume: (ensure) Make second marker",
         ].join("\n"),
@@ -2184,7 +2190,7 @@ describe("renderHostBlock for a step still open from an earlier apply", () => {
     expect(renderRecord(await resumeAfterFailedApply("apply", "exit 1"), "apply")).toBe(
       [
         "a",
-        "  an earlier apply didn't finish, so its follow-ups that didn't complete still trigger",
+        "  an earlier apply didn't finish, so follow-ups that didn't complete still trigger",
         "  ^ resume: (ensure) Make marker",
         "  ! failed: (run) Restart",
         "      failed to run the step -> exited with code 1",

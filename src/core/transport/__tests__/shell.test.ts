@@ -18,7 +18,12 @@ const createLocalShell = (variables: Record<string, string> = {}) => {
     variables,
     commandRecorder: {
       recordCommand: (shellCommand) => {
-        const commandRecord: CommandRecord = { ...shellCommand }
+        const commandRecord: CommandRecord = {
+          ...shellCommand,
+          toolCall: undefined,
+          phase: undefined,
+          output: undefined,
+        }
         commandRecords.push(commandRecord)
 
         const recordOutput: RecordOutput = (output) => {
@@ -102,7 +107,15 @@ describe("createShell with input", () => {
 
     await shell.exec("cat", { input: toInput("secret") })
 
-    expect(commandRecords).toStrictEqual([{ cmd: "cat", output: { stdout: "secret", stderr: "", exitCode: 0 } }])
+    expect(commandRecords).toStrictEqual([
+      {
+        cmd: "cat",
+        label: undefined,
+        toolCall: undefined,
+        phase: undefined,
+        output: { stdout: "secret", stderr: "", exitCode: 0 },
+      },
+    ])
   })
 })
 

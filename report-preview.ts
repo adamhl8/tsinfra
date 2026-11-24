@@ -462,8 +462,14 @@ const createScenarios = (dir: string, verbosity: Verbosity): Scenario[] => {
 const createHintsRecord = (): HostRecord => ({
   ...createHostRecord("hints", "web.lan"),
   preparationCommands: [
-    { cmd: "ssh -G -T -- web.lan", label: "ssh config" },
-    { cmd: String.raw`printf '%s\n' "$HOME"`, label: "home directory" },
+    { cmd: "ssh -G -T -- web.lan", label: "ssh config", toolCall: undefined, phase: undefined, output: undefined },
+    {
+      cmd: String.raw`printf '%s\n' "$HOME"`,
+      label: "home directory",
+      toolCall: undefined,
+      phase: undefined,
+      output: undefined,
+    },
   ],
   failure: {
     kind: "preparation",
@@ -493,7 +499,8 @@ const createSavedStateFailureRecord = (): HostRecord => ({
  * run only open changes triggered, with its note.
  */
 const createResumeRecord = (): HostRecord => {
-  const stepRecord = { options: {}, commands: [], comparisons: {}, waitingOn: [], messages: [] }
+  const comparisons = { before: undefined, after: undefined }
+  const stepRecord = { options: {}, commands: [], comparisons, waitingOn: [], messages: [] }
   return {
     ...createHostRecord("resume", "web.lan"),
     entries: [

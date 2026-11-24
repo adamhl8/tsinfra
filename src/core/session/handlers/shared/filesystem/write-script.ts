@@ -67,7 +67,7 @@ interface ChownLinesOptions extends OwnerOptions {
 
 interface AttributeLinesOptions extends ChownLinesOptions {
   /** The mode to set. The mode stays as it is when this is `undefined`. */
-  modeBits?: ModeBits | undefined
+  modeBits: ModeBits | undefined
 }
 
 /**

@@ -18,5 +18,5 @@ export const formatHostMessageEntry = (hostMessageEntry: HostMessageEntry): Form
   const { messageKind, text } = hostMessageEntry
   const label = `${hostMessageLabelElement(messageKind, MESSAGE_KIND_WORDS[messageKind])} `
   const valueLines = splitLines(text).map((line) => messageTextElement(line))
-  return { kind: "hostMessage", row: { label, valueLines } }
+  return { kind: "hostMessage", row: { kind: "value", label, valueLines } }
 }

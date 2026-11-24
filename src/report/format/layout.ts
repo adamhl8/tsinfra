@@ -22,7 +22,7 @@ const layoutStatusLine = (statusLine: StatusLine): string => {
 
 /** Returns the column the values of `alignedRows` line up in, from the labels of the rows that have a value. */
 const getValueColumn = (alignedRows: AlignedRow[]): number =>
-  getMaxWidth(alignedRows.filter(({ nestedRows }) => !nestedRows).map(({ label }) => label))
+  getMaxWidth(alignedRows.filter(({ kind }) => kind === "value").map(({ label }) => label))
 
 /**
  * Lays out aligned rows as `label: value` lines, with each value starting at `valueColumn`. A row with nested rows gets
@@ -32,8 +32,9 @@ const getValueColumn = (alignedRows: AlignedRow[]): number =>
 const layoutAlignedRows = (alignedRows: AlignedRow[], valueColumn: number): string[] => {
   const continuationIndent = " ".repeat(valueColumn)
 
-  return alignedRows.flatMap(({ label, valueLines, nestedRows }) => {
-    if (nestedRows) {
+  return alignedRows.flatMap((alignedRow) => {
+    if (alignedRow.kind === "heading") {
+      const { label, nestedRows } = alignedRow
       // Line up nested rows among themselves, whether or not they're in their own column, because they're under a label.
       const nestedLines =
         nestedRows.kind === "unaligned"
@@ -42,6 +43,7 @@ const layoutAlignedRows = (alignedRows: AlignedRow[], valueColumn: number): stri
       return [label, ...nestedLines.map((nestedLine) => `${INDENT}${nestedLine}`)]
     }
 
+    const { label, valueLines } = alignedRow
     const labelText = padToWidth(label, valueColumn)
     return valueLines.map((valueLine, index) => `${index === 0 ? labelText : continuationIndent}${valueLine}`)
   })

@@ -12,7 +12,7 @@ const formatStepMessageRow = (stepMessage: StepMessage): AlignedRow => {
   const { messageKind, text } = stepMessage
   const label = `${stepMessageLabelElement(messageKind, MESSAGE_KIND_WORDS[messageKind])} `
   const valueLines = splitLines(text).map((line) => messageTextElement(line))
-  return { label, valueLines }
+  return { kind: "value", label, valueLines }
 }
 
 /**

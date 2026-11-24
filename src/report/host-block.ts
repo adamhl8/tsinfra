@@ -29,7 +29,7 @@ export type HostNote = PieceLevels
   // The host recorded no entries and didn't fail.
   & (
     | { kind: "noEntries" }
-    // Some steps are `resume`, so an earlier apply's follow-ups that didn't complete still trigger.
+    // Some steps are `resume`, so follow-ups that didn't complete in an earlier apply still trigger.
     | { kind: "unfinishedApply" }
   )
 
@@ -40,18 +40,30 @@ export type HostBlockEntry = StatusLineEntry | HostMessageEntry
  * An entry shown as a status line, with its details under it: a step, or the one failure no step owns. Its levels are
  * where its own line shows, and it also shows when a note part or a detail inside it shows.
  */
-export interface StatusLineEntry extends PieceLevels {
-  status: EntryStatus
-  /** What the entry is about, which shows before the name. */
-  kind: EntryKind
-  /** What the entry is about. Unset for a host function failure, which the block's header already names the host of. */
-  name?: EntryName
+export type StatusLineEntry = FinishedStepEntry | FailureEntry
+
+interface BaseStatusLineEntry extends PieceLevels {
   /** The note's parts, which show after the name, joined with `, `. Empty when the entry has no note. */
   note: NotePart[]
   /** How a value would change, or for a failure, what the step last found on the host. */
   details: Detail[]
+}
+
+/** The entry of a step that finished. */
+export interface FinishedStepEntry extends BaseStatusLineEntry {
+  status: StepStatus
+  kind: StepKind
+  name: EntryName
+}
+
+/** The entry of the host's failure: a step's, or one no step owns. */
+export interface FailureEntry extends BaseStatusLineEntry {
+  status: "failed"
+  kind: EntryKind
+  /** Unset for a host function failure, which the block's header already names the host of. */
+  name: EntryName | undefined
   /** Why the entry failed. */
-  error?: Error
+  error: Error
 }
 
 export type EntryStatus = StepStatus | "failed"
@@ -112,7 +124,7 @@ export type Detail = PieceLevels
     | { kind: "stepMessages"; stepMessages: StepMessage[] }
     // The commands the step ran, in the order they ran. Its phase headings are a piece of their own, which the filter
     // leaves out below its level, so the commands then show as one list.
-    | { kind: "commands"; commands: StepCommand[]; phaseHeadings?: PieceLevels }
+    | { kind: "commands"; commands: StepCommand[]; phaseHeadings: PieceLevels | undefined }
     // What a read or inspect step's one command printed, because the step lists no commands to show it under.
     | { kind: "commandOutput"; output: CommandOutputDetail }
     // How to fix a failure, like setting the host's `sudo` option.
@@ -125,7 +137,7 @@ export type Detail = PieceLevels
  */
 export interface StepOption {
   name: string
-  value?: OptionValue
+  value: OptionValue | undefined
   entries: StepOption[]
 }
 
@@ -163,11 +175,11 @@ export interface StepMessage extends PieceLevels {
   messageKind: MessageKind
   text: string
   /** The part of a step that compares the host's state that logged it. Unset for a step that doesn't compare. */
-  phase?: ConvergePhase
+  phase: ConvergePhase | undefined
   /** How many of the step's commands were recorded when it was logged, which places it among them. */
   commandCount: number
   /** The levels it shows among the step's commands at, in place of a row under the step. */
-  amongCommands?: PieceLevels
+  amongCommands: PieceLevels | undefined
 }
 
 /**
@@ -176,14 +188,14 @@ export interface StepMessage extends PieceLevels {
  */
 export interface StepCommand {
   cmd: string
-  label?: string
+  label: string | undefined
   /** The tool whose call ran the command. Unset for a step's own command and for tsinfra's. */
-  toolName?: ToolName
-  /** The options the tool call set. Unset when it set none, and for a command no tool call ran. */
-  options?: StepOption[]
+  toolName: ToolName | undefined
+  /** The options the tool call set. Empty when it set none, and for a command no tool call ran. */
+  options: StepOption[]
   /** The part of a step that compares the host's state that ran the command. Unset for a step that doesn't compare. */
-  phase?: ConvergePhase
-  output?: PieceLevels & CommandOutputDetail
+  phase: ConvergePhase | undefined
+  output: (PieceLevels & CommandOutputDetail) | undefined
 }
 
 /** What a command printed: its exit code and both streams, or the error it failed with when it couldn't run at all. */

@@ -10,7 +10,7 @@ import { splitNonEmptyLines } from "#utils.ts"
 /** The lines under an entry's status line, each formatted, before layout lines up its aligned rows and indents them. */
 export interface Body {
   /** Unset when the entry has no error, so layout indents the details only under an error. */
-  errorLines?: string[]
+  errorLines: string[] | undefined
   detailRows: DetailRows[]
 }
 
@@ -19,14 +19,15 @@ export interface Body {
  * among the commands to the commands detail, because it places them.
  */
 export const formatBody = (statusLineEntry: StatusLineEntry, diffLimits: DiffLimits): Body => {
-  const { details, error } = statusLineEntry
+  const { details } = statusLineEntry
   const stepMessages = details.flatMap((detail) => (detail.kind === "stepMessages" ? detail.stepMessages : []))
   const stepMessagesAmongCommands = stepMessages.filter(({ amongCommands }) => amongCommands !== undefined)
   const ctx: DetailContext = { diffLimits, stepMessagesAmongCommands }
   const detailRows = details.map((detail) => formatDetail(ctx, detail))
-  if (!error) return { detailRows }
+  if (statusLineEntry.status !== "failed") return { errorLines: undefined, detailRows }
 
   // Leave out empty lines, like the one sudo prints after an empty prompt, because they only open a gap in the error.
-  const errorLines = splitNonEmptyLines(messageChain(error)).map((errorLine) => errorLineElement(errorLine))
+  const errorText = messageChain(statusLineEntry.error)
+  const errorLines = splitNonEmptyLines(errorText).map((errorLine) => errorLineElement(errorLine))
   return { errorLines, detailRows }
 }

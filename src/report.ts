@@ -20,33 +20,28 @@ export interface ReportOptions {
 const isShownAt = ({ from, until }: PieceLevels, verbosity: Verbosity): boolean =>
   verbosity >= from && (until === undefined || verbosity <= until)
 
+/** Returns `piece` only when it shows at `verbosity`. */
+const keepShown = <T extends PieceLevels>(piece: T | undefined, verbosity: Verbosity): T | undefined =>
+  piece && isShownAt(piece, verbosity) ? piece : undefined
+
 /** Returns `option` with each value in it, its own and its entries', only when the value shows at `verbosity`. */
 const keepShownOptionValues = (option: StepOption, verbosity: Verbosity): StepOption => {
-  const { name, value } = option
+  const value = keepShown(option.value, verbosity)
   const entries = option.entries.map((entry) => keepShownOptionValues(entry, verbosity))
-  return { name, ...(value && isShownAt(value, verbosity) && { value }), entries }
+  return { ...option, value, entries }
 }
 
 /** Returns `command` with its options' values and what it printed only when each shows at `verbosity`. */
 const keepShownCommandPieces = (command: StepCommand, verbosity: Verbosity): StepCommand => {
-  const { cmd, label, toolName, options, phase, output } = command
-  return {
-    cmd,
-    ...(label !== undefined && { label }),
-    ...(toolName !== undefined && { toolName }),
-    ...(options && { options: options.map((option) => keepShownOptionValues(option, verbosity)) }),
-    ...(phase !== undefined && { phase }),
-    ...(output && isShownAt(output, verbosity) && { output }),
-  }
+  const options = command.options.map((option) => keepShownOptionValues(option, verbosity))
+  const output = keepShown(command.output, verbosity)
+  return { ...command, options, output }
 }
 
 /** Returns `stepMessage` with its `amongCommands` piece only when it shows at `verbosity`. */
 const keepShownStepMessagePieces = (stepMessage: StepMessage, verbosity: Verbosity): StepMessage => {
-  const { amongCommands, ...stepMessageWithoutPlacement } = stepMessage
-  return {
-    ...stepMessageWithoutPlacement,
-    ...(amongCommands && isShownAt(amongCommands, verbosity) && { amongCommands }),
-  }
+  const amongCommands = keepShown(stepMessage.amongCommands, verbosity)
+  return { ...stepMessage, amongCommands }
 }
 
 /**
@@ -66,13 +61,9 @@ const keepShownInDetail = (detail: Detail, verbosity: Verbosity): Detail => {
   }
 
   if (detail.kind === "commands") {
-    const { phaseHeadings, ...detailWithoutHeadings } = detail
     const commands = detail.commands.map((command) => keepShownCommandPieces(command, verbosity))
-    return {
-      ...detailWithoutHeadings,
-      commands,
-      ...(phaseHeadings && isShownAt(phaseHeadings, verbosity) && { phaseHeadings }),
-    }
+    const phaseHeadings = keepShown(detail.phaseHeadings, verbosity)
+    return { ...detail, commands, phaseHeadings }
   }
 
   return detail
@@ -98,7 +89,7 @@ const keepShownEntries = (hostBlockEntries: HostBlockEntry[], verbosity: Verbosi
  */
 export const toShownHostBlock = (hostBlock: HostBlock, verbosity: Verbosity): HostBlock => {
   const { name, note, entries } = hostBlock
-  const shownNote = note && isShownAt(note, verbosity) ? note : undefined
+  const shownNote = keepShown(note, verbosity)
   const shownEntries = keepShownEntries(entries, verbosity)
   return { name, note: shownNote, entries: shownEntries }
 }

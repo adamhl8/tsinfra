@@ -29,11 +29,13 @@ const isSizeComparison = (content: ContentComparison): content is SizeComparison
 
 /** Formats a note in place of a diff, like `binary, 12 kB -> 14 kB`, or `new file, 2 kB` when there's no file yet. */
 const formatSizeComparison = (sizeComparison: SizeComparison): string => {
-  const { kind, gotSize, wantSize } = sizeComparison
+  const wantText = formatSize(sizeComparison.wantSize)
   // Show the sizes as a change, because they're what changed, like an attribute's values.
-  const wantText = wantValueElement(formatSize(wantSize))
-  const sizes = gotSize === undefined ? wantText : changeElement(formatSize(gotSize), formatSize(wantSize))
-  return `${changeDescriptionElement(SIZE_COMPARISON_WORDS[kind])}, ${sizes}`
+  const sizes =
+    sizeComparison.kind === "new"
+      ? wantValueElement(wantText)
+      : changeElement(formatSize(sizeComparison.gotSize), wantText)
+  return `${changeDescriptionElement(SIZE_COMPARISON_WORDS[sizeComparison.kind])}, ${sizes}`
 }
 
 /** Formats how a file differs as its rows: a note for content the output can't diff, then each attribute that changes. */

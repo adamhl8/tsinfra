@@ -5,7 +5,6 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 <!-- toc -->
 
 - [Next](#next)
-  - [Properties that code always sets](#properties-that-code-always-sets)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
   - [Live progress](#live-progress)
@@ -39,48 +38,6 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 ## Next
 
 In the order they'll be built.
-
-### Properties that code always sets
-
-One commit, `refactor: require properties that code always sets`, in two reviews.
-
-A property is optional when whoever writes the object may leave it out, like an option, or when which keys are present is the data. When code builds the object and always knows the answer, it's required and `T | undefined`, so a builder can't forget it. When only some kinds have it, it goes on those variants of a discriminated union. A conditional spread, or an `if` that sets a property afterward, usually means the property should be required and `T | undefined`.
-
-20 of the 27 conditional spreads outside tests go. The other seven are the six in `dir/comparison.ts` and `cwd` in `run-process.ts`. No property that's `T | undefined` now should become optional.
-
-**2a. Records, recorders, and the shell.**
-
-- `src/core/session/recorder/records.ts`: these become required and `T | undefined`: `HostRecord`'s `failure`, `StepMessageRecord`'s `phase`, `CommandRecord`'s `label`, `toolCall`, `phase`, and `output`, and `StepComparisons`' `before` and `after`. `createHostRecord` sets `failure`.
-- `src/core/session/recorder/session-recorder.ts`: `createCommandRecorder` builds the whole `CommandRecord` at once, in place of the two `if` lines that set `toolCall` and `phase` afterward. The comment on why the phase is stamped before the command runs stays. `startStep` sets both comparisons, and `recordMessage` loses its spread.
-- `src/core/session/recorder/preparation-recorder.ts`: its `CommandRecord` sets every property.
-- `src/core/transport/shell.ts`: `ShellCommand`'s `label` becomes `string | undefined`, and `recordCommand`'s call loses its spread. `ShellCallOptions`' `label` stays optional.
-- `src/core/session/handlers/shared/filesystem/write-script.ts`: `AttributeLinesOptions`' `modeBits` becomes `ModeBits | undefined`, because all three callers pass it.
-- `src/core/session/handlers/file/comparison/content.ts`: `SizeComparison` becomes a union. `new` has no `gotSize`, and `hidden`, `binary`, and `large` always have one. `formatSizeComparison` in `src/report/format/details/file.ts` checks the kind in place of `gotSize === undefined`.
-- Tests: these check that a key is absent, so they check for `undefined` instead.
-  - `session.test.ts`: "should record no comparison or phase for" a read, an inspect, and a run.
-  - `log.test.ts`: "should record a message a run's function logs with no phase".
-  - `session-recorder.test.ts`: "should give a failed step to the host's failure, not to the host's entries".
-  - `shell.test.ts`: "should record the command as written, never the input". `createLocalShell` sets every property of its records too.
-- `report.test.ts` and `report-preview.ts`: the records built by hand set every property.
-
-**2b. The report.** Its last part is the `AlignedRow` union, which can be dropped without changing the rest.
-
-- `src/report/host-block.ts`: these become required and `T | undefined`: `StatusLineEntry`'s `name`, the `commands` detail's `phaseHeadings`, `StepOption`'s `value`, `StepMessage`'s `phase` and `amongCommands`, and `StepCommand`'s `label`, `toolName`, `phase`, and `output`.
-- `StepCommand`'s `options` becomes always a list, where `[]` means none, like `note` and `hints`. `formatCommandLines` checks its length, because `formatOptions` prints a line even for an empty list.
-- `StatusLineEntry` becomes a union on `status`. The `failed` variant has a required `error`, and every other status has none. `toFailureEntry` builds its entry at once, in place of adding the name afterward, and `formatBody` reads the error from the `failed` variant.
-- `src/report.ts`, `src/report/host-block/details/commands.ts`, `options.ts`, and `step-messages.ts`: the builders and the filter set every property, so their spreads go.
-- `src/report/format/`: `Body`'s `errorLines`, `StatusLine`'s `name` and `note`, and `DiffLimits`' `timeoutMs` and `maxLines` become required and `T | undefined`. `toDiffLimits` is the only code that builds a `DiffLimits`, so its limits aren't options. The parameter of `commandLineElements` changes to match `StepCommand`.
-- `src/report/format/details/shared/aligned-row.ts`: `AlignedRow` becomes a union of a value row, with `valueLines`, and a heading row, with `nestedRows`. Heading rows set a meaningless `valueLines: []` today. Its readers are `layout.ts` and `countRowLines`. `host-message.ts` and `details/step-messages.ts` build value rows as literals, because their labels are styled their own way, so they set the kind too.
-- `docs/roadmap.md`: this entry goes, with its line in the table of contents, and Next holds nothing.
-
-These stay optional:
-
-- **Options objects and literals written by hand:** the options of steps, tools, and hosts, `ShellOptions`, `ShellCallOptions`, `StatCommandOptions`' and `ChownLinesOptions`' `follow`, `PrivateFileWriteOptions`' `executable`, `InputDescription`'s `reason`, and `PieceLevels`' `until`. `ShellCallOptions`' `input` keeps `?: Content | undefined`, because it passes along a value that may be undefined.
-- **Types whose keys are the data:** `RecordableOptions`, `StepOptionsRecord`, `StepOptionsToRecord`, the mapped types for `unmet` and `differing`, and the records in `dir/comparison.ts`.
-- **What an outside API takes:** `cwd` for Bun's `spawn`, and `colors` for Optique's `printError`.
-- **Function parameters,** like `formatAttributeChange`'s `prefix` and `createCommandRecorder`'s `toolCallRecord`.
-
-The report's output doesn't change, so compare `report-preview.ts` at every level before and after. A trial of the types in a scratch copy covered everything but the `StatusLineEntry` and `AlignedRow` unions, the CLI tests, and the Docker tests. Run `bunx bask lint`, and `bunx bask test --all`, because 2a changes the shell.
 
 ## Planned
 

@@ -12,12 +12,10 @@ import { quoteShellArg } from "#utils.ts"
 /** How a managed file's content differs. `text` holds both sides for a diff. */
 export type ContentComparison = { kind: "same" } | { kind: "text"; got: string; want: string } | SizeComparison
 
-/** Compares only the sizes, because the text can't be shown. `kind` says why, and `gotSize` is unset for a new file. */
-export interface SizeComparison {
-  kind: "new" | "hidden" | "binary" | "large"
-  gotSize?: Bytes
-  wantSize: Bytes
-}
+/** Compares only the sizes, because the text can't be shown. `kind` says why, and a new file has no size on the host. */
+export type SizeComparison =
+  | { kind: "new"; wantSize: Bytes }
+  | { kind: "hidden" | "binary" | "large"; gotSize: Bytes; wantSize: Bytes }
 
 // Skip the diff when either side is above this size, because fetching and diffing a large file costs more than the diff tells.
 const MAX_DIFF_BYTES = toBytes(100_000) // 100 kB

@@ -91,7 +91,7 @@ describe("h.log", () => {
     )
 
     expect(getFinishedStepRecords(hostSession.hostRecord)[0]?.messages).toStrictEqual([
-      { messageKind: "info", text: "ran", commandCount: 1 },
+      { messageKind: "info", text: "ran", phase: undefined, commandCount: 1 },
     ])
   })
 
