@@ -2150,8 +2150,31 @@ describe("renderHostBlock for a step still open from an earlier apply", () => {
       expect(renderRecord(await resumeAfterFailedApply(mode), mode)).toBe(
         [
           "a",
-          "  ^ resume: (ensure) Make marker   an earlier apply didn't finish, so its follow-ups that didn't complete still trigger",
+          "  an earlier apply didn't finish, so its follow-ups that didn't complete still trigger",
+          "  ^ resume: (ensure) Make marker",
           "  > triggered: (run) Restart   triggered because it didn't complete in an earlier unfinished apply",
+        ].join("\n"),
+      )
+    },
+  )
+
+  it.each(["apply", "plan"] as const)(
+    "should note the unfinished apply once, for every step still open, in %s",
+    async (mode) => {
+      const firstMarker = await createMarker()
+      const secondMarker = await createMarker()
+      const hostRecord = await runAfterApply(async (h, isFirstApply) => {
+        await h.ensure("Make first marker", firstMarker)
+        await h.ensure("Make second marker", secondMarker)
+        if (isFirstApply) throwBoom()
+      }, mode)
+
+      expect(renderRecord(hostRecord, mode)).toBe(
+        [
+          "a",
+          "  an earlier apply didn't finish, so its follow-ups that didn't complete still trigger",
+          "  ^ resume: (ensure) Make first marker",
+          "  ^ resume: (ensure) Make second marker",
         ].join("\n"),
       )
     },
@@ -2161,7 +2184,8 @@ describe("renderHostBlock for a step still open from an earlier apply", () => {
     expect(renderRecord(await resumeAfterFailedApply("apply", "exit 1"), "apply")).toBe(
       [
         "a",
-        "  ^ resume: (ensure) Make marker   an earlier apply didn't finish, so its follow-ups that didn't complete still trigger",
+        "  an earlier apply didn't finish, so its follow-ups that didn't complete still trigger",
+        "  ^ resume: (ensure) Make marker",
         "  ! failed: (run) Restart",
         "      failed to run the step -> exited with code 1",
       ].join("\n"),

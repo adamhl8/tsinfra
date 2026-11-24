@@ -4,14 +4,8 @@ import path from "node:path"
 import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
 
-import {
-  castInvalid,
-  createSession,
-  getFailureMessage,
-  getFinishedStepRecords,
-  runOrMessage,
-  throwBoom,
-} from "#core/__tests__/session.ts"
+import { castInvalid, createSession, getFailureMessage, runOrMessage, throwBoom } from "#core/__tests__/session.ts"
+import { getFinishedStepRecords } from "#core/session/recorder/records.ts"
 
 const createMarker = async () => path.join(await makeTempDir(), "marker")
 

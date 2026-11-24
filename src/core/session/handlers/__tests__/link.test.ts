@@ -12,12 +12,12 @@ import {
   createFakeSudoSession,
   createSession,
   dirOrMessage,
-  getFinishedStepRecords,
   getStepRecords,
   linkOrMessage,
   runOrMessage,
 } from "#core/__tests__/session.ts"
 import { PRIVATE_FILE_MODE, toModeBits } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
+import { getFinishedStepRecords } from "#core/session/recorder/records.ts"
 
 const COMPARE_ERROR = "failed to compare the host with what the step wants"
 const isRoot = process.getuid?.() === 0

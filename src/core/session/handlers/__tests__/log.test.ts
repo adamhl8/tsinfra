@@ -8,10 +8,10 @@ import {
   createSession,
   ensureOrMessage,
   getFailureMessage,
-  getFinishedStepRecords,
   getStepRecords,
   readOrMessage,
 } from "#core/__tests__/session.ts"
+import { getFinishedStepRecords } from "#core/session/recorder/records.ts"
 
 describe("h.log", () => {
   it("should record a message logged outside a step as an entry between the steps around it", async () => {

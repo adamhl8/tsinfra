@@ -8,6 +8,7 @@ import type { ConvergePhase, FailureHint, HostRecord, RecordedUnownedFailure } f
 import type { StepKind, StepStatus } from "#core/session/step.ts"
 import type { Mode } from "#mode.ts"
 import { toHostBlockEntries } from "#report/host-block/entries.ts"
+import { toHostNote } from "#report/host-block/note.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 
 /** The levels a piece of a block shows at: from `from`, up to `until` when it has one. The builder decides both. */
@@ -16,8 +17,21 @@ export interface PieceLevels {
   until?: Verbosity
 }
 
-/** A host's block: its name, then its entries, or "empty script" for a host that recorded none and didn't fail. */
-export type HostBlock = { name: string } & ({ kind: "entries"; entries: HostBlockEntry[] } | { kind: "noEntries" })
+/** A host's block: its name, then its note, if it has one, then its entries. */
+export interface HostBlock {
+  name: string
+  note: HostNote | undefined
+  entries: HostBlockEntry[]
+}
+
+/** A note about the whole host, which shows once, before its entries, as its kind, so the report picks the words. */
+export type HostNote = PieceLevels
+  // The host recorded no entries and didn't fail.
+  & (
+    | { kind: "noEntries" }
+    // Some steps are `resume`, so an earlier apply's follow-ups that didn't complete still trigger.
+    | { kind: "unfinishedApply" }
+  )
 
 /** One entry of a host block: a status line, or a host message. */
 export type HostBlockEntry = StatusLineEntry | HostMessageEntry
@@ -72,8 +86,6 @@ export type NotePart = PieceLevels
   // The names of the steps a waiting step needs.
   & (
     | { kind: "needs"; needs: string[] }
-    // A `resume` step, whose follow-ups that didn't complete in an earlier apply still trigger.
-    | { kind: "resume" }
     // A `ranFromOpenChanges` follow-up, which only changes still open from an earlier apply triggered.
     | { kind: "triggeredByOpenChange" }
   )
@@ -180,14 +192,12 @@ export type CommandOutputDetail =
   | { kind: "failed"; error: Error }
 
 /**
- * Returns a host's block, with every piece at every level, each with the level it shows from: an entry per finished
- * step, then the host's failure, if it failed. A host that recorded no entries and didn't fail gets "empty script"
- * instead, so it's clear the host ran.
+ * Returns a host's block, with every piece at every level, each with the level it shows from: the host's note, an entry
+ * per finished step, then the host's failure, if it failed.
  */
 export const toHostBlock = (hostRecord: HostRecord, mode: Mode): HostBlock => {
-  const { name, entries, failure } = hostRecord
-  if (entries.length === 0 && !failure) return { name, kind: "noEntries" }
-
-  const hostBlockEntries = toHostBlockEntries(hostRecord, mode)
-  return { name, kind: "entries", entries: hostBlockEntries }
+  const { name } = hostRecord
+  const note = toHostNote(hostRecord)
+  const entries = toHostBlockEntries(hostRecord, mode)
+  return { name, note, entries }
 }

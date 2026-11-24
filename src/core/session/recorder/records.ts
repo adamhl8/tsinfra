@@ -21,6 +21,10 @@ export const createHostRecord = (name: string, target: string): HostRecord => ({
   entries: [],
 })
 
+/** Returns the records of the steps a host finished, in order, without the host messages between them. */
+export const getFinishedStepRecords = (hostRecord: HostRecord): FinishedStepRecord[] =>
+  hostRecord.entries.filter((entry) => entry.kind !== "hostMessage")
+
 export interface HostRecord {
   name: string
   target: string

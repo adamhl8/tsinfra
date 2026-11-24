@@ -25,7 +25,7 @@ import type { ChangeStepResult } from "#core/session/handlers/shared/change-step
 import type { Change } from "#core/session/handlers/shared/change.ts"
 import { createPreparationRecorder } from "#core/session/recorder/preparation-recorder.ts"
 import type { FinishedStepRecord, HostRecord, StepRecord } from "#core/session/recorder/records.ts"
-import { createHostRecord } from "#core/session/recorder/records.ts"
+import { createHostRecord, getFinishedStepRecords } from "#core/session/recorder/records.ts"
 import { createSessionRecorder } from "#core/session/recorder/session-recorder.ts"
 import { savedStateFileSchema } from "#core/session/saved-state/schema.ts"
 import type { Transport } from "#core/transport.ts"
@@ -33,10 +33,6 @@ import { LOCAL_TARGET } from "#core/transport.ts"
 import type { Mode } from "#mode.ts"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
-
-/** Returns the records of the steps a host finished, in order, without the host messages between them. */
-export const getFinishedStepRecords = (hostRecord: HostRecord): FinishedStepRecord[] =>
-  hostRecord.entries.filter((entry) => entry.kind !== "hostMessage")
 
 /** Returns every step a host recorded, in order: the steps that finished, then the step that failed, if one did. */
 export const getStepRecords = (hostRecord: HostRecord): (FinishedStepRecord | StepRecord)[] => {

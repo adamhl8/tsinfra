@@ -4,13 +4,18 @@ import type { DiffLimits } from "#report/format/details/diff/limits.ts"
 import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { noteElement } from "#report/format/elements/asides.ts"
 import { formatHostMessageEntry } from "#report/format/host-message.ts"
-import { layoutHostBlock, layoutNoEntriesBlock } from "#report/format/layout.ts"
+import { layoutHostBlock } from "#report/format/layout.ts"
 import type { StatusLine } from "#report/format/status-line.ts"
 import { formatStatusLine } from "#report/format/status-line.ts"
-import type { HostBlock, HostBlockEntry } from "#report/host-block.ts"
+import type { HostBlock, HostBlockEntry, HostNote } from "#report/host-block.ts"
 import { styleBold } from "#styles.ts"
 
-// Re-export the summary's elements, because the summary is formatted outside this folder.
+/** A host block with each piece formatted, before layout puts them on lines. */
+export interface FormattedHostBlock {
+  name: string
+  note: string | undefined
+  entries: FormattedEntry[]
+}
 
 /** An entry with each piece formatted, before layout lines it up with the block's other entries. */
 export type FormattedEntry = FormattedStatusLineEntry | FormattedHostMessageEntry
@@ -40,17 +45,21 @@ const formatHostBlockEntry = (hostBlockEntry: HostBlockEntry, diffLimits: DiffLi
 /** Formats a block's host name in bold, so each block starts clearly. */
 const hostNameElement = (name: string): string => styleBold(name)
 
-/** Formats the note a block shows in place of entries when the host recorded none. */
-const formatNoEntriesNote = (): string => noteElement("empty script")
+const HOST_NOTE_WORDS: Record<HostNote["kind"], string> = {
+  noEntries: "empty script",
+  unfinishedApply: "an earlier apply didn't finish, so its follow-ups that didn't complete still trigger",
+}
+
+/** Formats the note a block shows before its entries. */
+const formatHostNote = (hostNote: HostNote): string => noteElement(HOST_NOTE_WORDS[hostNote.kind])
 
 /**
- * Formats a built host block as text: its name, then its entries laid out, or its "empty script" note. A diff, or an
- * `ensure`'s lines, stays within `diffLimits`.
+ * Formats a built host block as text: its name, then its note and its entries laid out. A diff, or an `ensure`'s lines,
+ * stays within `diffLimits`.
  */
 export const formatHostBlock = (hostBlock: HostBlock, diffLimits: DiffLimits): string => {
   const name = hostNameElement(hostBlock.name)
-  if (hostBlock.kind === "noEntries") return layoutNoEntriesBlock(name, formatNoEntriesNote())
-
-  const formattedEntries = hostBlock.entries.map((hostBlockEntry) => formatHostBlockEntry(hostBlockEntry, diffLimits))
-  return layoutHostBlock(name, formattedEntries)
+  const note = hostBlock.note && formatHostNote(hostBlock.note)
+  const entries = hostBlock.entries.map((hostBlockEntry) => formatHostBlockEntry(hostBlockEntry, diffLimits))
+  return layoutHostBlock({ name, note, entries })
 }

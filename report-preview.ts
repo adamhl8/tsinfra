@@ -489,8 +489,8 @@ const createSavedStateFailureRecord = (): HostRecord => ({
 
 /**
  * Returns a host that picks up after an earlier apply that didn't finish, as a record, because it takes two applies on
- * one host, and the second one's saved state would stay in the real home. It shows `^ resume` and a run only open
- * changes triggered, each with its note.
+ * one host, and the second one's saved state would stay in the real home. It shows the host's note, `^ resume`, and a
+ * run only open changes triggered, with its note.
  */
 const createResumeRecord = (): HostRecord => {
   const stepRecord = { options: {}, commands: [], comparisons: {}, waitingOn: [], messages: [] }

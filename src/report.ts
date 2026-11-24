@@ -93,14 +93,14 @@ const keepShownEntries = (hostBlockEntries: HostBlockEntry[], verbosity: Verbosi
   })
 
 /**
- * Returns a host's block with only what shows at `verbosity`: each entry that shows, with only the pieces that show. A
- * host with no entries keeps its block at every level, so it's clear the host ran.
+ * Returns a host's block with only what shows at `verbosity`: its note, and each entry that shows, with only the pieces
+ * that show.
  */
 export const toShownHostBlock = (hostBlock: HostBlock, verbosity: Verbosity): HostBlock => {
-  if (hostBlock.kind === "noEntries") return hostBlock
-
-  const entries = keepShownEntries(hostBlock.entries, verbosity)
-  return { ...hostBlock, entries }
+  const { name, note, entries } = hostBlock
+  const shownNote = note && isShownAt(note, verbosity) ? note : undefined
+  const shownEntries = keepShownEntries(entries, verbosity)
+  return { name, note: shownNote, entries: shownEntries }
 }
 
 /**
@@ -108,13 +108,11 @@ export const toShownHostBlock = (hostBlock: HostBlock, verbosity: Verbosity): Ho
  * formatted or measured for a column.
  */
 export const renderHostBlock = (hostBlock: HostBlock, reportOptions: ReportOptions): string | undefined => {
-  const { verbosity } = reportOptions
+  const { note, entries } = hostBlock
+  // Give a host with nothing to show no block, because its line in the summary already says how it went.
+  if (!note && entries.length === 0) return
+
   // Give the diff limits instead of a level, because computing a full diff only to drop it would be slow.
-  const diffLimits = toDiffLimits(verbosity)
-  if (hostBlock.kind === "noEntries") return formatHostBlock(hostBlock, diffLimits)
-
-  // Give a host whose entries are all hidden no block, because its line in the summary already says how it went.
-  if (hostBlock.entries.length === 0) return
-
+  const diffLimits = toDiffLimits(reportOptions.verbosity)
   return formatHostBlock(hostBlock, diffLimits)
 }

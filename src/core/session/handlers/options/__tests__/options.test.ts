@@ -4,9 +4,10 @@ import path from "node:path"
 import { makeTempDir } from "@adamhl8/configs/test"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
-import { castInvalid, createSession, getFailureMessage, getFinishedStepRecords } from "#core/__tests__/session.ts"
+import { castInvalid, createSession, getFailureMessage } from "#core/__tests__/session.ts"
 import type { Host } from "#core/session.ts"
 import type { ReadOptions } from "#core/session/handlers/read.ts"
+import { getFinishedStepRecords } from "#core/session/recorder/records.ts"
 
 const SECRET = "s3cret-value"
 

@@ -1,4 +1,4 @@
-import type { FormattedEntry } from "#report/format.ts"
+import type { FormattedEntry, FormattedHostBlock } from "#report/format.ts"
 import type { Body } from "#report/format/body.ts"
 import type { DetailRows } from "#report/format/details.ts"
 import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
@@ -82,12 +82,11 @@ const layoutEntry = (formattedEntry: FormattedEntry): string[] => {
   return [layoutStatusLine(statusLine), ...bodyLines]
 }
 
-/** Lays out a host block: its name, then each of its formatted entries. */
-export const layoutHostBlock = (name: string, formattedEntries: FormattedEntry[]): string => {
-  const entryLines = formattedEntries.flatMap((formattedEntry) => layoutEntry(formattedEntry))
+/** Lays out a host block: its name, then its note under it, if it has one, then each of its formatted entries. */
+export const layoutHostBlock = (formattedHostBlock: FormattedHostBlock): string => {
+  const { name, note, entries } = formattedHostBlock
+  const noteLines = note === undefined ? [] : [`${INDENT}${note}`]
+  const entryLines = entries.flatMap((formattedEntry) => layoutEntry(formattedEntry))
 
-  return [name, ...entryLines].join("\n")
+  return [name, ...noteLines, ...entryLines].join("\n")
 }
-
-/** Lays out the block of a host with no entries: its name, then its "empty script" note under it. */
-export const layoutNoEntriesBlock = (name: string, note: string): string => [name, `${INDENT}${note}`].join("\n")

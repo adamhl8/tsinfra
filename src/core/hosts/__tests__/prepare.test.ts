@@ -6,7 +6,6 @@ import bun from "bun"
 import { messageChain } from "ts-explicit-errors"
 
 import {
-  getFinishedStepRecords,
   getPreparationFailure,
   loadHostDefinition,
   prepareAndRunHost,
@@ -17,6 +16,7 @@ import type { LoadedHost } from "#core/hosts/load.ts"
 import { finishHosts, initializeHosts } from "#core/hosts/prepare.ts"
 import { toSavedStatePath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
 import type { Host } from "#core/session.ts"
+import { getFinishedStepRecords } from "#core/session/recorder/records.ts"
 
 const doNothing = async () => {
   /* empty */

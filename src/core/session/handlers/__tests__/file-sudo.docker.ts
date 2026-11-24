@@ -5,8 +5,9 @@ import { makeTempDir } from "@adamhl8/configs/test"
 import { $ } from "bun"
 
 import { CONTENT_LIMIT_BYTES, createRandomBytes, hashBytes } from "#core/__tests__/content.ts"
-import { createSession, fileOrMessage, getFinishedStepRecords } from "#core/__tests__/session.ts"
+import { createSession, fileOrMessage } from "#core/__tests__/session.ts"
 import type { Host } from "#core/session.ts"
+import { getFinishedStepRecords } from "#core/session/recorder/records.ts"
 
 const ROOT_OWNED_DIR = "/etc/tsinfra-docker"
 

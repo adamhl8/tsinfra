@@ -26,13 +26,11 @@ const STATUS_WORDS: Record<EntryStatus, string> = {
   resume: "resume",
 }
 
-const RESUME_NOTE = "an earlier apply didn't finish, so its follow-ups that didn't complete still trigger"
 const TRIGGERED_BY_OPEN_CHANGE_NOTE = "triggered because it didn't complete in an earlier unfinished apply"
 
 /** Returns the words of a part of an entry's note, like `needs 'A', 'B'`. */
 const getNotePartWords = (notePart: NotePart): string => {
   if (notePart.kind === "needs") return `needs ${quoteNames(notePart.needs)}`
-  if (notePart.kind === "resume") return RESUME_NOTE
   return TRIGGERED_BY_OPEN_CHANGE_NOTE
 }
 

@@ -4,15 +4,11 @@ import path from "node:path"
 import { makeTempDir } from "@adamhl8/configs/test"
 import bun, { $ } from "bun"
 
-import {
-  getFinishedStepRecords,
-  getPreparedHome,
-  loadHostThatStopsBeforeRun,
-  prepareAndRunHost,
-} from "#core/__tests__/session.ts"
+import { getPreparedHome, loadHostThatStopsBeforeRun, prepareAndRunHost } from "#core/__tests__/session.ts"
 import { SSHD_TARGET, startSshd, stopSshd } from "#core/__tests__/sshd.ts"
 import { toSavedStatePath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
 import type { HostRecord } from "#core/session/recorder/records.ts"
+import { getFinishedStepRecords } from "#core/session/recorder/records.ts"
 import { closeConnections } from "#core/transport.ts"
 
 const toStatuses = (hostRecord: HostRecord) =>

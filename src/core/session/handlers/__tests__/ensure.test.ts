@@ -7,16 +7,10 @@ import { makeTempDir } from "@adamhl8/configs/test"
 import bun from "bun"
 import { attempt } from "ts-explicit-errors"
 
-import {
-  castInvalid,
-  createSession,
-  ensureOrMessage,
-  getFailureMessage,
-  getFinishedStepRecords,
-  throwBoom,
-} from "#core/__tests__/session.ts"
+import { castInvalid, createSession, ensureOrMessage, getFailureMessage, throwBoom } from "#core/__tests__/session.ts"
 import type { Want } from "#core/session/handlers/ensure/want.ts"
 import type { ChangeTools } from "#core/session/handlers/tools.ts"
+import { getFinishedStepRecords } from "#core/session/recorder/records.ts"
 import { getOwnValue } from "#utils.ts"
 
 // Read `key=value` lines into a record, the shape a record check returns.
