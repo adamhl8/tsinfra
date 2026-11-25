@@ -1,7 +1,7 @@
 import { type } from "arktype"
 
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
-import { describeType } from "#utils.ts"
+import { describeType } from "#core/utils.ts"
 
 /** A set `want` as a script passes it, readonly so a constant works. */
 export type SetWant = ReadonlySet<string>

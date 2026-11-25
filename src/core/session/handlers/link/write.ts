@@ -14,7 +14,7 @@ import {
   toWriteScriptPaths,
 } from "#core/session/handlers/shared/filesystem/write-script.ts"
 import type { StepContext } from "#core/session/step.ts"
-import { quoteShellArg } from "#utils.ts"
+import { quoteShellArg } from "#core/utils.ts"
 
 /** Returns the lines that make the link under a temp name, then rename it into place (see `docs/transport.md`). */
 const buildLinkLines = (hostLinkDetails: HostLinkDetails, target: string, options: ValidLinkOptions): string[] => {

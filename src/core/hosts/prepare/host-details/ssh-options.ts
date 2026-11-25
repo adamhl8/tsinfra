@@ -2,7 +2,8 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { Shell } from "#core/transport/shell.ts"
-import { quoteShellArg, splitNonEmptyLines } from "#utils.ts"
+import { quoteShellArg } from "#core/utils.ts"
+import { splitNonEmptyLines } from "#utils.ts"
 
 /** An option tsinfra passes only when `ssh -G` shows the setting at ssh's own default. */
 interface ConfigDefault {

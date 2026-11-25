@@ -1,3 +1,5 @@
+import { sumBy } from "remeda"
+
 import type { DetailRows } from "#report/format/details.ts"
 import type { HeadingName } from "#report/format/elements/labels.ts"
 import { headingElement, labelElement } from "#report/format/elements/labels.ts"
@@ -70,12 +72,10 @@ export const formatHeadingRow = (name: HeadingName, nestedRows: AlignedRow[]): A
 
 /** Returns the lines `alignedRows` take up, counting each heading and the rows or lines under it. */
 export const countRowLines = (alignedRows: AlignedRow[]): number =>
-  alignedRows
-    .map((alignedRow) => {
-      if (alignedRow.kind === "value") return alignedRow.valueLines.length
+  sumBy(alignedRows, (alignedRow) => {
+    if (alignedRow.kind === "value") return alignedRow.valueLines.length
 
-      const { nestedRows } = alignedRow
-      const nestedLineCount = nestedRows.kind === "aligned" ? countRowLines(nestedRows.rows) : nestedRows.rows.length
-      return 1 + nestedLineCount
-    })
-    .reduce((lineCount, rowLineCount) => lineCount + rowLineCount, 0)
+    const { nestedRows } = alignedRow
+    const nestedLineCount = nestedRows.kind === "aligned" ? countRowLines(nestedRows.rows) : nestedRows.rows.length
+    return 1 + nestedLineCount
+  })

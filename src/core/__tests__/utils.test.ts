@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 
-import { quoteShellArg } from "#utils.ts"
+import { quoteShellArg } from "#core/utils.ts"
 
 describe("quoteShellArg", () => {
   it(String.raw`should wrap text in single quotes, and write each single quote as '\''`, () => {

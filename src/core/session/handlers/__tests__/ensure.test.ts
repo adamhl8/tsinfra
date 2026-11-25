@@ -225,6 +225,22 @@ describe("h.ensure with a string want", () => {
     })
   })
 
+  it("should compare a string with a long run of newlines in the middle without slowing down", async () => {
+    const { host: h } = await createSession()
+    const newlines = "\n".repeat(200_000)
+    // Time the step here, because Bun's test timeout doesn't fail a test that blocks the process.
+    const startedAt = Date.now()
+    const result = await ensureOrMessage(h, {
+      want: `a${newlines}b`,
+      check: async ({ read }) => `${await read("echo a")}${newlines}b`,
+      fix: "exit 1",
+    })
+    const durationMs = Date.now() - startedAt
+
+    expect(result).toMatchObject({ changed: false })
+    expect(durationMs).toBeLessThan(5000)
+  })
+
   it("should ignore trailing newlines on both sides", async () => {
     const { host: h } = await createSession()
 
@@ -588,6 +604,33 @@ describe("h.ensure with a record want", () => {
     })
 
     expect(result).toMatchObject({ changed: false })
+  })
+
+  it("should match a record with a constructor key inside a nested list", async () => {
+    const { host: h } = await createSession()
+    const result = await ensureOrMessage(h, {
+      want: { services: [{ constructor: { args: ["--debug"] } }] },
+      check: async ({ read }) => ({ services: [{ constructor: { args: [await read("echo --debug")] } }] }),
+      fix: "exit 1",
+    })
+
+    expect(result).toMatchObject({ changed: false })
+  })
+
+  it("should compare and mask a __proto__ key like any other key", async () => {
+    const { host: h, hostRecord } = await createSession("plan")
+    await ensureOrMessage(h, {
+      // Compute the key, because a plain `__proto__` sets the prototype instead.
+      want: { ["__proto__"]: "s3cret-token", TZ: "UTC" },
+      check: async ({ read }) => ({ ["__proto__"]: await read("echo old"), TZ: "UTC" }),
+      fix: "exit 1",
+      secretEnv: { TOKEN: "s3cret-token" },
+    })
+    const [stepRecord] = getFinishedStepRecords(hostRecord)
+    const values = stepRecord?.comparisons.before?.values
+    const unmet = values?.kind === "record" ? values.unmet : undefined
+
+    expect(Object.entries(unmet ?? {})).toStrictEqual([["__proto__", "[MASKED]"]])
   })
 
   it("should compare a nested list in order and a nested set as a set, at any depth", async () => {

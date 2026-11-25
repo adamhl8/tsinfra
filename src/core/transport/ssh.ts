@@ -4,7 +4,7 @@ import { err, isErr } from "ts-explicit-errors"
 
 import type { CommandOutput, Transport } from "#core/transport.ts"
 import { runProcess } from "#core/transport/run-process.ts"
-import { createCommandExitError } from "#utils.ts"
+import { createCommandExitError } from "#core/utils.ts"
 
 // See `docs/transport.md` for why each option is here.
 const CONTROL_PATH_OPTION = "ControlPath=~/.ssh/tsinfra-%C"

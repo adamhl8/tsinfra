@@ -1,4 +1,4 @@
-import { deepEqual } from "fast-equals"
+import { isDeepEqual } from "remeda"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
@@ -61,7 +61,7 @@ const OPTION_STAND_INS = new Map<string, string>(Object.entries(RECORDED_STAND_I
  */
 const toRecordedOptions = (options: StepOptionsToRecord): StepOptionsRecord => {
   const setEntries = Object.entries(options).filter(
-    ([name, value]) => value !== undefined && !deepEqual(value, OPTION_DEFAULTS.get(name)),
+    ([name, value]) => value !== undefined && !isDeepEqual(value, OPTION_DEFAULTS.get(name)),
   )
   const recordedEntries = setEntries.map(([name, value]): [string, unknown] => [
     name,

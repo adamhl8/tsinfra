@@ -3,7 +3,7 @@ import type { Body } from "#report/format/body.ts"
 import type { DetailRows } from "#report/format/details.ts"
 import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import type { StatusLine } from "#report/format/status-line.ts"
-import { getMaxWidth, padToWidth } from "#utils.ts"
+import { getMaxWidth, padToWidth } from "#report/utils.ts"
 
 export const INDENT = "  "
 const DETAIL_INDENT = INDENT.repeat(3)

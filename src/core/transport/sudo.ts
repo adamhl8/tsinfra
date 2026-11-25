@@ -1,5 +1,5 @@
 import type { Transport } from "#core/transport.ts"
-import { buildPrivateFileWriteScript, quoteShellArg } from "#utils.ts"
+import { buildPrivateFileWriteScript, quoteShellArg } from "#core/utils.ts"
 
 const SUDO_PASSWORD_VARIABLE = "TSINFRA_SUDO_PASSWORD"
 

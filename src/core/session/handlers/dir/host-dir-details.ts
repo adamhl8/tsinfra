@@ -5,7 +5,7 @@ import { err, isErr } from "ts-explicit-errors"
 import type { HostFileAttributeDetails } from "#core/session/handlers/shared/filesystem/attributes.ts"
 import { buildStatCommand, statAttributesLineSchema } from "#core/session/handlers/shared/filesystem/stat.ts"
 import type { Shell } from "#core/transport/shell.ts"
-import { quoteShellArg } from "#utils.ts"
+import { quoteShellArg } from "#core/utils.ts"
 
 /** The path of a directory that doesn't exist on the host yet. */
 interface NewHostDirDetails {

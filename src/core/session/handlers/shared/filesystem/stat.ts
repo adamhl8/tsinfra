@@ -3,7 +3,7 @@ import { type } from "arktype"
 import type { HostFileAttributeDetails } from "#core/session/handlers/shared/filesystem/attributes.ts"
 import { statModeSchema } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 import { nonEmptyStringSchema } from "#core/session/step.ts"
-import { splitWords } from "#utils.ts"
+import { splitWords } from "#core/utils.ts"
 
 // Pair each field's GNU and BSD format, so the two forms of the command print the same columns.
 // List them in the order they print, because a parser relies on it.

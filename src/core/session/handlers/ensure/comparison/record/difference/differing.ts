@@ -1,3 +1,5 @@
+import { isEmpty, mapValues } from "remeda"
+
 import type { RecordValue, RecordWant } from "#core/session/handlers/ensure/comparison/record.ts"
 import type { NonRecordValue } from "#core/session/handlers/ensure/comparison/record/difference.ts"
 import { isNestedRecord } from "#core/session/handlers/ensure/comparison/record/nested-kinds.ts"
@@ -24,19 +26,13 @@ type DifferingLiteralKeys<T> = {
 export type DifferingMark<V> = V extends NonRecordValue ? true : true | DifferingRecord<V>
 
 /** Marks each key of `extra`, the host's keys that `want` doesn't have, as `true`. */
-export const markExtraKeys = (extra: RecordWant): DifferingRecord<RecordWant> =>
-  Object.fromEntries(Object.keys(extra).map((key) => [key, true]))
+export const markExtraKeys = (extra: RecordWant): DifferingRecord<RecordWant> => mapValues(extra, () => true as const)
 
 /**
  * Marks every key of a wanted record at every depth, for a host that doesn't have the record. An empty record is `true`
  * itself, because it has no keys to mark.
  */
 export const markAllKeys = (want: RecordWant): DifferingMark<RecordValue> => {
-  const entries = Object.entries(want)
-  if (entries.length === 0) return true
-  const markedEntries = entries.map(([key, value]): [string, DifferingMark<RecordValue>] => {
-    const mark = isNestedRecord(value) ? markAllKeys(value) : true
-    return [key, mark]
-  })
-  return Object.fromEntries(markedEntries)
+  if (isEmpty(want)) return true
+  return mapValues(want, (value): DifferingMark<RecordValue> => (isNestedRecord(value) ? markAllKeys(value) : true))
 }

@@ -6,7 +6,7 @@ import type { HostDirDetails } from "#core/session/handlers/dir/host-dir-details
 import { parseFileMode } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 import { buildAttributeLines } from "#core/session/handlers/shared/filesystem/write-script.ts"
 import type { StepContext } from "#core/session/step.ts"
-import { quoteShellArg } from "#utils.ts"
+import { quoteShellArg } from "#core/utils.ts"
 
 /**
  * Returns the script that makes the directory and any parents it's missing, then sets its owner and mode when the

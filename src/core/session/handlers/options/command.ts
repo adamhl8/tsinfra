@@ -1,4 +1,5 @@
 import { type } from "arktype"
+import { intersection } from "remeda"
 
 import type { Content } from "#core/content.ts"
 import { CONTENT_DESCRIPTION, contentSchema } from "#core/content.ts"
@@ -43,7 +44,7 @@ export const envOptionsSchema = type
   .declare<EnvOptions>()
   .type({ "env?": envVariablesSchema, "secretEnv?": envVariablesSchema })
   .narrow(({ env = {}, secretEnv = {} }, ctx) => {
-    const sharedNames = Object.keys(env).filter((name) => Object.hasOwn(secretEnv, name))
+    const sharedNames = intersection(Object.keys(env), Object.keys(secretEnv))
     return (
       sharedNames.length === 0
       || ctx.reject({ expected: "names in only one of env and secretEnv", actual: quoteNames(sharedNames) })

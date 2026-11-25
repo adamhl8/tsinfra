@@ -1,3 +1,5 @@
+import { firstBy } from "remeda"
+
 import type { MessageKind } from "#core/session/handlers/log.ts"
 import type { StepMessageRecord, StepRecord } from "#core/session/recorder/records.ts"
 import type { Detail, StepMessage } from "#report/host-block.ts"
@@ -32,8 +34,8 @@ const toStepMessage = (stepMessageRecord: StepMessageRecord): StepMessage => {
  */
 export const toStepMessagesDetails = (stepRecord: StepRecord): Detail[] => {
   const stepMessages = stepRecord.messages.map((stepMessageRecord) => toStepMessage(stepMessageRecord))
-  const [lowestLevel] = stepMessages.map(({ from }) => from).toSorted((a, b) => a - b)
-  if (lowestLevel === undefined) return []
+  const lowestLevelMessage = firstBy(stepMessages, ({ from }) => from)
+  if (lowestLevelMessage === undefined) return []
 
-  return [{ kind: "stepMessages", stepMessages, from: lowestLevel }]
+  return [{ kind: "stepMessages", stepMessages, from: lowestLevelMessage.from }]
 }

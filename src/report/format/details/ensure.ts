@@ -1,3 +1,5 @@
+import { isEmpty } from "remeda"
+
 import type { EnsureComparisonValues } from "#core/session/handlers/ensure/comparison.ts"
 import type { DetailRows } from "#report/format/details.ts"
 import type { DiffLimits } from "#report/format/details/diff/limits.ts"
@@ -24,6 +26,5 @@ export const formatEnsureValues = (values: EnsureComparisonValues, diffLimits: D
   if (values.kind === "set")
     return values.want.length === 0 ? formatFoundItems(values.got, diffLimits) : formatSetValues(values, diffLimits)
 
-  const isEmptyRecord = Object.keys(values.want).length === 0
-  return isEmptyRecord ? formatFoundRecord(values.got, diffLimits) : formatRecordValues(values, diffLimits)
+  return isEmpty(values.want) ? formatFoundRecord(values.got, diffLimits) : formatRecordValues(values, diffLimits)
 }

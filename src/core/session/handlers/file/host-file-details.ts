@@ -8,7 +8,7 @@ import type { HostFileAttributeDetails } from "#core/session/handlers/shared/fil
 import { statModeSchema } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 import { buildStatCommand, STAT_OWNER_COLUMNS } from "#core/session/handlers/shared/filesystem/stat.ts"
 import type { Shell } from "#core/transport/shell.ts"
-import { quoteShellArg, splitWords } from "#utils.ts"
+import { quoteShellArg, splitWords } from "#core/utils.ts"
 
 // Read the first 64 hex characters, because GNU, busybox, and `shasum` print `<hash>  -`, and BSD prints the hash.
 const SHA256_PATTERN = /^[0-9a-f]{64}/v

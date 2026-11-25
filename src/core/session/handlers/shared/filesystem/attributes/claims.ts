@@ -1,3 +1,4 @@
+import { uniqueBy } from "remeda"
 import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
@@ -48,7 +49,7 @@ export const claimPathAttributes = (ctx: StepContext, path: string, options: Fil
     )
   }
 
-  // Keep an earlier claim, so a later conflict names the first step that set the attribute.
-  const newClaims = claims.filter(({ name }) => !earlierClaims.some((claim) => claim.name === name))
-  pathAttributeClaims.set(path, [...earlierClaims, ...newClaims])
+  // Put the earlier claims first, so a later conflict names the first step that set the attribute.
+  const allClaims = uniqueBy([...earlierClaims, ...claims], ({ name }) => name)
+  pathAttributeClaims.set(path, allClaims)
 }

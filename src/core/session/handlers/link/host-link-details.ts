@@ -9,7 +9,7 @@ import {
   statAttributesLineSchema,
 } from "#core/session/handlers/shared/filesystem/stat.ts"
 import type { Shell } from "#core/transport/shell.ts"
-import { quoteShellArg, splitWords, stripOneTrailingNewline } from "#utils.ts"
+import { quoteShellArg, splitWords, stripOneTrailingNewline } from "#core/utils.ts"
 
 /** What the link details script found at a link's path, and the mode and owner of the link's target. */
 export type HostLinkDetails = ExistingLinkDetails | NewLinkDetails | ReplaceableLinkDetails

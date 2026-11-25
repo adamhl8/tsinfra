@@ -1,5 +1,5 @@
 import { type } from "arktype"
-import { deepEqual } from "fast-equals"
+import { isDeepEqual } from "remeda"
 
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
 import { splitNonEmptyLines } from "#utils.ts"
@@ -32,5 +32,5 @@ export const toListItems = (stdout: string): string[] => splitNonEmptyLines(stdo
 /** Compares two lists in order, so they match only with the same items in the same order, duplicates included. */
 export const compareLists = (gotItems: ListWant, wantItems: ListWant): Comparison<ListComparisonValues> => {
   const values: ListComparisonValues = { kind: "list", got: [...gotItems], want: [...wantItems] }
-  return { inSync: deepEqual(gotItems, wantItems), values }
+  return { inSync: isDeepEqual(gotItems, wantItems), values }
 }

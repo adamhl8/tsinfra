@@ -1,10 +1,10 @@
 import { type } from "arktype"
+import { isEmpty, isPlainObject } from "remeda"
 
 import type { RecordDifference } from "#core/session/handlers/ensure/comparison/record/difference.ts"
 import { toRecordDifference } from "#core/session/handlers/ensure/comparison/record/difference.ts"
 import { findRecordValueProblem } from "#core/session/handlers/ensure/comparison/record/validation.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
-import { isPlainObject } from "#utils.ts"
 
 /**
  * A value a record `want` holds at a key: a `RecordPrimitive`, or a nested list of record values, a nested set of
@@ -76,6 +76,6 @@ export const compareRecords = (gotRecord: RecordWant, wantRecord: RecordWant): C
   const want = structuredClone(wantRecord)
 
   const values: RecordComparisonValues = { kind: "record", ...toRecordDifference(got, want) }
-  const inSync = Object.keys(values.differing).length === 0
+  const inSync = isEmpty(values.differing)
   return { inSync, values }
 }

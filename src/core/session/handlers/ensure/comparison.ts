@@ -21,7 +21,7 @@ import type { HostCheckDetails } from "#core/session/handlers/ensure/host-check-
 import type { TaggedWant, WantKind } from "#core/session/handlers/ensure/want.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
 import type { CommandOutput } from "#core/transport.ts"
-import { createCommandExitError, describeType } from "#utils.ts"
+import { createCommandExitError, describeType } from "#core/utils.ts"
 
 /**
  * What the check gave, what it wanted, and for a set or a record, their difference. `kind` says how the output shows

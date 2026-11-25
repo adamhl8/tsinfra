@@ -2,7 +2,7 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { Shell } from "#core/transport/shell.ts"
-import { createCommandExitError, quoteShellArg } from "#utils.ts"
+import { createCommandExitError, quoteShellArg } from "#core/utils.ts"
 
 export const INCORRECT_SUDO_PASSWORD_MESSAGE = "incorrect sudo password"
 export const SUDO_PASSWORD_CHECK_FAILED_MESSAGE = "failed to check the sudo password"

@@ -1,5 +1,5 @@
 import type { SavedState } from "#core/session/saved-state/schema.ts"
-import { buildPrivateFileWriteScript, quoteShellArg } from "#utils.ts"
+import { buildPrivateFileWriteScript, quoteShellArg } from "#core/utils.ts"
 
 /** Returns the script that writes `savedState` to `savedStatePath`, indented so it reads well on the host. */
 export const buildSavedStateWriteScript = (savedStatePath: string, savedState: SavedState): string =>

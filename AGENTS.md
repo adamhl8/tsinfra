@@ -72,11 +72,12 @@ Each name should say which side of a comparison it is. When naming anything in a
 ## Layout
 
 - **`src/` holds the CLI (`cli.ts`), the report (`report.ts`), and `core/`,** plus the published `index.ts` and code all three share (`mode.ts`, `styles.ts`, `utils.ts`). `core/` holds hosts, the session, and transports, the part of tsinfra that does the work. Nothing in `core/` imports the CLI or the report.
+- **A general helper goes in the `utils.ts` of the part that uses it:** `core/utils.ts`, `report/utils.ts`, or `src/utils.ts` when more than one part does. It goes there even with one caller, and doesn't get a file of its own. `src/utils.ts` imports no packages, because the launcher loads it.
 
 ## Architecture
 
 - **A comparison records what tsinfra works out, and the report only formats it.** Whether a step is in sync, and what's unmet, missing, or extra, is worked out once, before masking, and the fix and the report read that one result. The report never compares two sides itself, because masking can make two different values look the same. Line diffs are the exception: the report computes them when it renders, because their time and line limits follow its verbosity.
-- **Deep comparisons use fast-equals' `deepEqual`, never Bun's `deepEquals`.** Bun's tells `-0` from `0`, which the report shows as the same `0`, so every comparison uses one equality, whatever it compares.
+- **Deep comparisons use Remeda's `isDeepEqual`, never Bun's `deepEquals`.** Bun's tells `-0` from `0`, which the report shows as the same `0`, so every comparison uses one equality, whatever it compares.
 - **A generic over a step's `want` takes `T extends WantOf<T>`, never `T extends Want`.** `Want`'s record is an index signature, which a type an interface declares can't match. `RecordWantOf` maps each valid value to `unknown`, because a primitive there keeps `want`'s inferred values literal, so `{ a: "1" }` couldn't match a check that returns any string.
 - **`session.ts` is the only code that throws.** Everything the script can call (the `h` methods and the tools) is `callOrFail` around a `Result`-returning internal. `h.log` is synchronous, so its methods make the same checks without `callOrFail`.
 - **Handlers never record anything.** What a step has one of is returned (`HandlerReturn { status, value }`), and what it has zero or more of is recorded by a wrapper it runs through.

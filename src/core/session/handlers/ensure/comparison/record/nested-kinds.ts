@@ -1,5 +1,6 @@
+import { isPlainObject } from "remeda"
+
 import type { RecordPrimitive, RecordValue, RecordWant } from "#core/session/handlers/ensure/comparison/record.ts"
-import { isPlainObject } from "#utils.ts"
 
 /** Checks whether `value` is a nested list, because `Array.isArray` doesn't narrow a readonly array. */
 export const isNestedList = (value: RecordValue | undefined): value is readonly RecordValue[] => Array.isArray(value)

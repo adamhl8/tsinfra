@@ -1,6 +1,6 @@
 import crypto from "node:crypto"
 
-import { quoteShellArg } from "#utils.ts"
+import { quoteShellArg } from "#core/utils.ts"
 
 // `sh -s` runs each line as soon as it reads it, and that line's command shares the shell's stdin.
 // In `cat\necho after`, `cat` reads `echo after` as its input, so `echo after` never runs.

@@ -1,6 +1,7 @@
 import { type } from "arktype"
+import { isPlainObject } from "remeda"
 
-import { describeType, isPlainObject } from "#utils.ts"
+import { describeType } from "#core/utils.ts"
 
 /** A problem with a value inside a record, at its path from the record. */
 interface RecordValueProblem {

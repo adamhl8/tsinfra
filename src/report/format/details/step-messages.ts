@@ -1,9 +1,11 @@
+import { uniqueWith } from "remeda"
+
 import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { messageTextElement, stepMessageLabelElement } from "#report/format/elements/messages.ts"
 import { MESSAGE_KIND_WORDS } from "#report/format/host-message.ts"
 import { layoutRowsInOwnColumn } from "#report/format/layout.ts"
 import type { StepMessage } from "#report/host-block.ts"
-import { splitLines } from "#utils.ts"
+import { splitLines } from "#report/utils.ts"
 
 const isSameMessage = (a: StepMessage, b: StepMessage): boolean => a.messageKind === b.messageKind && a.text === b.text
 
@@ -28,8 +30,6 @@ export const formatStepMessageLines = (stepMessage: StepMessage): string[] =>
  */
 export const formatStepMessageRows = (stepMessages: StepMessage[]): string[] => {
   const rowMessages = stepMessages.filter(({ amongCommands }) => amongCommands === undefined)
-  const distinctMessages = rowMessages.filter(
-    (stepMessage, index) => rowMessages.findIndex((other) => isSameMessage(stepMessage, other)) === index,
-  )
+  const distinctMessages = uniqueWith(rowMessages, isSameMessage)
   return distinctMessages.flatMap((stepMessage) => formatStepMessageLines(stepMessage))
 }

@@ -1,9 +1,12 @@
+import { sumBy } from "remeda"
+
 import type { Mode } from "#mode.ts"
 import { planReminderElement } from "#report/format/elements/asides.ts"
 import { statusTextElement, warningCountElement } from "#report/format/elements/summary.ts"
 import { COLUMN_GAP } from "#report/format/layout.ts"
 import type { EntryStatus, HostBlock, StatusLineEntry } from "#report/host-block.ts"
-import { countOf, getMaxWidth, padToWidth } from "#utils.ts"
+import { getMaxWidth, padToWidth } from "#report/utils.ts"
+import { countOf } from "#utils.ts"
 
 const PLAN_REMINDER = "Steps after a change were checked without that change, so apply may differ."
 
@@ -57,9 +60,7 @@ const countWarnings = (hostBlock: HostBlock): number => {
   )
   const statusLineEntries = getStatusLineEntries(hostBlock)
   const stepWarnings = statusLineEntries.flatMap(({ details }) => details.filter(({ kind }) => kind === "warning"))
-  const stepWarningMessageCount = statusLineEntries
-    .map((statusLineEntry) => countStepWarningMessages(statusLineEntry))
-    .reduce((total, count) => total + count, 0)
+  const stepWarningMessageCount = sumBy(statusLineEntries, countStepWarningMessages)
   return hostWarnings.length + stepWarnings.length + stepWarningMessageCount
 }
 

@@ -1,7 +1,7 @@
 import { noteElement } from "#report/format/elements/asides.ts"
 import { diffRuleElement } from "#report/format/elements/diff.ts"
+import { getMaxWidth } from "#report/utils.ts"
 import type { Verbosity } from "#report/verbosity.ts"
-import { getMaxWidth } from "#utils.ts"
 
 /**
  * How far a diff, or a comparison of an `ensure`'s lines, may go before it becomes a note that names the flag that

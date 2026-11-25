@@ -1,5 +1,6 @@
+import { isPlainObject, mapValues } from "remeda"
+
 import { MASKED_VALUE } from "#styles.ts"
-import { isPlainObject } from "#utils.ts"
 
 /**
  * Adds `value` to `secrets`, and each of its lines on its own, because a diff or a stderr line can show one line of a
@@ -50,9 +51,7 @@ const maskUnknown = (value: unknown, pattern: RegExp): unknown => {
   }
   if (Array.isArray(value)) return value.map((item: unknown) => maskUnknown(item, pattern))
   if (value instanceof Set) return new Set(Array.from(value, (item: unknown) => maskUnknown(item, pattern)))
-  if (isPlainObject(value))
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, maskUnknown(item, pattern)]))
-
+  if (isPlainObject(value)) return mapValues(value, (item) => maskUnknown(item, pattern))
   return value
 }
 

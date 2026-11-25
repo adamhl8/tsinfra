@@ -4,7 +4,7 @@ import type { OwnerOptions } from "#core/session/handlers/options/attributes.ts"
 import type { HostOwner } from "#core/session/handlers/shared/filesystem/attributes.ts"
 import type { ModeBits } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 import { toOctalMode } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
-import { quoteShellArg } from "#utils.ts"
+import { quoteShellArg } from "#core/utils.ts"
 
 /** The temp path, inside the temp directory, as both write scripts name it, quoted for the shell. */
 export const TEMP_PATH_ARG = '"$tmppath"'

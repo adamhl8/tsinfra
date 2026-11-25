@@ -1,7 +1,7 @@
 import { type } from "arktype"
 
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
-import { stripTrailingNewlines } from "#utils.ts"
+import { stripTrailingNewlines } from "#core/utils.ts"
 
 /** A string `want`, which a command's stdout or a function's value must match. */
 export const stringWantSchema = type("string")

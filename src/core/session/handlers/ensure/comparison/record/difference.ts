@@ -1,4 +1,4 @@
-import { deepEqual } from "fast-equals"
+import { isDeepEqual, isDefined, isEmpty, mapValues, omit, pickBy } from "remeda"
 
 import type { RecordPrimitive, RecordValue, RecordWant } from "#core/session/handlers/ensure/comparison/record.ts"
 import type {
@@ -72,10 +72,6 @@ interface WantedKeysDifference {
   differing: DifferingRecord<RecordWant>
 }
 
-/** Returns the entries of `record` whose keys `others` doesn't have, in `record`'s key order. */
-const getEntriesNotIn = (record: RecordWant, others: RecordWant): RecordWant =>
-  Object.fromEntries(Object.entries(record).filter(([key]) => !Object.hasOwn(others, key)))
-
 /** Compares two nested sets: the missing items are unmet, and the host's other items are one entry of extras. */
 const toNestedSetDifference = (
   got: ReadonlySet<RecordPrimitive>,
@@ -97,7 +93,7 @@ const toNestedSetDifference = (
 const toNestedRecordDifference = (got: RecordWant, want: RecordWant, path: ValuePath): ValueDifference => {
   // oxlint-disable-next-line no-use-before-define - a nested record's keys compare like a record's
   const wantedKeysDifference = toWantedKeysDifference(got, want, path)
-  const extra = getEntriesNotIn(got, want)
+  const extra = omit(got, Object.keys(want))
   const extraKeys = Object.entries(extra).map(([key, value]): NestedExtraKey => ({
     kind: "key",
     path: [...path, key],
@@ -105,10 +101,8 @@ const toNestedRecordDifference = (got: RecordWant, want: RecordWant, path: Value
   }))
   const allDiffering = { ...wantedKeysDifference.differing, ...markExtraKeys(extra) }
 
-  const hasUnmet = Object.keys(wantedKeysDifference.unmet).length > 0
-  const unmet = hasUnmet ? wantedKeysDifference.unmet : undefined
-  const hasDiffering = Object.keys(allDiffering).length > 0
-  const differing = hasDiffering ? allDiffering : undefined
+  const unmet = isEmpty(wantedKeysDifference.unmet) ? undefined : wantedKeysDifference.unmet
+  const differing = isEmpty(allDiffering) ? undefined : allDiffering
   return { unmet, nestedExtra: [...wantedKeysDifference.nestedExtra, ...extraKeys], differing }
 }
 
@@ -124,7 +118,7 @@ const toValueDifference = (
 ): ValueDifference => {
   if (isNestedRecord(gotValue) && isNestedRecord(wantValue)) return toNestedRecordDifference(gotValue, wantValue, path)
   if (isNestedSet(gotValue) && isNestedSet(wantValue)) return toNestedSetDifference(gotValue, wantValue, path)
-  if (deepEqual(gotValue, wantValue)) return { unmet: undefined, nestedExtra: [], differing: undefined }
+  if (isDeepEqual(gotValue, wantValue)) return { unmet: undefined, nestedExtra: [], differing: undefined }
 
   const differing = isNestedRecord(wantValue) ? markAllKeys(wantValue) : true
   return { unmet: wantValue, nestedExtra: [], differing }
@@ -136,22 +130,14 @@ const toWantedKeysDifference = (
   want: RecordWant,
   path: readonly [] | ValuePath,
 ): WantedKeysDifference => {
-  const valueDifferences = Object.entries(want).map(([key, wantValue]) => {
-    const valuePath: ValuePath = [...path, key]
-    return { key, difference: toValueDifference(getOwnValue(got, key), wantValue, valuePath) }
-  })
-
-  const unmet = Object.fromEntries(
-    valueDifferences.flatMap(({ key, difference }): [string, RecordValue][] =>
-      difference.unmet === undefined ? [] : [[key, difference.unmet]],
-    ),
+  const valueDifferences = mapValues(want, (wantValue, key) =>
+    toValueDifference(getOwnValue(got, key), wantValue, [...path, key]),
   )
-  const nestedExtra = valueDifferences.flatMap(({ difference }) => difference.nestedExtra)
-  const differing = Object.fromEntries(
-    valueDifferences.flatMap(({ key, difference }): [string, DifferingMark<RecordValue>][] =>
-      difference.differing === undefined ? [] : [[key, difference.differing]],
-    ),
-  )
+  const unmetByKey = mapValues(valueDifferences, (valueDifference) => valueDifference.unmet)
+  const unmet = pickBy(unmetByKey, isDefined)
+  const nestedExtra = Object.values(valueDifferences).flatMap((valueDifference) => valueDifference.nestedExtra)
+  const differingByKey = mapValues(valueDifferences, (valueDifference) => valueDifference.differing)
+  const differing = pickBy(differingByKey, isDefined)
   return { unmet, nestedExtra, differing }
 }
 
@@ -169,7 +155,7 @@ const toWantedKeysDifference = (
 export const toRecordDifference = (got: RecordWant, want: RecordWant): RecordDifference => {
   const wantedKeysDifference = toWantedKeysDifference(got, want, [])
   const { unmet, nestedExtra } = wantedKeysDifference
-  const extra = getEntriesNotIn(got, want)
+  const extra = omit(got, Object.keys(want))
   const differing = { ...wantedKeysDifference.differing, ...markExtraKeys(extra) }
   return { got, want, unmet, extra, nestedExtra, differing }
 }

@@ -5,7 +5,7 @@ import { err, isErr } from "ts-explicit-errors"
 import type { SavedState } from "#core/session/saved-state/schema.ts"
 import { savedStateFileSchema } from "#core/session/saved-state/schema.ts"
 import type { Shell } from "#core/transport/shell.ts"
-import { quoteShellArg } from "#utils.ts"
+import { quoteShellArg } from "#core/utils.ts"
 
 // Print a marker for a missing file, because it isn't valid JSON, so it can't be mistaken for a file's contents.
 const NO_FILE_MARKER = "absent"

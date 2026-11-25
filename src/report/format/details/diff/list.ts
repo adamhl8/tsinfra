@@ -1,6 +1,6 @@
 import type { ArrayChange } from "diff"
 import { diffArrays } from "diff"
-import { deepEqual } from "fast-equals"
+import { isDeepEqual } from "remeda"
 
 import type { RecordValue } from "#core/session/handlers/ensure/comparison/record.ts"
 import type { DiffLimits } from "#report/format/details/diff/limits.ts"
@@ -52,7 +52,7 @@ const toListDiffHunks = (diffItems: ListDiffItem[]): ListDiffItem[][] => {
 
 /**
  * Returns an item diff's hunks from `got` to `want`, each item after its `-`, `+`, or space, or nothing when it took
- * longer than `diffLimits` allows. Matches items with `deepEqual`, so a nested record or list matches by value.
+ * longer than `diffLimits` allows. Matches items with `isDeepEqual`, so a nested record or list matches by value.
  */
 const formatListDiffHunks = (
   got: readonly RecordValue[],
@@ -60,7 +60,7 @@ const formatListDiffHunks = (
   diffLimits: DiffLimits,
 ): string[][] | undefined => {
   const timeout = diffLimits.timeoutMs ?? FULL_DIFF_TIMEOUT_MS
-  const changes = diffArrays([...got], [...want], { timeout, comparator: deepEqual })
+  const changes = diffArrays([...got], [...want], { timeout, comparator: isDeepEqual })
   if (changes === undefined) return undefined
 
   const diffItems = changes.flatMap((change) =>

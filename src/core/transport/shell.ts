@@ -5,7 +5,7 @@ import type { Content } from "#core/content.ts"
 import { readContentBytes } from "#core/content/read.ts"
 import type { CommandOutput, Transport } from "#core/transport.ts"
 import { addEnvPrelude, wrapCommandWithInput, wrapInRootShell } from "#core/transport/utils.ts"
-import { createCommandExitError } from "#utils.ts"
+import { createCommandExitError } from "#core/utils.ts"
 
 /** A command a shell is about to run, as its record shows it, with a label when tsinfra wrote the command itself. */
 interface ShellCommand {

@@ -7,7 +7,7 @@ import type { ValidFileOptions } from "#core/session/handlers/file.ts"
 import type { HostFileDetails } from "#core/session/handlers/file/host-file-details.ts"
 import type { ResolvedFileContent } from "#core/session/handlers/file/resolved-content.ts"
 import type { Shell } from "#core/transport/shell.ts"
-import { quoteShellArg } from "#utils.ts"
+import { quoteShellArg } from "#core/utils.ts"
 
 /** How a managed file's content differs. `text` holds both sides for a diff. */
 export type ContentComparison = { kind: "same" } | { kind: "text"; got: string; want: string } | SizeComparison

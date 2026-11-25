@@ -9,7 +9,7 @@ import {
   formatSlowDiffNote,
 } from "#report/format/details/diff/limits.ts"
 import { diffGutterElement, diffLineElement } from "#report/format/elements/diff.ts"
-import { endWithNewline } from "#utils.ts"
+import { endWithNewline } from "#report/utils.ts"
 
 /**
  * Returns a hunk's lines, each after a gutter with its line number in `want`. A removed line gets a blank gutter,

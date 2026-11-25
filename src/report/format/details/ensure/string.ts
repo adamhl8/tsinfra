@@ -12,7 +12,7 @@ import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { formatAlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { noteElement } from "#report/format/elements/asides.ts"
 import { gotValueElement, wantValueElement } from "#report/format/elements/values.ts"
-import { splitLines } from "#utils.ts"
+import { splitLines } from "#report/utils.ts"
 
 /**
  * Formats the note in place of values that took too long to compare, naming the flag that shows them only when one

@@ -11,7 +11,7 @@ import {
 import { headingElement } from "#report/format/elements/labels.ts"
 import { INDENT } from "#report/format/layout.ts"
 import type { StepCommand, StepMessage } from "#report/host-block.ts"
-import { getMaxWidth, padToWidth } from "#utils.ts"
+import { getMaxWidth, padToWidth } from "#report/utils.ts"
 
 // Start a command's options and output rows under its text, past the prompt.
 const COMMAND_TEXT_INDENT = " ".repeat(getMaxWidth([commandPromptElement()]))
