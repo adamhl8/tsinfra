@@ -36,8 +36,8 @@ import { getExitCode } from "#report/exit-code.ts"
 import type { HostBlock } from "#report/host-block.ts"
 import { toHostBlock } from "#report/host-block.ts"
 import { renderSummary } from "#report/summary.ts"
-import { toVerbosity } from "#report/verbosity.ts"
 import type { Verbosity } from "#report/verbosity.ts"
+import { toVerbosity } from "#report/verbosity.ts"
 
 /** One run of the preview: `plan` shows what only shows in `plan`, `apply` the rest, and `sudoPrompt` the prompt. */
 type PreviewPass = "plan" | "apply" | "sudoPrompt"

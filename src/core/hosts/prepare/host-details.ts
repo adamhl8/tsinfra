@@ -7,8 +7,8 @@ import { resolveHostSudo } from "#core/hosts/prepare/host-details/host-sudo/reso
 import { readSshDefaultOptions } from "#core/hosts/prepare/host-details/ssh-options.ts"
 import { toAskpassHelperPath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
 import type { PreparationRecorder } from "#core/session/recorder/preparation-recorder.ts"
-import { LOCAL_TARGET, getLocalTransport, getSshTransport } from "#core/transport.ts"
 import type { Transport } from "#core/transport.ts"
+import { LOCAL_TARGET, getLocalTransport, getSshTransport } from "#core/transport.ts"
 import type { Shell } from "#core/transport/shell.ts"
 import {
   buildAskpassHelperWriteScript,

@@ -8,13 +8,13 @@ import { buildHostDetails, finishHostDetails } from "#core/hosts/prepare/host-de
 import { toSavedStatePath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
 import type { SessionContext } from "#core/session.ts"
 import { createHostMeta } from "#core/session/host-meta.ts"
-import { createPreparationRecorder } from "#core/session/recorder/preparation-recorder.ts"
 import type { PreparationRecorder } from "#core/session/recorder/preparation-recorder.ts"
-import { createHostRecord } from "#core/session/recorder/records.ts"
+import { createPreparationRecorder } from "#core/session/recorder/preparation-recorder.ts"
 import type { HostRecord } from "#core/session/recorder/records.ts"
+import { createHostRecord } from "#core/session/recorder/records.ts"
 import { createSessionRecorder } from "#core/session/recorder/session-recorder.ts"
-import { createSavedStateManager } from "#core/session/saved-state.ts"
 import type { SavedStateManager } from "#core/session/saved-state.ts"
+import { createSavedStateManager } from "#core/session/saved-state.ts"
 import { createShell } from "#core/transport/shell.ts"
 
 /** A host after preparation: ready to run its function, or failed, with the record that says why. */

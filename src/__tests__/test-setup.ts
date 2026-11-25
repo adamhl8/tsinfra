@@ -1,3 +1,5 @@
+import "@adamhl8/configs/test/preload"
+
 import { mock } from "bun:test"
 import process from "node:process"
 
@@ -7,8 +9,6 @@ import { isErr } from "ts-explicit-errors"
 
 import type { LoadedHost } from "#core/hosts/load.ts"
 import type { HomeDirectory } from "#core/hosts/prepare/host-details.ts"
-
-import "@adamhl8/configs/test/preload"
 
 // Turn colors off before any test imports picocolors, because it decides once, and a terminal would turn them on.
 process.env["NO_COLOR"] = "1"
