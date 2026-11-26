@@ -242,7 +242,7 @@ A step is one call on `h`, other than `h.log` (see [Messages](#messages)). A hos
 
 Most change steps read one piece of the host's state, and in `apply` run a fix when it differs. `ensure` is the step where you write how to read it, as its `check`. [`file`](#file), [`link`](#link), and [`dir`](#dir) are steps that read the state themselves. [`run`](#run) is a step that reads no state.
 
-The steps on `h` are primitives: none of them needs to know a tool beyond `sh` and the POSIX commands. An integration is what does, like installing packages with a package manager: functions that take `h` and call these steps to set up one specific program, service, or piece of config. The integrations tsinfra ships will be imports, not methods on `h` (see [the roadmap](./roadmap.md#integrations-worth-shipping)).
+The steps on `h` are primitives: none of them needs to know a tool beyond `sh` and the POSIX commands. An integration is what does, like installing packages with a package manager: functions that take `h` and call these steps to set up one specific program, service, or piece of config. The integrations tsinfra ships are imports, not methods on `h` (see [Integrations](./integrations.md)).
 
 Name a step like a function, starting with a verb ("Install Caddy"), or as the state it ensures ("Caddy is installed"). Both read well after `ensure`.
 
@@ -1037,7 +1037,7 @@ const updateComposeStack = async (h: Host, after: ChangeStepResult[]) => {
 await updateComposeStack(h, [compose])
 ```
 
-The same works for steps with a check, as in `aptPackage(h, "caddy")`. Functions like these are how tsinfra gets integrations, whether you write them or tsinfra ships them (see [the roadmap](./roadmap.md#integrations-worth-shipping)).
+The same works for steps with a check, as in `aptPackage(h, "caddy")`. Functions like these are how tsinfra gets integrations, whether you write them or tsinfra ships them (see [Integrations](./integrations.md)).
 
 Anything that can be checked should be an `ensure`, not a `run`. `after` keeps a check out of the trigger, but one can still hide in a run function:
 

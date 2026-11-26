@@ -2,3 +2,7 @@
 declare module "tsinfra" {
   export * from "#index.ts"
 }
+
+declare module "tsinfra/integrations/macos/file-handlers" {
+  export * from "#integrations/macos/file-handlers/index.ts"
+}

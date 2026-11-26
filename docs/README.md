@@ -44,7 +44,7 @@ tsinfra keeps the script shape and adds what scripts lacked:
 - **Nothing on hosts** beyond `sh` and `sshd`.
 - **`plan` is honest.** It shows what each step sees on the host right now, and marks the places where an earlier change matters.
 - **Small.** Buildable in a few weeks and maintainable alone.
-- **Integrations for common tools.** tsinfra ships integrations for tools like apt, brew, and systemd, as functions that call steps, so a script doesn't have to write its own (see [the roadmap](./roadmap.md#integrations-worth-shipping)).
+- **Integrations for common tools.** tsinfra ships integrations for tools like apt, brew, and systemd, as functions that call steps, so a script doesn't have to write its own (see [Integrations](./integrations.md)).
 
 ## Non-goals
 
@@ -156,6 +156,7 @@ tsinfra plan            # every host
 - **[Transport](./transport.md)**: local and SSH, ControlMaster, sudo, and how commands and files cross
 - **[CLI](./cli.md)**: the `hosts/` folder, `plan` and `apply`, output, and exit codes
 - **[Recipes](./recipes.md)**: patterns that need no tsinfra feature
+- **[Integrations](./integrations.md)**: the integrations tsinfra ships, and how they work
 - **[Roadmap](./roadmap.md)**: what's planned, the open questions, ideas from other tools, and what was rejected
 
 ## Runtime

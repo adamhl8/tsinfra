@@ -34,6 +34,7 @@ Write one script per machine. A script reads top to bottom and is made of idempo
 - [Needs](#needs)
 - [Failures](#failures)
 - [Output](#output)
+- [Integrations](#integrations)
 - [CLI Reference](#cli-reference)
 - [Design](#design)
 - [License](#license)
@@ -677,6 +678,22 @@ Each `-v` shows more:
 - `-v`: every step, and every long diff and differing line in full
 - `-vv`: the options a step set, like `options: sudo`, every command each step ran, and a diff that was slow to compute
 - `-vvv`: option values (secrets as `[MASKED]`), and each command's exit code, stdout, and stderr
+
+## Integrations
+
+Integrations set up one specific program, service, or piece of config with ordinary steps. Each is its own import:
+
+```ts
+import { fileHandlers } from "tsinfra/integrations/macos/file-handlers"
+
+await fileHandlers(h, { "/System/Applications/Preview.app": ["pdf"] })
+```
+
+| Import                                     | Sets up                                      |
+| ------------------------------------------ | -------------------------------------------- |
+| `tsinfra/integrations/macos/file-handlers` | Which app opens each file extension on a Mac |
+
+See [Integrations](./docs/integrations.md) for each one's options and caveats.
 
 ## CLI Reference
 

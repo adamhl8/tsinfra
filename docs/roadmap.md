@@ -259,6 +259,7 @@ Fixes and finishing work for what's already built.
 - **Stop remote commands on Ctrl-C.** Without a terminal, Ctrl-C ends the local `ssh`, but the command on the host keeps running. nixos-rebuild runs a remote `pkill -SIGINT` when it's interrupted. tsinfra needs the same, with the process to stop known, and the run's connections still closed.
 - **Fail a tool saved for later.** A script can keep the `read` or `exec` a step function was given and call it after that step finished. At the top level its command goes unrecorded, and during a later step it is recorded under the wrong step. `callStep` already builds a fresh set of tools for each step. What's left is to bind them to the step's record, and fail the host through `callOrFail` when that step is no longer the running one. Do not throw in `recordCommands`, because only `session.ts` throws, and a throw there would skip recording the failure in `callOrFail`.
 - **Keep forced color out of commands.** `runProcess` starts the local shell with tsinfra's whole environment, so a `FORCE_COLOR` or `CLICOLOR_FORCE` that a task runner sets reaches every command on `@local`. A command then colors output a check parses, like `bun pm ls -g`, whose names stop matching the wanted ones and show as both missing and extra. Remove both variables from the environment `runProcess` passes, and leave `NO_COLOR`, because it only turns color off. The report keeps its own color, because it reads `process.env` in tsinfra's process. SSH hosts don't get them, because ssh only forwards the names in `SendEnv`.
+- **Check the host's platform first in a platform-specific integration.** `fileHandlers` runs `osascript` without checking that the host is a Mac, so on another host its first command fails with `osascript: command not found`, which doesn't say why. An integration that only works on one platform starts with a read of `uname -s`, and throws when the host isn't on that platform, naming the integration and the platform it needs. `plan` and `apply` then both stop the host script there, before any of the integration's steps. Use `platform(h)` once the [fact helpers](#fact-helpers) exist.
 - **Run the Docker tests in CI.** Only `bask test --all` runs the Docker tests, never `bask lint`, because they need Docker and download images and packages, so nothing runs them automatically yet.
 - **Check SELinux labels on a VM.** `file`'s `chcon` and `restorecon` are untested on real labels, because containers run with SELinux off.
 - **The user docs.** These docs will be published as a documentation site built with [Starlight](https://starlight.astro.build). When it gets written, start from [Recipes](./recipes.md), and add the comparison with other config tools from the [design notes](./README.md#compared-with-other-tools), led by tsinfra's strengths. Warn about a login shell's pitfalls once [the `shell` option](#the-shell-host-option) exists.
@@ -271,11 +272,9 @@ What still needs an answer. Most are best settled by porting real hosts first.
 
 ### Integrations worth shipping
 
-An integration is a set of functions that take `h` and call steps to set up one specific program, service, or piece of config, like apt packages or systemd units. The candidates are in [Integration ideas](#integration-ideas). Start each as a function in a host repo, and move one into tsinfra only once two hosts use it the same way.
+An integration is a set of functions that take `h` and call steps to set up one specific program, service, or piece of config, like apt packages or systemd units. The candidates are in [Integration ideas](#integration-ideas), and the ones that ship are in [Integrations](./integrations.md).
 
 An integration configures the host itself: its packages, services, files, users, and settings. It doesn't manage objects inside an app, like a database's users, or resources behind an API, like DNS records, because those belong to the app's own tooling or to tools like Terraform. And no integration installs and runs one app for you, like a Postgres or Tailscale module. A script does that with the general integrations.
-
-Each family of shipped integrations gets its own export path, like `tsinfra/apt` or `tsinfra/systemd`, so a script imports only the families it uses. The root, `tsinfra`, stays the core API: `host`, and every type a script annotates with. The file mode constants stay in the root too, because they're values for a core step's option, and their types have to be there for `FileOptions`. A subpath is an entry file like `src/facts.ts`, an `exports` entry in `package.json` with `types` and `import` like the root's, and whatever the build and knip need to treat it as an entry.
 
 ### Fact helpers
 
@@ -399,7 +398,6 @@ Integrations that might ship (see [Integrations worth shipping](#integrations-wo
 - a shell setup: rc lines and `PATH` entries
 - per-program config, like home-manager's `programs.*` for git, ssh, or a prompt
 - [macOS `defaults` keys](#macos-defaults)
-- maybe: default apps and file associations, with `duti` on macOS
 - maybe: fonts
 
 **System**
@@ -427,7 +425,7 @@ What's known so far about the ideas in [Integration ideas](#integration-ideas).
 
 #### Homebrew
 
-`tsinfra/brew`: a Brewfile, an `ensure` on `brew bundle check --no-upgrade` with `HOMEBREW_NO_AUTO_UPDATE` set, and nix-darwin's cleanup modes. `plan` computes the extras itself, because `brew bundle cleanup` prompts. The Brewfile goes to `brew bundle --file=-` through `input`, or is written with `file` when it's useful on its own, like for running `brew bundle --global` by hand.
+`tsinfra/integrations/brew`: a Brewfile, an `ensure` on `brew bundle check --no-upgrade` with `HOMEBREW_NO_AUTO_UPDATE` set, and nix-darwin's cleanup modes. `plan` computes the extras itself, because `brew bundle cleanup` prompts. The Brewfile goes to `brew bundle --file=-` through `input`, or is written with `file` when it's useful on its own, like for running `brew bundle --global` by hand.
 
 #### Portable integrations
 
@@ -443,15 +441,15 @@ One integration that takes an object of the settings to set, and sets only the k
 
 #### Docker images
 
-`tsinfra/docker`: container integrations, starting with the `want: []` `ensure` that keeps running containers on the newest images (see [Recipes](./recipes.md#running-the-latest-container-images)), if the Docker container ports repeat it.
+`tsinfra/integrations/docker`: container integrations, starting with the `want: []` `ensure` that keeps running containers on the newest images (see [Recipes](./recipes.md#running-the-latest-container-images)), if the Docker container ports repeat it.
 
 #### Lines in a file
 
-`tsinfra/files`: a managed block between marker lines, like Ansible's `blockinfile`, Salt's `file.blockreplace`, and pyinfra's `files.block`. Maybe a single-line function too, though Ansible itself warns against overusing `lineinfile`, and pyinfra's unanchored `files.line` match also catches `#foo` when you meant `foo`. Puppet's `file_line` has the cleanest options: `line`, `match`, `after`, and `multiple`.
+`tsinfra/integrations/files`: a managed block between marker lines, like Ansible's `blockinfile`, Salt's `file.blockreplace`, and pyinfra's `files.block`. Maybe a single-line function too, though Ansible itself warns against overusing `lineinfile`, and pyinfra's unanchored `files.line` match also catches `#foo` when you meant `foo`. Puppet's `file_line` has the cleanest options: `line`, `match`, `after`, and `multiple`.
 
 #### macOS defaults
 
-`tsinfra/macos`: each `defaults` key as an `ensure`, with `defaults read` as the check and `defaults write` as the fix, and a run that restarts Dock or Finder after. `defaults read` prints booleans as `1` and `0`. Like nix-darwin, a removed key stays as it was.
+`tsinfra/integrations/macos/defaults`: each `defaults` key as an `ensure`, with `defaults read` as the check and `defaults write` as the fix, and a run that restarts Dock or Finder after. `defaults read` prints booleans as `1` and `0`. Like nix-darwin, a removed key stays as it was.
 
 #### launchd
 

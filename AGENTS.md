@@ -1,6 +1,6 @@
 # AGENTS.md
 
-tsinfra's design lives in the docs: `docs/README.md` (the design notes), `docs/steps.md`, `docs/cli.md`, `docs/transport.md`, `docs/needs.md`, `docs/recipes.md`, and `docs/roadmap.md`. Read the doc for the area you're working on. This file holds only what the docs and the code don't make obvious.
+tsinfra's design lives in the docs: `docs/README.md` (the design notes), `docs/steps.md`, `docs/cli.md`, `docs/transport.md`, `docs/needs.md`, `docs/recipes.md`, `docs/integrations.md`, and `docs/roadmap.md`. Read the doc for the area you're working on. This file holds only what the docs and the code don't make obvious.
 
 ## Working with the user
 
@@ -71,7 +71,7 @@ Each name should say which side of a comparison it is. When naming anything in a
 
 ## Layout
 
-- **`src/` holds the CLI (`cli.ts`), the report (`report.ts`), and `core/`,** plus the published `index.ts` and code all three share (`mode.ts`, `styles.ts`, `utils.ts`). `core/` holds hosts, the session, and transports, the part of tsinfra that does the work. Nothing in `core/` imports the CLI or the report.
+- **`src/` holds the CLI (`cli.ts`), the report (`report.ts`), `core/`, and `integrations/`,** plus the published `index.ts` and code the first three share (`mode.ts`, `styles.ts`, `utils.ts`). `core/` holds hosts, the session, and transports, the part of tsinfra that does the work. Nothing in `core/` imports the CLI, the report, or an integration.
 - **A general helper goes in the `utils.ts` of the part that uses it:** `core/utils.ts`, `report/utils.ts`, or `src/utils.ts` when more than one part does. It goes there even with one caller, and doesn't get a file of its own. `src/utils.ts` imports no packages, because the launcher loads it.
 
 ## Architecture
@@ -79,7 +79,7 @@ Each name should say which side of a comparison it is. When naming anything in a
 - **A comparison records what tsinfra works out, and the report only formats it.** Whether a step is in sync, and what's unmet, missing, or extra, is worked out once, before masking, and the fix and the report read that one result. The report never compares two sides itself, because masking can make two different values look the same. Line diffs are the exception: the report computes them when it renders, because their time and line limits follow its verbosity.
 - **Deep comparisons use Remeda's `isDeepEqual`, never Bun's `deepEquals`.** Bun's tells `-0` from `0`, which the report shows as the same `0`, so every comparison uses one equality, whatever it compares.
 - **A generic over a step's `want` takes `T extends WantOf<T>`, never `T extends Want`.** `Want`'s record is an index signature, which a type an interface declares can't match. `RecordWantOf` maps each valid value to `unknown`, because a primitive there keeps `want`'s inferred values literal, so `{ a: "1" }` couldn't match a check that returns any string.
-- **`session.ts` is the only code that throws.** Everything the script can call (the `h` methods and the tools) is `callOrFail` around a `Result`-returning internal. `h.log` is synchronous, so its methods make the same checks without `callOrFail`.
+- **In `core/`, `session.ts` is the only code that throws.** Everything the script can call (the `h` methods and the tools) is `callOrFail` around a `Result`-returning internal. `h.log` is synchronous, so its methods make the same checks without `callOrFail`.
 - **Handlers never record anything.** What a step has one of is returned (`HandlerReturn { status, value }`), and what it has zero or more of is recorded by a wrapper it runs through.
 - **A check reports the same** whether it's a command string or a function with one `inspect`.
 - **`runProcess` doesn't pass `env` to `spawn`,** so a host script's changes to `process.env` never reach the commands tsinfra runs. Bun's `spawn` gives children the environment the process started with, so a test can't move `HOME` either. Instead, the test preload mocks `buildHostDetails` to give each host a temp `home`, ssh ones included, because the only sshds the tests reach run on the same machine as the same user.
@@ -102,3 +102,15 @@ Each name should say which side of a comparison it is. When naming anything in a
 - `handlers/shared/filesystem/` holds the filesystem building blocks (paths, sizes, stat commands, write-script pieces, and attributes), even when only one step uses one. `attributes.ts` holds the attribute types and their comparison, and its parts sit in `attributes/`: modes, owners, and the claims that keep two steps from setting one differently.
 - `handlers/options/` holds the options interfaces that steps' and tools' options extend, grouped by what the option is about, not by who takes it. `command.ts` holds how a command runs (`sudo`, `env`, `input`, `maskOutput`), `step.ts` what only steps take (`needs`) and the shell options `callStep` handles, and `attributes.ts` a path's owner and mode. Each handler keeps its own options interface and schema, extending these.
 - A value a script function returns is validated where it's used, not in `handlers/`'s top level.
+
+### `src/integrations/`
+
+- **An integration is code a host script could have written.** It uses only what `index.ts` exports, and throws like a script, with a message written as a sentence. Inside tsinfra it imports each name from the module that declares it, like `Host` from `core/session.ts`.
+- **Each integration's `index.ts` is its export path,** like `integrations/macos/file-handlers/index.ts` for `tsinfra/integrations/macos/file-handlers`. It declares everything the path exports, with its parts beside it in the same folder. `package.json` exports `./integrations/*` from each `index` file, so the parts and shared files like `jxa.ts` stay private, and tsdown builds every `index.ts` under `src/integrations/`. A new integration needs only its `index.ts` and a row in `src/__tests__/integrations.test.ts`, which fails until it has one. A fixture that imports it needs it declared in `src/__tests__/fixtures/tsinfra.d.ts`. No code imports another integration's `index.ts`, so a helper two integrations share moves to shared code first.
+- **Write JXA as typed TypeScript functions, not strings.** `toJxa` in `integrations/macos/jxa.ts` sends `fn.toString()` to `osascript` through `env`, because Bun strips the types on load. Each function must be self-contained, because only its own source reaches `osascript`. Coverage shows these functions as unrun, because they run in `osascript`. `integrations.test.ts` runs one from the packed package, because the build's output is what reaches `osascript`.
+- **The macOS tests only read and plan,** because applying would change the Mac running them. They're skipped off macOS, because CI runs on Ubuntu.
+- **`fileHandlers` sets handlers through the Launch Services API, never by editing its plist.** `lsd` keeps handlers in memory and overwrites `com.apple.launchservices.secure.plist` from that state, so a `defaults write ... LSHandlers` entry it didn't load reads as set until `lsd` next saves, then vanishes. `fileHandlers` calls `LSCopyDefaultRoleHandlerForContentType` and `LSSetDefaultRoleHandlerForContentType` through JXA instead.
+- **A handler change only counts once macOS has applied it.** On macOS 27, Launch Services treats every content type tried so far as protected, so a call from `osascript` returns success but only asks `CoreServicesUIAgent` to prompt the user. The agent applies the change after they agree. `fileHandlers` sends every change at once, because macOS groups some into one prompt, then `waitForHandlers` polls until they've all taken effect. The log shows the decision as `_LSCheckEntitlementValueForChangingDefaultHandler: result=NO: scheme or content type is protected`.
+- **Only Finder can handle `public.folder`.** Since macOS 26.6.2, Launch Services rejects any other app for it with status `-50`, and the log says `bindable public.folder failed validation`.
+- **`fileHandlers` sets only an extension's preferred type,** because that's the type its files get. The other types that list it can be the preferred type of another extension.
+- **`readInfoPlist` reads through `NSBundle` in JXA, not `plutil`.** `plutil -extract ... json` refuses a value that isn't an array or a dictionary, like a string.
