@@ -10,7 +10,7 @@ import { attempt } from "ts-explicit-errors"
 import { castInvalid, createSession, ensureOrMessage, getFailureMessage, throwBoom } from "#core/__tests__/session.ts"
 import type { Want } from "#core/session/handlers/ensure/want.ts"
 import type { ChangeTools } from "#core/session/handlers/tools.ts"
-import { getFinishedStepRecords } from "#core/session/recorder/records.ts"
+import { getFinishedStepRecords } from "#core/session/recorder/records/step.ts"
 import { getOwnValue } from "#utils.ts"
 
 // Read `key=value` lines into a record, the shape a record check returns.

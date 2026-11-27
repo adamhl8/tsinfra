@@ -16,7 +16,7 @@ import type { LoadedHost } from "#core/hosts/load.ts"
 import { finishHosts, initializeHosts } from "#core/hosts/prepare.ts"
 import { toSavedStatePath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
 import type { Host } from "#core/session.ts"
-import { getFinishedStepRecords } from "#core/session/recorder/records.ts"
+import { getFinishedStepRecords } from "#core/session/recorder/records/step.ts"
 
 const doNothing = async () => {
   /* empty */

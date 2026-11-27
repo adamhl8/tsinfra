@@ -4,7 +4,7 @@ import type { Result } from "ts-explicit-errors"
 import { isErr, messageChain } from "ts-explicit-errors"
 
 import { createRandomBytes } from "#core/__tests__/content.ts"
-import type { CommandRecord } from "#core/session/recorder/records.ts"
+import type { CommandRecord } from "#core/session/recorder/records/command.ts"
 import { getLocalTransport } from "#core/transport.ts"
 import { runLocal } from "#core/transport/local.ts"
 import type { RecordOutput, ShellOptions } from "#core/transport/shell.ts"

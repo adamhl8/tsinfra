@@ -5,30 +5,22 @@ import { err, isErr } from "ts-explicit-errors"
 import type { ValidHostOptions } from "#core/hosts/host.ts"
 import type { MessageKind } from "#core/session/handlers/log.ts"
 import type { ValidStepShellOptions } from "#core/session/handlers/options/step.ts"
-import type { Comparison } from "#core/session/handlers/shared/converge.ts"
+import type { ComparePhase, Comparison, ConvergePhase } from "#core/session/handlers/shared/converge.ts"
 import type { GetToolShell, ToolName, ValidToolOptions } from "#core/session/handlers/tools.ts"
 import type { HostMeta } from "#core/session/host-meta.ts"
 import { getFailureHints } from "#core/session/recorder/failure-hints.ts"
 import { addSecret, maskSecrets } from "#core/session/recorder/masking.ts"
-import type {
-  CommandRecord,
-  ConvergePhase,
-  HostRecord,
-  SessionFailureKind,
-  StepOptionsRecord,
-  StepOptionsToRecord,
-  StepMessageRecord,
-  StepRecord,
-  ToolCallRecord,
-} from "#core/session/recorder/records.ts"
-import { RECORDED_OPTION_DEFAULTS, RECORDED_STAND_INS } from "#core/session/recorder/records.ts"
+import type { HostRecord } from "#core/session/recorder/records.ts"
+import type { CommandRecord, ToolCallRecord } from "#core/session/recorder/records/command.ts"
+import type { SessionFailureKind } from "#core/session/recorder/records/failure.ts"
+import type { StepMessageRecord } from "#core/session/recorder/records/message.ts"
+import type { StepOptionsRecord, StepOptionsToRecord } from "#core/session/recorder/records/options.ts"
+import { RECORDED_OPTION_DEFAULTS, RECORDED_STAND_INS } from "#core/session/recorder/records/options.ts"
+import type { StepRecord } from "#core/session/recorder/records/step.ts"
 import type { StepKind, StepStatus } from "#core/session/step.ts"
 import type { Transport } from "#core/transport.ts"
 import type { CommandRecorder, RecordOutput, Shell } from "#core/transport/shell.ts"
 import { createShell } from "#core/transport/shell.ts"
-
-/** The phases of `converge` that compare the host with what the step wants. */
-export type ComparePhase = Exclude<ConvergePhase, "fix">
 
 /** What `converge` uses to record what it does, so a step's handler never records anything itself. */
 export interface ConvergeRecorder {

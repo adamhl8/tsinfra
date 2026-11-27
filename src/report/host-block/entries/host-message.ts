@@ -1,4 +1,4 @@
-import type { HostMessageRecord } from "#core/session/recorder/records.ts"
+import type { HostMessageRecord } from "#core/session/recorder/records/message.ts"
 import type { HostMessageEntry } from "#report/host-block.ts"
 import { MESSAGE_LEVELS } from "#report/host-block/details/step-messages.ts"
 

@@ -1,4 +1,4 @@
-import type { FinishedStepRecord, StepRecord } from "#core/session/recorder/records.ts"
+import type { FinishedStepRecord, StepRecord } from "#core/session/recorder/records/step.ts"
 import type { StepKind, StepStatus } from "#core/session/step.ts"
 import type { Mode } from "#mode.ts"
 import type { EntryName, FinishedStepEntry, NameKind } from "#report/host-block.ts"

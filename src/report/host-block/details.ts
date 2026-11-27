@@ -1,4 +1,6 @@
-import type { CommandRecord, FailureHint, FinishedStepRecord, StepRecord } from "#core/session/recorder/records.ts"
+import type { FailureHint } from "#core/session/recorder/failure-hints.ts"
+import type { CommandRecord } from "#core/session/recorder/records/command.ts"
+import type { FinishedStepRecord, StepRecord } from "#core/session/recorder/records/step.ts"
 import type { ComparisonValues } from "#core/session/step.ts"
 import type { Detail } from "#report/host-block.ts"
 import { toCommandsDetail, toCommandsDetails } from "#report/host-block/details/commands.ts"

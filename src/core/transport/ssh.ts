@@ -73,3 +73,33 @@ export const createSshTransport = (target: string, sshOptions: string[]): Transp
 export const closeSshConnection = async (target: string) => {
   await runProcess(["ssh", "-o", CONTROL_PATH_OPTION, "-O", "stop", "--", target], "")
 }
+
+/** A way to fix a failure that ssh printed the reason for, recorded as its kind, so the report picks the words. */
+export type SshFailureHint =
+  // ssh found a key that differs from the one in `known_hosts`.
+  | { kind: "changedHostKey" }
+  // ssh found no key for the host in `known_hosts`, under `StrictHostKeyChecking yes`.
+  | { kind: "unknownHostKey"; target: string }
+
+/** What `getSshFailureHint` needs to know about the host. */
+interface SshFailureHintContext {
+  target: string
+}
+
+/** Returns the hint for an ssh failure that `failureTexts` show. */
+export const getSshFailureHint = (
+  hintContext: SshFailureHintContext,
+  failureTexts: string[],
+): SshFailureHint | undefined => {
+  const { target } = hintContext
+  const hasFailedWith = (text: string) => failureTexts.some((failureText) => failureText.includes(text))
+
+  // Match ssh's banner for a key that differs from the one in `known_hosts`. Check it first, because ssh ends it with
+  // `Host key verification failed` too. Offer no way around it, because a changed key can mean a different host.
+  if (hasFailedWith("REMOTE HOST IDENTIFICATION HAS CHANGED")) return { kind: "changedHostKey" }
+
+  // Match the line ssh ends an unknown host with under `StrictHostKeyChecking yes`, which the user chose.
+  if (hasFailedWith("Host key verification failed")) return { kind: "unknownHostKey", target }
+
+  return undefined
+}

@@ -1,4 +1,4 @@
-import type { ConvergePhase } from "#core/session/recorder/records.ts"
+import type { ConvergePhase } from "#core/session/handlers/shared/converge.ts"
 import { formatCommandOutputLines } from "#report/format/details/command-output.ts"
 import { formatOptions } from "#report/format/details/options.ts"
 import { formatStepMessageLines } from "#report/format/details/step-messages.ts"

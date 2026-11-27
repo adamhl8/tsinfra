@@ -1,9 +1,6 @@
-import type {
-  CommandRecord,
-  HostRecord,
-  RecordedFailure,
-  RecordedUnownedFailure,
-} from "#core/session/recorder/records.ts"
+import type { HostRecord } from "#core/session/recorder/records.ts"
+import type { CommandRecord } from "#core/session/recorder/records/command.ts"
+import type { RecordedFailure, RecordedUnownedFailure } from "#core/session/recorder/records/failure.ts"
 import type { Detail, EntryName, FailureEntry } from "#report/host-block.ts"
 import {
   toHintDetails,

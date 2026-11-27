@@ -11,7 +11,7 @@ import type { HomeDirectory } from "#core/hosts/prepare/host-details/facts/home.
 import { toSavedStatePath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
 import type { EnsureOptions } from "#core/session/handlers/ensure.ts"
 import type { HostRecord } from "#core/session/recorder/records.ts"
-import { getFinishedStepRecords } from "#core/session/recorder/records.ts"
+import { getFinishedStepRecords } from "#core/session/recorder/records/step.ts"
 
 /** Returns an `ensure` that makes `marker`, so it changes the first time it runs. */
 const makeMarker = (marker: string): EnsureOptions<boolean> => ({

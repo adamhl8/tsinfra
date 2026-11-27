@@ -1,6 +1,7 @@
 import { isErr } from "ts-explicit-errors"
 
-import type { CommandRecord, StepRecord } from "#core/session/recorder/records.ts"
+import type { CommandRecord } from "#core/session/recorder/records/command.ts"
+import type { StepRecord } from "#core/session/recorder/records/step.ts"
 import type { Detail, StillDiffersPhase } from "#report/host-block.ts"
 import { toComparisonValuesDetails } from "#report/host-block/details/comparisons.ts"
 

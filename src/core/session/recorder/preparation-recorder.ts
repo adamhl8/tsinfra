@@ -1,6 +1,7 @@
 import type { ValidHostOptions } from "#core/hosts/host.ts"
 import { getFailureHints } from "#core/session/recorder/failure-hints.ts"
-import type { CommandRecord, HostRecord, HostWarningRecord } from "#core/session/recorder/records.ts"
+import type { HostRecord, HostWarningRecord } from "#core/session/recorder/records.ts"
+import type { CommandRecord } from "#core/session/recorder/records/command.ts"
 import type { Transport } from "#core/transport.ts"
 import type { CommandRecorder, RecordOutput, Shell } from "#core/transport/shell.ts"
 import { createShell } from "#core/transport/shell.ts"

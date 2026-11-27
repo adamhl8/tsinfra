@@ -6,7 +6,7 @@ import type { FileComparisonValues } from "#core/session/handlers/file/compariso
 import type { LinkComparisonValues } from "#core/session/handlers/link/comparison.ts"
 import type { PathAttributeClaim } from "#core/session/handlers/shared/filesystem/attributes/claims.ts"
 import type { ChangeTools, ReadTools } from "#core/session/handlers/tools.ts"
-import type { StepOptionsToRecord } from "#core/session/recorder/records.ts"
+import type { StepOptionsToRecord } from "#core/session/recorder/records/options.ts"
 import type { ConvergeRecorder } from "#core/session/recorder/session-recorder.ts"
 import type { SavedStateManager } from "#core/session/saved-state.ts"
 import type { Shell } from "#core/transport/shell.ts"

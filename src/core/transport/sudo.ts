@@ -38,3 +38,26 @@ export const createPasswordlessSudoTransport = (transport: Transport): Transport
 /** Returns a transport whose scripts' `sudo` gets `password` through the askpass helper at `helperPath`. */
 export const createAskpassSudoTransport = (transport: Transport, password: string, helperPath: string): Transport =>
   withSudoFunction(transport, buildAskpassSudoFunction(password, helperPath))
+
+/** A way to fix sudo needing a password on a host that leaves the `sudo` option off, recorded as its kind. */
+export interface SudoFailureHint {
+  kind: "sudoOption"
+}
+
+/** What `getSudoFailureHint` needs to know about the host. */
+interface SudoFailureHintContext {
+  hasSudoOption: boolean
+}
+
+/** Returns the hint for a sudo failure that `failureTexts` show. */
+export const getSudoFailureHint = (
+  hintContext: SudoFailureHintContext,
+  failureTexts: string[],
+): SudoFailureHint | undefined => {
+  // Hint at the `sudo` option only on a host that leaves it off, because a host that sets it already did the fix.
+  if (hintContext.hasSudoOption) return undefined
+
+  // Match the line `sudo -n` prints when it needs a password. It's English only, so another locale gets no hint.
+  const needsPassword = failureTexts.some((failureText) => failureText.includes("sudo: a password is required"))
+  return needsPassword ? { kind: "sudoOption" } : undefined
+}

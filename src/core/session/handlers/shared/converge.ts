@@ -2,7 +2,6 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { StepNeeds } from "#core/session/handlers/options/step.ts"
-import type { ComparePhase } from "#core/session/recorder/session-recorder.ts"
 import type { ChangeStepKind, ComparisonValues, StepContext, StepStatus } from "#core/session/step.ts"
 
 /**
@@ -13,6 +12,12 @@ export interface Comparison<V extends ComparisonValues = ComparisonValues> {
   inSync: boolean
   values: V
 }
+
+/** The parts of `converge` that run commands, in order. */
+export type ConvergePhase = "before" | "fix" | "after"
+
+/** The phases of `converge` that compare the host with what the step wants. */
+export type ComparePhase = Exclude<ConvergePhase, "fix">
 
 /**
  * What a step gives `converge`: how to read the host's state, how to compare it, how to fix it, and whether to compare

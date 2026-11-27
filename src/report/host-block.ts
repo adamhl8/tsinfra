@@ -3,14 +3,11 @@ import type { RecordComparisonValues } from "#core/session/handlers/ensure/compa
 import type { FileComparisonValues } from "#core/session/handlers/file/comparison.ts"
 import type { LinkComparisonValues } from "#core/session/handlers/link/comparison.ts"
 import type { MessageKind } from "#core/session/handlers/log.ts"
+import type { ConvergePhase } from "#core/session/handlers/shared/converge.ts"
 import type { ToolName } from "#core/session/handlers/tools.ts"
-import type {
-  ConvergePhase,
-  FailureHint,
-  HostRecord,
-  HostWarningRecord,
-  RecordedUnownedFailure,
-} from "#core/session/recorder/records.ts"
+import type { FailureHint } from "#core/session/recorder/failure-hints.ts"
+import type { HostRecord, HostWarningRecord } from "#core/session/recorder/records.ts"
+import type { RecordedUnownedFailure } from "#core/session/recorder/records/failure.ts"
 import type { StepKind, StepStatus } from "#core/session/step.ts"
 import type { Mode } from "#mode.ts"
 import { toHostBlockEntries } from "#report/host-block/entries.ts"

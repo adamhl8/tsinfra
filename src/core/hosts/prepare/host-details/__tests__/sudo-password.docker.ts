@@ -19,7 +19,7 @@ import {
 } from "#core/__tests__/session.ts"
 import { SSHD_TARGET, startSshd, stopSshd } from "#core/__tests__/sshd.ts"
 import type { Host, SessionContext } from "#core/session.ts"
-import { getFinishedStepRecords } from "#core/session/recorder/records.ts"
+import { getFinishedStepRecords } from "#core/session/recorder/records/step.ts"
 import { closeConnections } from "#core/transport.ts"
 
 // `setup.sh` gives this user this password.

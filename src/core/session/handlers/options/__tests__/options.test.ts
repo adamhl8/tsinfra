@@ -7,7 +7,7 @@ import { attempt, isErr, messageChain } from "ts-explicit-errors"
 import { castInvalid, createSession, getFailureMessage } from "#core/__tests__/session.ts"
 import type { Host } from "#core/session.ts"
 import type { ReadOptions } from "#core/session/handlers/read.ts"
-import { getFinishedStepRecords } from "#core/session/recorder/records.ts"
+import { getFinishedStepRecords } from "#core/session/recorder/records/step.ts"
 
 const SECRET = "s3cret-value"
 

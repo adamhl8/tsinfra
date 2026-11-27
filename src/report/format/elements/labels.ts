@@ -1,4 +1,4 @@
-import type { ConvergePhase } from "#core/session/recorder/records.ts"
+import type { ConvergePhase } from "#core/session/handlers/shared/converge.ts"
 import { styleItalic, styleMuted, styleValue } from "#styles.ts"
 
 /** Formats a row's label with its colon, like `got:`, muted so the value after it stands out. */

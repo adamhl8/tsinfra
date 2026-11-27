@@ -18,8 +18,9 @@ import {
   runOrMessage,
 } from "#core/__tests__/session.ts"
 import type { Host } from "#core/session.ts"
-import type { FinishedStepRecord, HostRecord, StepRecord } from "#core/session/recorder/records.ts"
-import { getFinishedStepRecords } from "#core/session/recorder/records.ts"
+import type { HostRecord } from "#core/session/recorder/records.ts"
+import type { FinishedStepRecord, StepRecord } from "#core/session/recorder/records/step.ts"
+import { getFinishedStepRecords } from "#core/session/recorder/records/step.ts"
 
 const DUPLICATE_ENSURE_NAME = "an earlier ensure step has the same name, and step names must be unique in a host script"
 
