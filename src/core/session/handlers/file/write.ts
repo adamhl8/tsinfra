@@ -1,6 +1,7 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
+import type { HandlerContext } from "#core/session/context.ts"
 import type { ValidFileOptions } from "#core/session/handlers/file.ts"
 import type { HostFileDetails } from "#core/session/handlers/file/host-file-details.ts"
 import type { ResolvedFileContent } from "#core/session/handlers/file/resolved-content.ts"
@@ -18,7 +19,6 @@ import {
   buildTempDirectoryLines,
   toWriteScriptPaths,
 } from "#core/session/handlers/shared/filesystem/write-script.ts"
-import type { StepContext } from "#core/session/step.ts"
 import { HEREDOC_DELIMITER, createCommandExitError } from "#core/utils.ts"
 
 // Stand in for the content in the record, because it may be a secret and it can be large.
@@ -100,12 +100,12 @@ const buildFileWriteScript = (
  * on a failure.
  */
 export const writeFile = async (
-  ctx: StepContext,
+  ctx: HandlerContext,
   hostFileDetails: HostFileDetails,
   fileWrite: FileWrite,
   options: ValidFileOptions,
 ): Promise<Result> => {
-  const { shell } = ctx
+  const { shell } = ctx.step
   const { path } = hostFileDetails
   const { resolvedContent, validateCommand } = fileWrite
 

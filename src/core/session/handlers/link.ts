@@ -2,6 +2,7 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
+import type { HandlerContext } from "#core/session/context.ts"
 import { compareLink } from "#core/session/handlers/link/comparison.ts"
 import { getHostLinkDetails } from "#core/session/handlers/link/host-link-details.ts"
 import { writeLink } from "#core/session/handlers/link/write.ts"
@@ -16,7 +17,7 @@ import { converge } from "#core/session/handlers/shared/converge.ts"
 import { claimPathAttributes } from "#core/session/handlers/shared/filesystem/attributes/claims.ts"
 import { validateHostPath } from "#core/session/handlers/shared/filesystem/path.ts"
 import { validateInput } from "#core/session/handlers/shared/validate-input.ts"
-import type { HandlerReturn, StepContext } from "#core/session/step.ts"
+import type { HandlerReturn } from "#core/session/step.ts"
 
 export interface LinkOptions extends OwnerOptions, SudoOptions, NeedsOptions {
   /** Replaces a regular file or an empty directory at the path. A directory with files in it is an error. */
@@ -50,12 +51,14 @@ const linkOptionsSchema = type
 export type ValidLinkOptions = typeof linkOptionsSchema.infer
 
 export const handleLink = async (
-  ctx: StepContext<"link">,
+  ctx: HandlerContext<"link">,
   path: unknown,
   target: unknown,
   options: unknown = {},
 ): Promise<Result<HandlerReturn<ChangeStepResult<"link">>>> => {
-  const { kind, shell, home, recordOptions } = ctx
+  const { kind, shell } = ctx.step
+  const { home } = ctx.session.facts
+  const { recordOptions } = ctx.session.recorder
 
   const absolutePath = validateHostPath(path, home, { inputLabel: "path", givenTo: kind })
   if (isErr(absolutePath)) return absolutePath

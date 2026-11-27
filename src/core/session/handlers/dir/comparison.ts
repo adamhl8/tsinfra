@@ -1,6 +1,7 @@
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
+import type { HandlerContext } from "#core/session/context.ts"
 import type { ValidDirOptions } from "#core/session/handlers/dir.ts"
 import type { HostDirDetails } from "#core/session/handlers/dir/host-dir-details.ts"
 import type { RecordWant } from "#core/session/handlers/ensure/comparison/record.ts"
@@ -9,7 +10,6 @@ import type { Comparison } from "#core/session/handlers/shared/converge.ts"
 import type { HostFileAttributeDetails } from "#core/session/handlers/shared/filesystem/attributes.ts"
 import { parseFileMode } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 import { checkCanSetOwner } from "#core/session/handlers/shared/filesystem/attributes/owner.ts"
-import type { StepContext } from "#core/session/step.ts"
 
 /** Returns what the script wants: the directory, and each attribute it gave, with the mode as its bits. */
 const toDirWant = (options: ValidDirOptions): RecordWant => {
@@ -44,11 +44,11 @@ const toCurrentDirRecord = (attributes: HostFileAttributeDetails | undefined, op
  * key that differs as a record `want`'s row. Fails a write that can't work.
  */
 export const compareDir = async (
-  ctx: StepContext,
+  ctx: HandlerContext,
   hostDirDetails: HostDirDetails,
   options: ValidDirOptions,
 ): Promise<Result<Comparison>> => {
-  const { shell } = ctx
+  const { shell } = ctx.step
   const { path } = hostDirDetails
 
   const attributes = hostDirDetails.kind === "new" ? undefined : hostDirDetails.attributes

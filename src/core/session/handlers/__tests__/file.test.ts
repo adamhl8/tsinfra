@@ -944,7 +944,8 @@ describe("h.file with overwrite: false", () => {
 describe("handleFile", () => {
   // Call the handler directly, because `h.file` rejects this path first, when it validates the step's name.
   it("should fail a path that isn't a string", async () => {
-    const result = await handleFile(castInvalid({ stepName: "x", kind: "file" }), 1, "a\n")
+    const ctx = castInvalid({ step: { name: "x", kind: "file" }, session: { facts: {}, recorder: {} } })
+    const result = await handleFile(ctx, 1, "a\n")
 
     expect(result).toBeInstanceOf(Error)
     expect(messageChain(castInvalid(result))).toBe(

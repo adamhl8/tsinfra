@@ -1,11 +1,11 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
+import type { HandlerContext } from "#core/session/context.ts"
 import type { ValidDirOptions } from "#core/session/handlers/dir.ts"
 import type { HostDirDetails } from "#core/session/handlers/dir/host-dir-details.ts"
 import { parseFileMode } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 import { buildAttributeLines } from "#core/session/handlers/shared/filesystem/write-script.ts"
-import type { StepContext } from "#core/session/step.ts"
 import { quoteShellArg } from "#core/utils.ts"
 
 /**
@@ -26,11 +26,11 @@ const buildDirWriteScript = (hostDirDetails: HostDirDetails, options: ValidDirOp
 
 /** Makes the directory on the host with one script, with the owner and mode the script gave. */
 export const writeDir = async (
-  ctx: StepContext,
+  ctx: HandlerContext,
   hostDirDetails: HostDirDetails,
   options: ValidDirOptions,
 ): Promise<Result> => {
-  const { shell } = ctx
+  const { shell } = ctx.step
   const { path } = hostDirDetails
 
   const writeScript = buildDirWriteScript(hostDirDetails, options)

@@ -2,6 +2,7 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
+import type { HandlerContext } from "#core/session/context.ts"
 import { compareDir } from "#core/session/handlers/dir/comparison.ts"
 import { getHostDirDetails } from "#core/session/handlers/dir/host-dir-details.ts"
 import { writeDir } from "#core/session/handlers/dir/write.ts"
@@ -16,7 +17,7 @@ import { converge } from "#core/session/handlers/shared/converge.ts"
 import { claimPathAttributes } from "#core/session/handlers/shared/filesystem/attributes/claims.ts"
 import { validateHostPath } from "#core/session/handlers/shared/filesystem/path.ts"
 import { validateInput } from "#core/session/handlers/shared/validate-input.ts"
-import type { HandlerReturn, StepContext } from "#core/session/step.ts"
+import type { HandlerReturn } from "#core/session/step.ts"
 
 export interface DirOptions extends FileAttributeOptions, SudoOptions, NeedsOptions {}
 
@@ -31,11 +32,12 @@ const dirOptionsSchema = type
 export type ValidDirOptions = typeof dirOptionsSchema.infer
 
 export const handleDir = async (
-  ctx: StepContext<"dir">,
+  ctx: HandlerContext<"dir">,
   path: unknown,
   options: unknown = {},
 ): Promise<Result<HandlerReturn<ChangeStepResult<"dir">>>> => {
-  const { kind, shell, home } = ctx
+  const { kind, shell } = ctx.step
+  const { home } = ctx.session.facts
 
   const absolutePath = validateHostPath(path, home, { inputLabel: "path", givenTo: kind })
   if (isErr(absolutePath)) return absolutePath

@@ -98,26 +98,26 @@ describe("initializeHosts and finishHosts", () => {
 
 describe("initializeHosts and finishHosts with saved state", () => {
   it("should read no saved state for a host with none, and keep the read off preparation's record", async () => {
-    const { sessionContext, hostRecord } = await preparePreparedHost(createLocalHost())
+    const { sessionSetup, hostRecord } = await preparePreparedHost(createLocalHost())
 
-    expect(sessionContext.savedStateManager.isOpen("Caddyfile")).toBe(false)
+    expect(sessionSetup.savedStateManager.isOpen("Caddyfile")).toBe(false)
     expect(hostRecord.preparationCommands.some(({ cmd }) => cmd.includes(".tsinfra/state"))).toBe(false)
   })
 
   it("should read the saved state an earlier preparation of the host left", async () => {
     const loadedHost = createLocalHost()
-    const { sessionContext: firstContext } = await preparePreparedHost(loadedHost)
+    const { sessionSetup: firstContext } = await preparePreparedHost(loadedHost)
     await firstContext.savedStateManager.openChange("Caddyfile")
 
-    const { sessionContext: secondContext } = await preparePreparedHost(loadedHost)
+    const { sessionSetup: secondContext } = await preparePreparedHost(loadedHost)
 
     expect(secondContext.savedStateManager.isOpen("Caddyfile")).toBe(true)
   })
 
   it("should fail preparation, naming the file, when the saved state isn't saved state tsinfra wrote", async () => {
     const loadedHost = createLocalHost()
-    const { sessionContext } = await preparePreparedHost(loadedHost)
-    const savedStatePath = toSavedStatePath(sessionContext.facts.home, "a")
+    const { sessionSetup } = await preparePreparedHost(loadedHost)
+    const savedStatePath = toSavedStatePath(sessionSetup.facts.home, "a")
     await bun.write(savedStatePath, "{")
 
     const { hostRecord } = await prepareOne(loadedHost)

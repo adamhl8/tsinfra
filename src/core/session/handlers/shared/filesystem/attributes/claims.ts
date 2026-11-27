@@ -2,9 +2,10 @@ import { uniqueBy } from "remeda"
 import type { Result } from "ts-explicit-errors"
 import { err } from "ts-explicit-errors"
 
+import type { HandlerContext } from "#core/session/context.ts"
 import type { FileAttributeOptions, FileOwner } from "#core/session/handlers/options/attributes.ts"
 import { parseFileMode, toOctalMode } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
-import type { StepContext, StepKind } from "#core/session/step.ts"
+import type { StepKind } from "#core/session/step.ts"
 
 /** A step's claim on one attribute of a path: the value it sets, like a file's mode or a link target's user. */
 export interface PathAttributeClaim {
@@ -16,8 +17,8 @@ export interface PathAttributeClaim {
 }
 
 /** Lists the step's claims, one for each attribute `options` sets. */
-const toPathAttributeClaims = (ctx: StepContext, options: FileAttributeOptions): PathAttributeClaim[] => {
-  const { stepName, kind } = ctx
+const toPathAttributeClaims = (ctx: HandlerContext, options: FileAttributeOptions): PathAttributeClaim[] => {
+  const { name: stepName, kind } = ctx.step
   const { mode, user, group } = options
 
   const modeClaims: PathAttributeClaim[] =
@@ -32,8 +33,8 @@ const toPathAttributeClaims = (ctx: StepContext, options: FileAttributeOptions):
  * other. Records the attributes the step sets otherwise. Compares each attribute on its own, so two steps can set
  * different attributes of one path.
  */
-export const claimPathAttributes = (ctx: StepContext, path: string, options: FileAttributeOptions): Result => {
-  const { pathAttributeClaims } = ctx
+export const claimPathAttributes = (ctx: HandlerContext, path: string, options: FileAttributeOptions): Result => {
+  const { pathAttributeClaims } = ctx.session.stepHistory
 
   const earlierClaims = pathAttributeClaims.get(path) ?? []
   const claims = toPathAttributeClaims(ctx, options)

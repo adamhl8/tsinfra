@@ -1,20 +1,22 @@
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
+import type { HandlerContext } from "#core/session/context.ts"
 import type { EnvOptions, InputOptions, MaskOptions } from "#core/session/handlers/options/command.ts"
 import { runExecCommand, validateToolCall } from "#core/session/handlers/tools.ts"
-import type { HandlerReturn, StepContext } from "#core/session/step.ts"
+import type { HandlerReturn } from "#core/session/step.ts"
 
 /** The options `h.read` takes. */
 export interface ReadOptions extends EnvOptions, InputOptions, MaskOptions {}
 
 /** Runs the `read` step, which runs the same command as the `read` tool and gives the script its stdout. */
 export const handleRead = async (
-  ctx: StepContext<"read">,
+  ctx: HandlerContext<"read">,
   cmd: unknown,
   options: unknown = {},
 ): Promise<Result<HandlerReturn<string>>> => {
-  const { shell, recordOptions } = ctx
+  const { shell } = ctx.step
+  const { recordOptions } = ctx.session.recorder
 
   const toolCall = validateToolCall("read", cmd, options)
   if (isErr(toolCall)) return toolCall

@@ -4,6 +4,7 @@ import { isErr } from "ts-explicit-errors"
 
 import type { Content } from "#core/content.ts"
 import { contentSchema, INVALID_CONTENT_REASON } from "#core/content.ts"
+import type { HandlerContext } from "#core/session/context.ts"
 import { compareFile } from "#core/session/handlers/file/comparison.ts"
 import { getHostFileDetails } from "#core/session/handlers/file/host-file-details.ts"
 import { resolveContent } from "#core/session/handlers/file/resolved-content.ts"
@@ -21,7 +22,7 @@ import { converge } from "#core/session/handlers/shared/converge.ts"
 import { claimPathAttributes } from "#core/session/handlers/shared/filesystem/attributes/claims.ts"
 import { validateHostPath } from "#core/session/handlers/shared/filesystem/path.ts"
 import { validateInput } from "#core/session/handlers/shared/validate-input.ts"
-import type { HandlerReturn, StepContext } from "#core/session/step.ts"
+import type { HandlerReturn } from "#core/session/step.ts"
 
 /**
  * What the file should hold: a string or bytes computed on the control machine, or a `Blob` like `bun.file(...)` for a
@@ -64,12 +65,14 @@ const fileOptionsSchema = type
 export type ValidFileOptions = typeof fileOptionsSchema.infer
 
 export const handleFile = async (
-  ctx: StepContext<"file">,
+  ctx: HandlerContext<"file">,
   path: unknown,
   content: unknown,
   options: unknown = {},
 ): Promise<Result<HandlerReturn<ChangeStepResult<"file">>>> => {
-  const { kind, shell, home, recordOptions } = ctx
+  const { kind, shell } = ctx.step
+  const { home } = ctx.session.facts
+  const { recordOptions } = ctx.session.recorder
 
   const absolutePath = validateHostPath(path, home, { inputLabel: "path", givenTo: kind })
   if (isErr(absolutePath)) return absolutePath

@@ -2,8 +2,8 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { attempt, isErr } from "ts-explicit-errors"
 
+import type { HandlerContext } from "#core/session/context.ts"
 import type { ChangeTools } from "#core/session/handlers/tools.ts"
-import type { StepContext } from "#core/session/step.ts"
 import { nonEmptyStringSchema } from "#core/session/step.ts"
 
 /**
@@ -20,11 +20,12 @@ export const changeSchema = type.declare<Change>().type(nonEmptyStringSchema.or(
 
 /** Runs `change` as a command, or calls the script's function with its tools and `extra`, and catches what it throws. */
 export const runChange = async <TExtra extends unknown[]>(
-  ctx: StepContext,
+  ctx: HandlerContext,
   change: Change<TExtra>,
   ...extra: TExtra
 ): Promise<Result> => {
-  const { shell, changeTools } = ctx
+  const { shell, tools } = ctx.step
+  const { changeTools } = tools
 
   // Discard what `change` returns, because `attempt` would treat a returned `Error` as a thrown one.
   // Only a throw fails a change.

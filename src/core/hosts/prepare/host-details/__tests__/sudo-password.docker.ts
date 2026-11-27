@@ -10,8 +10,8 @@ import type { Result } from "ts-explicit-errors"
 import { isErr, messageChain } from "ts-explicit-errors"
 
 import {
-  buildLocalSessionContext,
-  buildSessionContextOn,
+  buildLocalSessionSetup,
+  buildSessionSetupOn,
   createSession,
   createSessionOn,
   fileOrMessage,
@@ -19,7 +19,8 @@ import {
 } from "#core/__tests__/session.ts"
 import { SSHD_TARGET, startSshd, stopSshd } from "#core/__tests__/sshd.ts"
 import { getFinishedStepRecords } from "#core/recorder/records/step.ts"
-import type { Host, SessionContext } from "#core/session.ts"
+import type { Host } from "#core/session.ts"
+import type { SessionSetup } from "#core/session/context.ts"
 import { closeConnections } from "#core/transport.ts"
 
 // `setup.sh` gives this user this password.
@@ -45,8 +46,8 @@ const writeAppAskpassHelper = async (h: Host, env: Record<string, string> = {}) 
 }
 
 /** Returns why preparing a host failed as its message chain, or `prepared`. */
-const toPreparationMessage = (sessionContext: Result<SessionContext>) =>
-  isErr(sessionContext) ? messageChain(sessionContext) : "prepared"
+const toPreparationMessage = (sessionSetup: Result<SessionSetup>) =>
+  isErr(sessionSetup) ? messageChain(sessionSetup) : "prepared"
 
 describe("a user whose sudo needs a password", () => {
   it("should write a root-only file with the password from host(), and keep it off the record", async () => {
@@ -83,13 +84,13 @@ describe("a user whose sudo needs a password", () => {
   })
 
   it("should fail in preparation with only its own message for a wrong password from host()", async () => {
-    expect(toPreparationMessage(await buildLocalSessionContext({ sudo: { password: "wrong" } }))).toBe(
+    expect(toPreparationMessage(await buildLocalSessionSetup({ sudo: { password: "wrong" } }))).toBe(
       "incorrect sudo password",
     )
   })
 
   it("should fail in preparation with sudo: true and no password", async () => {
-    expect(toPreparationMessage(await buildLocalSessionContext({ sudo: true }))).toBe(
+    expect(toPreparationMessage(await buildLocalSessionSetup({ sudo: true }))).toBe(
       "needs a sudo password: set up passwordless sudo, or pass sudo: { password } to host() -> exited with code 1: sudo: a password is required",
     )
   })
@@ -135,7 +136,7 @@ describe("a user whose sudo needs a password, over ssh", () => {
   })
 
   it("should fail in preparation with only its own message for a wrong password from host()", async () => {
-    expect(toPreparationMessage(await buildSessionContextOn(SSHD_TARGET, { sudo: { password: "wrong" } }))).toBe(
+    expect(toPreparationMessage(await buildSessionSetupOn(SSHD_TARGET, { sudo: { password: "wrong" } }))).toBe(
       "incorrect sudo password",
     )
   })

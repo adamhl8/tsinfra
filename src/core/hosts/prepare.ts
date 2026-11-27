@@ -14,7 +14,7 @@ import { createHostRecord } from "#core/recorder/records.ts"
 import { createSessionRecorder } from "#core/recorder/session-recorder.ts"
 import type { SavedStateManager } from "#core/saved-state.ts"
 import { createSavedStateManager } from "#core/saved-state.ts"
-import type { SessionContext } from "#core/session.ts"
+import type { SessionSetup } from "#core/session/context.ts"
 import { createShell } from "#core/transport/shell.ts"
 
 /** A host after preparation: ready to run its function, or failed, with the record that says why. */
@@ -25,7 +25,7 @@ interface PreparedHostEntry {
   preparation: "prepared"
   hostFn: HostFunction
   hostRecord: HostRecord
-  sessionContext: SessionContext
+  sessionSetup: SessionSetup
 }
 
 /** A host whose preparation failed, so its function never runs. Its record holds why. */
@@ -88,8 +88,8 @@ const finishHost = async (initializedHost: InitializedHost): Promise<Result<Prep
   const { facts, transport, sudoPassword } = readyHostDetails
   const meta = createHostMeta(loadedHost.name, sudoPassword)
   const sessionRecorder = createSessionRecorder(hostRecord, loadedHost.options, transport, meta)
-  const sessionContext: SessionContext = { meta, facts, savedStateManager, sessionRecorder }
-  return { preparation: "prepared", hostFn: loadedHost.fn, hostRecord, sessionContext }
+  const sessionSetup: SessionSetup = { meta, facts, savedStateManager, sessionRecorder }
+  return { preparation: "prepared", hostFn: loadedHost.fn, hostRecord, sessionSetup }
 }
 
 /**

@@ -1,21 +1,23 @@
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
+import type { HandlerContext } from "#core/session/context.ts"
 import type { EnvOptions, InputOptions, MaskOptions } from "#core/session/handlers/options/command.ts"
 import type { InspectResult } from "#core/session/handlers/tools.ts"
 import { runInspectCommand, validateToolCall } from "#core/session/handlers/tools.ts"
-import type { HandlerReturn, StepContext } from "#core/session/step.ts"
+import type { HandlerReturn } from "#core/session/step.ts"
 
 /** The options `h.inspect` takes. */
 export interface InspectOptions extends EnvOptions, InputOptions, MaskOptions {}
 
 /** Runs the `inspect` step, which runs the same command as the `inspect` tool and gives the script its result. */
 export const handleInspect = async (
-  ctx: StepContext<"inspect">,
+  ctx: HandlerContext<"inspect">,
   cmd: unknown,
   options: unknown = {},
 ): Promise<Result<HandlerReturn<InspectResult>>> => {
-  const { shell, recordOptions } = ctx
+  const { shell } = ctx.step
+  const { recordOptions } = ctx.session.recorder
 
   const toolCall = validateToolCall("inspect", cmd, options)
   if (isErr(toolCall)) return toolCall

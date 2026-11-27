@@ -2,13 +2,14 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
+import type { HandlerContext } from "#core/session/context.ts"
 import type { EnvOptions } from "#core/session/handlers/options/command.ts"
 import type { HandlerOptions } from "#core/session/handlers/options/step.ts"
 import type { ChangeStepResult } from "#core/session/handlers/shared/change-step-result.ts"
 import { changeStepResultSchema, withChangeStepResult } from "#core/session/handlers/shared/change-step-result.ts"
 import { changeSchema, runChange } from "#core/session/handlers/shared/change.ts"
 import { validateInput } from "#core/session/handlers/shared/validate-input.ts"
-import type { FollowUpStatus, HandlerReturn, StepContext } from "#core/session/step.ts"
+import type { FollowUpStatus, HandlerReturn } from "#core/session/step.ts"
 
 /** What makes a run run: the steps it follows, or `"always"`. */
 export type RunTrigger = ChangeStepResult[] | "always"
@@ -40,17 +41,19 @@ type TriggerStatus = FollowUpStatus | "unchanged"
  * this pass is `ranAlways`, `ran` when any other step in `after` changed in this pass, `ranFromOpenChanges` when a step
  * in `after` has an open change missing this run, and `unchanged` otherwise.
  */
-const evaluateTrigger = (ctx: StepContext<"run">, options: RunOptions): TriggerStatus => {
-  const { stepName, savedStateManager, changedStepNames, ranAlwaysStepNames } = ctx
+const evaluateTrigger = (ctx: HandlerContext<"run">, options: RunOptions): TriggerStatus => {
+  const { name: stepName } = ctx.step
+  const { savedStateManager, stepHistory } = ctx.session
+  const { changedNames, ranAlwaysNames } = stepHistory
   const { after } = options
   if (after === "always") return "ranAlways"
 
-  // Check `changedStepNames`, not `changed`, because `changed` is the script's value, not whether the step changed.
+  // Check `changedNames`, not `changed`, because `changed` is the script's value, not whether the step changed.
   // The script's `changed` is also true when the step's change is still open from an earlier apply.
-  const changedFollowedSteps = after.filter(({ name }) => changedStepNames.has(name))
+  const changedFollowedSteps = after.filter(({ name }) => changedNames.has(name))
   if (changedFollowedSteps.length > 0) {
     // Mark a run `ranAlways` when it follows only runs that run on every pass, because it then runs on every pass too.
-    const isTriggeredOnlyByRanAlways = changedFollowedSteps.every(({ name }) => ranAlwaysStepNames.has(name))
+    const isTriggeredOnlyByRanAlways = changedFollowedSteps.every(({ name }) => ranAlwaysNames.has(name))
     return isTriggeredOnlyByRanAlways ? "ranAlways" : "ran"
   }
 
@@ -63,11 +66,12 @@ const evaluateTrigger = (ctx: StepContext<"run">, options: RunOptions): TriggerS
 }
 
 export const handleRun = async (
-  ctx: StepContext<"run">,
+  ctx: HandlerContext<"run">,
   change: unknown,
   options: unknown,
 ): Promise<Result<HandlerReturn<ChangeStepResult<"run">>>> => {
-  const { stepName, kind, mode, savedStateManager } = ctx
+  const { name: stepName, kind } = ctx.step
+  const { mode, savedStateManager } = ctx.session
 
   const validChange = validateInput(change, changeSchema, { inputLabel: "command", givenTo: kind })
   if (isErr(validChange)) return validChange

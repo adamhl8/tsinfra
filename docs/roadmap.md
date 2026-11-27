@@ -5,7 +5,6 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 <!-- toc -->
 
 - [Next](#next)
-  - [Grouping the step context](#grouping-the-step-context)
   - [Recording fact warnings](#recording-fact-warnings)
   - [Recorded step warnings](#recorded-step-warnings)
   - [Step entries](#step-entries)
@@ -44,17 +43,6 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 ## Next
 
 In the order they'll be built.
-
-### Grouping the step context
-
-`StepContext` mixes what changes per step with what stays the same for the whole host, because passing a value down on the context was the easy way to reach a handler. Group it, as one object:
-
-- **Per step, at the top level:** `stepName`, `kind`, `shell`, `readTools`, and `changeTools`, which are built from the step's options.
-- **Per host, under `ctx.session`:** the recorders, `savedStateManager`, `mode`, `home`, and the sets the steps of a run share, like `changedStepNames`, `ranAlwaysStepNames`, and `pathAttributeClaims`.
-
-Keep the context explicit, rather than a store a module imports. A store keyed by host still needs its key passed down, and its lookup can miss. The context reaches only orchestrators, like the handlers, the compares, the writes, and `converge`, and the leaves already take only the values they use. An `AsyncLocalStorage` store for the recorder is the one ambient design worth a prototype, to compare against, because it needs no key passed down. It hides which code records, though.
-
-Restate the recording rule in AGENTS.md as what the code does: code records through the recorders on its context, where it finds something, like `recordOptions` right after validating options. `HandlerReturn` carries only the status `callStep` records and the value the script gets.
 
 ### Recording fact warnings
 

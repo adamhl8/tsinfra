@@ -1,16 +1,15 @@
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
-import type { SessionContext } from "#core/session.ts"
 import { createStepNameClaims } from "#core/session/call-step/step-names.ts"
+import type { HandlerContext, SessionContext, SessionSetup } from "#core/session/context.ts"
 import type { StepShellOptions } from "#core/session/handlers/options/step.ts"
 import { stepShellOptionsSchema } from "#core/session/handlers/options/step.ts"
-import type { PathAttributeClaim } from "#core/session/handlers/shared/filesystem/attributes/claims.ts"
 import { validateInput } from "#core/session/handlers/shared/validate-input.ts"
 import type { ChangeTools, Exec, GetToolShell, Inspect, ReadTools } from "#core/session/handlers/tools.ts"
 import { execCommand, inspectCommand } from "#core/session/handlers/tools.ts"
 import type { CallOrFail, ScriptBoundary } from "#core/session/script-boundary.ts"
-import type { HandlerReturn, StepContext, StepKind } from "#core/session/step.ts"
+import type { HandlerReturn, StepKind } from "#core/session/step.ts"
 import { nonEmptyStringSchema } from "#core/session/step.ts"
 import type { Mode } from "#mode.ts"
 
@@ -39,19 +38,23 @@ const createTools = (callOrFail: CallOrFail, getToolShell: GetToolShell) => {
 }
 
 /** Returns the function that runs each of one host's steps, with what the steps of its session share. */
-export const createCallStep = (sessionContext: SessionContext, mode: Mode, scriptBoundary: ScriptBoundary) => {
-  const { facts, savedStateManager, sessionRecorder } = sessionContext
+export const createCallStep = (sessionSetup: SessionSetup, mode: Mode, scriptBoundary: ScriptBoundary) => {
+  const { facts, savedStateManager, sessionRecorder } = sessionSetup
   const { home } = facts
-  const { getStepShells, recordOptions, startStep, finishStep, failStep, convergeRecorder } = sessionRecorder
+  const { getStepShells, startStep, finishStep, failStep } = sessionRecorder
   const { callOrFail } = scriptBoundary
 
   const claimStepName = createStepNameClaims(home)
 
-  // Share these across the session's steps, because a step checks whether the steps it follows or needs changed.
+  // Share `stepHistory` across the session's steps, because a step checks whether the steps it follows or needs changed.
   // A run also checks whether the steps it follows run on every pass, and a path step checks what earlier ones set.
-  const changedStepNames = new Set<string>()
-  const ranAlwaysStepNames = new Set<string>()
-  const pathAttributeClaims = new Map<string, PathAttributeClaim[]>()
+  const session: SessionContext = {
+    mode,
+    facts,
+    savedStateManager,
+    recorder: sessionRecorder,
+    stepHistory: { changedNames: new Set(), ranAlwaysNames: new Set(), pathAttributeClaims: new Map() },
+  }
 
   /**
    * Runs one step: records it, runs `handler` with the step's context, and records how it turned out. Returns the value
@@ -60,7 +63,7 @@ export const createCallStep = (sessionContext: SessionContext, mode: Mode, scrip
   const callStep = async <K extends StepKind, T>(
     stepName: unknown,
     kind: K,
-    handler: (ctx: StepContext<K>) => Promise<Result<HandlerReturn<T>>>,
+    handler: (ctx: HandlerContext<K>) => Promise<Result<HandlerReturn<T>>>,
     options: StepShellOptions = {},
   ): Promise<T> =>
     callOrFail(async () => {
@@ -88,23 +91,8 @@ export const createCallStep = (sessionContext: SessionContext, mode: Mode, scrip
       }
 
       const { stepShell, getToolShell } = getStepShells(validOptions)
-      const { readTools, changeTools } = createTools(callOrFail, getToolShell)
-
-      const ctx: StepContext<K> = {
-        stepName: validName,
-        kind,
-        mode,
-        shell: stepShell,
-        home,
-        savedStateManager,
-        changedStepNames,
-        ranAlwaysStepNames,
-        pathAttributeClaims,
-        readTools,
-        changeTools,
-        convergeRecorder,
-        recordOptions,
-      }
+      const tools = createTools(callOrFail, getToolShell)
+      const ctx: HandlerContext<K> = { step: { name: validName, kind, shell: stepShell, tools }, session }
 
       const handlerReturn = await handler(ctx)
       if (isErr(handlerReturn)) {

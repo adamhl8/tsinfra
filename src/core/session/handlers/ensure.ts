@@ -2,6 +2,7 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
+import type { HandlerContext } from "#core/session/context.ts"
 import type { Check } from "#core/session/handlers/ensure/check.ts"
 import { checkSchema } from "#core/session/handlers/ensure/check.ts"
 import { compareCheck, getWantKind } from "#core/session/handlers/ensure/comparison.ts"
@@ -18,7 +19,7 @@ import { withChangeStepResult } from "#core/session/handlers/shared/change-step-
 import { runChange } from "#core/session/handlers/shared/change.ts"
 import { converge } from "#core/session/handlers/shared/converge.ts"
 import { validateInput } from "#core/session/handlers/shared/validate-input.ts"
-import type { HandlerReturn, StepContext } from "#core/session/step.ts"
+import type { HandlerReturn } from "#core/session/step.ts"
 
 /** `T` ties a check function's return type, and a fix function's difference, to `want`. */
 export interface EnsureOptions<T extends WantOf<T>> extends NeedsOptions, EnvOptions {
@@ -64,10 +65,12 @@ const ensureOptionsSchema = type
   .pipe((options) => ({ verify: true, needs: NO_NEEDS, ...options, want: tagWant(options.want) }))
 
 export const handleEnsure = async (
-  ctx: StepContext<"ensure">,
+  ctx: HandlerContext<"ensure">,
   options: unknown,
 ): Promise<Result<HandlerReturn<ChangeStepResult<"ensure">>>> => {
-  const { kind, shell, readTools, recordOptions } = ctx
+  const { kind, shell, tools } = ctx.step
+  const { readTools } = tools
+  const { recordOptions } = ctx.session.recorder
 
   const validOptions = validateInput(options, ensureOptionsSchema, { inputLabel: "options", givenTo: kind })
   if (isErr(validOptions)) return validOptions

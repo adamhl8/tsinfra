@@ -1,9 +1,8 @@
 import type { HostOptions } from "#core/hosts/host.ts"
 import type { HostFacts } from "#core/hosts/prepare/host-details/facts.ts"
 import type { HostMeta } from "#core/hosts/prepare/host-meta.ts"
-import type { SessionRecorder } from "#core/recorder/session-recorder.ts"
-import type { SavedStateManager } from "#core/saved-state.ts"
 import { createCallStep } from "#core/session/call-step.ts"
+import type { SessionSetup } from "#core/session/context.ts"
 import type { DirOptions } from "#core/session/handlers/dir.ts"
 import { handleDir } from "#core/session/handlers/dir.ts"
 import type { EnsureOptions } from "#core/session/handlers/ensure.ts"
@@ -28,15 +27,6 @@ import { createLog } from "#core/session/log.ts"
 import { createScriptBoundary } from "#core/session/script-boundary.ts"
 import type { StepKind } from "#core/session/step.ts"
 import type { Mode } from "#mode.ts"
-
-/** What a host's session needs, set up before any script runs. */
-export interface SessionContext {
-  meta: HostMeta
-  facts: HostFacts
-  /** The host's saved state, read when it was prepared. */
-  savedStateManager: SavedStateManager
-  sessionRecorder: SessionRecorder
-}
 
 // Extend `Record<StepKind, unknown>` so a step kind with no method fails to compile.
 /**
@@ -120,11 +110,11 @@ export interface Host<O extends HostOptions = HostOptions> extends Record<StepKi
  * `sessionRecorder`, where the script can't see it. Every method goes through the script boundary, which is the only
  * code that throws.
  */
-export const createHostSession = (sessionContext: SessionContext, mode: Mode): Host => {
-  const { meta, facts, sessionRecorder } = sessionContext
+export const createHostSession = (sessionSetup: SessionSetup, mode: Mode): Host => {
+  const { meta, facts, sessionRecorder } = sessionSetup
   const scriptBoundary = createScriptBoundary(sessionRecorder)
   const log = createLog(sessionRecorder, scriptBoundary)
-  const callStep = createCallStep(sessionContext, mode, scriptBoundary)
+  const callStep = createCallStep(sessionSetup, mode, scriptBoundary)
 
   const host: Host = {
     meta,

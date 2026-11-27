@@ -9,9 +9,9 @@ import type { Mode } from "#mode.ts"
 export const runHost = async (hostEntry: HostEntry, mode: Mode): Promise<HostRecord> => {
   if (hostEntry.preparation === "failed") return hostEntry.hostRecord
 
-  const { hostFn, hostRecord, sessionContext } = hostEntry
+  const { hostFn, hostRecord, sessionSetup } = hostEntry
 
-  const host = createHostSession(sessionContext, mode)
+  const host = createHostSession(sessionSetup, mode)
   const fnResult = await attempt(async () => hostFn(host))
 
   // Keep the failure the session recorded as it is, because a script that catches it can go on to throw something else.
@@ -19,7 +19,7 @@ export const runHost = async (hostEntry: HostEntry, mode: Mode): Promise<HostRec
 
   // Record a throw with no failure before it as the host function's, because no step is running.
   if (isErr(fnResult)) {
-    sessionContext.sessionRecorder.recordFailure(fnResult, "host fn")
+    sessionSetup.sessionRecorder.recordFailure(fnResult, "host fn")
     return hostRecord
   }
 
@@ -27,8 +27,8 @@ export const runHost = async (hostEntry: HostEntry, mode: Mode): Promise<HostRec
   // A host that failed returned above, so it keeps them, and its next apply triggers what this one missed.
   if (mode !== "apply") return hostRecord
 
-  const closeAllResult = await sessionContext.savedStateManager.closeAll()
-  if (isErr(closeAllResult)) sessionContext.sessionRecorder.recordFailure(closeAllResult, "saved state")
+  const closeAllResult = await sessionSetup.savedStateManager.closeAll()
+  if (isErr(closeAllResult)) sessionSetup.sessionRecorder.recordFailure(closeAllResult, "saved state")
 
   return hostRecord
 }

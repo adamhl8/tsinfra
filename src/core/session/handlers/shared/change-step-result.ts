@@ -2,7 +2,8 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
-import type { ChangeStepKind, HandlerReturn, StepContext, StepStatus } from "#core/session/step.ts"
+import type { HandlerContext } from "#core/session/context.ts"
+import type { ChangeStepKind, HandlerReturn, StepStatus } from "#core/session/step.ts"
 import { CHANGE_STEP_KINDS } from "#core/session/step.ts"
 
 /**
@@ -46,16 +47,18 @@ const COUNTS_AS_CHANGED: Record<StepStatus, boolean> = {
  * change is still open from an earlier apply `resume`.
  */
 export const withChangeStepResult = <K extends ChangeStepKind>(
-  ctx: StepContext<K>,
+  ctx: HandlerContext<K>,
   handlerStatus: Result<StepStatus>,
 ): Result<HandlerReturn<ChangeStepResult<K>>> => {
-  const { stepName, kind, savedStateManager, changedStepNames, ranAlwaysStepNames } = ctx
+  const { name: stepName, kind } = ctx.step
+  const { savedStateManager, stepHistory } = ctx.session
+  const { changedNames, ranAlwaysNames } = stepHistory
   if (isErr(handlerStatus)) return handlerStatus
 
   // Add the step from the handler's own status, before it can become `resume`, because the sets hold only the steps
   // that changed in this pass.
-  if (COUNTS_AS_CHANGED[handlerStatus]) changedStepNames.add(stepName)
-  if (handlerStatus === "ranAlways") ranAlwaysStepNames.add(stepName)
+  if (COUNTS_AS_CHANGED[handlerStatus]) changedNames.add(stepName)
+  if (handlerStatus === "ranAlways") ranAlwaysNames.add(stepName)
 
   // Open a step's change in this apply only right before it changes something, which makes it `changed`, `ran`, or
   // `ranAlways`. `plan` never opens one.

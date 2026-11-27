@@ -1,13 +1,13 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
+import type { HandlerContext } from "#core/session/context.ts"
 import type { ValidLinkOptions } from "#core/session/handlers/link.ts"
 import type { HostLinkDetails } from "#core/session/handlers/link/host-link-details.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
 import type { AttributeChange, OwnerChange } from "#core/session/handlers/shared/filesystem/attributes.ts"
 import { findAttributeChanges } from "#core/session/handlers/shared/filesystem/attributes.ts"
 import { checkCanSetOwner, findOwnerChanges } from "#core/session/handlers/shared/filesystem/attributes/owner.ts"
-import type { StepContext } from "#core/session/step.ts"
 
 /**
  * How the path becomes a link to the wanted target: a new link, one that replaces something, or one that changes its
@@ -74,12 +74,12 @@ export const isLinkItselfInSync = (linkChanges: LinkChanges): boolean => {
 
 /** Compares what's at the link's path on the host with what the script wants, and fails a write that can't work. */
 export const compareLink = async (
-  ctx: StepContext,
+  ctx: HandlerContext,
   hostLinkDetails: HostLinkDetails,
   target: string,
   options: ValidLinkOptions,
 ): Promise<Result<Comparison>> => {
-  const { shell } = ctx
+  const { shell } = ctx.step
   const { kind: linkDetailsKind, path, targetAttributes } = hostLinkDetails
   const { force, targetAttributes: targetAttributeOptions } = options
 

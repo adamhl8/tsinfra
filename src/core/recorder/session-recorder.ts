@@ -23,7 +23,7 @@ import type { CommandRecorder, RecordOutput, Shell } from "#core/transport/shell
 import { createShell } from "#core/transport/shell.ts"
 
 /** What `converge` uses to record what it does, so a step's handler never records anything itself. */
-export interface ConvergeRecorder {
+interface ConvergeRecorder {
   /** Marks the part of `converge` that commands run under from now on. */
   startPhase: (phase: ConvergePhase) => void
   /** Records what a compare found on the running step. */
@@ -66,18 +66,12 @@ const toRecordedOptions = (options: StepOptionsToRecord): StepOptionsRecord => {
 }
 
 /** Records the session's part of a host's run, once preparation has finished: each step, and the host's failure. */
-export interface SessionRecorder extends FailureRecorder, MessageRecorder {
+export interface SessionRecorder extends FailureRecorder, MessageRecorder, StepRecorder {
   /**
    * Records the shell options the running step set, and returns its shells, built once for the step. Recording and
    * building in one call keeps the record and the commands from disagreeing.
    */
   getStepShells: (options: ValidStepShellOptions) => StepShells
-  /**
-   * Records `options` on the running step, after any it already has, masked, and leaves out each one at its default.
-   * Records an option like `input` as its stand-in. A step's handler calls it right after validating its options, so a
-   * failure can't lose them.
-   */
-  recordOptions: (options: StepOptionsToRecord) => void
   /** Records a new step and marks it running, or fails when another step is running. */
   startStep: (stepName: string, kind: StepKind) => Result
   /**
@@ -87,7 +81,6 @@ export interface SessionRecorder extends FailureRecorder, MessageRecorder {
   finishStep: (status: StepStatus) => void
   /** Fails the running step with `error`, and marks no step as running. */
   failStep: (error: Error) => void
-  convergeRecorder: ConvergeRecorder
 }
 
 /** Reads and records the host's one failure, which the script boundary checks on every call. */
@@ -99,6 +92,17 @@ export interface FailureRecorder {
    * a step that was running makes it its own when it finishes.
    */
   recordFailure: (error: Error, kind: SessionFailureKind) => Error
+}
+
+/** The part of the session recorder a step's code records through, where it finds something. */
+export interface StepRecorder {
+  /**
+   * Records `options` on the running step, after any it already has, masked, and leaves out each one at its default.
+   * Records an option like `input` as its stand-in. A step's handler calls it right after validating its options, so a
+   * failure can't lose them.
+   */
+  recordOptions: (options: StepOptionsToRecord) => void
+  convergeRecorder: ConvergeRecorder
 }
 
 /** Records the messages the script logs with `h.log`. */
@@ -295,11 +299,11 @@ export const createSessionRecorder = (
     getFailure,
     recordFailure,
     recordMessage,
-    getStepShells,
     recordOptions,
+    convergeRecorder,
+    getStepShells,
     startStep,
     finishStep,
     failStep,
-    convergeRecorder,
   }
 }

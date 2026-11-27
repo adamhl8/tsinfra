@@ -23,8 +23,9 @@ import type { FinishedStepRecord, StepRecord } from "#core/recorder/records/step
 import { getFinishedStepRecords } from "#core/recorder/records/step.ts"
 import { createSessionRecorder } from "#core/recorder/session-recorder.ts"
 import { savedStateFileSchema } from "#core/saved-state/schema.ts"
-import type { Host, SessionContext } from "#core/session.ts"
+import type { Host } from "#core/session.ts"
 import { createHostSession } from "#core/session.ts"
+import type { SessionSetup } from "#core/session/context.ts"
 import type { EnsureOptions } from "#core/session/handlers/ensure.ts"
 import type { WantOf } from "#core/session/handlers/ensure/want.ts"
 import type { ReadOptions } from "#core/session/handlers/read.ts"
@@ -89,18 +90,18 @@ export const getPreparationFailure = (hostRecord: HostRecord): Error => {
 }
 
 /** Prepares one host the way a run does, and returns its context, or why it couldn't be prepared. */
-const prepareSessionContext = async (loadedHost: LoadedHost): Promise<Result<SessionContext>> => {
+const prepareSessionSetup = async (loadedHost: LoadedHost): Promise<Result<SessionSetup>> => {
   const hostEntry = await prepareHostEntry(loadedHost)
-  return hostEntry.preparation === "prepared" ? hostEntry.sessionContext : getPreparationFailure(hostEntry.hostRecord)
+  return hostEntry.preparation === "prepared" ? hostEntry.sessionSetup : getPreparationFailure(hostEntry.hostRecord)
 }
 
 /** Prepares a host 'a' on `target`, and returns its context, or why it couldn't be prepared. */
-export const buildSessionContextOn = async (target: string, hostOptions?: TestHostOptions) =>
-  prepareSessionContext(loadTestHost(target, hostOptions))
+export const buildSessionSetupOn = async (target: string, hostOptions?: TestHostOptions) =>
+  prepareSessionSetup(loadTestHost(target, hostOptions))
 
 /** Prepares a host 'a' on `@local`. */
-export const buildLocalSessionContext = async (hostOptions?: TestHostOptions) =>
-  buildSessionContextOn(LOCAL_TARGET, hostOptions)
+export const buildLocalSessionSetup = async (hostOptions?: TestHostOptions) =>
+  buildSessionSetupOn(LOCAL_TARGET, hostOptions)
 
 /** A test's view of a prepared host: the `Host` its function would get, and the record its session fills in. */
 interface TestSession {
@@ -126,14 +127,14 @@ const preparePreparedHostEntry = async (loadedHost: LoadedHost) => {
   const hostEntry = await prepareHostEntry(loadedHost)
   if (hostEntry.preparation === "failed") throw getPreparationFailure(hostEntry.hostRecord)
 
-  const { hostRecord, sessionContext } = hostEntry
-  return { hostRecord, sessionContext }
+  const { hostRecord, sessionSetup } = hostEntry
+  return { hostRecord, sessionSetup }
 }
 
 /** Prepares `loadedHost` the way a run does, and creates its session. */
 export const prepareSession = async (loadedHost: LoadedHost, mode: Mode): Promise<TestSession> => {
-  const { sessionContext, hostRecord } = await preparePreparedHostEntry(loadedHost)
-  return { host: createHostSession(sessionContext, mode), hostRecord, home: sessionContext.facts.home }
+  const { sessionSetup, hostRecord } = await preparePreparedHostEntry(loadedHost)
+  return { host: createHostSession(sessionSetup, mode), hostRecord, home: sessionSetup.facts.home }
 }
 
 /** Creates a session for a host 'a' on `target`. */
@@ -149,9 +150,9 @@ export const createSession = async (mode: Mode = "apply", hostOptions?: TestHost
  * host this machine isn't, like a Linux one.
  */
 export const createSessionWithFacts = async (mode: Mode, facts: Partial<HostFacts>): Promise<TestSession> => {
-  const { sessionContext, hostRecord } = await preparePreparedHostEntry(loadTestHost())
-  const hostFacts = Object.freeze({ ...sessionContext.facts, ...facts })
-  return { host: createHostSession({ ...sessionContext, facts: hostFacts }, mode), hostRecord, home: hostFacts.home }
+  const { sessionSetup, hostRecord } = await preparePreparedHostEntry(loadTestHost())
+  const hostFacts = Object.freeze({ ...sessionSetup.facts, ...facts })
+  return { host: createHostSession({ ...sessionSetup, facts: hostFacts }, mode), hostRecord, home: hostFacts.home }
 }
 
 /** Writes a shell script named `name` into `binDir`, to stand in for a command on `PATH`. */
@@ -171,7 +172,7 @@ export const createWrappedSession = async (
   wrapTransport: (transport: Transport) => Transport,
 ): Promise<TestSession> => {
   const loadedHost = loadTestHost()
-  const { sessionContext, hostRecord } = await preparePreparedHostEntry(loadedHost)
+  const { sessionSetup, hostRecord } = await preparePreparedHostEntry(loadedHost)
 
   // Record this second preparation on a recorder of its own, because the session's record already has the first.
   const { name, target, options } = loadedHost
@@ -184,12 +185,12 @@ export const createWrappedSession = async (
     hostRecord,
     options,
     wrapTransport(hostDetails.transport),
-    sessionContext.meta,
+    sessionSetup.meta,
   )
   return {
-    host: createHostSession({ ...sessionContext, sessionRecorder }, mode),
+    host: createHostSession({ ...sessionSetup, sessionRecorder }, mode),
     hostRecord,
-    home: sessionContext.facts.home,
+    home: sessionSetup.facts.home,
   }
 }
 
@@ -221,8 +222,8 @@ export const createFakeSudoSession = async (mode: Mode) => {
 
 /** Prepares `loadedHost` once, and returns the home its saved state goes under, which later preparations reuse. */
 export const getPreparedHome = async (loadedHost: LoadedHost) => {
-  const { sessionContext } = await preparePreparedHostEntry(loadedHost)
-  return sessionContext.facts.home
+  const { sessionSetup } = await preparePreparedHostEntry(loadedHost)
+  return sessionSetup.facts.home
 }
 
 /** What a test passes to `loadHostThatStopsBeforeRun`. */

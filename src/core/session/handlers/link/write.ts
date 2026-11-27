@@ -1,6 +1,7 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
+import type { HandlerContext } from "#core/session/context.ts"
 import type { ValidLinkOptions } from "#core/session/handlers/link.ts"
 import { findLinkChanges, isLinkItselfInSync } from "#core/session/handlers/link/comparison.ts"
 import type { HostLinkDetails } from "#core/session/handlers/link/host-link-details.ts"
@@ -13,7 +14,6 @@ import {
   buildTempDirectoryLines,
   toWriteScriptPaths,
 } from "#core/session/handlers/shared/filesystem/write-script.ts"
-import type { StepContext } from "#core/session/step.ts"
 import { quoteShellArg } from "#core/utils.ts"
 
 /** Returns the lines that make the link under a temp name, then rename it into place (see `docs/transport.md`). */
@@ -89,12 +89,12 @@ const buildLinkWriteScript = (hostLinkDetails: HostLinkDetails, target: string, 
  * exceptions (see `docs/transport.md`).
  */
 export const writeLink = async (
-  ctx: StepContext,
+  ctx: HandlerContext,
   hostLinkDetails: HostLinkDetails,
   target: string,
   options: ValidLinkOptions,
 ): Promise<Result> => {
-  const { shell } = ctx
+  const { shell } = ctx.step
   const { path } = hostLinkDetails
 
   const writeScript = buildLinkWriteScript(hostLinkDetails, target, options)

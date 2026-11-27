@@ -1,8 +1,9 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
+import type { HandlerContext } from "#core/session/context.ts"
 import type { StepNeeds } from "#core/session/handlers/options/step.ts"
-import type { ChangeStepKind, ComparisonValues, StepContext, StepStatus } from "#core/session/step.ts"
+import type { ChangeStepKind, ComparisonValues, StepStatus } from "#core/session/step.ts"
 
 /**
  * How the part of the host one step manages compared with what the step wants, and the values it compared. Takes the
@@ -52,10 +53,13 @@ const FAILED_COMPARE_MESSAGE = "failed to compare the host with what the step wa
  * connection drops right after the fix succeeds.
  */
 export const converge = async <HostDetails, V extends ComparisonValues>(
-  ctx: StepContext<ChangeStepKind>,
+  ctx: HandlerContext<ChangeStepKind>,
   spec: ConvergeSpec<HostDetails, V>,
 ): Promise<Result<StepStatus>> => {
-  const { stepName, mode, savedStateManager, changedStepNames, convergeRecorder } = ctx
+  const { name: stepName } = ctx.step
+  const { mode, savedStateManager, recorder, stepHistory } = ctx.session
+  const { convergeRecorder } = recorder
+  const { changedNames } = stepHistory
   const { startPhase, recordComparison, recordWaitingOn } = convergeRecorder
   const { needs, getHostDetails, compare, fix, verify } = spec
 
@@ -73,7 +77,7 @@ export const converge = async <HostDetails, V extends ComparisonValues>(
 
   // Skip reading the state in `plan` when a needed step would change, because the read would miss that change.
   // Wait only on needed steps that changed in this pass.
-  const pendingNeeds = needs.filter(({ name }) => changedStepNames.has(name)).map(({ name }) => name)
+  const pendingNeeds = needs.filter(({ name }) => changedNames.has(name)).map(({ name }) => name)
   if (mode === "plan" && pendingNeeds.length > 0) {
     recordWaitingOn(pendingNeeds)
     return "waiting"
