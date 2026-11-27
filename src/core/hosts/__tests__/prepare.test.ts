@@ -73,6 +73,9 @@ describe("initializeHosts and finishHosts", () => {
 
     expect(hostRecord.preparationCommands).toMatchObject([
       { cmd: `printf '%s' "$HOME"`, label: "home directory", output: { exitCode: 0 } },
+      { cmd: "uname -s", output: { exitCode: 0 } },
+      { cmd: "uname -m", output: { exitCode: 0 } },
+      { label: "os-release", output: { exitCode: 0 } },
       { cmd: "id -un", label: "user name", output: { exitCode: 0 } },
     ])
     expect(getFinishedStepRecords(hostRecord).map(({ commands }) => commands.map(({ cmd }) => cmd))).toStrictEqual([
@@ -114,7 +117,7 @@ describe("initializeHosts and finishHosts with saved state", () => {
   it("should fail preparation, naming the file, when the saved state isn't saved state tsinfra wrote", async () => {
     const loadedHost = createLocalHost()
     const { sessionContext } = await preparePreparedHost(loadedHost)
-    const savedStatePath = toSavedStatePath(sessionContext.home, "a")
+    const savedStatePath = toSavedStatePath(sessionContext.facts.home, "a")
     await bun.write(savedStatePath, "{")
 
     const { hostRecord } = await prepareOne(loadedHost)

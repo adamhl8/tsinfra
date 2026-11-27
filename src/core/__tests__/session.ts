@@ -11,8 +11,9 @@ import { host, hostDefinitionSchema } from "#core/hosts/host.ts"
 import type { LoadedHost } from "#core/hosts/load.ts"
 import { toLoadedHost } from "#core/hosts/load.ts"
 import { finishHosts, initializeHosts } from "#core/hosts/prepare.ts"
-import type { HomeDirectory } from "#core/hosts/prepare/host-details.ts"
 import { buildHostDetails } from "#core/hosts/prepare/host-details.ts"
+import type { HostFacts } from "#core/hosts/prepare/host-details/facts.ts"
+import type { HomeDirectory } from "#core/hosts/prepare/host-details/facts/home.ts"
 import { toSavedStatePath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
 import { runHost } from "#core/hosts/run.ts"
 import type { Host, SessionContext } from "#core/session.ts"
@@ -130,7 +131,7 @@ const preparePreparedHostEntry = async (loadedHost: LoadedHost) => {
 /** Prepares `loadedHost` the way a run does, and creates its session. */
 export const prepareSession = async (loadedHost: LoadedHost, mode: Mode): Promise<TestSession> => {
   const { sessionContext, hostRecord } = await preparePreparedHostEntry(loadedHost)
-  return { host: createHostSession(sessionContext, mode), hostRecord, home: sessionContext.home }
+  return { host: createHostSession(sessionContext, mode), hostRecord, home: sessionContext.facts.home }
 }
 
 /** Creates a session for a host 'a' on `target`. */
@@ -140,6 +141,16 @@ export const createSessionOn = async (target: string, mode: Mode, hostOptions?: 
 /** Creates a session for a host 'a' on `@local`. */
 export const createSession = async (mode: Mode = "apply", hostOptions?: TestHostOptions) =>
   createSessionOn(LOCAL_TARGET, mode, hostOptions)
+
+/**
+ * Creates a session for a host 'a' on `@local` whose facts have `facts` in place of the real ones, to stand in for a
+ * host this machine isn't, like a Linux one.
+ */
+export const createSessionWithFacts = async (mode: Mode, facts: Partial<HostFacts>): Promise<TestSession> => {
+  const { sessionContext, hostRecord } = await preparePreparedHostEntry(loadTestHost())
+  const hostFacts = Object.freeze({ ...sessionContext.facts, ...facts })
+  return { host: createHostSession({ ...sessionContext, facts: hostFacts }, mode), hostRecord, home: hostFacts.home }
+}
 
 /** Writes a shell script named `name` into `binDir`, to stand in for a command on `PATH`. */
 export const writeFakeTool = async (binDir: string, name: string, body: string) => {
@@ -176,7 +187,7 @@ export const createWrappedSession = async (
   return {
     host: createHostSession({ ...sessionContext, sessionRecorder }, mode),
     hostRecord,
-    home: sessionContext.home,
+    home: sessionContext.facts.home,
   }
 }
 
@@ -209,7 +220,7 @@ export const createFakeSudoSession = async (mode: Mode) => {
 /** Prepares `loadedHost` once, and returns the home its saved state goes under, which later preparations reuse. */
 export const getPreparedHome = async (loadedHost: LoadedHost) => {
   const { sessionContext } = await preparePreparedHostEntry(loadedHost)
-  return sessionContext.home
+  return sessionContext.facts.home
 }
 
 /** What a test passes to `loadHostThatStopsBeforeRun`. */

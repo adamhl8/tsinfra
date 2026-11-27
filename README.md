@@ -35,6 +35,7 @@ Write one script per machine. A script reads top to bottom and is made of idempo
 - [Failures](#failures)
 - [Output](#output)
 - [Integrations](#integrations)
+- [Facts](#facts)
 - [CLI Reference](#cli-reference)
 - [Design](#design)
 - [License](#license)
@@ -530,21 +531,21 @@ h.read(cmd: string, options?: ReadOptions): Promise<string>
 h.inspect(cmd: string, options?: InspectOptions): Promise<{ stdout: string; stderr: string; exitCode: number }>
 ```
 
-Run a command in both `plan` and `apply`, and return what it printed, for facts your script branches on.
+Run a command in both `plan` and `apply`, and return what it printed, for facts your script branches on that [`h.facts`](#facts) doesn't hold.
 
 - `read` returns stdout, and fails on a non-zero exit.
 - `inspect` returns stdout, stderr, and the exit code, and never fails on a non-zero exit.
 - Options: `env`, `secretEnv`, and `maskOutput` (see [Values and secrets](#values-and-secrets))
 
 ```ts
-const arch = await h.read("uname -m")
+const cpuCount = Number(await h.read("nproc"))
 
 const container = await h.inspect("systemd-detect-virt --container")
 if (container.exitCode !== 0) await tuneKernel(h)
 ```
 
 - Read a fact once at the top level, and use it inside a step through the closure.
-- Only branch on facts no step changes, like the CPU architecture. For state a step changes, use `ensure`.
+- Only branch on facts no step changes, like whether the host is a container. For state a step changes, use `ensure`.
 - They also run in `plan`, so they must not change anything your script manages.
 
 ## Commands
@@ -694,6 +695,19 @@ await fileHandlers(h, { "/System/Applications/Preview.app": ["pdf"] })
 | `tsinfra/integrations/macos/file-handlers` | Which app opens each file extension on a Mac |
 
 See [Integrations](./docs/integrations.md) for each one's options and caveats.
+
+## Facts
+
+`h.facts` holds what scripts most often branch on, read before the script runs, with the names normalized to Go's, the way most release downloads name them:
+
+```ts
+h.facts.home // "/home/alice", the SSH user's home
+h.facts.platform // "darwin" or "linux"
+h.facts.arch // "amd64" or "arm64"
+h.facts.osRelease // { id: "debian", versionCodename: "trixie", ... }, or undefined on macOS
+```
+
+A value tsinfra has no name for, like `armv7l`, passes through as the host printed it, with a warning in the report. See [Facts](./docs/steps.md#facts) for what each reads.
 
 ## CLI Reference
 

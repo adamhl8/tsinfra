@@ -19,6 +19,7 @@ import { fileHandlers } from "tsinfra/integrations/macos/file-handlers"
 
 - **An integration is ordinary script code.** It takes `h` and calls steps on it, the same steps a script calls, so it shows in the report as those steps. A script can write its own the same way (see [Steps](./steps.md#run)).
 - **Each one has its own export path** under `tsinfra/integrations/`, named for what it sets up, like `tsinfra/integrations/macos/file-handlers`. An export path can hold helpers that go with its integration, like a function that reads what an app supports.
+- **An integration that works on one platform checks the host first,** with [`h.facts.platform`](./steps.md#facts), and throws when the host is on another, like `The 'fileHandlers' integration needs a 'darwin' host, but this host is 'linux'`. So `plan` and `apply` both stop the host script there, before the integration's steps.
 - **A mistake in what a script passes throws,** like an extension listed under two apps. It fails the host the way any error in a host script does (see [Steps](./steps.md#failure)).
 - **An integration with a fixed step name can be called once per host,** because a change step's name must be unique in a host script (see [Steps](./steps.md#steps)).
 
@@ -26,7 +27,7 @@ The integrations that might ship next are in [the roadmap](./roadmap.md#integrat
 
 ## macOS file handlers
 
-`tsinfra/integrations/macos/file-handlers` sets which app opens each file extension on a Mac. It runs one `ensure` step, named `File handlers`.
+`tsinfra/integrations/macos/file-handlers` sets which app opens each file extension on a Mac. It checks that the host is a Mac, then runs one `ensure` step, named `File handlers`.
 
 ```ts
 import { fileHandlers } from "tsinfra/integrations/macos/file-handlers"

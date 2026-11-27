@@ -3,7 +3,8 @@ import process from "node:process"
 
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
-import { createSession } from "#core/__tests__/session.ts"
+import { createSession, createSessionWithFacts, getStepRecords } from "#core/__tests__/session.ts"
+import type { Host } from "#core/session.ts"
 import { getFinishedStepRecords } from "#core/session/recorder/records.ts"
 import { fileHandlers, readInfoPlist, readKnownExtensions } from "#integrations/macos/file-handlers/index.ts"
 import { getOwnValue } from "#utils.ts"
@@ -18,7 +19,8 @@ const planHandlers = async (handlers: Record<string, string[]>) => {
   const result = await attempt(async () => fileHandlers(h, handlers))
   if (isErr(result)) return { changed: undefined, got: undefined, message: messageChain(result) }
 
-  const values = getFinishedStepRecords(hostRecord)[0]?.comparisons.before?.values
+  const stepRecord = getFinishedStepRecords(hostRecord).find(({ name }) => name === "File handlers")
+  const values = stepRecord?.comparisons.before?.values
   const got = values?.kind === "record" ? values.got : undefined
   return { changed: result.changed, got, message: undefined }
 }
@@ -111,5 +113,21 @@ describe.skipIf(process.platform !== "darwin")("readInfoPlist", () => {
     const result = await attempt(async () => readInfoPlist(h, PREVIEW, "NoSuchKey"))
 
     expect(isErr(result) ? result.message : result).toBe(`The app at '${PREVIEW}' has no 'NoSuchKey' in its Info.plist`)
+  })
+})
+
+describe("the file handlers functions on a host that isn't a Mac", () => {
+  it.each([
+    ["fileHandlers", async (h: Host) => fileHandlers(h, { [PREVIEW]: ["pdf"] })],
+    ["readKnownExtensions", async (h: Host) => readKnownExtensions(h, ["pdf"])],
+    ["readInfoPlist", async (h: Host) => readInfoPlist(h, PREVIEW, "CFBundleIdentifier")],
+  ])("should stop %p before it runs anything", async (name, call) => {
+    const { host: h, hostRecord } = await createSessionWithFacts("plan", { platform: "linux" })
+    const result = await attempt(async () => call(h))
+
+    expect(isErr(result) ? result.message : result).toBe(
+      `The '${name}' integration needs a 'darwin' host, but this host is 'linux'`,
+    )
+    expect(getStepRecords(hostRecord)).toStrictEqual([])
   })
 })

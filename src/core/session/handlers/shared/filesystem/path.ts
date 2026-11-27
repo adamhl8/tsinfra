@@ -5,7 +5,7 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
-import type { HomeDirectory } from "#core/hosts/prepare/host-details.ts"
+import type { HomeDirectory } from "#core/hosts/prepare/host-details/facts/home.ts"
 import type { InputDescription } from "#core/session/handlers/shared/validate-input.ts"
 import { validateInput } from "#core/session/handlers/shared/validate-input.ts"
 

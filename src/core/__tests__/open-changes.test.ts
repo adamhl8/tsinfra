@@ -7,7 +7,7 @@ import bun from "bun"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
 import { createSession, loadTestHost, prepareSession, readOpenChanges } from "#core/__tests__/session.ts"
-import type { HomeDirectory } from "#core/hosts/prepare/host-details.ts"
+import type { HomeDirectory } from "#core/hosts/prepare/host-details/facts/home.ts"
 import { toSavedStatePath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
 import type { EnsureOptions } from "#core/session/handlers/ensure.ts"
 import type { HostRecord } from "#core/session/recorder/records.ts"

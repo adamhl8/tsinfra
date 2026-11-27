@@ -1,6 +1,6 @@
 import { type } from "arktype"
 
-import type { HomeDirectory } from "#core/hosts/prepare/host-details.ts"
+import type { HomeDirectory } from "#core/hosts/prepare/host-details/facts/home.ts"
 import type { EnsureComparisonValues } from "#core/session/handlers/ensure/comparison.ts"
 import type { FileComparisonValues } from "#core/session/handlers/file/comparison.ts"
 import type { LinkComparisonValues } from "#core/session/handlers/link/comparison.ts"

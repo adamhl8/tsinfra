@@ -53,7 +53,7 @@ tsinfra keeps the script shape and adds what scripts lacked:
 - Ordering between hosts, for now. Run them as separate commands. A [tentative design](./roadmap.md#ordering-between-hosts) comes late.
 - A record of resources, or a state file on the control machine.
 - A template engine. Template literals cover it.
-- A facts system. `h.read` returns a command's output.
+- A facts system. `h.facts` holds a fixed few, and `h.read` returns a command's output for the rest.
 - Secret source adapters. Decrypt in your script, and mark the file `secret` or pass the value in a step's `secretEnv`.
 
 ## Anti-goals

@@ -179,6 +179,27 @@ describe("renderHostBlock", () => {
     ).toBe(["a", "  empty script"].join("\n"))
   })
 
+  it("should show a warning about the host first, with how to report it", async () => {
+    const hostRecord = await runNamedHost(
+      "a",
+      async () => {
+        /* empty */
+      },
+      "plan",
+    )
+    hostRecord.warnings.push({ kind: "unknownFact", fact: "platform", value: "FreeBSD" })
+
+    expect([renderRecord(hostRecord, "plan"), renderRecordsSummary([hostRecord], "plan")]).toStrictEqual([
+      [
+        "a",
+        "  warning: tsinfra has no name for this platform, so h.facts.platform is what the host printed -> FreeBSD",
+        "    please report it at https://github.com/adamhl8/tsinfra/issues, so tsinfra can name it",
+        "  empty script",
+      ].join("\n"),
+      "a   unchanged, 1 warning",
+    ])
+  })
+
   it("should show a failure thrown before any step, not an empty script", async () => {
     expect(await formatBlock(throwBoom, "plan")).toBe(
       "a\n  ! failed: (host fn)\n      boom\n        thrown in the host function, outside any step",
@@ -254,6 +275,7 @@ describe("renderHostBlock", () => {
         preparationCommands: [],
         runningStep: undefined,
         entries: [],
+        warnings: [],
         failure: {
           kind: "preparation",
           error: new Error("Host key verification failed."),
@@ -281,6 +303,7 @@ describe("renderHostBlock", () => {
         preparationCommands: [],
         runningStep: undefined,
         entries: [],
+        warnings: [],
         failure: {
           kind: "saved state",
           error: new Error("failed to delete the saved state in '/home/a/.tsinfra/state/a.json'"),
@@ -308,6 +331,7 @@ describe("renderHostBlock", () => {
         preparationCommands: [],
         runningStep: undefined,
         entries: [],
+        warnings: [],
         failure: { kind: "preparation", error: new Error("failed"), hints: [{ kind: "changedHostKey" }] },
       },
       "plan",
@@ -347,6 +371,7 @@ describe("renderHostBlock", () => {
         ],
         runningStep: undefined,
         entries: [],
+        warnings: [],
         failure: {
           kind: "preparation",
           error: new Error("Host key verification failed."),

@@ -1,5 +1,6 @@
 export type { HostConfig, HostDefinition, HostFunction, HostOptions } from "#core/hosts/host.ts"
 export { host } from "#core/hosts/host.ts"
+export type { Arch, HostFacts, OsRelease, Platform } from "#core/hosts/prepare/host-details/facts.ts"
 export type { DirOptions } from "#core/session/handlers/dir.ts"
 export type { Check, CheckFunction } from "#core/session/handlers/ensure/check.ts"
 export type { EnsureOptions } from "#core/session/handlers/ensure.ts"

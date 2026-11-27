@@ -4,6 +4,7 @@ import type { DiffLimits } from "#report/format/details/diff/limits.ts"
 import type { AlignedRow } from "#report/format/details/shared/aligned-row.ts"
 import { noteElement } from "#report/format/elements/asides.ts"
 import { formatHostMessageEntry } from "#report/format/host-message.ts"
+import { formatHostWarning } from "#report/format/host-warning.ts"
 import { layoutHostBlock } from "#report/format/layout.ts"
 import type { StatusLine } from "#report/format/status-line.ts"
 import { formatStatusLine } from "#report/format/status-line.ts"
@@ -13,8 +14,15 @@ import { styleBold } from "#styles.ts"
 /** A host block with each piece formatted, before layout puts them on lines. */
 export interface FormattedHostBlock {
   name: string
+  warnings: FormattedHostWarning[]
   note: string | undefined
   entries: FormattedEntry[]
+}
+
+/** A host warning's line, and the hint under it. */
+export interface FormattedHostWarning {
+  line: string
+  hint: string
 }
 
 /** An entry with each piece formatted, before layout lines it up with the block's other entries. */
@@ -54,12 +62,13 @@ const HOST_NOTE_WORDS: Record<HostNote["kind"], string> = {
 const formatHostNote = (hostNote: HostNote): string => noteElement(HOST_NOTE_WORDS[hostNote.kind])
 
 /**
- * Formats a built host block as text: its name, then its note and its entries laid out. A diff, or an `ensure`'s lines,
- * stays within `diffLimits`.
+ * Formats a built host block as text: its name, then its warnings, its note, and its entries laid out. A diff, or an
+ * `ensure`'s lines, stays within `diffLimits`.
  */
 export const formatHostBlock = (hostBlock: HostBlock, diffLimits: DiffLimits): string => {
   const name = hostNameElement(hostBlock.name)
+  const warnings = hostBlock.warnings.map((hostWarning) => formatHostWarning(hostWarning))
   const note = hostBlock.note && formatHostNote(hostBlock.note)
   const entries = hostBlock.entries.map((hostBlockEntry) => formatHostBlockEntry(hostBlockEntry, diffLimits))
-  return layoutHostBlock({ name, note, entries })
+  return layoutHostBlock({ name, warnings, note, entries })
 }

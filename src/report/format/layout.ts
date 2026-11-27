@@ -84,11 +84,15 @@ const layoutEntry = (formattedEntry: FormattedEntry): string[] => {
   return [layoutStatusLine(statusLine), ...bodyLines]
 }
 
-/** Lays out a host block: its name, then its note under it, if it has one, then each of its formatted entries. */
+/**
+ * Lays out a host block: its name, then each warning with its hint indented under it, then its note, if it has one,
+ * then each of its formatted entries.
+ */
 export const layoutHostBlock = (formattedHostBlock: FormattedHostBlock): string => {
-  const { name, note, entries } = formattedHostBlock
+  const { name, warnings, note, entries } = formattedHostBlock
+  const warningLines = warnings.flatMap(({ line, hint }) => [`${INDENT}${line}`, `${INDENT.repeat(2)}${hint}`])
   const noteLines = note === undefined ? [] : [`${INDENT}${note}`]
   const entryLines = entries.flatMap((formattedEntry) => layoutEntry(formattedEntry))
 
-  return [name, ...noteLines, ...entryLines].join("\n")
+  return [name, ...warningLines, ...noteLines, ...entryLines].join("\n")
 }

@@ -4,7 +4,13 @@ import type { FileComparisonValues } from "#core/session/handlers/file/compariso
 import type { LinkComparisonValues } from "#core/session/handlers/link/comparison.ts"
 import type { MessageKind } from "#core/session/handlers/log.ts"
 import type { ToolName } from "#core/session/handlers/tools.ts"
-import type { ConvergePhase, FailureHint, HostRecord, RecordedUnownedFailure } from "#core/session/recorder/records.ts"
+import type {
+  ConvergePhase,
+  FailureHint,
+  HostRecord,
+  HostWarningRecord,
+  RecordedUnownedFailure,
+} from "#core/session/recorder/records.ts"
 import type { StepKind, StepStatus } from "#core/session/step.ts"
 import type { Mode } from "#mode.ts"
 import { toHostBlockEntries } from "#report/host-block/entries.ts"
@@ -17,12 +23,16 @@ export interface PieceLevels {
   until?: Verbosity
 }
 
-/** A host's block: its name, then its note, if it has one, then its entries. */
+/** A host's block: its name, then its warnings, then its note, if it has one, then its entries. */
 export interface HostBlock {
   name: string
+  warnings: HostWarning[]
   note: HostNote | undefined
   entries: HostBlockEntry[]
 }
+
+/** A warning about the whole host, which shows before its note and entries, as its kind, so the report picks the words. */
+export type HostWarning = PieceLevels & HostWarningRecord
 
 /** A note about the whole host, which shows once, before its entries, as its kind, so the report picks the words. */
 export type HostNote = PieceLevels
@@ -204,12 +214,14 @@ export type CommandOutputDetail =
   | { kind: "failed"; error: Error }
 
 /**
- * Returns a host's block, with every piece at every level, each with the level it shows from: the host's note, an entry
- * per finished step, then the host's failure, if it failed.
+ * Returns a host's block, with every piece at every level, each with the level it shows from: the host's warnings and
+ * note, an entry per finished step, then the host's failure, if it failed.
  */
 export const toHostBlock = (hostRecord: HostRecord, mode: Mode): HostBlock => {
   const { name } = hostRecord
+  // Show every warning at every level, because the script may rely on what it's about.
+  const warnings = hostRecord.warnings.map((warning): HostWarning => ({ ...warning, from: 0 }))
   const note = toHostNote(hostRecord)
   const entries = toHostBlockEntries(hostRecord, mode)
-  return { name, note, entries }
+  return { name, warnings, note, entries }
 }

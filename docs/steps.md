@@ -5,6 +5,7 @@ Everything a host script does to its host goes through `h`, the context passed t
 <!-- toc -->
 
 - [Choosing a method](#choosing-a-method)
+- [Facts](#facts)
 - [Commands](#commands)
 - [Steps](#steps)
 - [`read`](#read)
@@ -31,6 +32,7 @@ Everything a host script does to its host goes through `h`, the context passed t
 // `O` is the type of the host's options, which `host()` passes on to its function's `h`.
 interface Host<O extends HostOptions = HostOptions> {
   readonly meta: HostMeta<O>
+  readonly facts: HostFacts
   readonly log: Log
   read(cmd: string, options?: ReadOptions): Promise<string>
   inspect(cmd: string, options?: InspectOptions): Promise<InspectResult>
@@ -51,6 +53,14 @@ interface HostMeta<O extends HostOptions = HostOptions> {
   // `string` with sudo: { password }, `string | undefined` with sudo: true, `undefined` with sudo off.
   // See Transport's sudo section.
   readonly sudoPassword: SudoPassword<O["sudo"]>
+}
+
+// What tsinfra read from the host before the script ran, which nothing in a run would change. It's frozen. See Facts.
+interface HostFacts {
+  readonly home: string // the SSH user's home directory, always absolute, e.g. "/home/alice"
+  readonly platform: "darwin" | "linux"
+  readonly arch: "amd64" | "arm64"
+  readonly osRelease: OsRelease | undefined // undefined when the host has no os-release file, like macOS
 }
 
 // Records a message for the report. It runs nothing on the host, so it's synchronous. See Messages.
@@ -132,6 +142,34 @@ It mostly works. `plan` runs the inspect and shows the run when docker is missin
 ```ts
 await h.ensure("Install docker", { want: true, check: "command -v docker", fix: installDocker })
 ```
+
+## Facts
+
+`h.facts` holds what scripts most often branch on, with the names normalized. tsinfra reads them when it prepares the host, before the script runs, so a script uses them without `await`:
+
+| Fact        | Reads                                       | Holds                                                                    |
+| ----------- | ------------------------------------------- | ------------------------------------------------------------------------ |
+| `home`      | `$HOME`                                     | the SSH user's home directory, like `/home/alice`                        |
+| `platform`  | `uname -s`                                  | `"darwin"` or `"linux"`                                                  |
+| `arch`      | `uname -m`                                  | `"amd64"` or `"arm64"`                                                   |
+| `osRelease` | `/etc/os-release`, or `/usr/lib/os-release` | `{ id, idLike, versionId, versionCodename, prettyName }`, or `undefined` |
+
+```ts
+const { platform, arch } = h.facts
+const download = `https://example.com/releases/tool_${platform}_${arch}.tar.gz`
+await h.ensure("Install tool", {
+  want: true,
+  check: "command -v tool",
+  fix: `curl -fsSL '${download}' | sudo tar -xzC /usr/local/bin`,
+})
+```
+
+- **A fact is something nothing in a run would reasonably change,** that's cheap to read on every host, and that's useful to many scripts. The CPU architecture is one. The hostname isn't, because a script can set it, and neither is whether a package is installed. Read anything else with `h.read`, at the top level, and use it in a step through the closure (see [Choosing a method](#choosing-a-method)).
+- **The names are Go's,** its `GOOS` and `GOARCH`, because Go projects, Docker images, and apt name their downloads that way. Every spelling of one maps to it, like `aarch64` and `arm64` to `arm64`. A download named another way maps from these, like `x86_64` for a Rust build or `x64` for a Node one.
+- **A value tsinfra has no name for passes through as the host printed it,** like `armv7l` for a 32-bit ARM board, and the report shows a warning under the host's name that asks you to report it. The host still runs. So the type can be wrong: a `switch` over `h.facts.arch` that TypeScript calls exhaustive, or a lookup in a `Record<Arch, ...>`, can still meet a value it doesn't cover. Give it a `default` or check for `undefined`.
+- **`home` is the SSH user's home, even in a step with `sudo`,** where `~` in a command can name root's. Preparation fails when it's empty or not absolute, because tsinfra keeps its own files under it.
+- **`osRelease` reads the file the way a shell does,** so quoted and escaped values come out as written. `idLike` is `ID_LIKE` split into names, and a field the file leaves out is `undefined`, except `id`, which is `linux` then, as the os-release spec says.
+- **There are no facts about state a step manages,** like whether a file exists, a package is installed, or a command is on the `PATH`. Those belong in a step's check, where `plan` reads them at the right time. A `hasCommand` fact would invite the wrong shape above, an `inspect`, an `if`, and a `run`, instead of an `ensure` with `check: "command -v docker"`. A prerequisite nothing in the script installs is checked with `h.inspect` and a `throw` (see [Needs](./needs.md#a-prerequisite-nothing-in-the-script-installs)).
 
 ## Commands
 

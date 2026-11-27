@@ -10,6 +10,7 @@ import { attempt, isErr } from "ts-explicit-errors"
 
 import { createProject, getInstalledBin, removeInstalledFile, replaceInstalledFile } from "#__tests__/cli-project.ts"
 import { answerPrompts } from "#__tests__/terminal.ts"
+import { writeFakeTool } from "#core/__tests__/session.ts"
 import packageJson from "#package.json" with { type: "json" }
 
 setDefaultTimeout(30_000)
@@ -243,6 +244,30 @@ describe("tsinfra", () => {
       `${CLEAR_PROGRESS}Planning host 'slow' · (read) sleep 0.5 # ${"x".repeat(36)}…${CLEAR_PROGRESS}`,
     )
     expect(getScreenAfterProgress(screen)).toBe("slow   unchanged\r\n")
+  })
+
+  // Stand in for the host's `uname` on `PATH`, because preparation reads the facts before the script runs.
+  it("should warn about a fact tsinfra has no name for, and pass the host's value through", async () => {
+    const { dir, env, run } = await createProject()
+    const binDir = path.join(dir, "bin")
+    await writeFakeTool(binDir, "uname", `case "$1" in -s) echo Linux ;; -m) echo armv7l ;; esac`)
+
+    const { stdout, exitCode } = await run`tsinfra plan --hosts-dir hosts-facts --verbose`
+      .env({ ...env, PATH: `${binDir}:${env["PATH"] ?? ""}` })
+      .nothrow()
+
+    expect(exitCode).toBe(0)
+    expect(stdout).toBe(
+      [
+        "facts",
+        "  warning: tsinfra has no name for this CPU architecture, so h.facts.arch is what the host printed -> armv7l",
+        "    please report it at https://github.com/adamhl8/tsinfra/issues, so tsinfra can name it",
+        "  · observed: (read) true",
+        "  - info: linux armv7l",
+        "",
+        "facts   unchanged, 1 warning",
+      ].join("\n"),
+    )
   })
 
   it("should stop the command that's running and end by SIGINT on Ctrl-C", async () => {

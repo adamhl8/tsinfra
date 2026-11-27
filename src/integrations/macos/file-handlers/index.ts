@@ -12,6 +12,7 @@ import {
   waitForHandlers,
 } from "#integrations/macos/file-handlers/launch-services.ts"
 import { OSASCRIPT, toJxa } from "#integrations/macos/jxa.ts"
+import { assertPlatform } from "#integrations/utils.ts"
 
 // Give the user time to answer a prompt for each change.
 const APPROVAL_TIMEOUT_MINUTES = 5
@@ -28,6 +29,7 @@ export interface FileHandlersOptions {
  */
 export const fileHandlers = async (h: Host, handlers: Record<string, string[]>, options: FileHandlersOptions = {}) => {
   const { needs = [] } = options
+  assertPlatform(h, "darwin", "fileHandlers")
   const extensionApps = toExtensionApps(handlers)
 
   return h.ensure("File handlers", {
@@ -60,6 +62,7 @@ export const fileHandlers = async (h: Host, handlers: Record<string, string[]>, 
 
 /** Returns the ones in `extensions` that macOS has a content type for, so `fileHandlers` can set them. */
 export const readKnownExtensions = async (h: Host, extensions: string[]): Promise<string[]> => {
+  assertPlatform(h, "darwin", "readKnownExtensions")
   const script = toJxa(lookUpContentTypes, extensions)
   const output = await h.read(OSASCRIPT, { env: { SCRIPT: script } })
   const contentTypes = contentTypesSchema.assert(output)
@@ -71,6 +74,7 @@ export const readKnownExtensions = async (h: Host, extensions: string[]): Promis
  * doesn't have the key.
  */
 export const readInfoPlist = async (h: Host, appPath: string, key: string): Promise<unknown> => {
+  assertPlatform(h, "darwin", "readInfoPlist")
   const script = toJxa(lookUpInfoPlistKey, appPath, key)
   const output = await h.read(OSASCRIPT, { env: { SCRIPT: script } })
   const lookup = infoPlistLookupSchema.assert(output)

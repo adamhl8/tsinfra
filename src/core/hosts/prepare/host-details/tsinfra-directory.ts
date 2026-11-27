@@ -1,6 +1,6 @@
 import path from "node:path"
 
-import type { HomeDirectory } from "#core/hosts/prepare/host-details.ts"
+import type { HomeDirectory } from "#core/hosts/prepare/host-details/facts/home.ts"
 
 // Keep what tsinfra leaves on a host in one directory in the SSH user's home.
 // A home works where `/tmp` doesn't, because sudo can't run a helper from a `/tmp` mounted `noexec`.

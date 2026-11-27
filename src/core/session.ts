@@ -2,7 +2,7 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { HostOptions } from "#core/hosts/host.ts"
-import type { HomeDirectory } from "#core/hosts/prepare/host-details.ts"
+import type { HostFacts } from "#core/hosts/prepare/host-details/facts.ts"
 import type { DirOptions } from "#core/session/handlers/dir.ts"
 import { handleDir } from "#core/session/handlers/dir.ts"
 import type { EnsureOptions } from "#core/session/handlers/ensure.ts"
@@ -47,8 +47,7 @@ import type { Mode } from "#mode.ts"
 /** What a host's session needs, set up before any script runs. */
 export interface SessionContext {
   meta: HostMeta
-  /** The SSH user's home directory. */
-  home: HomeDirectory
+  facts: HostFacts
   /** The host's saved state, read when it was prepared. */
   savedStateManager: SavedStateManager
   sessionRecorder: SessionRecorder
@@ -62,6 +61,8 @@ export interface SessionContext {
 export interface Host<O extends HostOptions = HostOptions> extends Record<StepKind, unknown> {
   /** What the script is given about the host besides its steps, like its name. `O` is the type of its options. */
   readonly meta: HostMeta<O>
+  /** What tsinfra read from the host before the script ran, which nothing in a run would change, like its CPU. */
+  readonly facts: HostFacts
   /**
    * Records a message for the report, which shows it under the step whose function logged it, or between the steps
    * around it. A message that isn't a non-empty string fails the host and throws.
@@ -149,7 +150,8 @@ const STEP_NAME_LABELS: Record<StepKind, string> = {
  * as values. `h.log` is synchronous, so its methods make the same checks without `callOrFail`.
  */
 export const createHostSession = (sessionContext: SessionContext, mode: Mode): Host => {
-  const { meta, home, savedStateManager, sessionRecorder } = sessionContext
+  const { meta, facts, savedStateManager, sessionRecorder } = sessionContext
+  const { home } = facts
   const {
     getStepShells,
     recordOptions,
@@ -302,6 +304,7 @@ export const createHostSession = (sessionContext: SessionContext, mode: Mode): H
 
   const host: Host = {
     meta,
+    facts,
     log,
     // Pass `cmd` as the step name, because `h.read` and `h.inspect` take no name.
     read: async (cmd, options) => callStep(cmd, "read", async (ctx) => handleRead(ctx, cmd, options), options),

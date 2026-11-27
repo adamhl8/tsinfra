@@ -84,14 +84,15 @@ const keepShownEntries = (hostBlockEntries: HostBlockEntry[], verbosity: Verbosi
   })
 
 /**
- * Returns a host's block with only what shows at `verbosity`: its note, and each entry that shows, with only the pieces
- * that show.
+ * Returns a host's block with only what shows at `verbosity`: its warnings, its note, and each entry that shows, with
+ * only the pieces that show.
  */
 export const toShownHostBlock = (hostBlock: HostBlock, verbosity: Verbosity): HostBlock => {
-  const { name, note, entries } = hostBlock
+  const { name, warnings, note, entries } = hostBlock
+  const shownWarnings = warnings.filter((warning) => isShownAt(warning, verbosity))
   const shownNote = keepShown(note, verbosity)
   const shownEntries = keepShownEntries(entries, verbosity)
-  return { name, note: shownNote, entries: shownEntries }
+  return { name, warnings: shownWarnings, note: shownNote, entries: shownEntries }
 }
 
 /**
@@ -99,9 +100,9 @@ export const toShownHostBlock = (hostBlock: HostBlock, verbosity: Verbosity): Ho
  * formatted or measured for a column.
  */
 export const renderHostBlock = (hostBlock: HostBlock, reportOptions: ReportOptions): string | undefined => {
-  const { note, entries } = hostBlock
+  const { warnings, note, entries } = hostBlock
   // Give a host with nothing to show no block, because its line in the summary already says how it went.
-  if (!note && entries.length === 0) return
+  if (entries.length === 0 && warnings.length === 0 && !note) return
 
   // Give the diff limits instead of a level, because computing a full diff only to drop it would be slow.
   const diffLimits = toDiffLimits(reportOptions.verbosity)

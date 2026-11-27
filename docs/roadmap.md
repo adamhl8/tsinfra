@@ -5,6 +5,9 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 <!-- toc -->
 
 - [Next](#next)
+  - [The report's notes, warnings, messages, and hints](#the-reports-notes-warnings-messages-and-hints)
+  - [Splitting up `session.ts`](#splitting-up-sessionts)
+  - [More integrations](#more-integrations)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
   - [Live progress](#live-progress)
@@ -20,7 +23,7 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 - [Follow-ups](#follow-ups)
 - [Open questions](#open-questions)
   - [Integrations worth shipping](#integrations-worth-shipping)
-  - [Fact helpers](#fact-helpers)
+  - [Dependencies between integrations](#dependencies-between-integrations)
   - [Following symlinks in `file`](#following-symlinks-in-file)
   - [Files over 10 MB](#files-over-10-mb)
   - [`fsync` before the rename](#fsync-before-the-rename)
@@ -38,6 +41,34 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 ## Next
 
 In the order they'll be built.
+
+### The report's notes, warnings, messages, and hints
+
+The report's asides grew one kind at a time, at the host level, on an entry, and around the summary (see [CLI](./cli.md#output)), and their names and shapes no longer line up. Nothing about the fix is decided. What to work through:
+
+- **"Note" names four things:** a host note under the host's name (`HostNote`), a note part after an entry's name (`NotePart`), a detail note under an entry (`DetailNote`), and the limit notes the formatter writes in place of a long diff, which have no type.
+- **"Hint" names two things:** a failure's `FailureHint`, and the line under a host warning that asks you to report an unknown fact, which only reuses the hint style.
+- **The host and step levels don't pair up.** Messages and warnings each come in a host and a step version, but notes take a different name at each level, and hints exist only under failures.
+- **Host warnings come only from preparation,** because the preparation recorder is the only code that records one. Decide whether the name should say so, or whether the session should be able to record one too.
+- **A host warning's hint is written into its formatter.** Give each host warning its own hint, like a failure's `hints`, once a second kind needs a different one, or none.
+
+### Splitting up `session.ts`
+
+`core/session.ts` has grown to about 320 lines: the `Host` interface with its JSDoc, and `createHostSession`, which holds the failed-host check, the tools, the step name claims, `callStep`, and `h.log`. Some of those are jobs of their own that could move into parts beside it. Nothing about the split is decided. Keep the rule that `session.ts` is the only code in `core/` that throws, or decide what replaces it, because a part that holds a `callOrFail` would throw too.
+
+### More integrations
+
+Each ships as its own export path, one at a time, in this order (see [Integrations](./integrations.md)):
+
+1. **`macos/defaults`,** for macOS `defaults` keys (see [macOS defaults](#macos-defaults)). It comes with a generator that reads the IDs of macOS's keyboard shortcuts from the Mac it runs on, and a bask task that runs it. It merges the shortcut keys into the other keys with Remeda's `mergeDeep`, which must replace an array whole rather than merge it item by item.
+2. **`macos/power`,** for macOS power settings.
+3. **`brew`,** for Homebrew packages (see [Homebrew](#homebrew)). It removes packages the script doesn't list by default.
+4. **`bun`,** for Bun global packages. It removes packages the script doesn't list by default, like `brew`.
+5. **`macos/dock`,** for the apps in the Dock.
+6. **`macos/wallpaper`,** for the desktop picture.
+7. **`git`,** for a repo's git config.
+8. **`hostname`,** for the host's name.
+9. **`ssh`,** for SSH keys.
 
 ## Planned
 
@@ -259,8 +290,8 @@ Fixes and finishing work for what's already built.
 - **Stop remote commands on Ctrl-C.** Without a terminal, Ctrl-C ends the local `ssh`, but the command on the host keeps running. nixos-rebuild runs a remote `pkill -SIGINT` when it's interrupted. tsinfra needs the same, with the process to stop known, and the run's connections still closed.
 - **Fail a tool saved for later.** A script can keep the `read` or `exec` a step function was given and call it after that step finished. At the top level its command goes unrecorded, and during a later step it is recorded under the wrong step. `callStep` already builds a fresh set of tools for each step. What's left is to bind them to the step's record, and fail the host through `callOrFail` when that step is no longer the running one. Do not throw in `recordCommands`, because only `session.ts` throws, and a throw there would skip recording the failure in `callOrFail`.
 - **Keep forced color out of commands.** `runProcess` starts the local shell with tsinfra's whole environment, so a `FORCE_COLOR` or `CLICOLOR_FORCE` that a task runner sets reaches every command on `@local`. A command then colors output a check parses, like `bun pm ls -g`, whose names stop matching the wanted ones and show as both missing and extra. Remove both variables from the environment `runProcess` passes, and leave `NO_COLOR`, because it only turns color off. The report keeps its own color, because it reads `process.env` in tsinfra's process. SSH hosts don't get them, because ssh only forwards the names in `SendEnv`.
-- **Check the host's platform first in a platform-specific integration.** `fileHandlers` runs `osascript` without checking that the host is a Mac, so on another host its first command fails with `osascript: command not found`, which doesn't say why. An integration that only works on one platform starts with a read of `uname -s`, and throws when the host isn't on that platform, naming the integration and the platform it needs. `plan` and `apply` then both stop the host script there, before any of the integration's steps. Use `platform(h)` once the [fact helpers](#fact-helpers) exist.
 - **Run the Docker tests in CI.** Only `bask test --all` runs the Docker tests, never `bask lint`, because they need Docker and download images and packages, so nothing runs them automatically yet.
+- **Share `readInfoPlist` once a second integration needs it.** It lives in `macos/file-handlers` today, because only `fileHandlers` uses an app's `Info.plist`. Move it to a shared export path, like `tsinfra/integrations/utils`, when another integration reads one.
 - **Check SELinux labels on a VM.** `file`'s `chcon` and `restorecon` are untested on real labels, because containers run with SELinux off.
 - **The user docs.** These docs will be published as a documentation site built with [Starlight](https://starlight.astro.build). When it gets written, start from [Recipes](./recipes.md), and add the comparison with other config tools from the [design notes](./README.md#compared-with-other-tools), led by tsinfra's strengths. Warn about a login shell's pitfalls once [the `shell` option](#the-shell-host-option) exists.
   - **The AI features come from `starlight-llm-actions`:** a copy-as-Markdown and open-in-ChatGPT/Claude menu, a `.md` copy of each page, `llms.txt`, and a `rel="alternate"` link to the Markdown. Serving Markdown at a page's own URL when an agent sends `Accept: text/markdown` is a rewrite rule on the host, because a static site can't see headers.
@@ -276,32 +307,12 @@ An integration is a set of functions that take `h` and call steps to set up one 
 
 An integration configures the host itself: its packages, services, files, users, and settings. It doesn't manage objects inside an app, like a database's users, or resources behind an API, like DNS records, because those belong to the app's own tooling or to tools like Terraform. And no integration installs and runs one app for you, like a Postgres or Tailscale module. A script does that with the general integrations.
 
-### Fact helpers
+### Dependencies between integrations
 
-A fact is something read from the host that no step changes, like the CPU architecture, which is what a script may branch on (see [Steps](./steps.md#choosing-a-method)). Today a script reads one with `h.read`. A few helpers would normalize the common ones. A fact helper only reads something no step can change:
+An integration's steps can depend on something an earlier step sets up, like `fileHandlers` needing the step that installs the apps, but a script can only say so when the integration takes `needs`. One that doesn't, whether tsinfra ships it or a script writes it, leaves the script to put it in the right order, which is the problem `needs` and `after` exist to solve (see [Needs](./needs.md)). Nothing is decided, and it may not be worth doing.
 
-| Helper         | Reads             | Returns                                                                           |
-| -------------- | ----------------- | --------------------------------------------------------------------------------- |
-| `arch(h)`      | `uname -m`        | Node's `process.arch` names, like `"x64"` and `"arm64"`                           |
-| `platform(h)`  | `uname -s`        | Node's `process.platform` names, like `"linux"` and `"darwin"`                    |
-| `osRelease(h)` | `/etc/os-release` | `{ id, idLike, versionId, versionCodename, prettyName }`, or `undefined` on macOS |
-
-```ts
-import { arch } from "tsinfra/facts"
-
-const cpu = await arch(h)
-await h.ensure("Install the arm build", { want: true, check: "...", fix: `... ${cpu} ...` })
-```
-
-- **Each takes `h` and runs at the top level only.** A helper is an ordinary `h.read` with the normalizing added, so it shows as its own `·` line in `--verbose`, the same as a helper a script writes itself. A step uses the fact through the closure, as above. Calling a helper inside a step's function fails the host with `'read' can't run while ensure step 'X' is running`, like any other call on `h` there.
-- **There's no hidden way to run commands.** A helper that reached the shell around `h` would skip the session recorder and the failed-host check, and would follow rules a script's own helpers can't.
-- **The value is in the normalizing.** `uname -m` prints `x86_64` or `aarch64` on Linux and `arm64` on macOS, and download URLs want `amd64` or `x64`. Node's names give the host the same vocabulary as the control machine. If a step ever needs the normalizing inside its function, the pure part can be exported too, like `toNodeArch(await read("uname -m"))`.
-- **`os-release` covers every current Linux** through one standard file, with no per-distribution cases.
-- **No fact system.** pyinfra has fact classes with a command and a parser, `host.get_fact`, a cache, and defaults for a missing command. tsinfra leaves those out, because a fact read once at the top of a script is just a `const`. A missing command is already an answer through `inspect`.
-- **No facts about state a step manages,** like whether a file exists, a package is installed, or a command is on the `PATH`. Those belong in a step's check, where `plan` reads them at the right time. A `hasCommand` helper would invite the wrong shape from [Steps](./steps.md#choosing-a-method), an `inspect`, an `if`, and a `run`, instead of an `ensure` with `check: "command -v docker"`. A prerequisite nothing in the script installs is checked with `h.inspect` and a `throw` (see [Needs](./needs.md#a-prerequisite-nothing-in-the-script-installs)). pyinfra's docs warn about the same thing: "Only use immutable facts in deploy code (installed OS, Arch, etc)".
-- **Container detection is left out** until a port needs it, because it differs across Docker, LXC, and systemd.
-
-Build them once ported hosts show which facts the scripts actually branch on.
+- **For:** a factory like `createIntegration(fn)` that takes the function that gets `h`, and gives every integration the options any integration might want, like `needs`, so none can leave them out.
+- **Against:** taking `needs` as an option, the way `fileHandlers` does, may be enough, and it needs no new concept.
 
 ### Following symlinks in `file`
 
@@ -410,7 +421,6 @@ Integrations that might ship (see [Integrations worth shipping](#integrations-wo
 
 - [A run-once marker](#run-once-marker)
 - [A 1Password reader](#1password-reader)
-- [Facts: CPU architecture, platform, and OS release](#fact-helpers)
 - [Full-set cleanup, which removes what isn't declared](#removed-resources)
 
 **Left out:**
@@ -529,7 +539,7 @@ Recorded so the survey doesn't need redoing:
 - **Guards like `only_if`, `not_if`, `creates`, and `unless`.** `ensure`'s check covers them, and Chef's own docs show guards make why-run inaccurate.
 - **Delegation and `local_action`.** The script already runs on the control machine.
 - **Plugin systems for output.** JSON output covers what a reader needs.
-- **Fact caching and fact systems.** See [Fact helpers](#fact-helpers).
+- **Fact caching across runs, and fact systems,** like Ansible's fact cache and pyinfra's fact classes. `h.facts` is a fixed set, read when each run prepares the host, and no run trusts what an earlier one read (see [Facts](./steps.md#facts)). A script reads anything else with `h.read`.
 - **Vaults and encrypted files in the repo.** TypeScript can call sops or a password manager directly.
 - **Reading every step's state before any fix,** like cdist's stages and pyinfra's prepare phase. It decides on state that's stale by the time the fix runs.
 - **Delayed, deduplicated notifications.** A run after both steps with `after: [a, b]` already fires once.

@@ -67,7 +67,7 @@ const initializeHost = async (loadedHost: LoadedHost): Promise<HostInitializatio
   const hostDetails = await buildHostDetails(loadedHost, preparationRecorder)
   if (isErr(hostDetails)) return { initialization: "failed", hostRecord, preparationRecorder, error: hostDetails }
 
-  const savedStatePath = toSavedStatePath(hostDetails.home, loadedHost.name)
+  const savedStatePath = toSavedStatePath(hostDetails.facts.home, loadedHost.name)
   const savedStateManager = await createSavedStateManager(createShell(hostDetails.baseTransport), savedStatePath)
   if (isErr(savedStateManager))
     return { initialization: "failed", hostRecord, preparationRecorder, error: savedStateManager }
@@ -85,10 +85,10 @@ const finishHost = async (initializedHost: InitializedHost): Promise<Result<Prep
   const readyHostDetails = hostDetails.kind === "ready" ? hostDetails : await finishHostDetails(loadedHost, hostDetails)
   if (isErr(readyHostDetails)) return readyHostDetails
 
-  const { home, transport, sudoPassword } = readyHostDetails
+  const { facts, transport, sudoPassword } = readyHostDetails
   const meta = createHostMeta(loadedHost.name, sudoPassword)
   const sessionRecorder = createSessionRecorder(hostRecord, loadedHost.options, transport, meta)
-  const sessionContext: SessionContext = { meta, home, savedStateManager, sessionRecorder }
+  const sessionContext: SessionContext = { meta, facts, savedStateManager, sessionRecorder }
   return { preparation: "prepared", hostFn: loadedHost.fn, hostRecord, sessionContext }
 }
 

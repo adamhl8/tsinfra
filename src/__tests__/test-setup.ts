@@ -8,7 +8,8 @@ import type { Result } from "ts-explicit-errors"
 import { isErr } from "ts-explicit-errors"
 
 import type { LoadedHost } from "#core/hosts/load.ts"
-import type { HomeDirectory } from "#core/hosts/prepare/host-details.ts"
+import type { HomeDirectory } from "#core/hosts/prepare/host-details/facts/home.ts"
+import { validateHome } from "#core/hosts/prepare/host-details/facts/home.ts"
 
 // Turn colors off before any test imports picocolors, because it decides once, and a terminal would turn them on.
 process.env["NO_COLOR"] = "1"
@@ -27,7 +28,7 @@ const getTestHome = async (loadedHost: LoadedHost): Promise<Result<HomeDirectory
   const knownHome = homesByLoadedHost.get(loadedHost)
   if (knownHome) return knownHome
 
-  const home = hostDetails.validateHome(await makeTempDir())
+  const home = validateHome(await makeTempDir())
   if (isErr(home)) return home
 
   homesByLoadedHost.set(loadedHost, home)
@@ -47,6 +48,6 @@ await mock.module("#core/hosts/prepare/host-details.ts", () => ({
     const home = await getTestHome(loadedHost)
     if (isErr(home)) return home
 
-    return { ...builtHostDetails, home }
+    return { ...builtHostDetails, facts: Object.freeze({ ...builtHostDetails.facts, home }) }
   },
 }))

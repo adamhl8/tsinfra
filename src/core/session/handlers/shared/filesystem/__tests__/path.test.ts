@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test"
 
 import { isErr } from "ts-explicit-errors"
 
-import type { HomeDirectory } from "#core/hosts/prepare/host-details.ts"
-import { validateHome } from "#core/hosts/prepare/host-details.ts"
+import type { HomeDirectory } from "#core/hosts/prepare/host-details/facts/home.ts"
+import { validateHome } from "#core/hosts/prepare/host-details/facts/home.ts"
 import { resolvePath } from "#core/session/handlers/shared/filesystem/path.ts"
 
 /** Returns `rawHome` checked the way preparation checks it, or throws why it isn't a home directory. */

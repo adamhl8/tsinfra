@@ -53,15 +53,18 @@ const countStepWarningMessages = (statusLineEntry: StatusLineEntry): number => {
   return new Set(warningTexts).size
 }
 
-/** Returns how many warnings the block shows: each status line's, a step's messages included, and each host message's. */
+/**
+ * Returns how many warnings the block shows: the host's own, each status line's, a step's messages included, and each
+ * host message's.
+ */
 const countWarnings = (hostBlock: HostBlock): number => {
-  const hostWarnings = hostBlock.entries.filter(
+  const hostMessageWarnings = hostBlock.entries.filter(
     (hostBlockEntry) => hostBlockEntry.kind === "hostMessage" && hostBlockEntry.messageKind === "warn",
   )
   const statusLineEntries = getStatusLineEntries(hostBlock)
   const stepWarnings = statusLineEntries.flatMap(({ details }) => details.filter(({ kind }) => kind === "warning"))
   const stepWarningMessageCount = sumBy(statusLineEntries, countStepWarningMessages)
-  return hostWarnings.length + stepWarnings.length + stepWarningMessageCount
+  return hostBlock.warnings.length + hostMessageWarnings.length + stepWarnings.length + stepWarningMessageCount
 }
 
 const formatHostStatus = (hostBlock: HostBlock): string => {
@@ -70,7 +73,7 @@ const formatHostStatus = (hostBlock: HostBlock): string => {
   const statusLineEntries = getStatusLineEntries(hostBlock)
   const changeCount = statusLineEntries.filter(({ status }) => IN_CHANGE_COUNT[status]).length
   const waitingCount = statusLineEntries.filter(({ status }) => status === "waiting").length
-  // Count warnings too, a step's and a message's, so one isn't lost when the blocks have scrolled away.
+  // Count warnings too, the host's, a step's, and a message's, so one isn't lost when the blocks have scrolled away.
   const warningCount = countWarnings(hostBlock)
 
   // Leave the comma between the counts unstyled.

@@ -1,5 +1,6 @@
 import type { Result } from "ts-explicit-errors"
 
+import type { NamedFact } from "#core/hosts/prepare/host-details/facts.ts"
 import type { EnsureOptions } from "#core/session/handlers/ensure.ts"
 import type { Want } from "#core/session/handlers/ensure/want.ts"
 import type { FileOptions } from "#core/session/handlers/file.ts"
@@ -19,6 +20,7 @@ export const createHostRecord = (name: string, target: string): HostRecord => ({
   preparationCommands: [],
   runningStep: undefined,
   entries: [],
+  warnings: [],
   failure: undefined,
 })
 
@@ -38,8 +40,17 @@ export interface HostRecord {
    * failure's.
    */
   entries: EntryRecord[]
+  /** What tsinfra found about the whole host that worked but needs a look, from its preparation. */
+  warnings: HostWarningRecord[]
   /** The host's one failure, if it failed, and where it came from. */
   failure: RecordedFailure | undefined
+}
+
+/** A warning about the whole host, recorded as its kind, so the report picks the words. */
+export interface HostWarningRecord {
+  kind: "unknownFact"
+  fact: NamedFact
+  value: string
 }
 
 /** A host's failure: one that no step owns, or a step's. */
