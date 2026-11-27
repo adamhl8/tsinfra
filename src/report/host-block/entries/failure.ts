@@ -1,6 +1,6 @@
-import type { HostRecord } from "#core/session/recorder/records.ts"
-import type { CommandRecord } from "#core/session/recorder/records/command.ts"
-import type { RecordedFailure, RecordedUnownedFailure } from "#core/session/recorder/records/failure.ts"
+import type { HostRecord } from "#core/recorder/records.ts"
+import type { CommandRecord } from "#core/recorder/records/command.ts"
+import type { RecordedFailure, RecordedUnownedFailure } from "#core/recorder/records/failure.ts"
 import type { Detail, EntryName, FailureEntry } from "#report/host-block.ts"
 import {
   toHintDetails,
@@ -8,7 +8,7 @@ import {
   toPreparationFailureDetails,
   toSavedStateFailureDetails,
   toStepFailureDetails,
-} from "#report/host-block/details.ts"
+} from "#report/host-block/entries/details.ts"
 import { toStepName } from "#report/host-block/entries/step.ts"
 
 /** Returns what a failure no step owns shows under its error, before any hints, for its kind. */

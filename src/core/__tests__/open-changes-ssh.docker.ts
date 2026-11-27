@@ -6,9 +6,9 @@ import bun, { $ } from "bun"
 
 import { getPreparedHome, loadHostThatStopsBeforeRun, prepareAndRunHost } from "#core/__tests__/session.ts"
 import { SSHD_TARGET, startSshd, stopSshd } from "#core/__tests__/sshd.ts"
-import { toSavedStatePath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
-import type { HostRecord } from "#core/session/recorder/records.ts"
-import { getFinishedStepRecords } from "#core/session/recorder/records/step.ts"
+import { toSavedStatePath } from "#core/hosts/prepare/tsinfra-directory.ts"
+import type { HostRecord } from "#core/recorder/records.ts"
+import { getFinishedStepRecords } from "#core/recorder/records/step.ts"
 import { closeConnections } from "#core/transport.ts"
 
 const toStatuses = (hostRecord: HostRecord) =>

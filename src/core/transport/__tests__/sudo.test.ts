@@ -5,7 +5,7 @@ import path from "node:path"
 import { makeTempDir } from "@adamhl8/configs/test"
 
 import { createFakeSudoSession, readOrMessage, writeFakeTool } from "#core/__tests__/session.ts"
-import { getFinishedStepRecords } from "#core/session/recorder/records/step.ts"
+import { getFinishedStepRecords } from "#core/recorder/records/step.ts"
 import { runLocal } from "#core/transport/local.ts"
 import { buildAskpassHelperWriteScript, createAskpassSudoTransport } from "#core/transport/sudo.ts"
 

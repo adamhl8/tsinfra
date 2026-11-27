@@ -5,16 +5,16 @@ import type { HostFunction } from "#core/hosts/host.ts"
 import type { LoadedHost } from "#core/hosts/load.ts"
 import type { HostDetails } from "#core/hosts/prepare/host-details.ts"
 import { buildHostDetails, finishHostDetails } from "#core/hosts/prepare/host-details.ts"
-import { toSavedStatePath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
+import { createHostMeta } from "#core/hosts/prepare/host-meta.ts"
+import { toSavedStatePath } from "#core/hosts/prepare/tsinfra-directory.ts"
+import type { PreparationRecorder } from "#core/recorder/preparation-recorder.ts"
+import { createPreparationRecorder } from "#core/recorder/preparation-recorder.ts"
+import type { HostRecord } from "#core/recorder/records.ts"
+import { createHostRecord } from "#core/recorder/records.ts"
+import { createSessionRecorder } from "#core/recorder/session-recorder.ts"
+import type { SavedStateManager } from "#core/saved-state.ts"
+import { createSavedStateManager } from "#core/saved-state.ts"
 import type { SessionContext } from "#core/session.ts"
-import { createHostMeta } from "#core/session/host-meta.ts"
-import type { PreparationRecorder } from "#core/session/recorder/preparation-recorder.ts"
-import { createPreparationRecorder } from "#core/session/recorder/preparation-recorder.ts"
-import type { HostRecord } from "#core/session/recorder/records.ts"
-import { createHostRecord } from "#core/session/recorder/records.ts"
-import { createSessionRecorder } from "#core/session/recorder/session-recorder.ts"
-import type { SavedStateManager } from "#core/session/saved-state.ts"
-import { createSavedStateManager } from "#core/session/saved-state.ts"
 import { createShell } from "#core/transport/shell.ts"
 
 /** A host after preparation: ready to run its function, or failed, with the record that says why. */
@@ -35,7 +35,7 @@ interface FailedHostEntry {
 }
 
 /** How the part of preparation that runs for every host at once, before any password prompt, went for a host. */
-export type HostInitialization = InitializedHost | FailedInitialization
+type HostInitialization = InitializedHost | FailedInitialization
 
 /** A host that's initialized, so it only needs its password prompt, if any, and its session context. */
 interface InitializedHost {

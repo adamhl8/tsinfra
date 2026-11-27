@@ -1,13 +1,13 @@
-import type { FailureHint } from "#core/session/recorder/failure-hints.ts"
-import type { CommandRecord } from "#core/session/recorder/records/command.ts"
-import type { FinishedStepRecord, StepRecord } from "#core/session/recorder/records/step.ts"
+import type { FailureHint } from "#core/recorder/failure-hints.ts"
+import type { CommandRecord } from "#core/recorder/records/command.ts"
+import type { FinishedStepRecord, StepRecord } from "#core/recorder/records/step.ts"
 import type { ComparisonValues } from "#core/session/step.ts"
 import type { Detail } from "#report/host-block.ts"
-import { toCommandsDetail, toCommandsDetails } from "#report/host-block/details/commands.ts"
-import { toComparisonValuesDetails } from "#report/host-block/details/comparisons.ts"
-import { toFailedStepDetails } from "#report/host-block/details/failure.ts"
-import { toOptionsDetails } from "#report/host-block/details/options.ts"
-import { toStepMessagesDetails } from "#report/host-block/details/step-messages.ts"
+import { toCommandsDetail, toCommandsDetails } from "#report/host-block/entries/details/commands.ts"
+import { toComparisonValuesDetails } from "#report/host-block/entries/details/comparisons.ts"
+import { toFailedStepDetails } from "#report/host-block/entries/details/failure.ts"
+import { toOptionsDetails } from "#report/host-block/entries/details/options.ts"
+import { toStepMessagesDetails } from "#report/host-block/entries/details/step-messages.ts"
 
 // Show how a string, a list, a set, a record, a file, or a link would change, because the step's name doesn't say.
 // An exit code or a boolean needs no details, because the name already says what yes and no mean.

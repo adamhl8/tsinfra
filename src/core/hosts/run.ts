@@ -1,8 +1,8 @@
 import { attempt, isErr } from "ts-explicit-errors"
 
 import type { HostEntry } from "#core/hosts/prepare.ts"
+import type { HostRecord } from "#core/recorder/records.ts"
 import { createHostSession } from "#core/session.ts"
-import type { HostRecord } from "#core/session/recorder/records.ts"
 import type { Mode } from "#mode.ts"
 
 /** Calls the script's host function with its `Host`, catches what it throws, and returns the host's record. */

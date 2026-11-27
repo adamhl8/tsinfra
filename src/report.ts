@@ -11,7 +11,7 @@ import type {
 } from "#report/host-block.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 
-export interface ReportOptions {
+interface ReportOptions {
   /** How much of each host's block to show. */
   verbosity: Verbosity
 }

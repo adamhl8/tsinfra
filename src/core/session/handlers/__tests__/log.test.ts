@@ -11,7 +11,7 @@ import {
   getStepRecords,
   readOrMessage,
 } from "#core/__tests__/session.ts"
-import { getFinishedStepRecords } from "#core/session/recorder/records/step.ts"
+import { getFinishedStepRecords } from "#core/recorder/records/step.ts"
 
 describe("h.log", () => {
   it("should record a message logged outside a step as an entry between the steps around it", async () => {

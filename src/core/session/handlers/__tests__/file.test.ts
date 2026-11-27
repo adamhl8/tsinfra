@@ -19,9 +19,9 @@ import {
   fileOrMessage,
   getStepRecords,
 } from "#core/__tests__/session.ts"
+import { getFinishedStepRecords } from "#core/recorder/records/step.ts"
 import { handleFile } from "#core/session/handlers/file.ts"
 import { PUBLIC_FILE_MODE } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
-import { getFinishedStepRecords } from "#core/session/recorder/records/step.ts"
 
 const CLOSED_FILE_DESCRIPTOR = 9999
 

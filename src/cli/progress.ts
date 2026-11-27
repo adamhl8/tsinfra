@@ -3,8 +3,8 @@ import readline from "node:readline"
 
 import { sliceAnsi } from "bun"
 
-import type { HostRecord } from "#core/session/recorder/records.ts"
-import type { StepRecord } from "#core/session/recorder/records/step.ts"
+import type { HostRecord } from "#core/recorder/records.ts"
+import type { StepRecord } from "#core/recorder/records/step.ts"
 import type { Mode } from "#mode.ts"
 import { entryNameElement, kindElement } from "#report/format/elements/entry.ts"
 import { toStepName } from "#report/host-block/entries/step.ts"

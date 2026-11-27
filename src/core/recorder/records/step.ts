@@ -1,8 +1,8 @@
+import type { HostRecord } from "#core/recorder/records.ts"
+import type { CommandRecord } from "#core/recorder/records/command.ts"
+import type { StepMessageRecord } from "#core/recorder/records/message.ts"
+import type { StepOptionsRecord } from "#core/recorder/records/options.ts"
 import type { Comparison } from "#core/session/handlers/shared/converge.ts"
-import type { HostRecord } from "#core/session/recorder/records.ts"
-import type { CommandRecord } from "#core/session/recorder/records/command.ts"
-import type { StepMessageRecord } from "#core/session/recorder/records/message.ts"
-import type { StepOptionsRecord } from "#core/session/recorder/records/options.ts"
 import type { StepKind, StepStatus } from "#core/session/step.ts"
 
 /** Returns the records of the steps a host finished, in order, without the host messages between them. */

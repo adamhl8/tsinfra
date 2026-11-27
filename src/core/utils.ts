@@ -38,6 +38,9 @@ export const createCommandExitError = (commandOutput: CommandOutput) => {
   return err(`exited with code ${exitCode}${trimmedStderr}`, undefined)
 }
 
+/** Ends a heredoc of base64. Base64 has no `_`, so the encoded data can never hold this line. */
+export const HEREDOC_DELIMITER = "__TSINFRA_EOF__"
+
 /** Quotes `text` for a POSIX shell, so a space or a quote in it can't break the command. */
 export const quoteShellArg = (text: string): string => `'${text.replaceAll("'", String.raw`'\''`)}'`
 

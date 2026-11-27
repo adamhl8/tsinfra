@@ -15,10 +15,10 @@ import {
 } from "#core/__tests__/session.ts"
 import type { HostFunction } from "#core/hosts/host.ts"
 import { host } from "#core/hosts/host.ts"
-import { toSavedStatePath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
+import type { HostMeta } from "#core/hosts/prepare/host-meta.ts"
+import { toSavedStatePath } from "#core/hosts/prepare/tsinfra-directory.ts"
+import type { HostRecord } from "#core/recorder/records.ts"
 import type { Host } from "#core/session.ts"
-import type { HostMeta } from "#core/session/host-meta.ts"
-import type { HostRecord } from "#core/session/recorder/records.ts"
 
 const throwBoom = () => {
   throw new Error("boom")

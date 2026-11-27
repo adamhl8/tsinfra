@@ -6,7 +6,7 @@ import type { HomeDirectory } from "#core/hosts/prepare/host-details/facts/home.
 import { readHome } from "#core/hosts/prepare/host-details/facts/home.ts"
 import { readOsRelease } from "#core/hosts/prepare/host-details/facts/os-release.ts"
 import { readArch, readPlatform } from "#core/hosts/prepare/host-details/facts/system.ts"
-import type { HostWarningRecord } from "#core/session/recorder/records.ts"
+import type { HostWarningRecord } from "#core/recorder/records.ts"
 import type { Shell } from "#core/transport/shell.ts"
 
 /** What tsinfra reads from the host before its script runs, which nothing in a run would change. It's frozen. */

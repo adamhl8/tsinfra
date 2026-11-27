@@ -1,8 +1,8 @@
 import type { Result } from "ts-explicit-errors"
 
+import type { StepOptionsRecord } from "#core/recorder/records/options.ts"
 import type { ConvergePhase } from "#core/session/handlers/shared/converge.ts"
 import type { ToolName, ToolOptions } from "#core/session/handlers/tools.ts"
-import type { StepOptionsRecord } from "#core/session/recorder/records/options.ts"
 import type { CommandOutput } from "#core/transport.ts"
 
 export interface CommandRecord {

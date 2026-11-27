@@ -1,7 +1,7 @@
 import { isErr, messageChain } from "ts-explicit-errors"
 
 import type { ValidHostOptions } from "#core/hosts/host.ts"
-import type { CommandRecord } from "#core/session/recorder/records/command.ts"
+import type { CommandRecord } from "#core/recorder/records/command.ts"
 import type { SshFailureHint } from "#core/transport/ssh.ts"
 import { getSshFailureHint } from "#core/transport/ssh.ts"
 import type { SudoFailureHint } from "#core/transport/sudo.ts"

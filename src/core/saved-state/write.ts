@@ -1,4 +1,4 @@
-import type { SavedState } from "#core/session/saved-state/schema.ts"
+import type { SavedState } from "#core/saved-state/schema.ts"
 import { buildPrivateFileWriteScript, quoteShellArg } from "#core/utils.ts"
 
 /** Returns the script that writes `savedState` to `savedStatePath`, indented so it reads well on the host. */

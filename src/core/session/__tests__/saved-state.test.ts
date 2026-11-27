@@ -7,7 +7,7 @@ import bun from "bun"
 import type { Result } from "ts-explicit-errors"
 import { isErr, messageChain } from "ts-explicit-errors"
 
-import { createSavedStateManager } from "#core/session/saved-state.ts"
+import { createSavedStateManager } from "#core/saved-state.ts"
 import { getLocalTransport } from "#core/transport.ts"
 import { createShell } from "#core/transport/shell.ts"
 

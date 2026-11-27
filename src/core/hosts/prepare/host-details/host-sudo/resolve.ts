@@ -17,10 +17,7 @@ const NEEDS_SUDO_PASSWORD_MESSAGE =
   "needs a sudo password: set up passwordless sudo, or pass sudo: { password } to host()"
 
 /** What preparation found out about the host's sudo. */
-export type ResolvedHostSudo =
-  | { kind: "passwordless" }
-  | { kind: "password"; password: string }
-  | { kind: "needsPassword" }
+type ResolvedHostSudo = { kind: "passwordless" } | { kind: "password"; password: string } | { kind: "needsPassword" }
 
 /**
  * Checks that the host's `sudo` option works on the host, and returns what the host's `sudo` needs. A `sudo: true` host

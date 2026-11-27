@@ -3,20 +3,20 @@ import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
 import type { ValidHostOptions } from "#core/hosts/host.ts"
+import type { HostMeta } from "#core/hosts/prepare/host-meta.ts"
+import { getFailureHints } from "#core/recorder/failure-hints.ts"
+import { addSecret, maskSecrets } from "#core/recorder/masking.ts"
+import type { HostRecord } from "#core/recorder/records.ts"
+import type { CommandRecord, ToolCallRecord } from "#core/recorder/records/command.ts"
+import type { SessionFailureKind } from "#core/recorder/records/failure.ts"
+import type { StepMessageRecord } from "#core/recorder/records/message.ts"
+import type { StepOptionsRecord, StepOptionsToRecord } from "#core/recorder/records/options.ts"
+import { RECORDED_OPTION_DEFAULTS, RECORDED_STAND_INS } from "#core/recorder/records/options.ts"
+import type { StepRecord } from "#core/recorder/records/step.ts"
 import type { MessageKind } from "#core/session/handlers/log.ts"
 import type { ValidStepShellOptions } from "#core/session/handlers/options/step.ts"
 import type { ComparePhase, Comparison, ConvergePhase } from "#core/session/handlers/shared/converge.ts"
 import type { GetToolShell, ToolName, ValidToolOptions } from "#core/session/handlers/tools.ts"
-import type { HostMeta } from "#core/session/host-meta.ts"
-import { getFailureHints } from "#core/session/recorder/failure-hints.ts"
-import { addSecret, maskSecrets } from "#core/session/recorder/masking.ts"
-import type { HostRecord } from "#core/session/recorder/records.ts"
-import type { CommandRecord, ToolCallRecord } from "#core/session/recorder/records/command.ts"
-import type { SessionFailureKind } from "#core/session/recorder/records/failure.ts"
-import type { StepMessageRecord } from "#core/session/recorder/records/message.ts"
-import type { StepOptionsRecord, StepOptionsToRecord } from "#core/session/recorder/records/options.ts"
-import { RECORDED_OPTION_DEFAULTS, RECORDED_STAND_INS } from "#core/session/recorder/records/options.ts"
-import type { StepRecord } from "#core/session/recorder/records/step.ts"
 import type { StepKind, StepStatus } from "#core/session/step.ts"
 import type { Transport } from "#core/transport.ts"
 import type { CommandRecorder, RecordOutput, Shell } from "#core/transport/shell.ts"
@@ -66,7 +66,7 @@ const toRecordedOptions = (options: StepOptionsToRecord): StepOptionsRecord => {
 }
 
 /** Records the session's part of a host's run, once preparation has finished: each step, and the host's failure. */
-export interface SessionRecorder {
+export interface SessionRecorder extends FailureRecorder, MessageRecorder {
   /**
    * Records the shell options the running step set, and returns its shells, built once for the step. Recording and
    * building in one call keeps the record and the commands from disagreeing.
@@ -78,13 +78,6 @@ export interface SessionRecorder {
    * failure can't lose them.
    */
   recordOptions: (options: StepOptionsToRecord) => void
-  /** Returns the error the host failed with, or nothing while it hasn't failed. */
-  getFailure: () => Error | undefined
-  /**
-   * Keeps `error` as the host's failure, and returns the error the host ends up with. A new failure is of `kind`, until
-   * a step that was running makes it its own when it finishes.
-   */
-  recordFailure: (error: Error, kind: SessionFailureKind) => Error
   /** Records a new step and marks it running, or fails when another step is running. */
   startStep: (stepName: string, kind: StepKind) => Result
   /**
@@ -94,12 +87,27 @@ export interface SessionRecorder {
   finishStep: (status: StepStatus) => void
   /** Fails the running step with `error`, and marks no step as running. */
   failStep: (error: Error) => void
+  convergeRecorder: ConvergeRecorder
+}
+
+/** Reads and records the host's one failure, which the script boundary checks on every call. */
+export interface FailureRecorder {
+  /** Returns the error the host failed with, or nothing while it hasn't failed. */
+  getFailure: () => Error | undefined
+  /**
+   * Keeps `error` as the host's failure, and returns the error the host ends up with. A new failure is of `kind`, until
+   * a step that was running makes it its own when it finishes.
+   */
+  recordFailure: (error: Error, kind: SessionFailureKind) => Error
+}
+
+/** Records the messages the script logs with `h.log`. */
+export interface MessageRecorder {
   /**
    * Records a message the script logged, masked. Records it on the running step, with its phase and its place among the
    * step's commands, or as an entry of its own when no step is running.
    */
   recordMessage: (messageKind: MessageKind, text: string) => void
-  convergeRecorder: ConvergeRecorder
 }
 
 /**
@@ -284,14 +292,14 @@ export const createSessionRecorder = (
   const getFailure = () => hostRecord.failure?.error
 
   return {
-    getStepShells,
-    recordOptions,
     getFailure,
     recordFailure,
+    recordMessage,
+    getStepShells,
+    recordOptions,
     startStep,
     finishStep,
     failStep,
-    recordMessage,
     convergeRecorder,
   }
 }

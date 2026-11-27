@@ -8,10 +8,10 @@ import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
 import { createSession, loadTestHost, prepareSession, readOpenChanges } from "#core/__tests__/session.ts"
 import type { HomeDirectory } from "#core/hosts/prepare/host-details/facts/home.ts"
-import { toSavedStatePath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
+import { toSavedStatePath } from "#core/hosts/prepare/tsinfra-directory.ts"
+import type { HostRecord } from "#core/recorder/records.ts"
+import { getFinishedStepRecords } from "#core/recorder/records/step.ts"
 import type { EnsureOptions } from "#core/session/handlers/ensure.ts"
-import type { HostRecord } from "#core/session/recorder/records.ts"
-import { getFinishedStepRecords } from "#core/session/recorder/records/step.ts"
 
 /** Returns an `ensure` that makes `marker`, so it changes the first time it runs. */
 const makeMarker = (marker: string): EnsureOptions<boolean> => ({

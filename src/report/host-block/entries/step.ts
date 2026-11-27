@@ -1,8 +1,8 @@
-import type { FinishedStepRecord, StepRecord } from "#core/session/recorder/records/step.ts"
+import type { FinishedStepRecord, StepRecord } from "#core/recorder/records/step.ts"
 import type { StepKind, StepStatus } from "#core/session/step.ts"
 import type { Mode } from "#mode.ts"
 import type { EntryName, FinishedStepEntry, NameKind } from "#report/host-block.ts"
-import { toStepDetails } from "#report/host-block/details.ts"
+import { toStepDetails } from "#report/host-block/entries/details.ts"
 import { toStepNote } from "#report/host-block/note.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 

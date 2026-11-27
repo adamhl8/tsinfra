@@ -70,7 +70,7 @@ const TOOL_VERBS: Record<ToolName, string> = {
 const toToolFailureMessage = (toolName: ToolName, cmd: string) => `failed to ${TOOL_VERBS[toolName]} '${cmd}'`
 
 /** A tool's command and options, once validated. */
-export interface ToolCall {
+interface ToolCall {
   cmd: string
   options: ValidToolOptions
 }
@@ -116,7 +116,7 @@ export const runInspectCommand = async (ctx: CommandContext, toolCall: ToolCall)
 }
 
 /** What a tool is given: the name the script called it by, and where to get a shell for each call. */
-export interface ToolContext {
+interface ToolContext {
   toolName: ToolName
   getToolShell: GetToolShell
 }

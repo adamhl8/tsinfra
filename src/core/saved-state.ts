@@ -1,10 +1,10 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import { readSavedState } from "#core/session/saved-state/read.ts"
-import type { SavedState } from "#core/session/saved-state/schema.ts"
-import { SAVED_STATE_VERSION } from "#core/session/saved-state/schema.ts"
-import { buildSavedStateDeleteScript, buildSavedStateWriteScript } from "#core/session/saved-state/write.ts"
+import { readSavedState } from "#core/saved-state/read.ts"
+import type { SavedState } from "#core/saved-state/schema.ts"
+import { SAVED_STATE_VERSION } from "#core/saved-state/schema.ts"
+import { buildSavedStateDeleteScript, buildSavedStateWriteScript } from "#core/saved-state/write.ts"
 import type { Shell } from "#core/transport/shell.ts"
 
 /**

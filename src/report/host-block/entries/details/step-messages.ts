@@ -1,10 +1,10 @@
 import { firstBy } from "remeda"
 
+import type { StepMessageRecord } from "#core/recorder/records/message.ts"
+import type { StepRecord } from "#core/recorder/records/step.ts"
 import type { MessageKind } from "#core/session/handlers/log.ts"
-import type { StepMessageRecord } from "#core/session/recorder/records/message.ts"
-import type { StepRecord } from "#core/session/recorder/records/step.ts"
 import type { Detail, StepMessage } from "#report/host-block.ts"
-import { COMMANDS_LEVEL } from "#report/host-block/details/commands.ts"
+import { COMMANDS_LEVEL } from "#report/host-block/entries/details/commands.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 
 /**

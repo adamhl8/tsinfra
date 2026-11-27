@@ -5,8 +5,11 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 <!-- toc -->
 
 - [Next](#next)
-  - [The report's notes, warnings, messages, and hints](#the-reports-notes-warnings-messages-and-hints)
-  - [Splitting up `session.ts`](#splitting-up-sessionts)
+  - [Grouping the step context](#grouping-the-step-context)
+  - [Recording fact warnings](#recording-fact-warnings)
+  - [Recorded step warnings](#recorded-step-warnings)
+  - [Step entries](#step-entries)
+  - [Naming the report's asides](#naming-the-reports-asides)
   - [More integrations](#more-integrations)
 - [Planned](#planned)
   - [Running hosts in parallel](#running-hosts-in-parallel)
@@ -42,19 +45,53 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 
 In the order they'll be built.
 
-### The report's notes, warnings, messages, and hints
+### Grouping the step context
 
-The report's asides grew one kind at a time, at the host level, on an entry, and around the summary (see [CLI](./cli.md#output)), and their names and shapes no longer line up. Nothing about the fix is decided. What to work through:
+`StepContext` mixes what changes per step with what stays the same for the whole host, because passing a value down on the context was the easy way to reach a handler. Group it, as one object:
+
+- **Per step, at the top level:** `stepName`, `kind`, `shell`, `readTools`, and `changeTools`, which are built from the step's options.
+- **Per host, under `ctx.session`:** the recorders, `savedStateManager`, `mode`, `home`, and the sets the steps of a run share, like `changedStepNames`, `ranAlwaysStepNames`, and `pathAttributeClaims`.
+
+Keep the context explicit, rather than a store a module imports. A store keyed by host still needs its key passed down, and its lookup can miss. The context reaches only orchestrators, like the handlers, the compares, the writes, and `converge`, and the leaves already take only the values they use. An `AsyncLocalStorage` store for the recorder is the one ambient design worth a prototype, to compare against, because it needs no key passed down. It hides which code records, though.
+
+Restate the recording rule in AGENTS.md as what the code does: code records through the recorders on its context, where it finds something, like `recordOptions` right after validating options. `HandlerReturn` carries only the status `callStep` records and the value the script gets.
+
+### Recording fact warnings
+
+Look again at how a fact's warning reaches the record, so it follows the same rule as the other things the code records. Each fact's reader returns a `FactResult`, its value and a warning or `undefined`. `readHostFacts` collects the warnings, and `buildHostDetails` passes them straight to `preparationRecorder.recordWarnings`. A warning passed up only to be recorded right away may mean the reader should record it itself, through the preparation recorder passed down to it, which would leave a reader returning only its value. The case for keeping it is that `readHostFacts` is each reader's direct caller and collects from all of them alike. Nothing is decided.
+
+### Recorded step warnings
+
+A step warning, like a link to a missing target, is worked out by the report today, in `report/host-block/entries/details.ts`, from the link's comparison values. Record it in core instead, so the rule lives with the step, and a step record mirrors a host record:
+
+- **`StepRecord` gets `warnings`,** beside `HostRecord.warnings`. The warning's type moves from the report into core.
+- **`converge` records them from the final comparison,** which is `after` when it ran and `before` otherwise, so a step that compares twice warns once, about the state it left. `ConvergeSpec` gets an optional `getWarnings(comparison)`, and `converge` records what it returns through its recorder. A step that fails records none.
+- **The link step's `getWarnings`** reads `targetExists` from its comparison values.
+- **The report maps `stepRecord.warnings`** into warning details, for a finished step only, because a failed step's error comes first.
+
+This sets the rule for every aside: core records warnings and hints where it finds them, because they're about the host, and the builder derives notes, because they're about the run or the report. Warnings and hints stay separate. A warning is about a host or a step that worked, and shows under it. A hint is about a failure, shows under the failure, and stays on `RecordedFailure`, so a hint without a failure can't be recorded. Add the rule to AGENTS.md.
+
+### Step entries
+
+A step record keeps its commands and its step messages in two lists, and each message holds `commandCount`, the number of commands recorded before it, so the formatter can place it among them. Give a step `entries` instead, like a host's:
+
+| Level | Entries hold | Messages logged at that level |
+| ----- | ------------ | ----------------------------- |
+| Host  | steps        | host messages                 |
+| Step  | commands     | step messages                 |
+
+- **`StepRecord.entries`** replaces `commands` and `messages`, as `CommandRecord | StepMessageRecord`. `CommandRecord` gets `kind: "command"`, and `StepMessageRecord` gets `kind: "stepMessage"` and loses `commandCount`. `EntryRecord` becomes `HostEntryRecord`, to pair with `StepEntryRecord`.
+- **`getStepCommands`,** beside `getFinishedStepRecords`, serves the code that wants only the commands, like the failure hints and the commands detail.
+- **The builder works out each message's place** from its position among the entries, so the host block, the filter, and the formatter don't change.
+
+### Naming the report's asides
+
+The report's asides grew one kind at a time, at the host level, on an entry, and around the summary (see [CLI](./cli.md#output)), and their names no longer line up. Settle the names once the record's shape is done. What to work through:
 
 - **"Note" names four things:** a host note under the host's name (`HostNote`), a note part after an entry's name (`NotePart`), a detail note under an entry (`DetailNote`), and the limit notes the formatter writes in place of a long diff, which have no type.
 - **"Hint" names two things:** a failure's `FailureHint`, and the line under a host warning that asks you to report an unknown fact, which only reuses the hint style.
-- **The host and step levels don't pair up.** Messages and warnings each come in a host and a step version, but notes take a different name at each level, and hints exist only under failures.
 - **Host warnings come only from preparation,** because the preparation recorder is the only code that records one. Decide whether the name should say so, or whether the session should be able to record one too.
 - **A host warning's hint is written into its formatter.** Give each host warning its own hint, like a failure's `hints`, once a second kind needs a different one, or none.
-
-### Splitting up `session.ts`
-
-`core/session.ts` has grown to about 320 lines: the `Host` interface with its JSDoc, and `createHostSession`, which holds the failed-host check, the tools, the step name claims, `callStep`, and `h.log`. Some of those are jobs of their own that could move into parts beside it. Nothing about the split is decided. Keep the rule that `session.ts` is the only code in `core/` that throws, or decide what replaces it, because a part that holds a `callOrFail` would throw too.
 
 ### More integrations
 
@@ -288,7 +325,7 @@ Each copy of tsinfra warns when a newer version is out. The global launcher (see
 Fixes and finishing work for what's already built.
 
 - **Stop remote commands on Ctrl-C.** Without a terminal, Ctrl-C ends the local `ssh`, but the command on the host keeps running. nixos-rebuild runs a remote `pkill -SIGINT` when it's interrupted. tsinfra needs the same, with the process to stop known, and the run's connections still closed.
-- **Fail a tool saved for later.** A script can keep the `read` or `exec` a step function was given and call it after that step finished. At the top level its command goes unrecorded, and during a later step it is recorded under the wrong step. `callStep` already builds a fresh set of tools for each step. What's left is to bind them to the step's record, and fail the host through `callOrFail` when that step is no longer the running one. Do not throw in `recordCommands`, because only `session.ts` throws, and a throw there would skip recording the failure in `callOrFail`.
+- **Fail a tool saved for later.** A script can keep the `read` or `exec` a step function was given and call it after that step finished. At the top level its command goes unrecorded, and during a later step it is recorded under the wrong step. `callStep` already builds a fresh set of tools for each step. What's left is to bind them to the step's record, and fail the host through `callOrFail` when that step is no longer the running one. Do not throw in `recordCommands`, because only the script boundary throws, and a throw there would skip recording the failure in `callOrFail`.
 - **Keep forced color out of commands.** `runProcess` starts the local shell with tsinfra's whole environment, so a `FORCE_COLOR` or `CLICOLOR_FORCE` that a task runner sets reaches every command on `@local`. A command then colors output a check parses, like `bun pm ls -g`, whose names stop matching the wanted ones and show as both missing and extra. Remove both variables from the environment `runProcess` passes, and leave `NO_COLOR`, because it only turns color off. The report keeps its own color, because it reads `process.env` in tsinfra's process. SSH hosts don't get them, because ssh only forwards the names in `SendEnv`.
 - **Run the Docker tests in CI.** Only `bask test --all` runs the Docker tests, never `bask lint`, because they need Docker and download images and packages, so nothing runs them automatically yet.
 - **Share `readInfoPlist` once a second integration needs it.** It lives in `macos/file-handlers` today, because only `fileHandlers` uses an app's `Info.plist`. Move it to a shared export path, like `tsinfra/integrations/utils`, when another integration reads one.

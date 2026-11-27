@@ -4,8 +4,8 @@ import process from "node:process"
 import { attempt, isErr, messageChain } from "ts-explicit-errors"
 
 import { createSession, createSessionWithFacts, getStepRecords } from "#core/__tests__/session.ts"
+import { getFinishedStepRecords } from "#core/recorder/records/step.ts"
 import type { Host } from "#core/session.ts"
-import { getFinishedStepRecords } from "#core/session/recorder/records/step.ts"
 import { fileHandlers, readInfoPlist, readKnownExtensions } from "#integrations/macos/file-handlers/index.ts"
 import { getOwnValue } from "#utils.ts"
 

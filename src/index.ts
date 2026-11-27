@@ -42,4 +42,4 @@ export type { EnvOptions, InputOptions, MaskOptions } from "#core/session/handle
 export type { StepNeeds } from "#core/session/handlers/options/step.ts"
 export type { ChangeTools, Exec, Inspect, InspectResult, ReadTools, ToolOptions } from "#core/session/handlers/tools.ts"
 export type { Host } from "#core/session.ts"
-export type { HostMeta } from "#core/session/host-meta.ts"
+export type { HostMeta } from "#core/hosts/prepare/host-meta.ts"

@@ -1,8 +1,9 @@
-import type { Result } from "ts-explicit-errors"
-import { err, isErr } from "ts-explicit-errors"
-
 import type { HostOptions } from "#core/hosts/host.ts"
 import type { HostFacts } from "#core/hosts/prepare/host-details/facts.ts"
+import type { HostMeta } from "#core/hosts/prepare/host-meta.ts"
+import type { SessionRecorder } from "#core/recorder/session-recorder.ts"
+import type { SavedStateManager } from "#core/saved-state.ts"
+import { createCallStep } from "#core/session/call-step.ts"
 import type { DirOptions } from "#core/session/handlers/dir.ts"
 import { handleDir } from "#core/session/handlers/dir.ts"
 import type { EnsureOptions } from "#core/session/handlers/ensure.ts"
@@ -15,33 +16,17 @@ import type { InspectOptions } from "#core/session/handlers/inspect.ts"
 import { handleInspect } from "#core/session/handlers/inspect.ts"
 import type { LinkOptions } from "#core/session/handlers/link.ts"
 import { handleLink } from "#core/session/handlers/link.ts"
-import type { Log, MessageKind } from "#core/session/handlers/log.ts"
-import { validateMessage } from "#core/session/handlers/log.ts"
-import type { StepShellOptions } from "#core/session/handlers/options/step.ts"
-import { stepShellOptionsSchema } from "#core/session/handlers/options/step.ts"
+import type { Log } from "#core/session/handlers/log.ts"
 import type { ReadOptions } from "#core/session/handlers/read.ts"
 import { handleRead } from "#core/session/handlers/read.ts"
 import type { RunOptions } from "#core/session/handlers/run.ts"
 import { handleRun } from "#core/session/handlers/run.ts"
 import type { ChangeStepResult } from "#core/session/handlers/shared/change-step-result.ts"
 import type { Change } from "#core/session/handlers/shared/change.ts"
-import type { PathAttributeClaim } from "#core/session/handlers/shared/filesystem/attributes/claims.ts"
-import { resolvePath } from "#core/session/handlers/shared/filesystem/path.ts"
-import { validateInput } from "#core/session/handlers/shared/validate-input.ts"
-import type {
-  ChangeTools,
-  Exec,
-  GetToolShell,
-  Inspect,
-  InspectResult,
-  ReadTools,
-} from "#core/session/handlers/tools.ts"
-import { execCommand, inspectCommand } from "#core/session/handlers/tools.ts"
-import type { HostMeta } from "#core/session/host-meta.ts"
-import type { SessionRecorder } from "#core/session/recorder/session-recorder.ts"
-import type { SavedStateManager } from "#core/session/saved-state.ts"
-import type { ChangeStepKind, HandlerReturn, StepContext, StepKind } from "#core/session/step.ts"
-import { isChangeStepKind, isPathStepKind, nonEmptyStringSchema } from "#core/session/step.ts"
+import type { InspectResult } from "#core/session/handlers/tools.ts"
+import { createLog } from "#core/session/log.ts"
+import { createScriptBoundary } from "#core/session/script-boundary.ts"
+import type { StepKind } from "#core/session/step.ts"
 import type { Mode } from "#mode.ts"
 
 /** What a host's session needs, set up before any script runs. */
@@ -130,177 +115,16 @@ export interface Host<O extends HostOptions = HostOptions> extends Record<StepKi
   run: (name: string, cmd: Change, options: RunOptions) => Promise<ChangeStepResult<"run">>
 }
 
-// Name what each step takes as its name, so a validation error says which argument is wrong.
-const STEP_NAME_LABELS: Record<StepKind, string> = {
-  read: "command",
-  inspect: "command",
-  file: "path",
-  link: "path",
-  dir: "path",
-  ensure: "name",
-  run: "name",
-}
-
 /**
  * Builds the `Host` passed to a host's function, and keeps the run's failure on the host's record through
- * `sessionRecorder`, where the script can't see it.
- *
- * This is the only code that throws, because throwing is the contract with the script. Every function the script can
- * call, on `h` or as a tool, goes through `callOrFail` around an internal function from `handlers/` that returns errors
- * as values. `h.log` is synchronous, so its methods make the same checks without `callOrFail`.
+ * `sessionRecorder`, where the script can't see it. Every method goes through the script boundary, which is the only
+ * code that throws.
  */
 export const createHostSession = (sessionContext: SessionContext, mode: Mode): Host => {
-  const { meta, facts, savedStateManager, sessionRecorder } = sessionContext
-  const { home } = facts
-  const {
-    getStepShells,
-    recordOptions,
-    getFailure,
-    recordFailure,
-    startStep,
-    finishStep,
-    failStep,
-    recordMessage,
-    convergeRecorder,
-  } = sessionRecorder
-
-  // Throw the failure on every later call, so a script that catches it still can't use the host.
-  const throwIfFailed = () => {
-    const failure = getFailure()
-    if (failure) throw failure
-  }
-
-  // oxlint-disable-next-line promise/prefer-await-to-callbacks - `callback` is awaited, and the rule only matches its name
-  const callOrFail = async <T>(callback: () => Promise<Result<T>>) => {
-    throwIfFailed()
-
-    // oxlint-disable-next-line promise/prefer-await-to-callbacks - `callback` is awaited, and the rule only matches its name
-    const value = await callback()
-    if (isErr(value)) throw recordFailure(value, "host fn")
-
-    // Throw a failure recorded during `callback`, because a function in the script may have caught it and returned normally.
-    const callbackFailure = getFailure()
-    if (callbackFailure) throw callbackFailure
-    return value
-  }
-
-  /** Returns the tools a step's functions are given, running each call's command on its own shell from `getToolShell`. */
-  const createTools = (getToolShell: GetToolShell) => {
-    const readTool: Exec = async (cmd, options) =>
-      callOrFail(async () => execCommand({ toolName: "read", getToolShell }, cmd, options))
-    const inspectTool: Inspect = async (cmd, options) =>
-      callOrFail(async () => inspectCommand({ toolName: "inspect", getToolShell }, cmd, options))
-    const execTool: Exec = async (cmd, options) =>
-      callOrFail(async () => execCommand({ toolName: "exec", getToolShell }, cmd, options))
-    const readTools: ReadTools = { read: readTool, inspect: inspectTool }
-    const changeTools: ChangeTools = { exec: execTool, inspect: inspectTool }
-    return { readTools, changeTools }
-  }
-
-  const stepKindsByName = new Map<string, ChangeStepKind>()
-  const stepKindsByPath = new Map<string, ChangeStepKind>()
-  // Refuse a name an earlier change step has, because the report and `needs` tell steps apart by name.
-  // Refuse a path an earlier path step has under another spelling, like `~/x` and `/home/user/x`.
-  const claimStepName = (stepName: string, kind: StepKind): Result => {
-    if (!isChangeStepKind(kind)) return
-
-    const earlierKind = stepKindsByName.get(stepName)
-    if (earlierKind) {
-      return err(
-        `an earlier ${earlierKind} step has the same name, and step names must be unique in a host script`,
-        undefined,
-      )
-    }
-
-    const resolvedPath = isPathStepKind(kind) ? resolvePath(stepName, home) : undefined
-    const earlierPathKind = resolvedPath === undefined ? undefined : stepKindsByPath.get(resolvedPath)
-    if (earlierPathKind) {
-      return err(
-        `an earlier ${earlierPathKind} step has the same path, and a path can have only one file, link, or dir step in a host script`,
-        undefined,
-      )
-    }
-
-    stepKindsByName.set(stepName, kind)
-    if (resolvedPath !== undefined) stepKindsByPath.set(resolvedPath, kind)
-  }
-
-  // Share these across the session's steps, because a step checks whether the steps it follows or needs changed.
-  // A run also checks whether the steps it follows run on every pass, and a path step checks what earlier ones set.
-  const changedStepNames = new Set<string>()
-  const ranAlwaysStepNames = new Set<string>()
-  const pathAttributeClaims = new Map<string, PathAttributeClaim[]>()
-
-  const callStep = async <K extends StepKind, T>(
-    stepName: unknown,
-    kind: K,
-    handler: (ctx: StepContext<K>) => Promise<Result<HandlerReturn<T>>>,
-    options: StepShellOptions = {},
-  ): Promise<T> =>
-    callOrFail(async () => {
-      // Validate the name before recording the step, because the output shows every recorded step by its name.
-      const validName = validateInput(stepName, nonEmptyStringSchema, {
-        inputLabel: STEP_NAME_LABELS[kind],
-        givenTo: kind,
-      })
-      if (isErr(validName)) return validName
-
-      const stepStart = startStep(validName, kind)
-      if (isErr(stepStart)) return stepStart
-
-      const nameClaim = claimStepName(validName, kind)
-      if (isErr(nameClaim)) {
-        failStep(nameClaim)
-        return nameClaim
-      }
-
-      // Validate `options` after recording the step, so a bad one fails under the step like the step's other inputs.
-      const validOptions = validateInput(options, stepShellOptionsSchema, { inputLabel: "options", givenTo: kind })
-      if (isErr(validOptions)) {
-        failStep(validOptions)
-        return validOptions
-      }
-
-      const { stepShell, getToolShell } = getStepShells(validOptions)
-      const { readTools, changeTools } = createTools(getToolShell)
-
-      const ctx: StepContext<K> = {
-        stepName: validName,
-        kind,
-        mode,
-        shell: stepShell,
-        home,
-        savedStateManager,
-        changedStepNames,
-        ranAlwaysStepNames,
-        pathAttributeClaims,
-        readTools,
-        changeTools,
-        convergeRecorder,
-        recordOptions,
-      }
-
-      const handlerReturn = await handler(ctx)
-      if (isErr(handlerReturn)) {
-        failStep(handlerReturn)
-        return handlerReturn
-      }
-
-      finishStep(handlerReturn.status)
-      return handlerReturn.value
-    })
-
-  // Keep `h.log` synchronous, because it runs nothing, and a script shouldn't have to await a message.
-  const createLogMethod = (messageKind: MessageKind) => (message: unknown) => {
-    throwIfFailed()
-
-    const validMessage = validateMessage(messageKind, message)
-    if (isErr(validMessage)) throw recordFailure(validMessage, "host fn")
-
-    recordMessage(messageKind, validMessage)
-  }
-
-  const log: Log = { info: createLogMethod("info"), warn: createLogMethod("warn") }
+  const { meta, facts, sessionRecorder } = sessionContext
+  const scriptBoundary = createScriptBoundary(sessionRecorder)
+  const log = createLog(sessionRecorder, scriptBoundary)
+  const callStep = createCallStep(sessionContext, mode, scriptBoundary)
 
   const host: Host = {
     meta,

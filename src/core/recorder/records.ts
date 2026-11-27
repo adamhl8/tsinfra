@@ -1,8 +1,8 @@
 import type { NamedFact } from "#core/hosts/prepare/host-details/facts.ts"
-import type { CommandRecord } from "#core/session/recorder/records/command.ts"
-import type { RecordedFailure } from "#core/session/recorder/records/failure.ts"
-import type { HostMessageRecord } from "#core/session/recorder/records/message.ts"
-import type { FinishedStepRecord, StepRecord } from "#core/session/recorder/records/step.ts"
+import type { CommandRecord } from "#core/recorder/records/command.ts"
+import type { RecordedFailure } from "#core/recorder/records/failure.ts"
+import type { HostMessageRecord } from "#core/recorder/records/message.ts"
+import type { FinishedStepRecord, StepRecord } from "#core/recorder/records/step.ts"
 
 /** Returns a new, empty record for the host `name` on `target`, which preparation and the session both record on. */
 export const createHostRecord = (name: string, target: string): HostRecord => ({

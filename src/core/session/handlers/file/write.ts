@@ -19,8 +19,7 @@ import {
   toWriteScriptPaths,
 } from "#core/session/handlers/shared/filesystem/write-script.ts"
 import type { StepContext } from "#core/session/step.ts"
-import { HEREDOC_DELIMITER } from "#core/transport/utils.ts"
-import { createCommandExitError } from "#core/utils.ts"
+import { HEREDOC_DELIMITER, createCommandExitError } from "#core/utils.ts"
 
 // Stand in for the content in the record, because it may be a secret and it can be large.
 const RECORDED_CONTENT = "<content as base64>"

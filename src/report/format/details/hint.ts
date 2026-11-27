@@ -1,4 +1,4 @@
-import type { FailureHint } from "#core/session/recorder/failure-hints.ts"
+import type { FailureHint } from "#core/recorder/failure-hints.ts"
 import { hintElement } from "#report/format/elements/asides.ts"
 
 // Name both fixes, because `sudo: true` and `sudo: { password }` each give sudo what it needs.

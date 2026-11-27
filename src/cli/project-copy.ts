@@ -7,7 +7,7 @@ import type { Result } from "ts-explicit-errors"
 import { attempt, err, isErr } from "ts-explicit-errors"
 
 /** The copy of tsinfra installed in the project that the CLI runs in. */
-export interface ProjectCopy {
+interface ProjectCopy {
   cliPath: string
   packageJsonPath: string
   /** Whether the project's copy is the running copy, in which case it doesn't hand off. */

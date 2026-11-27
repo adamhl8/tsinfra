@@ -1,14 +1,14 @@
 import { type } from "arktype"
 
 import type { HomeDirectory } from "#core/hosts/prepare/host-details/facts/home.ts"
+import type { StepOptionsToRecord } from "#core/recorder/records/options.ts"
+import type { ConvergeRecorder } from "#core/recorder/session-recorder.ts"
+import type { SavedStateManager } from "#core/saved-state.ts"
 import type { EnsureComparisonValues } from "#core/session/handlers/ensure/comparison.ts"
 import type { FileComparisonValues } from "#core/session/handlers/file/comparison.ts"
 import type { LinkComparisonValues } from "#core/session/handlers/link/comparison.ts"
 import type { PathAttributeClaim } from "#core/session/handlers/shared/filesystem/attributes/claims.ts"
 import type { ChangeTools, ReadTools } from "#core/session/handlers/tools.ts"
-import type { StepOptionsToRecord } from "#core/session/recorder/records/options.ts"
-import type { ConvergeRecorder } from "#core/session/recorder/session-recorder.ts"
-import type { SavedStateManager } from "#core/session/saved-state.ts"
 import type { Shell } from "#core/transport/shell.ts"
 import type { Mode } from "#mode.ts"
 

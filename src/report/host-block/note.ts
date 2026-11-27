@@ -1,6 +1,6 @@
-import type { HostRecord } from "#core/session/recorder/records.ts"
-import type { FinishedStepRecord } from "#core/session/recorder/records/step.ts"
-import { getFinishedStepRecords } from "#core/session/recorder/records/step.ts"
+import type { HostRecord } from "#core/recorder/records.ts"
+import type { FinishedStepRecord } from "#core/recorder/records/step.ts"
+import { getFinishedStepRecords } from "#core/recorder/records/step.ts"
 import type { HostNote, NotePart } from "#report/host-block.ts"
 
 /** Returns the host's note, for a host with no entries and no failure, or with a `resume` step. */

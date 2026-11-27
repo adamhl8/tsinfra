@@ -1,5 +1,5 @@
-import type { FailureHint } from "#core/session/recorder/failure-hints.ts"
-import type { StepRecord } from "#core/session/recorder/records/step.ts"
+import type { FailureHint } from "#core/recorder/failure-hints.ts"
+import type { StepRecord } from "#core/recorder/records/step.ts"
 
 /** A host's failure: one that no step owns, or a step's. */
 export type RecordedFailure = RecordedUnownedFailure | RecordedStepFailure

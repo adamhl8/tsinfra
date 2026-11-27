@@ -1,5 +1,5 @@
-import type { StepOptionsRecord } from "#core/session/recorder/records/options.ts"
-import type { StepRecord } from "#core/session/recorder/records/step.ts"
+import type { StepOptionsRecord } from "#core/recorder/records/options.ts"
+import type { StepRecord } from "#core/recorder/records/step.ts"
 import type { Detail, OptionValue, StepOption } from "#report/host-block.ts"
 import type { Verbosity } from "#report/verbosity.ts"
 

@@ -1,4 +1,4 @@
-import type { EntryRecord, HostRecord } from "#core/session/recorder/records.ts"
+import type { EntryRecord, HostRecord } from "#core/recorder/records.ts"
 import type { Mode } from "#mode.ts"
 import type { HostBlockEntry } from "#report/host-block.ts"
 import { toFailureEntry } from "#report/host-block/entries/failure.ts"

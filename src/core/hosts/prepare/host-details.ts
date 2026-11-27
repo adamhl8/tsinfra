@@ -7,8 +7,8 @@ import { readHostFacts } from "#core/hosts/prepare/host-details/facts.ts"
 import { promptForSudoPassword } from "#core/hosts/prepare/host-details/host-sudo/prompt.ts"
 import { resolveHostSudo } from "#core/hosts/prepare/host-details/host-sudo/resolve.ts"
 import { readSshDefaultOptions } from "#core/hosts/prepare/host-details/ssh-options.ts"
-import { toAskpassHelperPath } from "#core/hosts/prepare/host-details/tsinfra-directory.ts"
-import type { PreparationRecorder } from "#core/session/recorder/preparation-recorder.ts"
+import { toAskpassHelperPath } from "#core/hosts/prepare/tsinfra-directory.ts"
+import type { PreparationRecorder } from "#core/recorder/preparation-recorder.ts"
 import type { Transport } from "#core/transport.ts"
 import { LOCAL_TARGET, getLocalTransport, getSshTransport } from "#core/transport.ts"
 import type { Shell } from "#core/transport/shell.ts"
@@ -22,12 +22,12 @@ import {
 export type HostDetails = NeedsPasswordHostDetails | ReadyHostDetails
 
 /** A host's details while its sudo password still needs a prompt, so it has no transport yet. */
-export interface NeedsPasswordHostDetails extends BaseHostDetails {
+interface NeedsPasswordHostDetails extends BaseHostDetails {
   kind: "needsPassword"
 }
 
 /** A host's details once its transport is built. */
-export interface ReadyHostDetails extends BaseHostDetails {
+interface ReadyHostDetails extends BaseHostDetails {
   kind: "ready"
   transport: Transport
   /** The password the transport gives sudo, from `host()` or the prompt. It's undefined on a host that has none. */

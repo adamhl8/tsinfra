@@ -2,8 +2,8 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { SavedState } from "#core/session/saved-state/schema.ts"
-import { savedStateFileSchema } from "#core/session/saved-state/schema.ts"
+import type { SavedState } from "#core/saved-state/schema.ts"
+import { savedStateFileSchema } from "#core/saved-state/schema.ts"
 import type { Shell } from "#core/transport/shell.ts"
 import { quoteShellArg } from "#core/utils.ts"
 

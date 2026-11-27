@@ -6,8 +6,8 @@ import { $ } from "bun"
 
 import { CONTENT_LIMIT_BYTES, createRandomBytes, hashBytes } from "#core/__tests__/content.ts"
 import { createSession, fileOrMessage } from "#core/__tests__/session.ts"
+import { getFinishedStepRecords } from "#core/recorder/records/step.ts"
 import type { Host } from "#core/session.ts"
-import { getFinishedStepRecords } from "#core/session/recorder/records/step.ts"
 
 const ROOT_OWNED_DIR = "/etc/tsinfra-docker"
 

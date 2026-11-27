@@ -19,6 +19,8 @@ import { err, isErr } from "ts-explicit-errors"
 import type { HostFunction, HostSudo } from "#core/hosts/host.ts"
 import { finishHosts, initializeHosts } from "#core/hosts/prepare.ts"
 import { runHost } from "#core/hosts/run.ts"
+import type { HostRecord } from "#core/recorder/records.ts"
+import { createHostRecord } from "#core/recorder/records.ts"
 import type { RecordWant } from "#core/session/handlers/ensure/comparison/record.ts"
 import {
   GROUP_DIRECTORY_MODE,
@@ -26,8 +28,6 @@ import {
   PUBLIC_FILE_MODE,
 } from "#core/session/handlers/shared/filesystem/attributes/mode.ts"
 import type { ReadTools } from "#core/session/handlers/tools.ts"
-import type { HostRecord } from "#core/session/recorder/records.ts"
-import { createHostRecord } from "#core/session/recorder/records.ts"
 import { runLocal } from "#core/transport/local.ts"
 import type { Mode } from "#mode.ts"
 import { renderHostBlock, toShownHostBlock } from "#report.ts"
