@@ -2,8 +2,7 @@ import { type } from "arktype"
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { FactResult, OsRelease } from "#core/hosts/prepare/host-details/facts.ts"
-import type { Shell } from "#core/transport/shell.ts"
+import type { FactContext, OsRelease } from "#core/hosts/prepare/host-details/facts.ts"
 
 // Source the file, because its values can be quoted or escaped like shell.
 // Print each value after its name, so the lines read the same whichever ones are empty.
@@ -64,12 +63,9 @@ export const toOsRelease = (output: string): Result<OsRelease | undefined> => {
 }
 
 /** Reads the host's `/etc/os-release`, or `/usr/lib/os-release`, or undefined when it has neither, like macOS. */
-export const readOsRelease = async (hostShell: Shell): Promise<Result<FactResult<OsRelease | undefined>>> => {
-  const output = await hostShell.exec(READ_OS_RELEASE_COMMAND, { label: "os-release" })
+export const readOsRelease = async (ctx: FactContext): Promise<Result<OsRelease | undefined>> => {
+  const output = await ctx.shell.exec(READ_OS_RELEASE_COMMAND, { label: "os-release" })
   if (isErr(output)) return err("failed to read the host's os-release file", output)
 
-  const osRelease = toOsRelease(output)
-  if (isErr(osRelease)) return osRelease
-
-  return { value: osRelease, warning: undefined }
+  return toOsRelease(output)
 }

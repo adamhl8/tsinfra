@@ -7,13 +7,17 @@ import type { CommandRecorder, RecordOutput, Shell } from "#core/transport/shell
 import { createShell } from "#core/transport/shell.ts"
 
 /** Records a host's preparation, before its script runs: the commands preparation runs, its warnings, and its failure. */
-export interface PreparationRecorder {
+export interface PreparationRecorder extends HostWarningRecorder {
   /** Returns a shell on `transport` that records each command on the host's preparation. */
   getShell: (transport: Transport) => Shell
-  /** Records warnings about the whole host. */
-  recordWarnings: (warnings: HostWarningRecord[]) => void
   /** Records `error` as the preparation's failure, with hints for it. */
   recordFailure: (error: Error) => void
+}
+
+/** The part of the preparation recorder a fact's reader records through. */
+export interface HostWarningRecorder {
+  /** Records a warning about the whole host, which worked but needs a look. */
+  recordWarning: (warning: HostWarningRecord) => void
 }
 
 /** Records a host's preparation on `hostRecord`. */
@@ -41,8 +45,8 @@ export const createPreparationRecorder = (
 
   const getShell = (transport: Transport) => createShell(transport, { commandRecorder })
 
-  const recordWarnings = (warnings: HostWarningRecord[]) => {
-    hostRecord.warnings.push(...warnings)
+  const recordWarning = (warning: HostWarningRecord) => {
+    hostRecord.warnings.push(warning)
   }
 
   // Record it as the host's first failure, because nothing else runs on the host before preparation finishes.
@@ -51,5 +55,5 @@ export const createPreparationRecorder = (
     hostRecord.failure = { kind: "preparation", error, hints }
   }
 
-  return { getShell, recordWarnings, recordFailure }
+  return { recordWarning, getShell, recordFailure }
 }

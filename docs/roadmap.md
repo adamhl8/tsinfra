@@ -5,7 +5,6 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 <!-- toc -->
 
 - [Next](#next)
-  - [Recording fact warnings](#recording-fact-warnings)
   - [Recorded step warnings](#recorded-step-warnings)
   - [Step entries](#step-entries)
   - [Naming the report's asides](#naming-the-reports-asides)
@@ -43,10 +42,6 @@ What tsinfra does next, what it plans to do, what's still undecided, what might 
 ## Next
 
 In the order they'll be built.
-
-### Recording fact warnings
-
-Look again at how a fact's warning reaches the record, so it follows the same rule as the other things the code records. Each fact's reader returns a `FactResult`, its value and a warning or `undefined`. `readHostFacts` collects the warnings, and `buildHostDetails` passes them straight to `preparationRecorder.recordWarnings`. A warning passed up only to be recorded right away may mean the reader should record it itself, through the preparation recorder passed down to it, which would leave a reader returning only its value. The case for keeping it is that `readHostFacts` is each reader's direct caller and collects from all of them alike. Nothing is decided.
 
 ### Recorded step warnings
 

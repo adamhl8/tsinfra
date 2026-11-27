@@ -80,10 +80,8 @@ export const buildHostDetails = async (
   if (isErr(baseTransport)) return baseTransport
   const hostShell = preparationRecorder.getShell(baseTransport)
 
-  const readFacts = await readHostFacts(hostShell)
-  if (isErr(readFacts)) return readFacts
-  const { facts, warnings } = readFacts
-  preparationRecorder.recordWarnings(warnings)
+  const facts = await readHostFacts({ shell: hostShell, recorder: preparationRecorder })
+  if (isErr(facts)) return facts
 
   const userOutput = await hostShell.exec(READ_USER_COMMAND, { label: "user name" })
   if (isErr(userOutput)) return err("failed to read the SSH user's name", userOutput)

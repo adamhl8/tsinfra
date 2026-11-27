@@ -6,7 +6,7 @@ import type { HomeDirectory } from "#core/hosts/prepare/host-details/facts/home.
 import { readHome } from "#core/hosts/prepare/host-details/facts/home.ts"
 import { readOsRelease } from "#core/hosts/prepare/host-details/facts/os-release.ts"
 import { readArch, readPlatform } from "#core/hosts/prepare/host-details/facts/system.ts"
-import type { HostWarningRecord } from "#core/recorder/records.ts"
+import type { HostWarningRecorder } from "#core/recorder/preparation-recorder.ts"
 import type { Shell } from "#core/transport/shell.ts"
 
 /** What tsinfra reads from the host before its script runs, which nothing in a run would change. It's frozen. */
@@ -50,20 +50,14 @@ export interface OsRelease {
 /** The facts tsinfra gives its own names, so a value it has no name for gets a warning. */
 export type NamedFact = "platform" | "arch"
 
-/** Every fact, and a warning for each value tsinfra has no name for. */
-interface ReadHostFacts {
-  facts: HostFacts
-  warnings: HostWarningRecord[]
+/** What a fact's reader is given: the shell to read the host with, and what to record a warning through. */
+export interface FactContext {
+  shell: Shell
+  recorder: HostWarningRecorder
 }
 
-/** A fact's value, and a warning about it when there is one. */
-export interface FactResult<T> {
-  value: T
-  warning: HostWarningRecord | undefined
-}
-
-/** Reads one fact from the host, with a warning when there is one. Fails when the host can't give it. */
-type FactReader<T> = (hostShell: Shell) => Promise<Result<FactResult<T>>>
+/** Reads one fact from the host, and records a warning when it finds one. Fails when the host can't give it. */
+type FactReader<T> = (ctx: FactContext) => Promise<Result<T>>
 
 // Give each fact the reader that reads it from the host, in the order of `HostFacts`.
 const FACT_READERS: { [F in keyof HostFacts]: FactReader<HostFacts[F]> } = {
@@ -73,20 +67,18 @@ const FACT_READERS: { [F in keyof HostFacts]: FactReader<HostFacts[F]> } = {
   osRelease: readOsRelease,
 }
 
-/** Reads every fact, and a warning for each value tsinfra has no name for. */
-export const readHostFacts = async (hostShell: Shell): Promise<Result<ReadHostFacts>> => {
+/** Reads every fact, and records a warning for each value tsinfra has no name for. */
+export const readHostFacts = async (ctx: FactContext): Promise<Result<HostFacts>> => {
   const facts: Partial<Record<keyof HostFacts, unknown>> = {}
-  const warnings: HostWarningRecord[] = []
 
   for (const [fact, readFact] of entries(FACT_READERS)) {
     // oxlint-disable-next-line no-await-in-loop - read one fact at a time, so preparation records its commands in order
-    const factResult = await readFact(hostShell)
-    if (isErr(factResult)) return factResult
+    const value = await readFact(ctx)
+    if (isErr(value)) return value
 
-    facts[fact] = factResult.value
-    if (factResult.warning) warnings.push(factResult.warning)
+    facts[fact] = value
   }
 
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion - the loop sets every key of `HostFacts`, which TypeScript can't follow
-  return { facts: Object.freeze(facts) as HostFacts, warnings }
+  return Object.freeze(facts) as HostFacts
 }

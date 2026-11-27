@@ -1,8 +1,7 @@
 import type { Result } from "ts-explicit-errors"
 import { err, isErr } from "ts-explicit-errors"
 
-import type { FactResult } from "#core/hosts/prepare/host-details/facts.ts"
-import type { Shell } from "#core/transport/shell.ts"
+import type { FactContext } from "#core/hosts/prepare/host-details/facts.ts"
 
 declare const HOME_DIRECTORY_BRAND: unique symbol
 /** The SSH user's home directory, which is absolute. Only `validateHome` makes one, so a raw `$HOME` can't stand in. */
@@ -25,12 +24,9 @@ export const validateHome = (rawHome: string): Result<HomeDirectory> => {
  * Reads the SSH user's home, which a path that starts with `~/` needs. An unset `$HOME` comes back empty, so the read
  * fails only when the host can't run commands at all.
  */
-export const readHome = async (hostShell: Shell): Promise<Result<FactResult<HomeDirectory>>> => {
-  const homeOutput = await hostShell.exec(READ_HOME_COMMAND, { label: "home directory" })
+export const readHome = async (ctx: FactContext): Promise<Result<HomeDirectory>> => {
+  const homeOutput = await ctx.shell.exec(READ_HOME_COMMAND, { label: "home directory" })
   if (isErr(homeOutput)) return err("failed to read the SSH user's home directory", homeOutput)
 
-  const home = validateHome(homeOutput)
-  if (isErr(home)) return home
-
-  return { value: home, warning: undefined }
+  return validateHome(homeOutput)
 }
